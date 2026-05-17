@@ -1,0 +1,246 @@
+body{
+    position:relative;
+    margin:0;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    overflow:hidden;
+    font-family:"ms_sans_serif";
+    background:#000;
+}
+
+/* =========================
+   FONDOS
+========================= */
+
+body::before,
+body::after{
+    content:'';
+    position:fixed;
+    inset:0;
+    z-index:-2;
+    transition:opacity .7s ease;
+}
+
+/* FONDO PRINCIPAL */
+
+body::before{
+    background:
+    radial-gradient(
+        circle at top left,
+        #f9e6ef 0%,
+        #f6c5dd 40%,
+        #f3a4d2 70%,
+        #e88ac5 100%
+    );
+
+    opacity:1;
+}
+
+/* FONDO USUARIO 2 */
+
+body::after{
+
+    background-image:url("../img/angela.png");
+
+    background-position:center;
+
+    background-size:cover;
+
+    background-repeat:no-repeat;
+
+    filter:
+        blur(8px)
+        saturate(1.1)
+        brightness(.8);
+
+    transform:scale(1.05);
+
+    opacity:0;
+}
+
+/* ACTIVAR FONDO */
+
+body.user2::before{
+    opacity:0;
+}
+
+body.user2::after{
+    opacity:1;
+}
+
+/* =========================
+   CONTENEDOR
+========================= */
+
+.login-window{
+    position:relative;
+    width:320px;
+    height:180px;
+}
+
+/* =========================
+   VENTANAS
+========================= */
+
+.window{
+    will-change:transform, opacity;
+}
+
+/* =========================
+   SELECT WINDOW
+========================= */
+
+#selectWindow{
+    position:absolute;
+    top:0;
+    left:0;
+    width:320px;
+
+    opacity:1;
+
+    transform:translateY(0);
+
+    pointer-events:auto;
+
+    transition:
+        opacity .35s ease,
+        transform .35s ease;
+}
+
+#selectWindow.hidden{
+    opacity:0;
+
+    transform:translateY(-25px);
+
+    pointer-events:none;
+}
+
+/* =========================
+   LOGIN WINDOW
+========================= */
+
+#loginWindow{
+    position:absolute;
+
+    top:0;
+    left:0;
+
+    width:320px;
+
+    opacity:0;
+
+    transform:translateY(25px);
+
+    pointer-events:none;
+
+    transition:
+        opacity .35s ease,
+        transform .35s ease;
+}
+
+#loginWindow.visible{
+    opacity:1;
+
+    transform:translateY(0);
+
+    pointer-events:auto;
+}
+
+/* =========================
+   FOTO
+========================= */
+
+.user-preview{
+    position:absolute;
+    top:0;
+    left:320px;
+    width:140px;
+
+    z-index:50;
+
+    opacity:0;
+
+    transform:
+        translateY(20px)
+        scale(.92);
+
+    pointer-events:none;
+
+    transition:
+        opacity .35s ease,
+        transform .35s ease;
+}
+
+.user-preview.visible{
+    opacity:1;
+
+    transform:
+        translateY(-20px)
+        scale(1);
+
+    pointer-events:auto;
+}
+
+.user-preview .window{
+    overflow:hidden;
+}
+
+.user-preview .window-body{
+    min-height:120px;
+
+    padding:12px;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.user-preview img{
+    width:90px;
+    height:90px;
+
+    object-fit:cover;
+
+    border-radius:8px;
+
+    display:block;
+
+    box-shadow:
+        0 0 0 2px #fff,
+        2px 2px 0 rgba(0,0,0,.2);
+}
+
+/* =========================
+   BOTONES
+========================= */
+
+.user-list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.user-button{
+    width:100%;
+}
+
+/* =========================
+   FORM
+========================= */
+
+.login-text{
+    margin-bottom:14px;
+}
+
+.field-row-stacked{
+    margin-top:12px;
+}
+
+.login-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    margin-top:14px;
+}
