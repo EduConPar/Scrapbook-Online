@@ -25,5 +25,10 @@ function getUserWallpaper($label)
             }
         }
     }
+    foreach (['png', 'jpg', 'jpeg'] as $ext) {
+        if (file_exists(__DIR__ . "/img/base-wallpaper.{$ext}")) {
+            return "assets/img/base-wallpaper.{$ext}";
+        }
+    }
     return '';
 }

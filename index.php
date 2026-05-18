@@ -2,6 +2,18 @@
 session_start();
 require_once __DIR__ . '/assets/config.php';
 
+$adImages = [];
+$adDir = __DIR__ . '/assets/img/archiveAd';
+if (is_dir($adDir)) {
+    foreach (scandir($adDir) as $f) {
+        $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg','jpeg','png','gif','webp'])) {
+            $adImages[] = 'assets/img/archiveAd/' . $f;
+        }
+    }
+}
+$adImage = $adImages ? $adImages[array_rand($adImages)] : null;
+
 $users = $loginUsers;
 
 $selectedUser = $_POST['user'] ?? '';
@@ -29,6 +41,14 @@ if ($selectedUser && isset($users[$selectedUser])) {
 
 $bodyClass = $showLogin ? "user-selected {$selectedUser}" : '';
 $skipIntro = isset($_GET['nointro']);
+
+$baseWallpaper = '';
+foreach (['png','jpg','jpeg'] as $ext) {
+    if (file_exists(__DIR__ . "/assets/img/base-wallpaper.{$ext}")) {
+        $baseWallpaper = "assets/img/base-wallpaper.{$ext}";
+        break;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -38,7 +58,51 @@ $skipIntro = isset($_GET['nointro']);
     <title>Scrapbook Melon</title>
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
+    #intro-start {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: 14px 18px 14px 60px;
+        background: #0d1117;
+        z-index: 1;
+        cursor: pointer;
+        overflow: hidden;
+    }
+    #intro-start::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 3px,
+            rgba(0,0,0,0.22) 3px,
+            rgba(0,0,0,0.22) 4px
+        );
+        pointer-events: none;
+    }
+    #intro-start > span {
+        font-family: 'VT323', monospace;
+        font-size: 2rem;
+        color: #c8ffe0;
+        text-shadow: none;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        user-select: none;
+        position: relative;
+        z-index: 1;
+    }
+    @keyframes termBlink {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0; }
+    }
+    #intro-cursor {
+        animation: termBlink 1s step-end infinite;
+    }
     #intro-overlay {
         position: fixed;
         inset: 0;
@@ -60,7 +124,51 @@ $skipIntro = isset($_GET['nointro']);
         font-size: 11px;
         margin-top: 4px;
     }
+    @keyframes adFromTL {
+        from { opacity:0; transform:translate(-20px,-20px); }
+        to   { opacity:1; transform:translate(0,0); }
+    }
+    @keyframes adFromTR {
+        from { opacity:0; transform:translate(20px,-20px); }
+        to   { opacity:1; transform:translate(0,0); }
+    }
+    @keyframes adFromBL {
+        from { opacity:0; transform:translate(-20px,20px); }
+        to   { opacity:1; transform:translate(0,0); }
+    }
+    @keyframes adFromBR {
+        from { opacity:0; transform:translate(20px,20px); }
+        to   { opacity:1; transform:translate(0,0); }
+    }
+    #ad-popup {
+        position: fixed;
+        z-index: 5000;
+        display: none;
+        cursor: pointer;
+    }
+    #ad-titlebar {
+        cursor: move;
+    }
+    #ad-image {
+        display: block;
+        width: 10vw;
+        height: auto;
+        image-rendering: pixelated;
+    }
+    #previewImage {
+        image-rendering: pixelated;
+    }
+    #ad-btn {
+        width: 100%;
+        margin-top: 8px;
+        font-weight: bold;
+        font-size: 12px;
+        letter-spacing: 1px;
+    }
     </style>
+    <?php if ($baseWallpaper): ?>
+    <style>body::before{ background-image:url('<?php echo htmlspecialchars($baseWallpaper); ?>'); opacity:1; }</style>
+    <?php endif; ?>
     <?php if ($selectedWallpaper): ?>
     <style id="wallpaper-style">body::before{ background-image:url('<?php echo htmlspecialchars($selectedWallpaper); ?>'); }</style>
     <?php endif; ?>
@@ -71,7 +179,10 @@ $skipIntro = isset($_GET['nointro']);
 <!-- INTRO -->
 <?php if (!$skipIntro): ?>
 <div id="intro-overlay">
-    <video id="intro-video" autoplay muted playsinline>
+    <div id="intro-start">
+        <span>Click para comenzar...<span id="intro-cursor">_</span></span>
+    </div>
+    <video id="intro-video" muted playsinline>
         <source src="assets/vids/inicio.mp4" type="video/mp4">
     </video>
 </div>
@@ -138,6 +249,22 @@ $skipIntro = isset($_GET['nointro']);
 
 </div>
 
+<?php if ($adImage): ?>
+<!-- POPUP AD -->
+<div id="ad-popup" class="window">
+    <div class="title-bar" id="ad-titlebar">
+        <div class="title-bar-text">&#128276; MelonArchive</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="ad-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="ad-body">
+        <img id="ad-image" src="<?php echo htmlspecialchars($adImage); ?>" alt="MelonArchive">
+        <button class="button" id="ad-btn">!VISIT NOW</button>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 const body = document.body;
 const selectWindow = document.getElementById('selectWindow');
@@ -154,20 +281,30 @@ const introOverlay = document.getElementById('intro-overlay');
 ========================= */
 
 if (introVideo && introOverlay) {
-    introOverlay.addEventListener('click', function(){
-        introVideo.muted = false;
-    }, { once: true });
-
-    introVideo.addEventListener('ended', function(){
-        introOverlay.classList.add('oculto');
-        setTimeout(function(){
-            introOverlay.style.display = 'none';
-        }, 800);
-    });
-
-    introVideo.addEventListener('error', function(){
+    if (sessionStorage.getItem('introSeen')) {
         introOverlay.style.display = 'none';
-    });
+    } else {
+        const introStart = document.getElementById('intro-start');
+
+        introStart.addEventListener('click', function() {
+            introStart.style.display = 'none';
+            introVideo.muted = false;
+            introVideo.play();
+        }, { once: true });
+
+        introVideo.addEventListener('ended', function(){
+            sessionStorage.setItem('introSeen', '1');
+            introOverlay.classList.add('oculto');
+            setTimeout(function(){
+                introOverlay.style.display = 'none';
+            }, 800);
+        });
+
+        introVideo.addEventListener('error', function(){
+            sessionStorage.setItem('introSeen', '1');
+            introOverlay.style.display = 'none';
+        });
+    }
 }
 
 /* =========================
@@ -184,6 +321,21 @@ function setWallpaper(src)
     }
     style.textContent = src ? `body::before{ background-image:url('${src}'); }` : '';
 }
+
+function pixelateImg(img, factor) {
+    if (!img.naturalWidth || img.src.startsWith('data:')) return;
+    const w = Math.max(1, Math.round(img.naturalWidth  * factor));
+    const h = Math.max(1, Math.round(img.naturalHeight * factor));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, 0, 0, w, h);
+    img.src = c.toDataURL('image/png');
+}
+
+previewImage.addEventListener('load', function() { pixelateImg(previewImage, 0.1); });
+if (previewImage.complete && previewImage.naturalWidth) pixelateImg(previewImage, 0.1);
 
 const userKeys = [...document.querySelectorAll('.select-user')].map(b => b.dataset.user);
 
@@ -219,10 +371,123 @@ document.getElementById('changeUser').addEventListener('click', function(){
     userPreview.classList.remove('visible');
     body.classList.remove('user-selected', ...userKeys);
     setWallpaper('');
+    if (adPopup) adPopup.style.display = 'none';
     setTimeout(() => {
         selectWindow.classList.remove('hidden');
     }, 350);
 });
+
+/* =========================
+   POPUP AD
+========================= */
+
+const adPopup = document.getElementById('ad-popup');
+
+if (adPopup) {
+    const adClose = document.getElementById('ad-close');
+    const adBody  = document.getElementById('ad-body');
+    const adUrl   = 'https://www.youtube.com/@melondeaguaarchive/playlists';
+
+    const adImg      = document.getElementById('ad-image');
+    const adAllImages = <?php echo json_encode(array_values($adImages)); ?>;
+    const corners = [
+        { top: true,  left: true,  anim: 'adFromTL' },
+        { top: true,  left: false, anim: 'adFromTR' },
+        { top: false, left: true,  anim: 'adFromBL' },
+        { top: false, left: false, anim: 'adFromBR' },
+    ];
+
+    function placeAd() {
+        const c   = corners[Math.floor(Math.random() * 4)];
+        const gap = 80 + Math.floor(Math.random() * 80);
+        const taskbar = 50;
+
+        adPopup.style.top    = 'auto';
+        adPopup.style.left   = 'auto';
+        adPopup.style.right  = 'auto';
+        adPopup.style.bottom = 'auto';
+
+        if (c.top)  adPopup.style.top    = gap + 'px';
+        else        adPopup.style.bottom = (gap + taskbar) + 'px';
+        if (c.left) adPopup.style.left   = gap + 'px';
+        else        adPopup.style.right  = gap + 'px';
+
+        adPopup.style.animation = 'none';
+        adPopup.offsetHeight; /* reflow para reiniciar */
+        adPopup.style.animation = c.anim + ' 0.35s ease-out forwards';
+    }
+
+    function pixelate(img) {
+        if (img.dataset.px) return;
+        img.dataset.px = '1';
+        const factor = 0.15;
+        const w = Math.max(1, Math.round(img.naturalWidth  * factor));
+        const h = Math.max(1, Math.round(img.naturalHeight * factor));
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, w, h);
+        img.src = c.toDataURL('image/png');
+    }
+
+    adImg.addEventListener('load', function() { pixelate(adImg); });
+    if (adImg.complete && adImg.naturalWidth) pixelate(adImg);
+
+    function showAd() {
+        if (adAllImages.length) {
+            const newSrc = adAllImages[Math.floor(Math.random() * adAllImages.length)];
+            delete adImg.dataset.px;
+            adImg.src = newSrc;
+        }
+        placeAd();
+        adPopup.style.display = 'block';
+    }
+
+    adClose.addEventListener('click', function(e) {
+        e.stopPropagation();
+        adPopup.style.display = 'none';
+    });
+
+    adBody.addEventListener('click', function() {
+        window.open(adUrl, '_blank');
+    });
+
+    /* Arrastrar */
+    (function() {
+        const bar = document.getElementById('ad-titlebar');
+        let dragging = false, ox, oy;
+        bar.addEventListener('mousedown', function(e) {
+            if (e.target.tagName === 'BUTTON') return;
+            dragging = true;
+            const rect = adPopup.getBoundingClientRect();
+            adPopup.style.animation = 'none';
+            adPopup.style.top    = rect.top  + 'px';
+            adPopup.style.left   = rect.left + 'px';
+            adPopup.style.bottom = 'auto';
+            adPopup.style.right  = 'auto';
+            ox = e.clientX - rect.left;
+            oy = e.clientY - rect.top;
+        });
+        document.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            adPopup.style.left = (e.clientX - ox) + 'px';
+            adPopup.style.top  = (e.clientY - oy) + 'px';
+        });
+        document.addEventListener('mouseup', () => { dragging = false; });
+    })();
+
+    /* Mostrar al seleccionar usuario */
+    const _origSetUser = setUser;
+    setUser = function(userKey, label, imgSrc, wallpaperSrc) {
+        _origSetUser(userKey, label, imgSrc, wallpaperSrc);
+        setTimeout(showAd, 400);
+    };
+
+    <?php if ($showLogin): ?>
+    showAd();
+    <?php endif; ?>
+}
 </script>
 
 </body>

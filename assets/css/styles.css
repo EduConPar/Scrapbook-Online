@@ -1,6 +1,7 @@
 body{
     position:relative;
     margin:0;
+    user-select:none;
     min-height:100vh;
     display:flex;
     justify-content:center;

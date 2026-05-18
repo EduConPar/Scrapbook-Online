@@ -32,6 +32,7 @@ $hasPlayer = in_array($desktopUserKey, ['user1', 'user2']);
     <title><?php echo htmlspecialchars($desktopLabel); ?> - Escritorio</title>
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/desktop.css">
+    <style>#player-cover { image-rendering: pixelated; }</style>
 </head>
 
 <body class="<?php echo $desktopUserKey === 'user1' ? 'dark' : 'angie'; ?>"<?php echo $wallpaperStyle ? " style=\"{$wallpaperStyle}\"" : ''; ?>>
@@ -189,6 +190,22 @@ const playerDur     = document.getElementById('player-duration');
 const btnPlay       = document.getElementById('btn-play');
 const volSlider     = document.getElementById('player-volume');
 
+function pixelateImg(img, factor) {
+    if (!img.naturalWidth || img.src.startsWith('data:')) return;
+    const w = Math.max(1, Math.round(img.naturalWidth  * factor));
+    const h = Math.max(1, Math.round(img.naturalHeight * factor));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    try {
+        ctx.drawImage(img, 0, 0, w, h);
+        img.src = c.toDataURL('image/png');
+    } catch (e) {}
+}
+
+playerCover.addEventListener('load', function() { pixelateImg(playerCover, 0.25); });
+
 function formatTime(s)
 {
     const m = Math.floor(s / 60);
@@ -201,6 +218,7 @@ function updateTrackUI(index)
     const track = playlist[index];
     playerTitle.textContent  = track.title;
     playerArtist.textContent = track.artist || '—';
+    playerCover.crossOrigin = 'anonymous';
     playerCover.src = `https://img.youtube.com/vi/${track.videoId}/mqdefault.jpg`;
     playerProg.value = 0;
     playerCurrent.textContent = '0:00';
