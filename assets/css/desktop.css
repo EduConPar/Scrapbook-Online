@@ -263,7 +263,7 @@ body {
     outline: none;
     cursor: default;
     padding: 0;
-    margin: 0 0 4px 0;
+    margin: 0 0 4% 0;
     display: block;
 }
 
@@ -325,7 +325,6 @@ body {
                 inset 2px 2px #0a0a0a, inset -2px -2px #dfdfdf;
     background: #c0c0c0;
     height: 10px;
-    padding: 0px;
     border: 2px solid #d0d0d0;
 }
 
@@ -347,7 +346,7 @@ body {
     background: transparent;
     outline: none;
     cursor: default;
-    margin-bottom: -16px;
+    margin-top: -30%;
 }
 
 #player-volume::-webkit-slider-runnable-track {
@@ -366,7 +365,6 @@ body {
     box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
                 inset -2px -2px #808080, inset 2px 2px #dfdfdf;
     cursor: default;
-    margin-left: -6px;
 }
 
 #player-volume::-moz-range-track {
@@ -382,8 +380,8 @@ body {
 }
 
 #player-volume::-moz-range-thumb {
-    width: 18px;
-    height: 12px;
+    width: 100%;
+    height: 20%;
     background: #d4d4d4;
     border: none;
     box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
