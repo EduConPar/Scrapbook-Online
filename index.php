@@ -53,9 +53,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <link rel="stylesheet" href="assets/css/styles.css">
 
+    <style>
+    #intro-overlay {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 9999;
+    }
+    #intro-overlay video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    #intro-overlay.oculto {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.8s ease;
+    }
+    </style>
+
 </head>
 
 <body class="<?php echo htmlspecialchars($selectedUser); ?>">
+
+<!-- INTRO -->
+<div id="intro-overlay">
+    <video id="intro-video" autoplay muted playsinline>
+        <source src="assets/Vids/Inicio.mp4" type="video/mp4">
+    </video>
+</div>
 
 <div class="login-window">
 
@@ -175,6 +201,25 @@ const selectedUserInput = document.getElementById('selectedUser');
 const selectedLabel = document.getElementById('selectedLabel');
 const userPreview = document.getElementById('userPreview');
 const previewImage = document.getElementById('previewImage');
+
+/* =========================
+   INTRO
+========================= */
+
+var introVideo = document.getElementById('intro-video');
+var introOverlay = document.getElementById('intro-overlay');
+
+introVideo.addEventListener('ended', function(){
+    introOverlay.classList.add('oculto');
+    setTimeout(function(){
+        introOverlay.style.display = 'none';
+    }, 800);
+});
+
+// por si el video no carga, quitar intro igualmente
+introVideo.addEventListener('error', function(){
+    introOverlay.style.display = 'none';
+});
 
 /* =========================
    CAMBIO USUARIO
