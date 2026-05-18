@@ -1,4 +1,4 @@
-﻿body{
+body{
     position:relative;
     margin:0;
     min-height:100vh;
@@ -229,7 +229,7 @@ body.user1 .title-bar {
 
 body.user2 .window {
     background: #F8D0C8;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 
@@ -239,21 +239,21 @@ body.user2 .window-body {
 }
 
 body.user2 .title-bar {
-    background: linear-gradient(90deg, #5B744B, #8FAF70);
+    background: linear-gradient(90deg, #5B744B, #799567);
 }
 
 body.user2 input[type="password"],
 body.user2 input[type="text"]{
     background: #F3BABA;
     color:#1a1a1a;
-    box-shadow:inset -1px -1px #fdecea, inset 1px 1px #2d4025,
+    box-shadow:inset -1px -1px #F9DDD8, inset 1px 1px #35522B,
                inset -2px -2px #F8D0C8, inset 2px 2px #5B744B;
 }
 
 body.user2 .button {
     background: #F8D0C8;
-    color: #2d4025;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    color: #35522B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                 inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 

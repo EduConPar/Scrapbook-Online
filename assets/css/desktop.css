@@ -1,4 +1,4 @@
-﻿*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 @keyframes fadeOut {
     from { opacity: 1; }
@@ -425,8 +425,8 @@ body {
 
     body.angie #player-volume::-moz-range-thumb {
         background: #5B744B;
-        box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
-                    inset -2px -2px #3a5030, inset 2px 2px #afd490;
+        box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                    inset -2px -2px #35522B, inset 2px 2px #A7B59E;
     }
 }
 
@@ -597,57 +597,68 @@ body.dark .win-logo span {
    ANGIE MODE
 ========================= */
 
+body.angie .window {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
 body.angie .window-body {
     background: #F8D0C8;
+    color: #35522B;
 }
 
 body.angie .title-bar {
-    background: linear-gradient(90deg, #5B744B, #8FAF70);
+    background: linear-gradient(90deg, #5B744B, #799567);
 }
 
 body.angie #taskbar {
     background: #F8D0C8;
-    border-top-color: #fdecea;
-    box-shadow: 0 -1px 0 #c4857a;
+    border-top-color: #F9DDD8;
+    box-shadow: 0 -1px 0 #F3BABA;
 }
 
 body.angie .taskbar-sep {
-    box-shadow: inset -1px 0 0 #fdecea, inset 1px 0 0 #c4857a;
+    box-shadow: inset -1px 0 0 #F9DDD8, inset 1px 0 0 #F3BABA;
 }
 
 body.angie #start-btn {
-    background: #8FAF70;
-    color: #fdecea;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    background: #799567;
+    color: #F9DDD8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                 inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 
 body.angie #start-sidebar {
-    background: linear-gradient(to top, #5B744B, #8FAF70);
-    color: #fdecea;
+    background: linear-gradient(to top, #5B744B, #799567);
+    color: #F9DDD8;
+}
+
+body.angie .menu-item {
+    color: #35522B;
 }
 
 body.angie .menu-item:hover {
-    background: #8FAF70;
-    color: #fdecea;
+    background: #799567;
+    color: #F9DDD8;
 }
 
 body.angie #taskbar-tasks .button {
-    background: #fce8e4;
-    color: #2d4025;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    background: #F9DDD8;
+    color: #35522B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                 inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 
 body.angie #system-tray {
-    background: #f0c4bc;
-    color: #2d4025;
-    box-shadow: inset 1px 1px #c4857a, inset -1px -1px #fdecea;
+    background: #F3BABA;
+    color: #35522B;
+    box-shadow: inset 1px 1px #F3BABA, inset -1px -1px #F9DDD8;
 }
 
 body.angie #start-menu {
     background: #F8D0C8;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                 inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 
@@ -656,14 +667,14 @@ body.angie #start-menu-items {
 }
 
 body.angie .menu-sep {
-    background: #c4857a;
-    box-shadow: 0 1px 0 #fdecea;
+    background: #F3BABA;
+    box-shadow: 0 1px 0 #F9DDD8;
 }
 
 body.angie .button {
     background: #5B744B;
-    color: #fdecea;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+    color: #F9DDD8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
                 inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
 }
 
@@ -673,45 +684,61 @@ body.angie #player-artist {
 }
 
 body.angie #player-cover-wrap {
-    box-shadow: -1px -1px 0 #2d4025, 1px 1px 0 #fdecea,
+    box-shadow: -1px -1px 0 #35522B, 1px 1px 0 #F9DDD8,
                 -2px -2px 0 #5B744B, 2px 2px 0 #F8D0C8;
 }
 
 body.angie #player-progress {
-    background: #fdecea;
-    box-shadow: inset -1px -1px #fdecea, inset 1px 1px #5B744B,
-                inset -2px -2px #F8D0C8, inset 2px 2px #2d4025;
+    background: #F9DDD8;
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #5B744B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #35522B;
 }
 
 body.angie #player-progress::-webkit-slider-thumb {
     background: #5B744B;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
-                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
 }
 
 body.angie #player-progress::-moz-range-thumb {
     background: #5B744B;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
-                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
 }
 
 body.angie #volume-track-outer {
-    background: #fdecea;
-    box-shadow: inset 1px 1px #5B744B, inset -1px -1px #fdecea,
-                inset 2px 2px #2d4025, inset -2px -2px #F8D0C8;
-    border: 2px solid #8FAF70;
+    background: #F9DDD8;
+    box-shadow: inset 1px 1px #5B744B, inset -1px -1px #F9DDD8,
+                inset 2px 2px #35522B, inset -2px -2px #F8D0C8;
+    border: 2px solid #799567;
+}
+
+body.angie #player-volume::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 body.angie #player-volume::-webkit-slider-thumb {
     background: #5B744B;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
-                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
+}
+
+body.angie #player-volume::-moz-range-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+body.angie #player-volume::-moz-range-progress {
+    background: transparent;
 }
 
 body.angie #player-volume::-moz-range-thumb {
     background: #5B744B;
-    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
-                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
 }
 
 body.angie #volume-icon {
