@@ -1,0 +1,684 @@
+﻿*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+#page-enter {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 9998;
+    pointer-events: none;
+    animation: fadeOut 0.5s ease-out 0.05s forwards;
+}
+
+body {
+    font-family: "ms_sans_serif", sans-serif;
+    font-size: 11px;
+    background-color: #008080;
+    background-size: cover;
+    background-position: center;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+}
+
+#desktop {
+    position: fixed;
+    inset: 0;
+    bottom: 28px;
+}
+
+/* =========================
+   TASKBAR
+========================= */
+
+#taskbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    background: #c0c0c0;
+    border-top: 2px solid #fff;
+    box-shadow: 0 -1px 0 #808080;
+    display: flex;
+    align-items: center;
+    padding: 2px 2px;
+    gap: 2px;
+    z-index: 1000;
+}
+
+#start-btn {
+    height: 22px;
+    padding: 0 8px 0 4px;
+    font-weight: bold;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: default;
+}
+
+.win-logo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.win-logo span { display: block; }
+
+.taskbar-sep {
+    width: 2px;
+    height: 20px;
+    box-shadow: inset -1px 0 0 #fff, inset 1px 0 0 #808080;
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+#taskbar-tasks {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    height: 22px;
+    gap: 2px;
+    overflow: hidden;
+}
+
+#system-tray {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    box-shadow: inset 1px 1px #808080, inset -1px -1px #fff;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+/* =========================
+   START MENU
+========================= */
+
+#start-menu {
+    display: none;
+    position: fixed;
+    bottom: 28px;
+    left: 2px;
+    width: 180px;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    background: #c0c0c0;
+    z-index: 999;
+}
+
+#start-menu-inner {
+    display: flex;
+}
+
+#start-sidebar {
+    width: 22px;
+    background: linear-gradient(to top, #000082, #1a6cd4);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    font-style: italic;
+    letter-spacing: 1px;
+    padding: 6px 4px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#start-menu-items {
+    flex: 1;
+    padding: 2px 0;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: "ms_sans_serif", sans-serif;
+    background: none;
+    border: none;
+    cursor: default;
+    text-align: left;
+    color: #000;
+    text-decoration: none;
+    gap: 8px;
+}
+
+.menu-item:hover {
+    background: #000082;
+    color: #fff;
+}
+
+.menu-sep {
+    height: 1px;
+    background: #808080;
+    box-shadow: 0 1px 0 #fff;
+    margin: 2px 4px;
+}
+
+/* =========================
+   REPRODUCTOR
+========================= */
+
+#yt-player {
+    position: fixed;
+    left: -300px;
+    top: 0;
+    width: 200px;
+    height: 150px;
+    pointer-events: none;
+}
+
+#music-player {
+    position: absolute;
+    top: 30px;
+    left: 30px;
+    width: 290px;
+    z-index: 10;
+    cursor: default;
+}
+
+#player-titlebar {
+    cursor: move;
+}
+
+#player-body {
+    display: flex;
+    gap: 8px;
+}
+
+#player-content {
+    flex: 1;
+    min-width: 0;
+}
+
+
+#player-main {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+#player-cover-wrap {
+    flex-shrink: 0;
+    width: 72px;
+    height: 72px;
+    box-shadow:
+        -1px -1px 0 #0a0a0a,
+         1px  1px 0 #ffffff,
+        -2px -2px 0 #808080,
+         2px  2px 0 #dfdfdf;
+    background: #808080;
+    overflow: hidden;
+}
+
+#player-cover {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    display: block;
+}
+
+#player-info {
+    flex: 1;
+    overflow: hidden;
+    padding-top: 4px;
+}
+
+#player-title {
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+#player-artist {
+    font-size: 10px;
+    color: #444;
+}
+
+#player-progress {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 16px;
+    background: #fff;
+    box-shadow: inset -1px -1px #fff, inset 1px 1px #808080,
+                inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a;
+    outline: none;
+    cursor: default;
+    padding: 0;
+    margin: 0 0 4px 0;
+    display: block;
+}
+
+#player-progress::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px;
+    height: 22px;
+    background: #c0c0c0;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    cursor: default;
+}
+
+#player-progress::-moz-range-thumb {
+    width: 11px;
+    height: 22px;
+    background: #c0c0c0;
+    border: none;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    cursor: default;
+}
+
+#player-time {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    margin-bottom: 8px;
+}
+
+#player-controls {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+#player-controls .button {
+    width: 34px;
+    font-size: 10px;
+    padding: 2px 0;
+}
+
+#player-volume-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 22px;
+    gap: 4px;
+}
+
+#volume-track-outer {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    box-shadow: inset 1px 1px #808080, inset -1px -1px #fff,
+                inset 2px 2px #0a0a0a, inset -2px -2px #dfdfdf;
+    background: #c0c0c0;
+    height: 10px;
+    padding: 0px;
+    border: 2px solid #d0d0d0;
+}
+
+#volume-icon {
+    font-size: 9px;
+    line-height: 1;
+    flex-shrink: 0;
+    color: #444;
+    letter-spacing: -1px;
+}
+
+#player-volume {
+    -webkit-appearance: none;
+    appearance: none;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 12px;
+    height: 100%;
+    background: transparent;
+    outline: none;
+    cursor: default;
+    margin-bottom: -16px;
+}
+
+#player-volume::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    width: 0;
+    height: 0;
+}
+
+#player-volume::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 24px;
+    background: #d4d4d4;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    cursor: default;
+    margin-left: -6px;
+}
+
+#player-volume::-moz-range-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    width: 0;
+    height: 0;
+}
+
+#player-volume::-moz-range-progress {
+    background: transparent;
+}
+
+#player-volume::-moz-range-thumb {
+    width: 18px;
+    height: 12px;
+    background: #d4d4d4;
+    border: none;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    cursor: default;
+}
+
+
+/* =========================
+   DARK MODE (Capi)
+========================= */
+
+body.dark .window {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.dark .title-bar {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+}
+
+body.dark .window-body {
+    background: #222;
+    color: #d0d0d0;
+}
+
+body.dark .button {
+    background: #3a3a3a;
+    color: #d0d0d0;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+}
+
+body.dark #player-artist {
+    color: #888;
+}
+
+body.dark #player-progress {
+    background: #1a1a1a;
+    box-shadow: inset -1px -1px #333, inset 1px 1px #111,
+                inset -2px -2px #2a2a2a, inset 2px 2px #000;
+}
+
+body.dark #player-progress::-webkit-slider-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+
+body.dark #player-progress::-moz-range-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+
+body.dark #volume-track-outer {
+    background: #2d2d2d;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #555,
+                inset 2px 2px #0a0a0a, inset -2px -2px #444;
+    border: 2px solid #d0d0d0;
+    border: 2px solid #d0d0d0;
+}
+
+body.dark #volume-icon {
+    color: #d0d0d0;
+}
+
+body.dark #player-volume::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    width: 0;
+    height: 0;
+}
+
+body.dark #player-volume::-webkit-slider-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+
+body.dark #player-volume::-moz-range-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    width: 0;
+    height: 0;
+}
+
+body.dark #player-volume::-moz-range-progress {
+    background: transparent;
+}
+
+#player-volume::-moz-range-progress {
+    background: transparent;
+}
+
+body.dark #player-volume::-moz-range-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+
+
+body.dark #taskbar {
+    background: #1e1e1e;
+    border-top-color: #444;
+    box-shadow: 0 -1px 0 #111;
+}
+body.dark .taskbar-sep {
+    box-shadow: inset -1px 0 0 #111, inset 1px 0 0 #444;
+}
+
+body.dark #start-btn {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+}
+
+body.dark #system-tray {
+    background: #1e1e1e;
+    color: #d0d0d0;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #444;
+}
+
+body.dark #start-menu {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+
+body.dark .menu-item {
+    color: #d0d0d0;
+}
+
+body.dark .menu-item:hover {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+}
+
+body.dark .menu-sep {
+    background: #444;
+    box-shadow: 0 1px 0 #222;
+}
+
+body.dark #taskbar-tasks .button {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+    box-shadow: inset -1px -1px #3a2e00, inset 1px 1px #fff8c0,
+                inset -2px -2px #2a1e00, inset 2px 2px #ffeea0;
+}
+
+
+body.dark #start-sidebar {
+    background: linear-gradient(to top, #6b5500, #EDC001);
+    color: #1a1000;
+}
+
+body.dark .win-logo {
+    background-image: url('../img/helldivers_skull.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+body.dark .win-logo span {
+    display: none;
+}
+
+
+
+
+
+/* =========================
+   ANGIE MODE
+========================= */
+
+body.angie .window-body {
+    background: #F8D0C8;
+}
+
+body.angie .title-bar {
+    background: linear-gradient(90deg, #5B744B, #8FAF70);
+}
+
+body.angie #taskbar {
+    background: #F8D0C8;
+    border-top-color: #fdecea;
+    box-shadow: 0 -1px 0 #c4857a;
+}
+
+body.angie .taskbar-sep {
+    box-shadow: inset -1px 0 0 #fdecea, inset 1px 0 0 #c4857a;
+}
+
+body.angie #start-btn {
+    background: #8FAF70;
+    color: #fdecea;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+body.angie #start-sidebar {
+    background: linear-gradient(to top, #5B744B, #8FAF70);
+    color: #fdecea;
+}
+
+body.angie .menu-item:hover {
+    background: #8FAF70;
+    color: #fdecea;
+}
+
+body.angie #taskbar-tasks .button {
+    background: #fce8e4;
+    color: #2d4025;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+body.angie #system-tray {
+    background: #f0c4bc;
+    color: #2d4025;
+    box-shadow: inset 1px 1px #c4857a, inset -1px -1px #fdecea;
+}
+
+body.angie #start-menu {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+body.angie #start-menu-items {
+    background: #F8D0C8;
+}
+
+body.angie .menu-sep {
+    background: #c4857a;
+    box-shadow: 0 1px 0 #fdecea;
+}
+
+body.angie .button {
+    background: #5B744B;
+    color: #fdecea;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+
+body.angie #player-artist {
+    color: #5B744B;
+}
+
+body.angie #player-cover-wrap {
+    box-shadow: -1px -1px 0 #2d4025, 1px 1px 0 #fdecea,
+                -2px -2px 0 #5B744B, 2px 2px 0 #F8D0C8;
+}
+
+body.angie #player-progress {
+    background: #fdecea;
+    box-shadow: inset -1px -1px #fdecea, inset 1px 1px #5B744B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #2d4025;
+}
+
+body.angie #player-progress::-webkit-slider-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
+                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+}
+
+body.angie #player-progress::-moz-range-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
+                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+}
+
+body.angie #volume-track-outer {
+    background: #fdecea;
+    box-shadow: inset 1px 1px #5B744B, inset -1px -1px #fdecea,
+                inset 2px 2px #2d4025, inset -2px -2px #F8D0C8;
+    border: 2px solid #8FAF70;
+}
+
+body.angie #player-volume::-webkit-slider-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
+                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+}
+
+body.angie #player-volume::-moz-range-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #8FAF70,
+                inset -2px -2px #3a5030, inset 2px 2px #afd490;
+}
+
+body.angie #volume-icon {
+    color: #5B744B;
+}

@@ -1,4 +1,4 @@
-body{
+﻿body{
     position:relative;
     margin:0;
     min-height:100vh;
@@ -20,79 +20,19 @@ body::after{
     position:fixed;
     inset:0;
     z-index:-2;
-    transition:opacity .7s ease;
-}
-
-/* FONDO PRINCIPAL */
-
-body::before,
-body::after{
-    content:'';
-    position:fixed;
-    inset:0;
-    z-index:-2;
-
     background-position:center;
     background-size:cover;
     background-repeat:no-repeat;
-
-    filter:
-        blur(8px)
-        saturate(1.1)
-        brightness(.8);
-
+    filter:blur(8px) saturate(1.1) brightness(.8);
     transform:scale(1.05);
-
     transition:opacity .7s ease;
 }
-
-/* FONDO USUARIO 1 */
 
 body::before{
-
-    background-image:url("../img/edu.jpg");
-
-    opacity:1;
-}
-
-/* FONDO USUARIO 2 */
-
-body::after{
-
-    background-image:url("../img/angela.png");
-
-    background-position:center;
-
-    background-size:cover;
-
-    background-repeat:no-repeat;
-
-    filter:
-        blur(8px)
-        saturate(1.1)
-        brightness(.8);
-
-    transform:scale(1.05);
-
     opacity:0;
 }
 
-/* ACTIVAR FONDO */
-
-
-body.user1::before{
-    opacity:1;
-}
-
-body.user1::after{
-    opacity:0;
-}
-
-body.user2::before{
-    opacity:0;
-}
-
-body.user2::after{
+body.user-selected::before{
     opacity:1;
 }
 
@@ -123,23 +63,15 @@ body.user2::after{
     top:0;
     left:0;
     width:320px;
-
     opacity:1;
-
     transform:translateY(0);
-
     pointer-events:auto;
-
-    transition:
-        opacity .35s ease,
-        transform .35s ease;
+    transition:opacity .35s ease, transform .35s ease;
 }
 
 #selectWindow.hidden{
     opacity:0;
-
     transform:translateY(-25px);
-
     pointer-events:none;
 }
 
@@ -149,28 +81,18 @@ body.user2::after{
 
 #loginWindow{
     position:absolute;
-
     top:0;
     left:0;
-
     width:320px;
-
     opacity:0;
-
     transform:translateY(25px);
-
     pointer-events:none;
-
-    transition:
-        opacity .35s ease,
-        transform .35s ease;
+    transition:opacity .35s ease, transform .35s ease;
 }
 
 #loginWindow.visible{
     opacity:1;
-
     transform:translateY(0);
-
     pointer-events:auto;
 }
 
@@ -183,29 +105,16 @@ body.user2::after{
     top:0;
     left:320px;
     width:140px;
-
     z-index:50;
-
     opacity:0;
-
-    transform:
-        translateY(20px)
-        scale(.92);
-
+    transform:translateY(20px) scale(.92);
     pointer-events:none;
-
-    transition:
-        opacity .35s ease,
-        transform .35s ease;
+    transition:opacity .35s ease, transform .35s ease;
 }
 
 .user-preview.visible{
     opacity:1;
-
-    transform:
-        translateY(-20px)
-        scale(1);
-
+    transform:translateY(-20px) scale(1);
     pointer-events:auto;
 }
 
@@ -215,9 +124,7 @@ body.user2::after{
 
 .user-preview .window-body{
     min-height:120px;
-
     padding:12px;
-
     display:flex;
     justify-content:center;
     align-items:center;
@@ -226,16 +133,13 @@ body.user2::after{
 .user-preview img{
     width:90px;
     height:90px;
-
     object-fit:cover;
-
-    border-radius:8px;
-
     display:block;
-
     box-shadow:
-        0 0 0 2px #fff,
-        2px 2px 0 rgba(0,0,0,.2);
+        -1px -1px 0 #0a0a0a,
+         1px  1px 0 #ffffff,
+        -2px -2px 0 #808080,
+         2px  2px 0 #dfdfdf;
 }
 
 /* =========================
@@ -270,3 +174,87 @@ body.user2::after{
     gap:8px;
     margin-top:14px;
 }
+
+/* =========================
+   TRANSICION DARK/LIGHT
+========================= */
+
+.window,
+.window-body,
+.button,
+input[type="password"],
+input[type="text"],
+label, p, strong {
+    transition: background 0.5s ease, color 0.5s ease, box-shadow 0.5s ease;
+}
+
+/* =========================
+   DARK MODE (Capi)
+========================= */
+
+body.user1 .window{
+    background:#2d2d2d;
+    box-shadow:inset -1px -1px #111, inset 1px 1px #555,
+               inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+
+body.user1 .window-body{
+    background:#222;
+}
+
+body.user1 label,
+body.user1 p,
+body.user1 strong{
+    color:#d0d0d0;
+}
+
+body.user1 .button{
+    background:#3a3a3a;
+    color:#d0d0d0;
+    box-shadow:inset -1px -1px #111, inset 1px 1px #555,
+               inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+}
+
+body.user1 input[type="password"],
+body.user1 input[type="text"]{
+    background:#1a1a1a;
+    color:#d0d0d0;
+    box-shadow:inset -1px -1px #444, inset 1px 1px #0a0a0a,
+               inset -2px -2px #333, inset 2px 2px #000;
+}
+
+body.user1 .title-bar {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+}
+
+body.user2 .window {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+               inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+
+body.user2 .window-body {
+    background: #F9DDD8;
+}
+
+body.user2 .title-bar {
+    background: linear-gradient(90deg, #5B744B, #8FAF70);
+}
+
+body.user2 input[type="password"],
+body.user2 input[type="text"]{
+    background: #F3BABA;
+    color:#1a1a1a;
+    box-shadow:inset -1px -1px #fdecea, inset 1px 1px #2d4025,
+               inset -2px -2px #F8D0C8, inset 2px 2px #5B744B;
+}
+
+body.user2 .button {
+    background: #F8D0C8;
+    color: #2d4025;
+    box-shadow: inset -1px -1px #2d4025, inset 1px 1px #fdecea,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+
