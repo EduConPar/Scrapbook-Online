@@ -1,0 +1,12 @@
+# Base de datos - nunca subir
+.env
+
+# XAMPP / logs
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
