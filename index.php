@@ -158,6 +158,166 @@ foreach (['png','jpg','jpeg'] as $ext) {
     #previewImage {
         image-rendering: pixelated;
     }
+    #selectWindow {
+        min-width: 200px;
+        background: #120808;
+        border-color: #3a0000 #0a0000 #0a0000 #3a0000;
+        box-shadow:
+            1px 1px 0 #000,
+            -1px -1px 0 #5a1010,
+            0 8px 32px rgba(0,0,0,0.8),
+            0 0 12px rgba(180,0,0,0.15);
+    }
+    #selectWindow .title-bar {
+        background: linear-gradient(to right, #6a0000, #b02020);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        border-bottom: 1px solid #3a0000;
+    }
+    #selectWindow .window-body {
+        background: #120808;
+        padding: 8px;
+    }
+    .user-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .user-button {
+        width: 100%;
+        text-align: left;
+        padding: 5px 12px;
+        font-size: 12px;
+        background: #1e0c0c !important;
+        color: #d4a0a0 !important;
+        border: 1px solid #3a1515 !important;
+        border-radius: 1px;
+        box-shadow:
+            inset 0 1px 0 rgba(255,100,100,0.08),
+            0 1px 3px rgba(0,0,0,0.5) !important;
+        transition: background 0.1s, color 0.1s;
+    }
+    .user-button:hover {
+        background: #5a0000 !important;
+        color: #fff !important;
+        border-color: #a03030 !important;
+        box-shadow:
+            inset 0 1px 0 rgba(255,120,120,0.15),
+            0 2px 6px rgba(120,0,0,0.4) !important;
+    }
+    .user-button:active {
+        background: #3a0000 !important;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+    }
+    #error-icon {
+        display: inline-flex;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+        color: #cc0000;
+        font-size: 10px;
+        font-weight: bold;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        margin-right: 4px;
+        line-height: 1;
+        flex-shrink: 0;
+    }
+    .user-list {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .user-button {
+        width: 100%;
+        text-align: left;
+        padding: 4px 12px;
+        font-size: 12px;
+    }
+    .error-popup {
+        position: fixed;
+        z-index: 4500;
+        width: 270px;
+        opacity: 0;
+        transform: scale(0.88);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+        background: #120808;
+        border-color: #3a0000 #0a0000 #0a0000 #3a0000;
+        box-shadow: 1px 1px 0 #000, -1px -1px 0 #5a1010,
+                    0 10px 36px rgba(0,0,0,0.85), 0 0 14px rgba(180,0,0,0.2);
+    }
+    .error-popup.ep-visible {
+        opacity: 1;
+        transform: scale(1);
+    }
+    .error-popup .title-bar {
+        background: linear-gradient(to right, #6a0000, #b02020);
+        border-bottom: 1px solid #3a0000;
+    }
+    .ep-title-icon {
+        display: inline-flex;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #fff;
+        color: #cc0000;
+        font-size: 9px;
+        font-weight: bold;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        margin-right: 3px;
+        line-height: 1;
+    }
+    .error-popup .window-body {
+        background: #120808;
+        padding: 12px 14px;
+    }
+    .ep-body {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .ep-big-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: #cc0000;
+        color: #fff;
+        font-size: 24px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        border: 2px solid #800000;
+        box-shadow: inset 0 1px 0 rgba(255,100,100,0.3);
+        line-height: 1;
+    }
+    .ep-msg {
+        color: #d4a0a0;
+        font-size: 11px;
+        margin: 2px 0 0;
+        line-height: 1.5;
+    }
+    .ep-actions {
+        display: flex;
+        justify-content: center;
+    }
+    .ep-ok-btn {
+        min-width: 72px;
+        background: #1e0c0c !important;
+        color: #d4a0a0 !important;
+        border: 1px solid #3a1515 !important;
+        box-shadow: inset 0 1px 0 rgba(255,80,80,0.07), 0 1px 3px rgba(0,0,0,0.5) !important;
+    }
+    .ep-ok-btn:hover {
+        background: #5a0000 !important;
+        color: #fff !important;
+        border-color: #a03030 !important;
+    }
     #ad-btn {
         width: 100%;
         margin-top: 8px;
@@ -180,10 +340,10 @@ foreach (['png','jpg','jpeg'] as $ext) {
 <?php if (!$skipIntro): ?>
 <div id="intro-overlay">
     <div id="intro-start">
-        <span>Click para comenzar...<span id="intro-cursor">_</span></span>
+        <span>Click to start...<span id="intro-cursor">_</span></span>
     </div>
     <video id="intro-video" muted playsinline>
-        <source src="assets/vids/inicio.mp4" type="video/mp4">
+        <source src="assets/vids/inicio.mp4?v=<?php echo filemtime(__DIR__.'/assets/vids/inicio.mp4'); ?>" type="video/mp4">
     </video>
 </div>
 <?php endif; ?>
@@ -205,7 +365,7 @@ foreach (['png','jpg','jpeg'] as $ext) {
     <!-- SELECCION -->
     <div class="window <?php echo $showLogin ? 'hidden' : ''; ?>" id="selectWindow">
         <div class="title-bar">
-            <div class="title-bar-text">Seleccionar usuario</div>
+            <div class="title-bar-text"><span id="error-icon">✕</span> !ERROR</div>
         </div>
         <div class="window-body">
             <div class="user-list">
@@ -488,6 +648,90 @@ if (adPopup) {
     showAd();
     <?php endif; ?>
 }
+
+/* ========================
+   FATAL ERROR POPUPS
+======================== */
+(function() {
+    var msgs = [
+        'SOUL.EXE stopped working.\nPlease select a user to continue.',
+        'User not responding.\nIs your body still yours?',
+        'Biometric data confusing. \nTry to remember who you are.',
+        'Integrated GPS failure.\nInfinity cannot be measured.',
+        'Unauthorised presence.\nLog in as fast as possible.',
+        'Connection to reality lost.\nPlease select a user to reconnect.',
+        'Consciousness leaking.\nEncapsulate yourself.',
+        'Questioning existence.\n Think to stabilize.',
+        '"I" is not a valid user.\nPlease select yourself to proceed.',
+        'Hostile environment detected.\nPlease flee.',
+        'Kernel panic - not fitting: Attempted to kill init!\n Task failed.',
+        'const self = null;\nError: Cannot set property "self" of null at line 42.',
+        'booting failed: no operating system found.\nPlease select a user to load your world.',
+        'Module human.exe failed to initialize.\n Check the list to proceed.',
+    ];
+
+    var active = false;
+    var timer  = null;
+
+    function createPopup() {
+        var msg = msgs[Math.floor(Math.random() * msgs.length)];
+        var el  = document.createElement('div');
+        el.className = 'error-popup window';
+        el.innerHTML =
+            '<div class="title-bar">' +
+                '<div class="title-bar-text"><span class="ep-title-icon">✕</span> !FATAL ERROR</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" class="ep-close-btn"></button></div>' +
+            '</div>' +
+            '<div class="window-body">' +
+                '<div class="ep-body">' +
+                    '<div class="ep-big-icon">✕</div>' +
+                    '<p class="ep-msg">' + msg.replace('\n', '<br>') + '</p>' +
+                '</div>' +
+                '<div class="ep-actions"><button class="button ep-ok-btn">OK</button></div>' +
+            '</div>';
+
+        var maxX = Math.max(50, window.innerWidth  - 290);
+        var maxY = Math.max(50, window.innerHeight - 180);
+        el.style.left = (20 + Math.floor(Math.random() * maxX)) + 'px';
+        el.style.top  = (20 + Math.floor(Math.random() * maxY)) + 'px';
+
+        document.body.appendChild(el);
+        setTimeout(function() { el.classList.add('ep-visible'); }, 10);
+
+        function close() { el.classList.remove('ep-visible'); setTimeout(function() { el.remove(); }, 180); }
+        el.querySelector('.ep-close-btn').addEventListener('click', close);
+        el.querySelector('.ep-ok-btn').addEventListener('click', close);
+    }
+
+    function schedule() {
+        if (!active) return;
+        var delay = timer === null ? 8000 : (6000 + Math.random() * 5000);
+        timer = setTimeout(function() { if (!active) return; createPopup(); schedule(); }, delay);
+    }
+
+    window.startErrorPopups = function() {
+        if (active) return;
+        active = true;
+        timer = null;
+        schedule();
+    };
+
+    window.stopErrorPopups = function() {
+        active = false;
+        clearTimeout(timer);
+        timer = null;
+        document.querySelectorAll('.error-popup').forEach(function(p) { p.remove(); });
+    };
+})();
+
+<?php if (!$showLogin): ?>startErrorPopups();<?php endif; ?>
+
+const _origSetUser2 = setUser;
+setUser = function(u, l, i, w) { _origSetUser2(u, l, i, w); stopErrorPopups(); };
+
+document.getElementById('changeUser').addEventListener('click', function() {
+    setTimeout(startErrorPopups, 400);
+}, true);
 </script>
 
 </body>

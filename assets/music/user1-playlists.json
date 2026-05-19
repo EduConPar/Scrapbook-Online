@@ -1,0 +1,155 @@
+[
+    {
+        "id": "pl_1779175324177",
+        "name": "Playlist para bombardear peru",
+        "tracks": [
+            {
+                "videoId": "NVqXG3QNav0",
+                "title": "The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum",
+                "artist": "Heaven Pierce Her",
+                "duration": 382
+            },
+            {
+                "videoId": "QDYUiCPLtxk",
+                "title": "In Absentia ΛΟΓΟΣ",
+                "artist": "Heaven Pierce Her",
+                "duration": 274
+            },
+            {
+                "videoId": "mxKUFhBKmnw",
+                "title": "Spiral Out (Keep Going)",
+                "artist": "Heaven Pierce Her",
+                "duration": 279
+            },
+            {
+                "videoId": "XY3b4kVAV2Y",
+                "title": "Never Odd or Even",
+                "artist": "Heaven Pierce Her",
+                "duration": 133
+            },
+            {
+                "videoId": "bcOUS1o6bwM",
+                "title": "Duel (Versus Reprise)",
+                "artist": "Heaven Pierce Her",
+                "duration": 365
+            },
+            {
+                "videoId": "_ysPpT7-f4o",
+                "title": "No Devil Lived On",
+                "artist": "Heaven Pierce Her",
+                "duration": 438
+            },
+            {
+                "videoId": "9BY8FW1LLqw",
+                "title": "Mirror Rim",
+                "artist": "Heaven Pierce Her",
+                "duration": 184
+            },
+            {
+                "videoId": "gtboglNaLgw",
+                "title": "The Break (Crimson Glass deComposition)",
+                "artist": "Heaven Pierce Her",
+                "duration": 263
+            },
+            {
+                "videoId": "stpMtEx5zqc",
+                "title": "Event Horizon (Reach for the Sun and Burn! Burn! Burn!)",
+                "artist": "Heaven Pierce Her",
+                "duration": 312
+            },
+            {
+                "videoId": "BvPrRkK1I6k",
+                "title": "The Fall",
+                "artist": "Heaven Pierce Her",
+                "duration": 187
+            }
+        ]
+    },
+    {
+        "id": "pl_1779182747435",
+        "name": "test",
+        "owner": "user1",
+        "collaborators": [
+            "user2"
+        ],
+        "tracks": [
+            {
+                "videoId": "NVqXG3QNav0",
+                "title": "The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum",
+                "artist": "Heaven Pierce Her",
+                "duration": 382,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "bcOUS1o6bwM",
+                "title": "Duel (Versus Reprise)",
+                "artist": "Heaven Pierce Her",
+                "duration": 365,
+                "addedBy": "Capi"
+            },
+            {
+                "videoId": "QDYUiCPLtxk",
+                "title": "In Absentia ΛΟΓΟΣ",
+                "artist": "Heaven Pierce Her",
+                "duration": 274,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "mxKUFhBKmnw",
+                "title": "Spiral Out (Keep Going)",
+                "artist": "Heaven Pierce Her",
+                "duration": 279,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "XY3b4kVAV2Y",
+                "title": "Never Odd or Even",
+                "artist": "Heaven Pierce Her",
+                "duration": 133,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "_ysPpT7-f4o",
+                "title": "No Devil Lived On",
+                "artist": "Heaven Pierce Her",
+                "duration": 438,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "9BY8FW1LLqw",
+                "title": "Mirror Rim",
+                "artist": "Heaven Pierce Her",
+                "duration": 184,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "gtboglNaLgw",
+                "title": "The Break (Crimson Glass deComposition)",
+                "artist": "Heaven Pierce Her",
+                "duration": 263,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "stpMtEx5zqc",
+                "title": "Event Horizon (Reach for the Sun and Burn! Burn! Burn!)",
+                "artist": "Heaven Pierce Her",
+                "duration": 312,
+                "addedBy": "Angie"
+            },
+            {
+                "videoId": "BvPrRkK1I6k",
+                "title": "The Fall",
+                "artist": "Heaven Pierce Her",
+                "duration": 187,
+                "addedBy": "Angie"
+            }
+        ]
+    },
+    {
+        "id": "pl_1779183150311",
+        "name": "test2",
+        "owner": "user1",
+        "collaborators": [],
+        "tracks": []
+    }
+]
