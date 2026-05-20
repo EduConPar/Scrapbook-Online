@@ -11,7 +11,11 @@ if (!$userKey || !isset($loginUsers[$userKey])) {
 
 $userLabel = $loginUsers[$userKey]['label'];
 
-// Comprobar si ya tiene pareja
+$stmt = $pdo->prepare("SELECT id FROM usuarios WHERE username = ?");
+$stmt->execute([strtolower($userLabel)]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+$userId = $user['id'] ?? 0;
+
 $stmt = $pdo->prepare("
     SELECT p.id, p.fecha_inicio, u1.username as user1, u2.username as user2
     FROM parejas p
@@ -21,6 +25,8 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute([strtolower($userLabel), strtolower($userLabel)]);
 $pareja = $stmt->fetch(PDO::FETCH_ASSOC);
+$parejaId = $pareja ? $pareja['id'] : 0;
+$fechaInicio = $pareja ? $pareja['fecha_inicio'] : null;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -29,28 +35,68 @@ $pareja = $stmt->fetch(PDO::FETCH_ASSOC);
     <title>Nuestro espacio</title>
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/desktop.css">
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            z-index: 9000;
+            justify-content: center;
+            align-items: center;
+        }
+        .popup-overlay.active { display: flex; }
+        .cal-cell-foto {
+            background-size: cover;
+            background-position: center;
+            color: #fff !important;
+            text-shadow: 0 0 3px #000, 0 0 6px #000;
+            border: 2px solid #fff !important;
+        }
+        body.dark {
+            background-image: url('assets/img/capi-wallpaper.jpg') !important;
+            background-size: cover;
+            background-position: center;
+        }
+        body.angie {
+            background-image: url('assets/img/angie-wallpaper.png') !important;
+            background-size: cover;
+            background-position: center;
+        }
+        .cal-cell {
+            padding: 0;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px dashed rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .cal-cell:hover {
+            border-color: rgba(0,0,0,0.35);
+            background: rgba(255,255,255,0.3);
+        }
+        .cal-cell-num {
+            padding: 6px 4px;
+        }
+    </style>
 </head>
 <body class="<?php echo $userKey === 'user1' ? 'dark' : 'angie'; ?>">
 
-<div style="padding: 16px;">
+<!-- BARRA SUPERIOR -->
+<div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
     <button class="button" onclick="history.back()">◄ Volver</button>
-    <span style="margin-left: 12px; font-size: 13px;">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
-</div>
-
-<?php if (!$pareja): ?>
-<!-- SIN PAREJA: mostrar opciones -->
-<div class="window" style="width: 320px; margin: 40px auto;">
-    <div class="title-bar">
-        <div class="title-bar-text">💑 Nuestro espacio</div>
-    </div>
-    <div class="window-body" style="padding: 16px; text-align: center;">
-        <p style="margin-bottom: 16px; font-size: 12px;">Todavía no estás conectado con tu pareja.</p>
-        <button class="button" id="btn-invitar" style="width: 100%; margin-bottom: 8px;">💌 Invitar a mi pareja</button>
-    </div>
+    <span style="font-size: 13px;">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
+    <?php if (!$pareja): ?>
+    <button class="button" id="btn-invitar">💌 Invitar a mi pareja</button>
+    <?php endif; ?>
 </div>
 
 <!-- VENTANA DE INVITACIÓN -->
-<div class="window" id="invite-window" style="display:none; width: 280px; margin: 0 auto;">
+<div class="window" id="invite-window" style="display:none; width: 280px; position: fixed; top: 80px; left: 50%; transform: translateX(-50%); z-index: 1000;">
     <div class="title-bar">
         <div class="title-bar-text">💌 Invitar pareja</div>
         <div class="title-bar-controls">
@@ -84,10 +130,508 @@ $pareja = $stmt->fetch(PDO::FETCH_ASSOC);
     </div>
 </div>
 
-<script>
-const currentUserKey = '<?php echo $userKey; ?>';
+<!-- POPUP DÍA -->
+<div class="popup-overlay" id="popup-dia">
+    <div class="window" style="width: 380px; max-height: 85vh; display: flex; flex-direction: column;">
+        <div class="title-bar">
+            <div class="title-bar-text" id="popup-titulo">📅 Día</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="popup-close"></button>
+            </div>
+        </div>
+        <div class="window-body" style="padding: 12px; overflow-y: auto; flex: 1;">
+            <div id="popup-contenido"></div>
+        </div>
+    </div>
+</div>
 
-// Cargar lista de usuarios para invitar
+<!-- LAYOUT PRINCIPAL -->
+<div style="display: grid; grid-template-columns: 180px 1fr 240px; gap: 12px; padding: 0 16px 16px 16px; height: calc(100vh - 50px); box-sizing: border-box;">
+
+    <!-- IZQUIERDA -->
+    <div style="display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+
+        <?php if ($pareja): ?>
+        <div class="window">
+            <div class="title-bar"><div class="title-bar-text">💕 Juntos</div></div>
+            <div class="window-body" style="padding: 12px; text-align: center;">
+                <div id="dias-contador" style="font-size: 28px; font-weight: bold;"></div>
+                <div style="font-size: 11px; margin-top: 4px;">días juntos</div>
+                <div style="font-size: 10px; color: #808080; margin-top: 6px;">Desde <?php echo $pareja['fecha_inicio']; ?></div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- AÑADIR MOMENTO -->
+        <div class="window" style="overflow: auto;">
+            <div class="title-bar"><div class="title-bar-text">📸 Añadir momento</div></div>
+            <div class="window-body" style="padding: 10px;">
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Título</label>
+                    <input type="text" id="momento-titulo" style="width: 100%;">
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Fecha</label>
+                    <input type="date" id="momento-fecha" style="width: 100%;">
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Descripción</label>
+                    <textarea id="momento-desc" style="width: 100%; height: 50px;"></textarea>
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Emoción</label>
+                    <select id="momento-emocion" style="width: 100%;">
+                        <option value="😊">😊 Feliz</option>
+                        <option value="😍">😍 Enamorado/a</option>
+                        <option value="😂">😂 Divertido</option>
+                        <option value="😢">😢 Nostálgico</option>
+                        <option value="😌">😌 En paz</option>
+                    </select>
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 8px;">
+                    <label style="font-size: 11px;">Foto (opcional)</label>
+                    <input type="file" id="momento-foto" accept="image/*" style="width: 100%; font-size: 11px;">
+                </div>
+                <button class="button" id="btn-guardar-momento" style="width: 100%;">Guardar</button>
+                <p id="momento-status" style="font-size: 11px; margin-top: 6px;"></p>
+            </div>
+        </div>
+
+        <!-- AÑADIR RECORDATORIO -->
+        <div class="window" style="overflow: auto;">
+            <div class="title-bar"><div class="title-bar-text">🔔 Añadir recordatorio</div></div>
+            <div class="window-body" style="padding: 10px;">
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Título</label>
+                    <input type="text" id="rec-titulo" style="width: 100%;">
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Fecha</label>
+                    <input type="date" id="rec-fecha" style="width: 100%;">
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 6px;">
+                    <label style="font-size: 11px;">Tipo</label>
+                    <select id="rec-tipo" style="width: 100%;">
+                        <option value="cita">🏥 Cita médica</option>
+                        <option value="examen">📝 Examen</option>
+                        <option value="aniversario">💑 Aniversario</option>
+                        <option value="otro">📌 Otro</option>
+                    </select>
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 8px;">
+                    <label style="font-size: 11px;">Descripción</label>
+                    <textarea id="rec-desc" style="width: 100%; height: 40px;"></textarea>
+                </div>
+                <button class="button" id="btn-guardar-rec" style="width: 100%;">Guardar</button>
+                <p id="rec-status" style="font-size: 11px; margin-top: 6px;"></p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- CENTRO: Calendario -->
+    <div class="window" style="display: flex; flex-direction: column; overflow: hidden;">
+        <div class="title-bar"><div class="title-bar-text">📅 Calendario</div></div>
+        <div class="window-body" style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <button class="button" id="prev-month">◄</button>
+                <span id="month-label" style="font-size: 18px; font-weight: bold;"></span>
+                <button class="button" id="next-month">►</button>
+            </div>
+            <div style="font-size: 10px; margin-bottom: 8px; display: flex; gap: 12px;">
+                <span><span style="color:#ff69b4;">●</span> Momentos</span>
+                <span><span style="color:#4a90d9;">●</span> Recordatorios</span>
+            </div>
+            <div id="calendar-grid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 13px; flex: 1;"></div>
+        </div>
+    </div>
+
+    <!-- DERECHA: Recordatorios + Momentos -->
+    <div style="display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+
+        <div class="window" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="title-bar"><div class="title-bar-text">🔔 Recordatorios</div></div>
+            <div class="window-body" style="padding: 10px; flex: 1; overflow-y: auto;">
+                <div id="recordatorios-lista"><p style="font-size:11px;color:#808080;">Cargando...</p></div>
+            </div>
+        </div>
+
+        <div class="window" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="title-bar"><div class="title-bar-text">💗 Momentos</div></div>
+            <div class="window-body" style="padding: 10px; flex: 1; overflow-y: auto;">
+                <div id="momentos-lista"><p style="font-size:11px;color:#808080;">Cargando...</p></div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+const parejaId = <?php echo $parejaId; ?>;
+const fechaInicio = '<?php echo $fechaInicio; ?>';
+const hoy = new Date();
+
+<?php if ($pareja): ?>
+const inicio = new Date(fechaInicio);
+const dias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24));
+document.getElementById('dias-contador').textContent = dias;
+<?php endif; ?>
+
+let currentYear = hoy.getFullYear();
+let currentMonth = hoy.getMonth();
+let momentosPorFecha = {};
+let recordatoriosPorFecha = {};
+let todosMomentos = [];
+const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+
+function cargarTodo() {
+    Promise.all([
+        fetch('assets/couple/get-momentos.php?pareja_id=' + parejaId).then(r => r.json()),
+        fetch('assets/couple/get-recordatorios.php?pareja_id=' + parejaId).then(r => r.json())
+    ]).then(([momentos, recordatorios]) => {
+        todosMomentos = momentos;
+        momentosPorFecha = {};
+        momentos.forEach(m => {
+            if (!momentosPorFecha[m.fecha]) momentosPorFecha[m.fecha] = [];
+            momentosPorFecha[m.fecha].push(m);
+        });
+
+        recordatoriosPorFecha = {};
+        recordatorios.forEach(r => {
+            if (!recordatoriosPorFecha[r.fecha]) recordatoriosPorFecha[r.fecha] = [];
+            recordatoriosPorFecha[r.fecha].push(r);
+        });
+
+        renderCalendario();
+        renderRecordatorios(recordatorios);
+        renderMomentos(momentos);
+    }).catch(() => renderCalendario());
+}
+
+function renderRecordatorios(lista) {
+    const div = document.getElementById('recordatorios-lista');
+    if (!lista.length) { div.innerHTML = '<p style="font-size:11px;color:#808080;">No hay recordatorios.</p>'; return; }
+
+    const tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
+    const hoyStr = hoy.toISOString().split('T')[0];
+
+    lista.sort((a,b) => a.fecha.localeCompare(b.fecha));
+    div.innerHTML = '';
+    lista.forEach(r => {
+        const pasado = r.fecha < hoyStr;
+        const item = document.createElement('div');
+        item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;' + (pasado ? 'opacity:0.5;' : '');
+        const diasRestantes = Math.ceil((new Date(r.fecha) - hoy) / (1000*60*60*24));
+        const cuandoStr = pasado ? 'Pasado' : diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' días';
+        const texto = document.createElement('div');
+        texto.style.cssText = 'flex: 1;';
+        texto.innerHTML = '<strong>' + (tiposIcono[r.tipo] || '📌') + ' ' + r.titulo + '</strong><br>' +
+            '<span style="color:#808080;">' + r.fecha + ' · ' + cuandoStr + (r.autor ? ' · ' + r.autor : '') + '</span>' +
+            (r.descripcion ? '<br>' + r.descripcion : '');
+        const btnDel = document.createElement('button');
+        btnDel.className = 'button';
+        btnDel.textContent = '✕';
+        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px; flex-shrink: 0;';
+        btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
+        item.appendChild(texto);
+        item.appendChild(btnDel);
+        div.appendChild(item);
+    });
+}
+
+function renderMomentos(lista) {
+    const div = document.getElementById('momentos-lista');
+    if (!lista.length) { div.innerHTML = '<p style="font-size:11px;color:#808080;">No hay momentos.</p>'; return; }
+
+    const ordenados = [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));
+    div.innerHTML = '';
+    ordenados.forEach(m => {
+        const item = document.createElement('div');
+        item.style.cssText = 'border: 1px solid #ff69b4; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
+        const texto = document.createElement('div');
+        texto.style.cssText = 'flex: 1; cursor: pointer;';
+        texto.innerHTML = '<strong>' + m.emocion + ' ' + m.titulo + '</strong>' +
+            '<br><span style="color:#808080;">' + m.fecha + (m.autor ? ' · ' + m.autor : '') + '</span>' +
+            (m.descripcion ? '<br>' + m.descripcion : '');
+        texto.addEventListener('click', () => abrirPopupDia(m.fecha));
+        const btnDel = document.createElement('button');
+        btnDel.className = 'button';
+        btnDel.textContent = '✕';
+        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px; flex-shrink: 0;';
+        btnDel.addEventListener('click', () => eliminarMomento(m.id));
+        item.appendChild(texto);
+        item.appendChild(btnDel);
+        div.appendChild(item);
+    });
+}
+
+function renderCalendario() {
+    document.getElementById('month-label').textContent = meses[currentMonth] + ' ' + currentYear;
+    const grid = document.getElementById('calendar-grid');
+    grid.innerHTML = '';
+
+    diasSemana.forEach(d => {
+        const cell = document.createElement('div');
+        cell.textContent = d;
+        cell.style.cssText = 'font-weight:bold; padding: 8px 4px; color: #808080; border-bottom: 1px solid #c0c0c0; text-align:center;';
+        grid.appendChild(cell);
+    });
+
+    const primerDia = new Date(currentYear, currentMonth, 1).getDay();
+    const offset = primerDia === 0 ? 6 : primerDia - 1;
+    const totalDias = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    for (let i = 0; i < offset; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'cal-cell';
+        empty.style.cursor = 'default';
+        empty.style.borderColor = 'transparent';
+        grid.appendChild(empty);
+    }
+
+    for (let d = 1; d <= totalDias; d++) {
+        const cell = document.createElement('div');
+        const fechaStr = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+        const momentosDelDia = momentosPorFecha[fechaStr] || [];
+        const tieneRecordatorios = recordatoriosPorFecha[fechaStr] && recordatoriosPorFecha[fechaStr].length > 0;
+        const esHoy = d === hoy.getDate() && currentMonth === hoy.getMonth() && currentYear === hoy.getFullYear();
+        const momentoConFoto = momentosDelDia.find(m => m.foto);
+
+        cell.className = 'cal-cell';
+
+        if (momentoConFoto) {
+            cell.style.backgroundImage = 'url(uploads/momentos/' + momentoConFoto.foto + ')';
+            cell.classList.add('cal-cell-foto');
+            const num = document.createElement('div');
+            num.className = 'cal-cell-num';
+            num.textContent = d;
+            cell.appendChild(num);
+        } else if (esHoy) {
+            cell.style.borderColor = 'transparent';
+            const barra = document.createElement('div');
+            barra.style.cssText = 'width:100%; background:#000080; color:#fff; padding: 6px 4px; box-sizing:border-box; text-align:center;';
+            barra.textContent = d;
+            cell.appendChild(barra);
+        } else {
+            const num = document.createElement('div');
+            num.className = 'cal-cell-num';
+            num.textContent = d;
+            cell.appendChild(num);
+        }
+
+        if (momentosDelDia.length > 0 || tieneRecordatorios) {
+            const dots = document.createElement('div');
+            dots.style.cssText = 'display:flex; justify-content:center; gap:2px; padding-bottom:3px;';
+            if (momentosDelDia.length > 0) {
+                const dot = document.createElement('div');
+                dot.style.cssText = 'width:5px;height:5px;background:#ff69b4;border-radius:50%;';
+                dots.appendChild(dot);
+            }
+            if (tieneRecordatorios) {
+                const dot = document.createElement('div');
+                dot.style.cssText = 'width:5px;height:5px;background:#4a90d9;border-radius:50%;';
+                dots.appendChild(dot);
+            }
+            cell.appendChild(dots);
+        }
+
+        cell.addEventListener('click', () => abrirPopupDia(fechaStr));
+
+        grid.appendChild(cell);
+    }
+}
+
+function abrirPopupDia(fecha) {
+    const momentos = momentosPorFecha[fecha] || [];
+    const recordatorios = recordatoriosPorFecha[fecha] || [];
+
+    document.getElementById('popup-titulo').textContent = '📅 ' + fecha;
+    const contenido = document.getElementById('popup-contenido');
+    contenido.innerHTML = '';
+
+    if (!momentos.length && !recordatorios.length) {
+        contenido.innerHTML = '<p style="font-size:11px;color:#808080;">No hay nada este día.</p>';
+    }
+
+    if (momentos.length) {
+        const h = document.createElement('p');
+        h.style.cssText = 'font-size:11px; font-weight:bold; color:#ff69b4; margin-bottom:6px;';
+        h.textContent = '💗 Momentos';
+        contenido.appendChild(h);
+        momentos.forEach(m => {
+            const div = document.createElement('div');
+            div.style.cssText = 'border: 1px solid #ff69b4; padding: 8px; margin-bottom: 8px; font-size: 11px; border-radius: 2px;';
+            let html = '';
+            if (m.foto) {
+                html += '<img src="uploads/momentos/' + m.foto + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
+            }
+            html += '<div style="display:flex; justify-content:space-between; align-items:flex-start;">';
+            html += '<div><strong>' + m.emocion + ' ' + m.titulo + '</strong>';
+            if (m.autor) html += ' <span style="color:#808080;">(' + m.autor + ')</span>';
+            if (m.descripcion) html += '<br>' + m.descripcion;
+            html += '</div>';
+            html += '<button class="button" onclick="eliminarMomento(' + m.id + ')" style="font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;">✕</button>';
+            html += '</div>';
+            div.innerHTML = html;
+            contenido.appendChild(div);
+        });
+    }
+
+    if (recordatorios.length) {
+        const tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
+        const h = document.createElement('p');
+        h.style.cssText = 'font-size:11px; font-weight:bold; color:#4a90d9; margin-bottom:6px; margin-top:8px;';
+        h.textContent = '❓ Recordatorios';
+        contenido.appendChild(h);
+        recordatorios.forEach(r => {
+            const div = document.createElement('div');
+            div.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display:flex; justify-content:space-between; align-items:flex-start;';
+            const texto = document.createElement('div');
+            texto.innerHTML = '<strong>' + (tiposIcono[r.tipo] || '📌') + ' ' + r.titulo + '</strong>' +
+                (r.descripcion ? '<br>' + r.descripcion : '');
+            const btnDel = document.createElement('button');
+            btnDel.className = 'button';
+            btnDel.textContent = '✕';
+            btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;';
+            btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
+            div.appendChild(texto);
+            div.appendChild(btnDel);
+            contenido.appendChild(div);
+        });
+    }
+
+    document.getElementById('popup-dia').classList.add('active');
+    document.getElementById('momento-fecha').value = fecha;
+    document.getElementById('rec-fecha').value = fecha;
+}
+
+document.getElementById('popup-close').addEventListener('click', () => {
+    document.getElementById('popup-dia').classList.remove('active');
+});
+document.getElementById('popup-dia').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+
+document.getElementById('prev-month').addEventListener('click', () => {
+    currentMonth--;
+    if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+    renderCalendario();
+});
+
+document.getElementById('next-month').addEventListener('click', () => {
+    currentMonth++;
+    if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+    renderCalendario();
+});
+
+document.getElementById('btn-guardar-momento').addEventListener('click', function() {
+    const titulo = document.getElementById('momento-titulo').value.trim();
+    const fecha = document.getElementById('momento-fecha').value;
+    const desc = document.getElementById('momento-desc').value.trim();
+    const emocion = document.getElementById('momento-emocion').value;
+    const fotoInput = document.getElementById('momento-foto');
+    const status = document.getElementById('momento-status');
+
+    if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
+
+    status.style.color = '#808080';
+    status.textContent = 'Guardando...';
+
+    fetch('assets/couple/save-momento.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, emocion })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { status.style.color = 'red'; status.textContent = data.error; return; }
+
+        const momentoId = data.id;
+
+        if (fotoInput.files.length > 0) {
+            const formData = new FormData();
+            formData.append('foto', fotoInput.files[0]);
+            formData.append('momento_id', momentoId);
+
+            return fetch('assets/couple/upload-foto.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(fotoData => {
+                if (fotoData.error) { status.style.color = 'orange'; status.textContent = '⚠️ Momento guardado pero error con la foto: ' + fotoData.error; }
+                else { status.style.color = 'green'; status.textContent = '✅ Guardado con foto'; }
+                document.getElementById('momento-titulo').value = '';
+                document.getElementById('momento-desc').value = '';
+                fotoInput.value = '';
+                cargarTodo();
+            });
+        }
+
+        status.style.color = 'green'; status.textContent = '✅ Guardado';
+        document.getElementById('momento-titulo').value = '';
+        document.getElementById('momento-desc').value = '';
+        cargarTodo();
+    });
+});
+
+document.getElementById('btn-guardar-rec').addEventListener('click', function() {
+    const titulo = document.getElementById('rec-titulo').value.trim();
+    const fecha = document.getElementById('rec-fecha').value;
+    const tipo = document.getElementById('rec-tipo').value;
+    const desc = document.getElementById('rec-desc').value.trim();
+    const status = document.getElementById('rec-status');
+
+    if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
+
+    fetch('assets/couple/save-recordatorio.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, tipo, descripcion: desc })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { status.style.color = 'red'; status.textContent = data.error; return; }
+        status.style.color = 'green'; status.textContent = '✅ Guardado';
+        document.getElementById('rec-titulo').value = '';
+        document.getElementById('rec-desc').value = '';
+        cargarTodo();
+    });
+});
+
+function eliminarMomento(id) {
+    if (!confirm('¿Eliminar este momento?')) return;
+    fetch('assets/couple/delete-momento.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('popup-dia').classList.remove('active');
+        cargarTodo();
+    });
+}
+
+function eliminarRecordatorio(id) {
+    if (!confirm('¿Eliminar este recordatorio?')) return;
+    fetch('assets/couple/delete-recordatorio.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('popup-dia').classList.remove('active');
+        cargarTodo();
+    });
+}
+
+<?php if (!$pareja): ?>
 document.getElementById('btn-invitar').addEventListener('click', function() {
     document.getElementById('invite-window').style.display = 'block';
     fetch('assets/couple/get-users.php')
@@ -125,7 +669,6 @@ document.getElementById('invite-close').addEventListener('click', function() {
     document.getElementById('invite-window').style.display = 'none';
 });
 
-// Comprobar invitaciones recibidas
 let currentPartnerInvite = null;
 
 function checkPartnerInvites() {
@@ -145,10 +688,7 @@ function checkPartnerInvites() {
 function respondInvite(action) {
     if (!currentPartnerInvite) return;
     const fecha = document.getElementById('partner-fecha').value;
-    if (action === 'accept' && !fecha) {
-        alert('Por favor introduce la fecha en que empezasteis.');
-        return;
-    }
+    if (action === 'accept' && !fecha) { alert('Por favor introduce la fecha en que empezasteis.'); return; }
     fetch('assets/couple/respond-partner-invite.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,8 +699,7 @@ function respondInvite(action) {
         if (data.error) { alert(data.error); return; }
         document.getElementById('partner-notif').style.display = 'none';
         if (action === 'accept') location.reload();
-    })
-    .catch(() => {});
+    });
 }
 
 document.getElementById('partner-accept').addEventListener('click', () => respondInvite('accept'));
@@ -168,15 +707,10 @@ document.getElementById('partner-reject').addEventListener('click', () => respon
 
 checkPartnerInvites();
 setInterval(checkPartnerInvites, 5000);
-</script>
-
-<?php else: ?>
-<!-- CON PAREJA: mostrar el calendario -->
-<div style="padding: 16px;">
-    <p style="font-size: 12px;">✅ Conectado con tu pareja. ¡El calendario viene pronto!</p>
-    <p style="font-size: 11px; color: #808080;">Juntos desde: <?php echo $pareja['fecha_inicio']; ?></p>
-</div>
 <?php endif; ?>
+
+cargarTodo();
+</script>
 
 </body>
 </html>

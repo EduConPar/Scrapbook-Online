@@ -1489,3 +1489,9 @@ body.angie .archive-item:hover {
 
 body.angie .archive-item-title { color: #35522B; }
 body.angie .archive-item-meta  { color: #5B744B; }
+
+#calendar-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+}
