@@ -54,6 +54,10 @@ $hasPlayer = in_array($desktopUserKey, ['user1', 'user2']);
         <div class="desktop-icon-img">📼</div>
         <span>MelonArchive</span>
     </div>
+    <div class="desktop-icon" id="calendar-icon">
+        <div class="desktop-icon-img">📅</div>
+        <span>Calendario</span>
+    </div>
 </div>
 
 <!-- ARCHIVE WINDOW -->
@@ -1841,6 +1845,9 @@ function playVideo(id) {
 
     document.addEventListener('mouseup', function() { resizing = false; });
 })();
+document.getElementById('calendar-icon').addEventListener('dblclick', function() {
+    window.location.href = 'calendario.php';
+});
 </script>
 
 </body>
