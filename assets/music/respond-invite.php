@@ -10,7 +10,7 @@ if (!array_key_exists($userKey, $loginUsers)) { echo json_encode(['error' => 'Us
 $body     = json_decode(file_get_contents('php://input'), true);
 $inviteId = isset($body['inviteId']) ? $body['inviteId'] : '';
 $action   = isset($body['action'])   ? $body['action']   : '';
-if (!$inviteId || !in_array($action, ['accept', 'reject'])) {
+if (!$inviteId || !in_array($action, ['accept', 'reject', 'dismiss'])) {
     echo json_encode(['error' => 'Datos inválidos']); exit;
 }
 
@@ -64,6 +64,25 @@ if ($action === 'accept') {
     }
     unset($pl);
     file_put_contents($ownerFile, json_encode($ownerPls, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+// Notificar al dueño de la playlist sobre la respuesta (accept o reject)
+if (in_array($action, ['accept', 'reject']) && isset($invite['fromUser']) && array_key_exists($invite['fromUser'], $loginUsers)) {
+    $ownerNotifFile = __DIR__ . '/' . $invite['fromUser'] . '-invites.json';
+    $ownerNotifs    = [];
+    if (file_exists($ownerNotifFile)) {
+        $ownerNotifs = json_decode(file_get_contents($ownerNotifFile), true);
+        if (!is_array($ownerNotifs)) $ownerNotifs = [];
+    }
+    $ownerNotifs[] = [
+        'id'           => 'resp_' . time() . '_' . rand(1000, 9999),
+        'type'         => $action === 'accept' ? 'collab-accepted' : 'collab-rejected',
+        'playlistId'   => $invite['playlistId'],
+        'playlistName' => $invite['playlistName'],
+        'fromLabel'    => $loginUsers[$userKey]['label'],
+        'sentAt'       => time(),
+    ];
+    file_put_contents($ownerNotifFile, json_encode($ownerNotifs, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 }
 
 echo json_encode(['ok' => true]);

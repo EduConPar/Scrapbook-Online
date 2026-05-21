@@ -56,20 +56,33 @@ function getSpotifyWebToken() {
     return $data['accessToken'];
 }
 
-function searchYouTubeVideoId($query) {
-    $url = 'https://www.youtube.com/results?search_query=' . urlencode($query);
-    $ctx = stream_context_create(['http' => [
-        'timeout'       => 10,
-        'ignore_errors' => true,
-        'header'        => implode("\r\n", [
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept-Language: en-US,en;q=0.9',
-        ]),
+function searchYouTubeVideo($query) {
+    $headers = implode("\r\n", [
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language: en-US,en;q=0.9',
+    ]);
+
+    $searchCtx = stream_context_create(['http' => [
+        'timeout' => 10, 'ignore_errors' => true, 'header' => $headers,
     ]]);
-    $html = @file_get_contents($url, false, $ctx);
+    $html = @file_get_contents('https://www.youtube.com/results?search_query=' . urlencode($query), false, $searchCtx);
     if (!$html) return null;
-    if (preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) {
-        return $m[1][0];
+    if (!preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) return null;
+    $videoId = $m[1][0];
+
+    $duration = 0;
+    $watchCtx = stream_context_create(['http' => [
+        'timeout' => 10, 'ignore_errors' => true, 'header' => $headers,
+    ]]);
+    $watchHtml = @file_get_contents('https://www.youtube.com/watch?v=' . $videoId, false, $watchCtx);
+    if ($watchHtml && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $watchHtml, $d)) {
+        $duration = intval($d[1]);
     }
-    return null;
+
+    return ['videoId' => $videoId, 'duration' => $duration];
+}
+
+function searchYouTubeVideoId($query) {
+    $result = searchYouTubeVideo($query);
+    return $result ? $result['videoId'] : null;
 }

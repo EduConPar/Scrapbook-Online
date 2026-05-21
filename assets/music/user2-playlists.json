@@ -57,10 +57,18 @@
                 "artist": "Heaven Pierce Her",
                 "duration": 187
             }
-        ]
+        ],
+        "collaborators": []
     },
     {
-        "id": "pl_1779182747435",
+        "id": "pl_1779266053149",
         "sharedFrom": "user1"
+    },
+    {
+        "id": "pl_1779383332980",
+        "name": "adada",
+        "owner": "user2",
+        "collaborators": [],
+        "tracks": []
     }
 ]

@@ -39,4 +39,26 @@ foreach ($ownerPls as &$pl) {
 unset($pl);
 file_put_contents($ownerFile, json_encode($ownerPls, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
+// Notificar al dueño que el colaborador ha abandonado la playlist
+$playlistName = '';
+foreach ($ownerPls as $pl) {
+    if ($pl['id'] === $id) { $playlistName = $pl['name'] ?? ''; break; }
+}
+$ownerNotifFile = $ownerFile; // reutilizamos la ruta
+$ownerNotifPath = __DIR__ . '/' . $sharedFrom . '-invites.json';
+$ownerNotifs    = [];
+if (file_exists($ownerNotifPath)) {
+    $ownerNotifs = json_decode(file_get_contents($ownerNotifPath), true);
+    if (!is_array($ownerNotifs)) $ownerNotifs = [];
+}
+$ownerNotifs[] = [
+    'id'           => 'left_' . time() . '_' . rand(1000, 9999),
+    'type'         => 'collab-left',
+    'playlistId'   => $id,
+    'playlistName' => $playlistName,
+    'fromLabel'    => $loginUsers[$userKey]['label'],
+    'sentAt'       => time(),
+];
+file_put_contents($ownerNotifPath, json_encode($ownerNotifs, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
 echo json_encode(['ok' => true]);

@@ -1,0 +1,805 @@
+/* =========================================================
+   THEMES — OVERRIDES EXCLUSIVOS POR USUARIO
+   ---------------------------------------------------------
+   Este archivo SOLO sobreescribe estilos definidos en los
+   demás CSS. Debe cargarse el último para tener prioridad.
+
+   Clases de tema en la app:
+     body.capi   → tema oscuro (Capi)         — escritorio + apps
+     body.angie  → tema rosa/verde (Angie)    — escritorio + apps
+     body.user1  → equivalente a capi   en login
+     body.user2  → equivalente a angie  en login
+
+   Las variables --t-* definidas aquí permiten que futuras
+   reglas usen var(--t-accent) en lugar de un hex literal.
+========================================================= */
+
+
+/* =========================================================
+   PALETA POR USUARIO (CSS variables)
+========================================================= */
+
+body.capi,
+body.user1 {
+    --t-bg:           #2d2d2d;   /* fondo principal */
+    --t-bg-alt:       #1a1a1a;   /* fondo secundario */
+    --t-text:         #d0d0d0;   /* texto principal */
+    --t-text-muted:   #888888;   /* texto secundario */
+    --t-accent:       #EDC001;   /* acento (amarillo) */
+    --t-accent-text:  #000000;   /* texto sobre acento */
+    --t-border:       #3a3a3a;   /* bordes */
+    --t-grad:         linear-gradient(90deg, #6b5500, #EDC001);
+}
+
+body.angie,
+body.user2 {
+    --t-bg:           #F8D0C8;   /* fondo principal */
+    --t-bg-alt:       #F9DDD8;   /* fondo secundario */
+    --t-text:         #35522B;   /* texto principal */
+    --t-text-muted:   #5B744B;   /* texto secundario */
+    --t-accent:       #799567;   /* acento (verde) */
+    --t-accent-text:  #F9DDD8;   /* texto sobre acento */
+    --t-border:       #F3BABA;   /* bordes */
+    --t-grad:         linear-gradient(90deg, #5B744B, #799567);
+}
+
+
+/* =========================================================
+   ─── LOGIN  (body.user1 / body.user2) ───
+========================================================= */
+
+/* user1 — capi */
+body.user1 .window {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.user1 .window-body { background: #222; }
+body.user1 label,
+body.user1 p,
+body.user1 strong { color: #d0d0d0; }
+body.user1 .button {
+    background: #3a3a3a;
+    color: #d0d0d0;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+}
+body.user1 input[type="password"],
+body.user1 input[type="text"] {
+    background: #1a1a1a;
+    color: #d0d0d0;
+    box-shadow: inset -1px -1px #444, inset 1px 1px #0a0a0a,
+                inset -2px -2px #333, inset 2px 2px #000;
+}
+body.user1 .title-bar {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+}
+
+/* user2 — angie */
+body.user2 .window {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.user2 .window-body { background: #F9DDD8; }
+body.user2 .title-bar {
+    background: linear-gradient(90deg, #5B744B, #799567);
+}
+body.user2 input[type="password"],
+body.user2 input[type="text"] {
+    background: #F3BABA;
+    color: #1a1a1a;
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #35522B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #5B744B;
+}
+body.user2 .button {
+    background: #F8D0C8;
+    color: #35522B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+
+
+/* =========================================================
+   ─── CAPI (dark/yellow) ───
+========================================================= */
+
+/* ── Chrome general ── */
+body.capi .window {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.capi .title-bar {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+}
+body.capi .window-body {
+    background: #222;
+    color: #d0d0d0;
+}
+body.capi .button {
+    background: #3a3a3a;
+    color: #d0d0d0;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+    transform: translateZ(0);
+}
+body.capi button:not(:disabled):active,
+body.capi .button:not(:disabled):active {
+    box-shadow: inset -1px -1px #555, inset 1px 1px #111,
+                inset -2px -2px #4a4a4a, inset 2px 2px #1a1a1a !important;
+    text-shadow: 1px 1px #111;
+}
+body.capi button:disabled,
+body.capi .button:disabled {
+    box-shadow: inset -1px -1px #111, inset 1px 1px #333,
+                inset -2px -2px #1a1a1a, inset 2px 2px #2a2a2a !important;
+}
+
+/* ── Taskbar / start menu ── */
+body.capi #taskbar {
+    background: #1e1e1e;
+    border-top-color: #444;
+    box-shadow: 0 -1px 0 #111;
+}
+body.capi .taskbar-sep {
+    box-shadow: inset -1px 0 0 #111, inset 1px 0 0 #444;
+}
+body.capi #start-btn {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #4a4a4a;
+}
+body.capi #system-tray {
+    background: #1e1e1e;
+    color: #d0d0d0;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #444;
+}
+body.capi #start-menu {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.capi .menu-item { color: #d0d0d0; }
+body.capi .menu-item:hover {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+}
+body.capi .menu-sep {
+    background: #444;
+    box-shadow: 0 1px 0 #222;
+}
+body.capi #taskbar-tasks .button {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #1a1000;
+    box-shadow: inset -1px -1px #3a2e00, inset 1px 1px #fff8c0,
+                inset -2px -2px #2a1e00, inset 2px 2px #ffeea0;
+}
+body.capi .taskbar-task-btn.taskbar-task-minimized {
+    box-shadow: inset -1px -1px #fff8c0, inset 1px 1px #3a2e00,
+                inset -2px -2px #ffeea0, inset 2px 2px #2a1e00;
+}
+body.capi #start-sidebar {
+    background: linear-gradient(to top, #6b5500, #EDC001);
+    color: #1a1000;
+}
+body.capi .win-logo {
+    background-image: url('../img/helldivers_skull.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+body.capi .win-logo span { display: none; }
+
+/* ── Reproductor ── */
+body.capi .btn-active {
+    background: #EDC001 !important;
+    color: #000000 !important;
+}
+body.capi #player-artist { color: #888; }
+body.capi #player-progress {
+    background: #1a1a1a;
+    box-shadow: inset -1px -1px #333, inset 1px 1px #111,
+                inset -2px -2px #2a2a2a, inset 2px 2px #000;
+}
+body.capi #player-progress::-webkit-slider-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+body.capi #player-progress::-moz-range-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+body.capi #volume-track-outer {
+    background: #2d2d2d;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #555,
+                inset 2px 2px #0a0a0a, inset -2px -2px #444;
+    border: 2px solid #d0d0d0;
+}
+body.capi #volume-icon { color: #d0d0d0; }
+body.capi #player-volume::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+body.capi #player-volume::-webkit-slider-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+body.capi #player-volume::-moz-range-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+body.capi #player-volume::-moz-range-progress { background: transparent; }
+body.capi #player-volume::-moz-range-thumb {
+    background: #3a3a3a;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #222, inset 2px 2px #4a4a4a;
+}
+
+/* Playlist editor / dialogs */
+body.capi .pl-item-thumb-wrap {
+    box-shadow: -1px -1px 0 #0a0a0a, 1px 1px 0 #555,
+                -2px -2px 0 #1a1a1a, 2px 2px 0 #4a4a4a;
+}
+body.capi .pl-item--playing {
+    background: rgba(237, 192, 1, 0.12);
+    border-left: 3px solid #EDC001;
+}
+body.capi .pl-item.drag-over { border-top: 2px solid #EDC001; }
+body.capi .pl-menu-item { color: #d0d0d0; }
+body.capi .pl-menu-item:hover {
+    background: #c8a000;
+    color: #000;
+}
+body.capi #add-track-dialog .window-body { background: #222; }
+body.capi #add-track-dialog label,
+body.capi #add-track-dialog p { color: #d0d0d0; }
+body.capi #add-track-dialog input[type="text"] {
+    background: #1a1a1a;
+    color: #d0d0d0;
+    box-shadow: inset -1px -1px #444, inset 1px 1px #0a0a0a,
+                inset -2px -2px #333, inset 2px 2px #000;
+}
+body.capi #spotify-import-hint { color: #e8e8e8; }
+body.capi .spotify-warn {
+    background: #2a2200;
+    border-color: #6b5500;
+    color: #e8cc80;
+}
+
+/* ── Perfil ── */
+body.capi #profile-sidebar {
+    background: #2d2d2d;
+    border-right-color: #3a3a3a;
+    box-shadow: none;
+}
+body.capi .profile-sidebar-heading {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi .profile-nav-item {
+    border-bottom-color: #3a3a3a;
+    color: #d0d0d0;
+}
+body.capi .profile-nav-item:hover {
+    background: #EDC001;
+    color: #000;
+}
+body.capi .profile-nav-count {
+    background: #3a3a3a;
+    color: #888;
+}
+body.capi .profile-nav-item:hover .profile-nav-count {
+    background: #a88000;
+    color: #000;
+}
+body.capi #profile-top { border-bottom-color: #3a3a3a; box-shadow: none; }
+body.capi #profile-catview-topbar { border-bottom-color: #3a3a3a; box-shadow: none; }
+body.capi #profile-catview-avatar-wrap { border-right-color: #3a3a3a; }
+body.capi #profile-avatar-col {
+    border-right-color: #3a3a3a;
+    box-shadow: 1px 0 0 #555;
+}
+body.capi .profile-encurso-heading {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi #profile-catview-encurso-slots { background: #1e1e1e; }
+body.capi .profile-encurso-slot {
+    background: #2d2d2d;
+    box-shadow: 0 0 0 1px #111, 0 0 0 3px #444,
+                inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.capi .profile-encurso-slot-tb {
+    background: linear-gradient(to right, #333, #555);
+    color: #666;
+}
+body.capi .profile-encurso-slot.filled .profile-encurso-slot-tb {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi .profile-encurso-slot-body {
+    background: #111;
+    color: #444;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #555,
+                inset 2px 2px #1a1a1a, inset -2px -2px #444;
+}
+body.capi .profile-gallery-img-slot {
+    background: #111;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #555,
+                inset 2px 2px #1a1a1a, inset -2px -2px #444;
+}
+body.capi .profile-ctx-menu {
+    background: #2d2d2d;
+    box-shadow: inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+}
+body.capi .profile-ctx-option { color: #e0e0e0; }
+body.capi .profile-ctx-option:hover {
+    background: #EDC001;
+    color: #000;
+}
+body.capi .profile-ctx-option.disabled { color: #555; }
+body.capi #profile-username { color: #d0d0d0; }
+body.capi #profile-posts-header {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi #profile-new-post { border-bottom-color: #3a3a3a; box-shadow: none; }
+body.capi .profile-post-box { border-bottom-color: #3a3a3a; }
+body.capi .profile-post-time { color: #666; }
+body.capi .profile-post-text { color: #d0d0d0; }
+body.capi .profile-post-empty { color: #666; }
+body.capi #profile-catview-title { color: #e0e0e0; }
+body.capi .profile-catview-username { color: #d0d0d0; }
+body.capi .profile-catview-section-head {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi #profile-sidebar-back { border-top-color: #3a3a3a; box-shadow: none; }
+body.capi .profile-gallery-empty { color: #666; }
+body.capi .profile-cat-toolbar { border-bottom-color: #3a3a3a; box-shadow: none; }
+body.capi .profile-gallery-card {
+    box-shadow: 0 0 0 1px #111, 0 0 0 3px #444,
+                inset -1px -1px #111, inset 1px 1px #555,
+                inset -2px -2px #1a1a1a, inset 2px 2px #444;
+    background: #2d2d2d;
+}
+body.capi .profile-gallery-tb {
+    background: linear-gradient(90deg, #6b5500, #EDC001);
+    color: #000;
+}
+body.capi .profile-gallery-footer {
+    border-top-color: #3a3a3a;
+    color: #d0d0d0;
+}
+body.capi .profile-gallery-footer:hover {
+    background: #EDC001;
+    color: #000;
+}
+body.capi .profile-gallery-placeholder {
+    background: #111;
+    color: #444;
+}
+body.capi .pinfo-chip {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #ddd;
+}
+body.capi .pinfo-bio { color: #ccc; }
+body.capi .pinfo-social {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #EDC001;
+}
+body.capi .pinfo-social:hover {
+    background: #EDC001;
+    color: #000;
+}
+body.capi #profile-review-view-comment { color: #EDC001; }
+body.capi #profile-review-view-header  { color: #EDC001; }
+body.capi .profile-star-num { color: #000000; }
+
+/* Music view dentro del perfil */
+body.capi #music-catview-topbar { border-bottom-color: #3a3a3a; box-shadow: none; }
+body.capi #music-catview-avatar-wrap { border-right-color: #3a3a3a; }
+body.capi #music-catview-destacados-slots { background: #1e1e1e; }
+body.capi #music-tab-bar { border-bottom-color: #3a3a3a; background: #2d2d2d; }
+body.capi .music-tab { color: #d0d0d0; }
+body.capi .music-tab.active {
+    background: #2d2d2d !important;
+    color: #EDC001 !important;
+}
+body.capi .music-list-row {
+    border-bottom-color: #3a3a3a;
+    color: #d0d0d0;
+}
+body.capi .music-list-row:hover { background: #3a3a3a; }
+body.capi .music-list-featured { border-left-color: #EDC001; }
+body.capi .music-list-cover {
+    background: #111;
+    box-shadow: inset 1px 1px #111, inset -1px -1px #555;
+}
+body.capi .music-list-cover-ph {
+    background: #111;
+    color: #444;
+}
+body.capi .music-list-artist { color: #888; }
+body.capi .music-list-empty { color: #666; }
+body.capi #music-list-wrap { background: #1e1e1e; }
+body.capi .music-list-stars .profile-star-num { color: #EDC001; }
+
+/* ── Archive (MelonArchive) ── */
+body.capi #archive-toolbar {
+    background: #2d2d2d;
+    border-bottom-color: #111;
+    color: #d0d0d0;
+}
+body.capi #archive-toolbar .button {
+    color: #d0d0d0;
+    text-shadow: none;
+}
+body.capi #archive-breadcrumb { color: #d0d0d0; }
+body.capi #archive-status { color: #aaa; }
+body.capi .archive-item:hover {
+    border-color: #EDC001;
+    background: #3a3820;
+}
+body.capi .archive-item-title { color: #d0d0d0; }
+body.capi .archive-item-meta  { color: #888; }
+
+
+/* =========================================================
+   ─── ANGIE (pink/green) ───
+========================================================= */
+
+/* ── Chrome general ── */
+body.angie .window {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie .title-bar {
+    background: linear-gradient(90deg, #5B744B, #799567);
+}
+body.angie .window-body {
+    background: #F8D0C8;
+    color: #35522B;
+}
+body.angie .button {
+    background: #5B744B;
+    color: #F9DDD8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+    transform: translateZ(0);
+}
+body.angie button:not(:disabled):active,
+body.angie .button:not(:disabled):active {
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #35522B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #5B744B !important;
+    text-shadow: 1px 1px #35522B;
+}
+body.angie button:disabled,
+body.angie .button:disabled {
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #5B744B, inset 2px 2px #6a8a5a !important;
+}
+
+/* ── Taskbar / start menu ── */
+body.angie #taskbar {
+    background: #F8D0C8;
+    border-top-color: #F9DDD8;
+    box-shadow: 0 -1px 0 #F3BABA;
+}
+body.angie .taskbar-sep {
+    box-shadow: inset -1px 0 0 #F9DDD8, inset 1px 0 0 #F3BABA;
+}
+body.angie #start-btn {
+    background: #799567;
+    color: #F9DDD8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie #start-sidebar {
+    background: linear-gradient(to top, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie .menu-item { color: #35522B; }
+body.angie .menu-item:hover {
+    background: #799567;
+    color: #F9DDD8;
+}
+body.angie #taskbar-tasks .button {
+    background: #F9DDD8;
+    color: #35522B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie .taskbar-task-btn.taskbar-task-minimized {
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #35522B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #5B744B;
+}
+body.angie #system-tray {
+    background: #F3BABA;
+    color: #35522B;
+    box-shadow: inset 1px 1px #F3BABA, inset -1px -1px #F9DDD8;
+}
+body.angie #start-menu {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie #start-menu-items { background: #F8D0C8; }
+body.angie .menu-sep {
+    background: #F3BABA;
+    box-shadow: 0 1px 0 #F9DDD8;
+}
+
+/* ── Reproductor ── */
+body.angie .btn-active {
+    background: #007020 !important;
+    color: #ffffff !important;
+}
+body.angie #player-artist { color: #5B744B; }
+body.angie #player-cover-wrap {
+    box-shadow: -1px -1px 0 #35522B, 1px 1px 0 #F9DDD8,
+                -2px -2px 0 #5B744B, 2px 2px 0 #F8D0C8;
+}
+body.angie #player-progress {
+    background: #F9DDD8;
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #5B744B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #35522B;
+}
+body.angie #player-progress::-webkit-slider-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
+}
+body.angie #player-progress::-moz-range-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
+}
+body.angie #volume-track-outer {
+    background: #F9DDD8;
+    box-shadow: inset 1px 1px #5B744B, inset -1px -1px #F9DDD8,
+                inset 2px 2px #35522B, inset -2px -2px #F8D0C8;
+    border: 2px solid #799567;
+}
+body.angie #volume-icon { color: #5B744B; }
+body.angie #player-volume::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+body.angie #player-volume::-webkit-slider-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
+}
+body.angie #player-volume::-moz-range-track {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+body.angie #player-volume::-moz-range-progress { background: transparent; }
+body.angie #player-volume::-moz-range-thumb {
+    background: #5B744B;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #799567,
+                inset -2px -2px #35522B, inset 2px 2px #A7B59E;
+}
+
+/* Playlist editor / dialogs */
+body.angie .pl-item-thumb-wrap {
+    box-shadow: -1px -1px 0 #35522B, 1px 1px 0 #F9DDD8,
+                -2px -2px 0 #5B744B, 2px 2px 0 #F8D0C8;
+}
+body.angie #add-track-dialog .window-body { background: #F9DDD8; }
+body.angie #add-track-dialog label,
+body.angie #add-track-dialog p { color: #35522B; }
+body.angie #add-track-dialog input[type="text"] {
+    background: #F3BABA;
+    color: #1a1a1a;
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #35522B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #5B744B;
+}
+body.angie .spotify-warn {
+    background: #F3BABA;
+    border-color: #5B744B;
+    color: #35522B;
+}
+
+/* ── Perfil ── */
+body.angie #profile-sidebar {
+    background: #F8D0C8;
+    border-right-color: #F3BABA;
+    box-shadow: none;
+}
+body.angie .profile-sidebar-heading {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie .profile-nav-item {
+    border-bottom-color: #F3BABA;
+    color: #35522B;
+}
+body.angie .profile-nav-item:hover {
+    background: #799567;
+    color: #F9DDD8;
+}
+body.angie .profile-nav-count {
+    background: #F3BABA;
+    color: #5B744B;
+}
+body.angie .profile-nav-item:hover .profile-nav-count {
+    background: #5B744B;
+    color: #F9DDD8;
+}
+body.angie #profile-top { border-bottom-color: #F3BABA; box-shadow: none; }
+body.angie #profile-catview-topbar { border-bottom-color: #F3BABA; box-shadow: none; }
+body.angie #profile-catview-avatar-wrap { border-right-color: #F3BABA; }
+body.angie #profile-avatar-col {
+    border-right-color: #F3BABA;
+    box-shadow: 1px 0 0 #fff;
+}
+body.angie .profile-encurso-heading {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie #profile-catview-encurso-slots { background: #F8D0C8; }
+body.angie .profile-encurso-slot {
+    background: #F8D0C8;
+    box-shadow: 0 0 0 1px #35522B, 0 0 0 3px #F9DDD8,
+                inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie .profile-encurso-slot-tb {
+    background: linear-gradient(to right, #8a9e7a, #b0c4a0);
+    color: #F9DDD8;
+}
+body.angie .profile-encurso-slot.filled .profile-encurso-slot-tb {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie .profile-encurso-slot-body {
+    background: #F3BABA;
+    color: #799567;
+    box-shadow: inset 1px 1px #35522B, inset -1px -1px #F9DDD8,
+                inset 2px 2px #5B744B, inset -2px -2px #F8D0C8;
+}
+body.angie .profile-gallery-img-slot {
+    background: #F3BABA;
+    box-shadow: inset 1px 1px #35522B, inset -1px -1px #F9DDD8,
+                inset 2px 2px #5B744B, inset -2px -2px #F8D0C8;
+}
+body.angie .profile-ctx-menu {
+    background: #F8D0C8;
+    box-shadow: inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+}
+body.angie .profile-ctx-option { color: #35522B; }
+body.angie .profile-ctx-option:hover {
+    background: #799567;
+    color: #F9DDD8;
+}
+body.angie .profile-ctx-option.disabled { color: #aaa; }
+body.angie #profile-username { color: #35522B; }
+body.angie #profile-posts-header {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie #profile-new-post { border-bottom-color: #F3BABA; box-shadow: none; }
+body.angie .profile-post-box { border-bottom-color: #F3BABA; }
+body.angie .profile-post-time { color: #799567; }
+body.angie .profile-post-text { color: #35522B; }
+body.angie .profile-post-empty { color: #799567; }
+body.angie #profile-catview-title { color: #35522B; }
+body.angie .profile-catview-username { color: #35522B; }
+body.angie .profile-catview-section-head {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie #profile-sidebar-back { border-top-color: #F3BABA; box-shadow: none; }
+body.angie .profile-avatar-frame {
+    box-shadow: -1px -1px 0 #35522B, 1px 1px 0 #F9DDD8,
+                -2px -2px 0 #5B744B, 2px 2px 0 #F8D0C8;
+}
+body.angie .profile-gallery-empty { color: #799567; }
+body.angie .profile-cat-toolbar { border-bottom-color: #F3BABA; box-shadow: none; }
+body.angie .profile-gallery-card {
+    box-shadow: 0 0 0 1px #35522B, 0 0 0 3px #F9DDD8,
+                inset -1px -1px #35522B, inset 1px 1px #F9DDD8,
+                inset -2px -2px #5B744B, inset 2px 2px #F8D0C8;
+    background: #F8D0C8;
+}
+body.angie .profile-gallery-tb {
+    background: linear-gradient(90deg, #5B744B, #799567);
+    color: #F9DDD8;
+}
+body.angie .profile-gallery-footer {
+    border-top-color: #F3BABA;
+    color: #35522B;
+}
+body.angie .profile-gallery-footer:hover {
+    background: #799567;
+    color: #F9DDD8;
+}
+body.angie .profile-gallery-placeholder {
+    background: #d4a0a0;
+    color: #F9DDD8;
+}
+body.angie .pinfo-chip {
+    background: #F3BABA;
+    border-color: #5B744B;
+    color: #3a3a3a;
+}
+body.angie .pinfo-bio { color: #444; }
+body.angie .pinfo-social {
+    background: #F3BABA;
+    border-color: #5B744B;
+    color: #5B744B;
+}
+body.angie .pinfo-social:hover {
+    background: #5B744B;
+    color: #F9DDD8;
+}
+body.angie #profile-review-view-comment { color: #5B744B; }
+body.angie #profile-review-view-header  { color: #5B744B; }
+body.angie .profile-star-num { color: #F8D0C8; }
+
+/* Music view dentro del perfil */
+body.angie #music-catview-topbar { border-bottom-color: #F3BABA; box-shadow: none; }
+body.angie #music-catview-avatar-wrap { border-right-color: #F3BABA; }
+body.angie #music-catview-destacados-slots { background: #F8D0C8; }
+body.angie #music-tab-bar {
+    border-bottom-color: #F3BABA;
+    background: #F9DDD8;
+}
+body.angie .music-tab { color: #35522B; }
+body.angie .music-tab.active {
+    background: #F9DDD8 !important;
+    color: #35522B !important;
+    box-shadow: inset -1px -1px #F9DDD8, inset 1px 1px #5B744B,
+                inset -2px -2px #F8D0C8, inset 2px 2px #35522B !important;
+}
+body.angie .music-list-row { border-bottom-color: #F3BABA; }
+body.angie .music-list-row:hover { background: #F9DDD8; }
+body.angie .music-list-featured { border-left-color: #799567; }
+body.angie .music-list-cover {
+    background: #F3BABA;
+    box-shadow: inset 1px 1px #35522B, inset -1px -1px #F9DDD8;
+}
+body.angie .music-list-cover-ph {
+    background: #F3BABA;
+    color: #799567;
+}
+body.angie .music-list-artist { color: #799567; }
+body.angie .music-list-empty { color: #799567; }
+body.angie #music-list-wrap { background: #F9DDD8; }
+body.angie .music-list-stars .profile-star-num { color: #799567; }
+
+/* ── Archive (MelonArchive) ── */
+body.angie #archive-toolbar {
+    background: #F8D0C8;
+    border-bottom-color: #5B744B;
+    color: #35522B;
+}
+body.angie #archive-toolbar .button {
+    color: #35522B;
+    text-shadow: none;
+}
+body.angie #archive-breadcrumb { color: #35522B; }
+body.angie #archive-status { color: #5B744B; }
+body.angie .archive-item:hover {
+    border-color: #5B744B;
+    background: #e8f0e0;
+}
+body.angie .archive-item-title { color: #35522B; }
+body.angie .archive-item-meta  { color: #5B744B; }

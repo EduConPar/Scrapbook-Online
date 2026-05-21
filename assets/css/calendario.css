@@ -1,0 +1,64 @@
+/* =========================================================
+   CALENDARIO
+   ---------------------------------------------------------
+   Calendario de pareja: rejilla mensual, popup de día,
+   formularios de añadir momento / recordatorio y diálogo
+   de invitación a pareja. Solo estilos base — los overrides
+   de tema generales viven en themes.css.
+
+   Nota: los fondos (wallpaper) por tema se quedan en este
+   archivo porque solo aplican dentro del iframe del
+   calendario; ponerlos en themes.css colisionaría con el
+   wallpaper que setea desktop-base.php por inline style.
+========================================================= */
+
+html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+
+.popup-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 9000;
+    justify-content: center;
+    align-items: center;
+}
+.popup-overlay.active { display: flex; }
+
+.cal-cell {
+    padding: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 1px dashed rgba(0,0,0,0.15);
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+.cal-cell:hover {
+    border-color: rgba(0,0,0,0.35);
+    background: rgba(255,255,255,0.3);
+}
+.cal-cell-num {
+    padding: 6px 4px;
+}
+.cal-cell-foto {
+    background-size: cover;
+    background-position: center;
+    color: #fff !important;
+    text-shadow: 0 0 3px #000, 0 0 6px #000;
+    border: 2px solid #fff !important;
+}
+
+/* ── Wallpapers por tema (scope: calendario) ── */
+body.capi {
+    background-image: url('../img/capi-wallpaper.jpg') !important;
+    background-size: cover;
+    background-position: center;
+}
+body.angie {
+    background-image: url('../img/angie-wallpaper.png') !important;
+    background-size: cover;
+    background-position: center;
+}

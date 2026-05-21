@@ -48,6 +48,7 @@ $invites[] = [
     'playlistName' => $playlist['name'],
     'fromUser'     => $userKey,
     'fromLabel'    => $loginUsers[$userKey]['label'],
+    'sentAt'       => time(),
 ];
 file_put_contents($inviteFile, json_encode($invites, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 echo json_encode(['ok' => true]);

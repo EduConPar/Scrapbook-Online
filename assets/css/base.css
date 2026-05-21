@@ -1,0 +1,321 @@
+/* =========================================================
+   BASE
+   ---------------------------------------------------------
+   Reset, body, escritorio, taskbar, menú inicio, iconos
+   del escritorio y comportamiento genérico de ventanas
+   (drag, resize, minimize, maximize). Compartido por todas
+   las apps.
+========================================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { user-select: none; }
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+#page-enter {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 9998;
+    pointer-events: none;
+    animation: fadeOut 0.5s ease-out 0.05s forwards;
+}
+
+body {
+    font-family: "ms_sans_serif", sans-serif;
+    font-size: 11px;
+    background-color: #008080;
+    background-size: cover;
+    background-position: center;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+}
+
+#desktop {
+    position: fixed;
+    inset: 0;
+    bottom: 28px;
+}
+
+/* =========================
+   TASKBAR
+========================= */
+
+#taskbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    background: #c0c0c0;
+    border-top: 2px solid #fff;
+    box-shadow: 0 -1px 0 #808080;
+    display: flex;
+    align-items: center;
+    padding: 2px 2px;
+    gap: 2px;
+    z-index: 1000;
+}
+
+#start-btn {
+    height: 22px;
+    padding: 0 8px 0 4px;
+    font-weight: bold;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: default;
+}
+
+.win-logo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.win-logo span { display: block; }
+
+.taskbar-sep {
+    width: 2px;
+    height: 20px;
+    box-shadow: inset -1px 0 0 #fff, inset 1px 0 0 #808080;
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+#taskbar-tasks {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    height: 22px;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.taskbar-task-btn {
+    height: 20px !important;
+    min-width: 80px;
+    max-width: 150px;
+    padding: 0 6px !important;
+    font-size: 11px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.taskbar-task-btn.taskbar-task-minimized {
+    box-shadow: inset -1px -1px #fff, inset 1px 1px #808080,
+                inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a;
+}
+
+#system-tray {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    box-shadow: inset 1px 1px #808080, inset -1px -1px #fff;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+#tray-player-btn {
+    height: 18px !important;
+    min-height: 0 !important;
+    padding: 0 5px !important;
+    font-size: 11px;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+/* =========================
+   START MENU
+========================= */
+
+#start-menu {
+    display: none;
+    position: fixed;
+    bottom: 28px;
+    left: 2px;
+    width: 180px;
+    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    background: #c0c0c0;
+    z-index: 999;
+}
+
+#start-menu-inner {
+    display: flex;
+}
+
+#start-sidebar {
+    width: 22px;
+    background: linear-gradient(to top, #000082, #1a6cd4);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    color: #fff;
+    font-size: 13px;
+    font-weight: bold;
+    font-style: italic;
+    letter-spacing: 1px;
+    padding: 6px 4px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#start-menu-items {
+    flex: 1;
+    padding: 2px 0;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: "ms_sans_serif", sans-serif;
+    background: none;
+    border: none;
+    cursor: default;
+    text-align: left;
+    color: #000;
+    text-decoration: none;
+    gap: 8px;
+}
+
+.menu-item:hover {
+    background: #000082;
+    color: #fff;
+}
+
+.menu-sep {
+    height: 1px;
+    background: #808080;
+    box-shadow: 0 1px 0 #fff;
+    margin: 2px 4px;
+}
+
+/* =========================
+   DESKTOP ICONS
+========================= */
+
+.desktop-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 8px;
+    cursor: default;
+    width: 76px;
+    text-align: center;
+    margin: 8px;
+    border: 1px solid transparent;
+    vertical-align: top;
+}
+
+.desktop-icon:hover {
+    border-color: rgba(255,255,255,0.4);
+    background: rgba(0,0,128,0.25);
+}
+
+.desktop-icon-img {
+    font-size: 30px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.desktop-icon span {
+    font-size: 11px;
+    color: #fff;
+    text-shadow: 1px 1px 1px #000, -1px -1px 1px #000;
+    word-break: break-word;
+    line-height: 1.2;
+    pointer-events: none;
+}
+
+#calendar-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* =========================
+   GENERIC WINDOW DRAG / RESIZE / MIN / MAX
+========================= */
+
+.win-draggable > .title-bar {
+    cursor: move;
+}
+
+.win-draggable > .title-bar .title-bar-controls button {
+    cursor: default;
+}
+
+.win-managed { overflow: visible !important; }
+
+.win-handle { position: absolute; z-index: 10; }
+.win-handle-n  { top: -4px;    left: 8px;   right: 8px;  height: 8px; cursor: n-resize; }
+.win-handle-s  { bottom: -4px; left: 8px;   right: 8px;  height: 8px; cursor: s-resize; }
+.win-handle-e  { right: -4px;  top: 8px; bottom: 8px;    width:  8px; cursor: e-resize; }
+.win-handle-w  { left: -4px;   top: 8px; bottom: 8px;    width:  8px; cursor: w-resize; }
+.win-handle-ne { top: -4px;    right: -4px;  width: 12px; height: 12px; cursor: ne-resize; }
+.win-handle-nw { top: -4px;    left: -4px;   width: 12px; height: 12px; cursor: nw-resize; }
+.win-handle-se { bottom: -4px; right: -4px;  width: 12px; height: 12px; cursor: se-resize; }
+.win-handle-sw { bottom: -4px; left: -4px;   width: 12px; height: 12px; cursor: sw-resize; }
+
+.win-minimized > *:not(.title-bar) { display: none !important; }
+
+.win-maximized {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9990 !important;
+    transform: none !important;
+}
+
+/* Botón con estado "ocupado" (cargando) — usado por varios diálogos */
+.btn-busy { opacity: 0.6; cursor: default; }
+
+/* =========================
+   ARCHIVE WINDOW WRAPPER
+   (el contenido va dentro de un iframe — los estilos del
+   archivo en sí están en melonarchive.css)
+========================= */
+
+#archive-window {
+    position: fixed;
+    top: 50px;
+    left: 100px;
+    width: 520px;
+    height: 480px;
+    z-index: 600;
+    display: none;
+    flex-direction: column;
+    overflow: visible;
+}
+
+.ar-handle {
+    position: absolute;
+    z-index: 20;
+}
+.ar-handle[data-dir="n"]  { top:-4px;    left:10px;   right:10px;  height:8px;  cursor:n-resize;  }
+.ar-handle[data-dir="s"]  { bottom:-4px; left:10px;   right:10px;  height:8px;  cursor:s-resize;  }
+.ar-handle[data-dir="e"]  { right:-4px;  top:10px;  bottom:10px;   width:8px;   cursor:e-resize;  }
+.ar-handle[data-dir="w"]  { left:-4px;   top:10px;  bottom:10px;   width:8px;   cursor:w-resize;  }
+.ar-handle[data-dir="ne"] { top:-4px;    right:-4px;  width:12px;  height:12px; cursor:ne-resize; }
+.ar-handle[data-dir="nw"] { top:-4px;    left:-4px;   width:12px;  height:12px; cursor:nw-resize; }
+.ar-handle[data-dir="se"] { bottom:-4px; right:-4px;  width:12px;  height:12px; cursor:se-resize; }
+.ar-handle[data-dir="sw"] { bottom:-4px; left:-4px;   width:12px;  height:12px; cursor:sw-resize; }

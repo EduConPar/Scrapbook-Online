@@ -1,0 +1,32 @@
+/* =========================================================
+   PALETA / TOKENS
+   ---------------------------------------------------------
+   Variables CSS de la app. base.css y los CSS por app usan
+   los valores Win98 neutros por defecto. themes.css se
+   encarga de redefinir las variables --t-* para cada tema
+   de usuario (body.capi / body.angie / body.user1 / body.user2).
+========================================================= */
+
+:root {
+    /* --- Win98 chrome neutro (no se cambia con el tema) --- */
+    --w98-bg:           #c0c0c0;
+    --w98-bg-light:     #dfdfdf;
+    --w98-bg-dark:      #808080;
+    --w98-shadow-out:   #0a0a0a;
+    --w98-shadow-in:    #ffffff;
+
+    /* --- Paleta semántica por defecto (tema "neutro" Win98) --- */
+    --t-bg:             #c0c0c0;   /* fondo principal de paneles */
+    --t-bg-alt:         #dfdfdf;   /* fondo secundario / hover suave */
+    --t-text:           #000000;   /* texto principal */
+    --t-text-muted:     #666666;   /* texto secundario, metadata */
+    --t-accent:         #000080;   /* acento — header de ventana, links activos */
+    --t-accent-text:    #ffffff;   /* texto sobre fondo de acento */
+    --t-border:         #808080;   /* bordes neutros */
+
+    /* --- Constantes (no varían por tema) --- */
+    --c-error:          #c00000;
+    --c-warning-bg:     #fffbe6;
+    --c-warning-text:   #444444;
+    --c-star:           #ffd700;
+}

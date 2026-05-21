@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat)",
+      "Bash(cat /tmp/p_js.txt)",
+      "Read(//tmp/**)",
+      "Bash(cp /tmp/build_reproductor_js.php c:/xampp/htdocs/proyectoScrap/reproductor-js.php)",
+      "Bash(sed -i '549,2242c\\\\ *)",
+      "Bash(sed -n '546,555p' desktop-base.php)",
+      "Bash(sed -i '93,450c\\\\ *)",
+      "Bash(grep -n \"include.*perfil\\\\\\\\|include.*reproductor\" desktop-base.php)",
+      "Bash(rm desktop-base.php.bak *)",
+      "Bash(sed -i \"s|__DIR__ . '/assets/config.php'|dirname\\(__DIR__\\) . '/assets/config.php'|g\" apps/calendario.php)",
+      "Bash(sed -i \"s|__DIR__ . '/db.php'|dirname\\(__DIR__\\) . '/db.php'|g\" apps/calendario.php)",
+      "Bash(sed -i \"s|Location: index.php|Location: ../index.php|g\" apps/calendario.php)",
+      "Bash(sed -i \"s|'assets/|'../assets/|g; s|\\\\\"assets/|\\\\\"../assets/|g\" apps/calendario.php)",
+      "Bash(sed -i \"s|__DIR__ . '/assets/config.php'|dirname\\(__DIR__\\) . '/assets/config.php'|g\" apps/melonarchive.php)"
+    ],
+    "additionalDirectories": [
+      "C:\\xampp\\htdocs\\proyectoScrap"
+    ]
+  }
+}

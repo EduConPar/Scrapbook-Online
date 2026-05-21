@@ -17,9 +17,9 @@ foreach ($body['tracks'] as $track) {
     $artist   = isset($track['artist'])   ? substr(strip_tags($track['artist']), 0, 200) : '';
     $duration = isset($track['duration']) ? max(0, intval($track['duration']))            : 0;
     if (!$title) continue;
-    $videoId = searchYouTubeVideoId($title . ' ' . $artist . ' audio');
-    if (!$videoId) continue;
-    $results[] = ['videoId' => $videoId, 'title' => $title, 'artist' => $artist, 'duration' => $duration];
+    $video = searchYouTubeVideo($title . ' ' . $artist . ' audio');
+    if (!$video) continue;
+    $results[] = ['videoId' => $video['videoId'], 'title' => $title, 'artist' => $artist, 'duration' => $video['duration'] ?: $duration];
     usleep(150000);
 }
 

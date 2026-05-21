@@ -1,4 +1,5 @@
 <?php
+header('Content-Type: text/html; charset=UTF-8');
 session_start();
 require_once __DIR__ . '/assets/config.php';
 
@@ -57,275 +58,10 @@ foreach (['png','jpg','jpeg'] as $ext) {
     <meta charset="UTF-8">
     <title>Scrapbook Melon</title>
     <link rel="stylesheet" href="assets/css/98.css">
-    <link rel="stylesheet" href="assets/css/styles.css">
+    <link rel="stylesheet" href="assets/css/tokens.css">
+    <link rel="stylesheet" href="assets/css/login.css">
+    <link rel="stylesheet" href="assets/css/themes.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <style>
-    #intro-start {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        justify-content: flex-start;
-        align-items: flex-start;
-        padding: 14px 18px 14px 60px;
-        background: #0d1117;
-        z-index: 1;
-        cursor: pointer;
-        overflow: hidden;
-    }
-    #intro-start::after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: repeating-linear-gradient(
-            to bottom,
-            transparent 0,
-            transparent 3px,
-            rgba(0,0,0,0.22) 3px,
-            rgba(0,0,0,0.22) 4px
-        );
-        pointer-events: none;
-    }
-    #intro-start > span {
-        font-family: 'VT323', monospace;
-        font-size: 2rem;
-        color: #c8ffe0;
-        text-shadow: none;
-        letter-spacing: 4px;
-        text-transform: uppercase;
-        user-select: none;
-        position: relative;
-        z-index: 1;
-    }
-    @keyframes termBlink {
-        0%, 100% { opacity: 1; }
-        50%       { opacity: 0; }
-    }
-    #intro-cursor {
-        animation: termBlink 1s step-end infinite;
-    }
-    #intro-overlay {
-        position: fixed;
-        inset: 0;
-        background: #000;
-        z-index: 9999;
-    }
-    #intro-overlay video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    #intro-overlay.oculto {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.8s ease;
-    }
-    .error-text {
-        color: #c00;
-        font-size: 11px;
-        margin-top: 4px;
-    }
-    @keyframes adFromTL {
-        from { opacity:0; transform:translate(-20px,-20px); }
-        to   { opacity:1; transform:translate(0,0); }
-    }
-    @keyframes adFromTR {
-        from { opacity:0; transform:translate(20px,-20px); }
-        to   { opacity:1; transform:translate(0,0); }
-    }
-    @keyframes adFromBL {
-        from { opacity:0; transform:translate(-20px,20px); }
-        to   { opacity:1; transform:translate(0,0); }
-    }
-    @keyframes adFromBR {
-        from { opacity:0; transform:translate(20px,20px); }
-        to   { opacity:1; transform:translate(0,0); }
-    }
-    #ad-popup {
-        position: fixed;
-        z-index: 5000;
-        display: none;
-        cursor: pointer;
-    }
-    #ad-titlebar {
-        cursor: move;
-    }
-    #ad-image {
-        display: block;
-        width: 10vw;
-        height: auto;
-        image-rendering: pixelated;
-    }
-    #previewImage {
-        image-rendering: pixelated;
-    }
-    #selectWindow {
-        min-width: 200px;
-        background: #120808;
-        border-color: #3a0000 #0a0000 #0a0000 #3a0000;
-        box-shadow:
-            1px 1px 0 #000,
-            -1px -1px 0 #5a1010,
-            0 8px 32px rgba(0,0,0,0.8),
-            0 0 12px rgba(180,0,0,0.15);
-    }
-    #selectWindow .title-bar {
-        background: linear-gradient(to right, #6a0000, #b02020);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.6);
-        border-bottom: 1px solid #3a0000;
-    }
-    #selectWindow .window-body {
-        background: #120808;
-        padding: 8px;
-    }
-    .user-list {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-    }
-    .user-button {
-        width: 100%;
-        text-align: left;
-        padding: 5px 12px;
-        font-size: 12px;
-        background: #1e0c0c !important;
-        color: #d4a0a0 !important;
-        border: 1px solid #3a1515 !important;
-        border-radius: 1px;
-        box-shadow:
-            inset 0 1px 0 rgba(255,100,100,0.08),
-            0 1px 3px rgba(0,0,0,0.5) !important;
-        transition: background 0.1s, color 0.1s;
-    }
-    .user-button:hover {
-        background: #5a0000 !important;
-        color: #fff !important;
-        border-color: #a03030 !important;
-        box-shadow:
-            inset 0 1px 0 rgba(255,120,120,0.15),
-            0 2px 6px rgba(120,0,0,0.4) !important;
-    }
-    .user-button:active {
-        background: #3a0000 !important;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
-    }
-    #error-icon {
-        display: inline-flex;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #fff;
-        color: #cc0000;
-        font-size: 10px;
-        font-weight: bold;
-        align-items: center;
-        justify-content: center;
-        vertical-align: middle;
-        margin-right: 4px;
-        line-height: 1;
-        flex-shrink: 0;
-    }
-    .user-list {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-    }
-    .user-button {
-        width: 100%;
-        text-align: left;
-        padding: 4px 12px;
-        font-size: 12px;
-    }
-    .error-popup {
-        position: fixed;
-        z-index: 4500;
-        width: 270px;
-        opacity: 0;
-        transform: scale(0.88);
-        transition: opacity 0.18s ease, transform 0.18s ease;
-        background: #120808;
-        border-color: #3a0000 #0a0000 #0a0000 #3a0000;
-        box-shadow: 1px 1px 0 #000, -1px -1px 0 #5a1010,
-                    0 10px 36px rgba(0,0,0,0.85), 0 0 14px rgba(180,0,0,0.2);
-    }
-    .error-popup.ep-visible {
-        opacity: 1;
-        transform: scale(1);
-    }
-    .error-popup .title-bar {
-        background: linear-gradient(to right, #6a0000, #b02020);
-        border-bottom: 1px solid #3a0000;
-    }
-    .ep-title-icon {
-        display: inline-flex;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #fff;
-        color: #cc0000;
-        font-size: 9px;
-        font-weight: bold;
-        align-items: center;
-        justify-content: center;
-        vertical-align: middle;
-        margin-right: 3px;
-        line-height: 1;
-    }
-    .error-popup .window-body {
-        background: #120808;
-        padding: 12px 14px;
-    }
-    .ep-body {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        margin-bottom: 12px;
-    }
-    .ep-big-icon {
-        width: 38px;
-        height: 38px;
-        border-radius: 50%;
-        background: #cc0000;
-        color: #fff;
-        font-size: 24px;
-        font-weight: bold;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        border: 2px solid #800000;
-        box-shadow: inset 0 1px 0 rgba(255,100,100,0.3);
-        line-height: 1;
-    }
-    .ep-msg {
-        color: #d4a0a0;
-        font-size: 11px;
-        margin: 2px 0 0;
-        line-height: 1.5;
-    }
-    .ep-actions {
-        display: flex;
-        justify-content: center;
-    }
-    .ep-ok-btn {
-        min-width: 72px;
-        background: #1e0c0c !important;
-        color: #d4a0a0 !important;
-        border: 1px solid #3a1515 !important;
-        box-shadow: inset 0 1px 0 rgba(255,80,80,0.07), 0 1px 3px rgba(0,0,0,0.5) !important;
-    }
-    .ep-ok-btn:hover {
-        background: #5a0000 !important;
-        color: #fff !important;
-        border-color: #a03030 !important;
-    }
-    #ad-btn {
-        width: 100%;
-        margin-top: 8px;
-        font-weight: bold;
-        font-size: 12px;
-        letter-spacing: 1px;
-    }
-    </style>
     <?php if ($baseWallpaper): ?>
     <style>body::before{ background-image:url('<?php echo htmlspecialchars($baseWallpaper); ?>'); opacity:1; }</style>
     <?php endif; ?>
@@ -343,7 +79,7 @@ foreach (['png','jpg','jpeg'] as $ext) {
         <span>Click to start...<span id="intro-cursor">_</span></span>
     </div>
     <video id="intro-video" muted playsinline>
-        <source src="assets/vids/inicio.mp4?v=<?php echo filemtime(__DIR__.'/assets/vids/inicio.mp4'); ?>" type="video/mp4">
+        <source src="https://raw.githubusercontent.com/EduConPar/Scrapbook-Online/dev/assets/vids/inicio.mp4" type="video/mp4">
     </video>
 </div>
 <?php endif; ?>
@@ -433,18 +169,19 @@ const selectedUserInput = document.getElementById('selectedUser');
 const selectedLabel = document.getElementById('selectedLabel');
 const userPreview = document.getElementById('userPreview');
 const previewImage = document.getElementById('previewImage');
-const introVideo = document.getElementById('intro-video');
 const introOverlay = document.getElementById('intro-overlay');
 
 /* =========================
    INTRO
 ========================= */
 
-if (introVideo && introOverlay) {
+if (introOverlay) {
     if (sessionStorage.getItem('introSeen')) {
         introOverlay.style.display = 'none';
     } else {
         const introStart = document.getElementById('intro-start');
+
+        const introVideo = document.getElementById('intro-video');
 
         introStart.addEventListener('click', function() {
             introStart.style.display = 'none';
@@ -452,15 +189,13 @@ if (introVideo && introOverlay) {
             introVideo.play();
         }, { once: true });
 
-        introVideo.addEventListener('ended', function(){
+        introVideo.addEventListener('ended', function() {
             sessionStorage.setItem('introSeen', '1');
             introOverlay.classList.add('oculto');
-            setTimeout(function(){
-                introOverlay.style.display = 'none';
-            }, 800);
+            setTimeout(function() { introOverlay.style.display = 'none'; }, 800);
         });
 
-        introVideo.addEventListener('error', function(){
+        introVideo.addEventListener('error', function() {
             sessionStorage.setItem('introSeen', '1');
             introOverlay.style.display = 'none';
         });
