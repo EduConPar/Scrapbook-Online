@@ -1,0 +1,26 @@
+[
+    {
+        "id": "notif_1779444730_546",
+        "type": "review",
+        "fromUser": "user1",
+        "createdAt": 1779444730,
+        "read": true,
+        "category": "music",
+        "itemTitle": "No Children"
+    },
+    {
+        "id": "notif_1779436657_5377",
+        "type": "follow",
+        "fromUser": "user1",
+        "createdAt": 1779436657,
+        "read": true
+    },
+    {
+        "id": "notif_1779436656_8940",
+        "type": "like",
+        "fromUser": "user1",
+        "createdAt": 1779436656,
+        "read": true,
+        "postId": "post_1779433890_776"
+    }
+]

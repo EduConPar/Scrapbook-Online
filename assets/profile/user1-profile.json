@@ -4,20 +4,29 @@
         {
             "id": "post_1779275103_190",
             "text": "que tal?",
-            "createdAt": 1779275103
+            "createdAt": 1779275103,
+            "likes": [
+                "user2"
+            ]
         },
         {
             "id": "post_1779275098_819",
             "text": "hola",
-            "createdAt": 1779275098
+            "createdAt": 1779275098,
+            "likes": [
+                "user2"
+            ]
         }
     ],
-    "bio": "adad",
+    "following": [
+        "user2"
+    ],
+    "bio": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut a",
     "pronouns": "I\/Me\/Myself",
     "age": "19",
     "country": "España",
-    "steam": "",
+    "steam": "ada",
     "discord": "CapiWasTaken_",
     "twitter": "CapiWasTaken",
-    "instagram": ""
+    "instagram": "capiwastaken"
 }

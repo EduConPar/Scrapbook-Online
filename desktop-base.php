@@ -594,7 +594,7 @@ window.notifSystem = (function() {
      'collab-dialog','spotify-import-dialog','confirm-dialog',
      'profile-add-dialog','profile-review-prompt','profile-review-window',
      'profile-review-view','profile-invite-dialog','profile-info-edit-dialog',
-     'music-add-dialog'].forEach(function(id) { setup(id, true); });
+     'music-add-dialog','profile-notifs-window','profile-melon-details-window','profile-chat-window'].forEach(function(id) { setup(id, true); });
 })();
 
 /* ──── Window minimize / maximize ──── */

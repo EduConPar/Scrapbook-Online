@@ -15,29 +15,59 @@
     <div class="window-body" id="profile-body">
         <!-- SIDEBAR IZQUIERDO -->
         <div id="profile-sidebar">
-            <div class="profile-sidebar-heading">Mis Listas</div>
-            <div class="profile-nav-item" data-cat="movies">
-                <span class="profile-nav-icon">🎬</span>
-                <span class="profile-nav-label">Películas</span>
-                <span class="profile-nav-count" id="profile-count-movies">—</span>
+            <div class="profile-sidebar-heading" id="profile-listas-heading"><span id="profile-listas-heading-text">Mis Listas</span></div>
+            <div id="profile-listas-nav">
+                <div class="profile-nav-item" data-cat="movies">
+                    <span class="profile-nav-icon">🎬</span>
+                    <span class="profile-nav-label">Películas</span>
+                    <span class="profile-nav-count" id="profile-count-movies">—</span>
+                </div>
+                <div class="profile-nav-item" data-cat="books">
+                    <span class="profile-nav-icon">📚</span>
+                    <span class="profile-nav-label">Libros</span>
+                    <span class="profile-nav-count" id="profile-count-books">—</span>
+                </div>
+                <div class="profile-nav-item" data-cat="games">
+                    <span class="profile-nav-icon">🎮</span>
+                    <span class="profile-nav-label">Videojuegos</span>
+                    <span class="profile-nav-count" id="profile-count-games">—</span>
+                </div>
+                <div class="profile-nav-item" data-cat="music">
+                    <span class="profile-nav-icon">🎵</span>
+                    <span class="profile-nav-label">Música</span>
+                    <span class="profile-nav-count" id="profile-count-music">—</span>
+                </div>
             </div>
-            <div class="profile-nav-item" data-cat="books">
-                <span class="profile-nav-icon">📚</span>
-                <span class="profile-nav-label">Libros</span>
-                <span class="profile-nav-count" id="profile-count-books">—</span>
+            <div id="profile-melon-section">
+                <div class="profile-sidebar-heading"><span>Melon reviews</span></div>
+                <div id="profile-melon-nav">
+                    <div class="profile-nav-item" data-melon="year">
+                        <span class="profile-nav-icon">🏆</span>
+                        <span class="profile-nav-label">Mejor del año</span>
+                    </div>
+                    <div class="profile-nav-item" data-melon="recent">
+                        <span class="profile-nav-icon">🆕</span>
+                        <span class="profile-nav-label">Reciente</span>
+                    </div>
+                    <div class="profile-nav-item" data-melon="alltime">
+                        <span class="profile-nav-icon">⏳</span>
+                        <span class="profile-nav-label">Todo el tiempo</span>
+                    </div>
+                </div>
             </div>
-            <div class="profile-nav-item" data-cat="games">
-                <span class="profile-nav-icon">🎮</span>
-                <span class="profile-nav-label">Videojuegos</span>
-                <span class="profile-nav-count" id="profile-count-games">—</span>
+            <div id="profile-social-section">
+                <div class="profile-sidebar-heading">Social</div>
+                <div id="profile-followed-nav"></div>
+                <div class="profile-nav-item" id="profile-nav-social" data-cat="social">
+                    <span class="profile-nav-icon">+</span>
+                    <span class="profile-nav-label">Explorar</span>
+                </div>
             </div>
-            <div class="profile-nav-item" data-cat="music">
-                <span class="profile-nav-icon">🎵</span>
-                <span class="profile-nav-label">Música</span>
-                <span class="profile-nav-count" id="profile-count-music">—</span>
-            </div>
-            <div id="profile-sidebar-back">
-                <button class="button" id="profile-catview-back">← Volver</button>
+            <div id="profile-sidebar-footer">
+                <div id="profile-sidebar-back">
+                    <button class="button" id="profile-catview-back">← Volver</button>
+                </div>
+                <button class="button" id="profile-info-edit-btn">✏ Editar perfil</button>
             </div>
         </div>
         <!-- CONTENIDO PRINCIPAL -->
@@ -55,16 +85,24 @@
                             <?php endif; ?>
                         </div>
                         <div id="profile-username"><?php echo htmlspecialchars($desktopLabel); ?></div>
+                        <button class="button" id="profile-follow-btn" style="display:none;font-size:9px;margin-top:5px;">+ Seguir</button>
                     </div>
                     <div id="profile-info-col">
-                        <div id="profile-info-bio" class="pinfo-bio"></div>
-                        <div id="profile-info-meta"></div>
-                        <div id="profile-info-links"></div>
-                        <button class="button" id="profile-info-edit-btn" style="font-size:9px;align-self:flex-start;margin-top:5px;">✏ Editar perfil</button>
+                        <div id="profile-info-row">
+                            <div id="profile-info-meta"></div>
+                            <div id="profile-info-bio" class="pinfo-bio"></div>
+                            <div id="profile-info-links"></div>
+                        </div>
                     </div>
                 </div>
                 <div id="profile-posts-area">
-                    <div id="profile-posts-header">Posts</div>
+                    <div id="profile-posts-header">
+                        <span>Posts</span>
+                        <button type="button" id="profile-notif-btn" title="Notificaciones">
+                            <span class="profile-notif-icon">🔔</span>
+                            <span class="profile-notif-badge" id="profile-notif-badge" style="display:none;">0</span>
+                        </button>
+                    </div>
                     <div id="profile-new-post">
                         <textarea id="profile-post-input" placeholder="Escribe algo..."></textarea>
                         <button class="button" id="profile-post-btn">Publicar</button>
@@ -96,11 +134,17 @@
                 </div>
                 <div id="profile-catview-sections">
                     <div class="profile-catview-section">
-                        <div class="profile-catview-section-head">Pendientes</div>
+                        <div class="profile-catview-section-head">
+                            <span class="profile-catview-section-head-text">Pendientes</span>
+                            <div class="profile-catview-pager" id="profile-catview-pending-pager"></div>
+                        </div>
                         <div class="profile-gallery" id="profile-catview-pending"></div>
                     </div>
                     <div class="profile-catview-section">
-                        <div class="profile-catview-section-head" id="profile-catview-done-head">Vistas</div>
+                        <div class="profile-catview-section-head">
+                            <span class="profile-catview-section-head-text" id="profile-catview-done-head">Vistas</span>
+                            <div class="profile-catview-pager" id="profile-catview-done-pager"></div>
+                        </div>
                         <div class="profile-gallery" id="profile-catview-done"></div>
                     </div>
                 </div>
@@ -135,7 +179,74 @@
                     <div id="music-list"></div>
                 </div>
             </div>
+            <!-- SOCIAL VIEW -->
+            <div id="profile-view-social" style="display:none;">
+                <div class="profile-social-head">👥 Explorar</div>
+                <div id="profile-social-body">
+                    <div id="profile-social-explore" class="profile-social-list"></div>
+                </div>
+            </div>
+            <!-- MELON REVIEWS VIEW -->
+            <div id="profile-view-melon" style="display:none;">
+                <div class="profile-social-head" id="profile-melon-title">⭐ Melon reviews</div>
+                <div id="profile-melon-cats">
+                    <button class="button melon-cat-btn" data-mcat="movies">🎬 Películas</button>
+                    <button class="button melon-cat-btn" data-mcat="books">📚 Libros</button>
+                    <button class="button melon-cat-btn" data-mcat="games">🎮 Videojuegos</button>
+                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="album">💿 Álbumes</button>
+                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="song">🎵 Canciones</button>
+                </div>
+                <div id="profile-melon-body">
+                    <div id="profile-melon-status" style="padding:14px;text-align:center;font-size:11px;color:#808080;">Selecciona una categoría</div>
+                    <div id="profile-melon-list"></div>
+                    <div id="profile-melon-pager"></div>
+                </div>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- CHAT WINDOW -->
+<div class="window" id="profile-chat-window" style="display:none;position:fixed;z-index:10002;width:340px;height:420px;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="profile-chat-title">💬 Chat</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="profile-chat-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="profile-chat-body">
+        <div id="profile-chat-messages"></div>
+        <div id="profile-chat-input-row">
+            <input type="text" id="profile-chat-input" maxlength="2000" placeholder="Escribe un mensaje…">
+            <button class="button" id="profile-chat-send">Enviar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MELON REVIEWS DETAILS WINDOW -->
+<div class="window" id="profile-melon-details-window" style="display:none;position:fixed;z-index:10002;width:360px;max-height:65vh;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="profile-melon-details-title">Reseñas</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="profile-melon-details-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:6px;max-height:55vh;overflow-y:auto;">
+        <div id="profile-melon-details-list"></div>
+    </div>
+</div>
+
+<!-- PROFILE NOTIFICATIONS WINDOW -->
+<div class="window" id="profile-notifs-window" style="display:none;position:fixed;z-index:10002;width:320px;max-height:60vh;">
+    <div class="title-bar">
+        <div class="title-bar-text">🔔 Notificaciones</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="profile-notifs-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="profile-notifs-body" style="padding:6px;max-height:50vh;overflow-y:auto;">
+        <div id="profile-notifs-list"></div>
+        <div id="profile-notifs-empty" style="display:none;padding:14px;text-align:center;font-size:11px;color:#808080;">No tienes notificaciones</div>
     </div>
 </div>
 
@@ -424,6 +535,7 @@ var PROFILE_USERS = <?php
     var _ctxMenu = null;
 
     function showCtxMenu(x, y, options) {
+        if (!options || !options.length) return;
         hideCtxMenu();
         var menu = document.createElement('div');
         menu.className = 'profile-ctx-menu';
@@ -524,6 +636,12 @@ var PROFILE_USERS = <?php
                 (function(it) {
                     slot.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
+                        if (viewingUser) {
+                            showCtxMenu(e.clientX, e.clientY, [
+                                { label: '+ Añadir a mi perfil', action: function() { addItemToOwnProfile(cat, it); }}
+                            ]);
+                            return;
+                        }
                         showCtxMenu(e.clientX, e.clientY, [
                             { label: '✓ Completar', action: function() {
                                 var idx = lists[cat].indexOf(it);
@@ -904,24 +1022,46 @@ var PROFILE_USERS = <?php
         newCancel.addEventListener('click', closeWin);
         newSubmit.addEventListener('click', function() {
             if (!sel) return;
-            lists[cat][itemIdx].review = { stars: sel, comment: commentEl.value.trim() };
+            var item = lists[cat][itemIdx];
+            item.review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
             saveCategory(cat);
+            notifyReviewToFollowers(cat, item.title, item.type);
             renderCatView(cat);
             closeWin();
         });
     }
 
+    function notifyReviewToFollowers(cat, itemTitle, mtype) {
+        if (!itemTitle) return;
+        if (viewingUser) return; /* sólo notifica reseñas hechas en MI perfil */
+        fetch('assets/profile/notify-review.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat, itemTitle: itemTitle, mtype: mtype || '' })
+        }).catch(function() {});
+    }
+
     /* ──── Category view ──── */
+    var CATVIEW_PAGE_SIZE = 4;
+    var catPage = { pending: 1, done: 1 };
+
     function showCatView(cat) {
         currentCat = cat;
+        catPage = { pending: 1, done: 1 };
         document.getElementById('profile-view-default').style.display = 'none';
+        document.getElementById('profile-view-social').style.display  = 'none';
+        var melonV = document.getElementById('profile-view-melon');
+        if (melonV) melonV.style.display = 'none';
         var mv = document.getElementById('profile-view-music');
         if (mv) mv.style.display = 'none';
         document.getElementById('profile-sidebar-back').style.display = 'block';
+        document.getElementById('profile-info-edit-btn').style.display = 'none';
+        var addBtn = document.getElementById('profile-catview-add-btn');
+        if (addBtn) addBtn.style.display = viewingUser ? 'none' : '';
         var catView = document.getElementById('profile-view-cat');
         catView.style.display = 'flex';
         var titleEl  = document.getElementById('profile-catview-title');
-        if (titleEl) titleEl.textContent = CATS[cat].icon + ' ' + CATS[cat].label;
+        applyTopbarUser('profile-catview-avatar-wrap', titleEl, CATS[cat].icon, CATS[cat].label);
         var doneHead = document.getElementById('profile-catview-done-head');
         if (doneHead) doneHead.textContent = DONE_LABELS[cat];
         renderCatView(cat);
@@ -931,9 +1071,13 @@ var PROFILE_USERS = <?php
     function showDefaultView() {
         currentCat = null;
         document.getElementById('profile-view-cat').style.display = 'none';
+        document.getElementById('profile-view-social').style.display = 'none';
+        var melonV = document.getElementById('profile-view-melon');
+        if (melonV) melonV.style.display = 'none';
         var mv = document.getElementById('profile-view-music');
         if (mv) mv.style.display = 'none';
         document.getElementById('profile-sidebar-back').style.display = 'none';
+        document.getElementById('profile-info-edit-btn').style.display = viewingUser ? 'none' : '';
         document.getElementById('profile-view-default').style.display = 'flex';
     }
 
@@ -944,8 +1088,45 @@ var PROFILE_USERS = <?php
         var items   = lists[cat] || [];
         var pending = items.filter(function(i) { return i.status === 'pending'; });
         var done    = items.filter(function(i) { return i.status === 'completed'; });
-        renderGallery(cat, pending, pendingGallery, true, false);
-        renderGallery(cat, done, doneGallery, true, false);
+        renderPaginatedGallery(cat, pending, pendingGallery, 'pending', 'profile-catview-pending-pager');
+        renderPaginatedGallery(cat, done,    doneGallery,    'done',    'profile-catview-done-pager');
+    }
+
+    function renderPaginatedGallery(cat, items, gallery, key, pagerId) {
+        var totalPages = Math.max(1, Math.ceil(items.length / CATVIEW_PAGE_SIZE));
+        if (catPage[key] > totalPages) catPage[key] = totalPages;
+        if (catPage[key] < 1)          catPage[key] = 1;
+        var start = (catPage[key] - 1) * CATVIEW_PAGE_SIZE;
+        var pageItems = items.slice(start, start + CATVIEW_PAGE_SIZE);
+        renderGallery(cat, pageItems, gallery, true, false);
+        renderPager(totalPages, key, pagerId);
+    }
+
+    function renderPager(totalPages, key, pagerId) {
+        var pager = document.getElementById(pagerId);
+        if (!pager) return;
+        pager.innerHTML = '';
+        if (totalPages <= 1) return;
+        var prevBtn = document.createElement('button');
+        prevBtn.className = 'button';
+        prevBtn.textContent = '◄';
+        prevBtn.disabled = catPage[key] <= 1;
+        prevBtn.addEventListener('click', function() {
+            if (catPage[key] > 1) { catPage[key]--; if (currentCat) renderCatView(currentCat); }
+        });
+        pager.appendChild(prevBtn);
+        var info = document.createElement('span');
+        info.className = 'profile-catview-pager-info';
+        info.textContent = catPage[key] + ' / ' + totalPages;
+        pager.appendChild(info);
+        var nextBtn = document.createElement('button');
+        nextBtn.className = 'button';
+        nextBtn.textContent = '►';
+        nextBtn.disabled = catPage[key] >= totalPages;
+        nextBtn.addEventListener('click', function() {
+            if (catPage[key] < totalPages) { catPage[key]++; if (currentCat) renderCatView(currentCat); }
+        });
+        pager.appendChild(nextBtn);
     }
 
     function renderGallery(cat, items, gallery, withCtx, showFooter) {
@@ -1043,6 +1224,7 @@ var PROFILE_USERS = <?php
             footer.textContent = STATUS_LABELS[item.status || 'pending'];
             (function(i, el) {
                 el.addEventListener('click', function() {
+                    if (viewingUser) return;
                     var cur  = el.dataset.status;
                     var next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(cur) + 1) % STATUS_CYCLE.length];
                     el.dataset.status    = next;
@@ -1063,6 +1245,13 @@ var PROFILE_USERS = <?php
                     card.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
                         var menuItems = [];
+                        if (viewingUser) {
+                            menuItems.push({ label: '+ Añadir a mi perfil', action: function() {
+                                addItemToOwnProfile(cat, it);
+                            }});
+                            showCtxMenu(e.clientX, e.clientY, menuItems);
+                            return;
+                        }
                         var isCollab = !!it.sharedFrom;
                         if (it.status === 'completed') {
                             var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
@@ -1176,9 +1365,14 @@ var PROFILE_USERS = <?php
     var catviewAddBtn  = document.getElementById('profile-catview-add-btn');
     var catviewBackBtn = document.getElementById('profile-catview-back');
     if (catviewAddBtn) catviewAddBtn.addEventListener('click', function() {
+        if (viewingUser) return;
         if (currentCat) openAddDialog(currentCat);
     });
-    if (catviewBackBtn) catviewBackBtn.addEventListener('click', showDefaultView);
+    if (catviewBackBtn) catviewBackBtn.addEventListener('click', function() {
+        /* Volver SIEMPRE devuelve al perfil propio */
+        if (viewingUser) exitViewingUser();
+        showDefaultView();
+    });
 
     /* ──── Posts ──── */
     function relTime(ts) {
@@ -1196,10 +1390,33 @@ var PROFILE_USERS = <?php
                 if (data && !data.error) {
                     renderPosts(data.posts || []);
                     renderProfileInfo(data);
+                    ownFollowing = Array.isArray(data.following) ? data.following : [];
+                    loadMyFollowers(function() { renderFollowedNav(); });
                 }
                 if (cb) cb();
             })
             .catch(function() { if (cb) cb(); });
+    }
+
+    function fitBioText(bioEl) {
+        var textEl = bioEl && bioEl.querySelector('.pinfo-bio-text');
+        if (!textEl) return;
+        if (bioEl.offsetWidth === 0 || bioEl.offsetHeight === 0) return;
+        var availW = bioEl.clientWidth  - 8;
+        var availH = bioEl.clientHeight - 8;
+        if (availW <= 0 || availH <= 0) return;
+        var lo = 9, hi = 16, best = lo;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            textEl.style.fontSize = mid + 'px';
+            if (textEl.scrollWidth <= availW && textEl.scrollHeight <= availH) {
+                best = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        textEl.style.fontSize = best + 'px';
     }
 
     function renderProfileInfo(data) {
@@ -1208,14 +1425,21 @@ var PROFILE_USERS = <?php
         var linksEl = document.getElementById('profile-info-links');
         if (!bioEl) return;
 
-        bioEl.textContent    = data.bio || '';
-        bioEl.style.display  = data.bio ? '' : 'none';
+        if (data.bio) {
+            bioEl.innerHTML = '<span class="pinfo-bio-text"></span>';
+            bioEl.querySelector('.pinfo-bio-text').textContent = '" ' + data.bio + ' "';
+            bioEl.style.display = '';
+            requestAnimationFrame(function() { fitBioText(bioEl); });
+        } else {
+            bioEl.innerHTML = '';
+            bioEl.style.display = 'none';
+        }
 
         metaEl.innerHTML = '';
-        function chip(txt) { var s = document.createElement('span'); s.className = 'pinfo-chip'; s.textContent = txt; return s; }
-        if (data.pronouns) metaEl.appendChild(chip(data.pronouns));
-        if (data.age)      metaEl.appendChild(chip(data.age + ' años'));
-        if (data.country)  metaEl.appendChild(chip('📍 ' + data.country));
+        function line(txt) { var s = document.createElement('div'); s.className = 'pinfo-line'; s.textContent = txt; return s; }
+        if (data.pronouns) metaEl.appendChild(line(data.pronouns));
+        if (data.age)      metaEl.appendChild(line(data.age + ' años'));
+        if (data.country)  metaEl.appendChild(line('📍 ' + data.country));
 
         linksEl.innerHTML = '';
         var socials = [
@@ -1231,14 +1455,15 @@ var PROFILE_USERS = <?php
             if (!data[s.key]) return;
             var a = document.createElement('a');
             a.className = 'pinfo-social';
-            a.textContent = s.icon + ' ' + s.label;
+            a.textContent = s.icon;
+            a.title = s.label + ': ' + data[s.key];
             if (s.url) {
                 a.href = s.url(data[s.key]);
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
             } else {
                 a.href = '#';
-                a.title = 'Copiar: ' + data[s.key];
+                a.title = s.label + ' (clic para copiar): ' + data[s.key];
                 (function(val) {
                     a.addEventListener('click', function(e) {
                         e.preventDefault();
@@ -1249,6 +1474,265 @@ var PROFILE_USERS = <?php
             linksEl.appendChild(a);
         });
     }
+
+    (function setupBioResize() {
+        var bioEl = document.getElementById('profile-info-bio');
+        if (!bioEl) return;
+        if (window.ResizeObserver) {
+            var ro = new ResizeObserver(function() { fitBioText(bioEl); });
+            ro.observe(bioEl);
+        } else {
+            window.addEventListener('resize', function() { fitBioText(bioEl); });
+        }
+    })();
+
+    /* ──── Collapsible sections ──── */
+    function makeCollapsible(headerEl, bodyEl) {
+        /* Si se pasa bodyEl, pliega sólo ese elemento. Si no, todos los siguientes hermanos. */
+        if (!headerEl || headerEl.dataset.collapsibleReady === '1') return;
+        var arrow = document.createElement('button');
+        arrow.type = 'button';
+        arrow.className = 'profile-collapse-arrow';
+        arrow.title = 'Plegar/desplegar';
+        arrow.textContent = '▼';
+        headerEl.appendChild(arrow);
+        headerEl.dataset.collapsibleReady = '1';
+
+        function toggleEl(el, collapsed) {
+            if (collapsed) {
+                if (el.style.display !== 'none') el.dataset._prevDisp = el.style.display || '';
+                el.style.display = 'none';
+            } else {
+                el.style.display = (el.dataset._prevDisp !== undefined) ? el.dataset._prevDisp : '';
+                delete el.dataset._prevDisp;
+            }
+        }
+
+        arrow.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var collapsed = headerEl.classList.toggle('section-collapsed');
+            if (bodyEl) {
+                toggleEl(bodyEl, collapsed);
+            } else {
+                var sib = headerEl.nextElementSibling;
+                while (sib) { toggleEl(sib, collapsed); sib = sib.nextElementSibling; }
+            }
+            arrow.textContent = collapsed ? '▶' : '▼';
+        });
+    }
+
+    (function setupCollapsibles() {
+        document.querySelectorAll('.profile-catview-section-head').forEach(function(h) { makeCollapsible(h); });
+        document.querySelectorAll('#profile-catview-encurso .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
+        document.querySelectorAll('#music-catview-destacados .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
+        var postsHeader = document.getElementById('profile-posts-header');
+        if (postsHeader) makeCollapsible(postsHeader);
+        /* Mis Listas pliega sólo su contenedor de nav (NO el resto del sidebar) */
+        var listasHd  = document.getElementById('profile-listas-heading');
+        var listasNav = document.getElementById('profile-listas-nav');
+        if (listasHd && listasNav) makeCollapsible(listasHd, listasNav);
+        /* Melon reviews: pliega sólo su nav (NO el resto del sidebar) */
+        var melonHd  = document.querySelector('#profile-melon-section > .profile-sidebar-heading');
+        var melonNav = document.getElementById('profile-melon-nav');
+        if (melonHd && melonNav) makeCollapsible(melonHd, melonNav);
+        /* Social: la cabecera plega sus hermanos dentro de #profile-social-section */
+        var socialHd = document.querySelector('#profile-social-section > .profile-sidebar-heading');
+        if (socialHd) makeCollapsible(socialHd);
+    })();
+
+    /* ──── Profile notifications ──── */
+    var profileNotifs = [];
+
+    function loadProfileNotifs(cb) {
+        fetch('assets/profile/get-profile-notifs.php')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data && data.ok) {
+                    profileNotifs = Array.isArray(data.notifs) ? data.notifs : [];
+                    updateNotifBadge(data.unread || 0);
+                }
+                if (cb) cb();
+            })
+            .catch(function() { if (cb) cb(); });
+    }
+
+    function updateNotifBadge(count) {
+        var badge = document.getElementById('profile-notif-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : String(count);
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        /* Campana en el botón del taskbar */
+        var tbBtn = (window.taskbarManager && typeof taskbarManager.getButton === 'function')
+            ? taskbarManager.getButton('profile-window') : null;
+        if (tbBtn) {
+            var bell = tbBtn.querySelector('.taskbar-notif-bell');
+            if (count > 0) {
+                if (!bell) {
+                    bell = document.createElement('span');
+                    bell.className = 'taskbar-notif-bell';
+                    bell.textContent = '🔔';
+                    tbBtn.appendChild(bell);
+                }
+            } else if (bell) {
+                bell.remove();
+            }
+        }
+    }
+
+    function renderProfileNotifs() {
+        var listEl  = document.getElementById('profile-notifs-list');
+        var emptyEl = document.getElementById('profile-notifs-empty');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        if (!profileNotifs.length) {
+            if (emptyEl) emptyEl.style.display = '';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+        profileNotifs.forEach(function(n) {
+            var u = PROFILE_USERS[n.fromUser];
+            if (!u) return;
+            var row = document.createElement('div');
+            row.className = 'profile-notif-row' + (n.read ? '' : ' unread');
+            var avFrame = document.createElement('div');
+            avFrame.className = 'profile-avatar-frame profile-notif-av';
+            if (u.image) {
+                var img = document.createElement('img');
+                img.src = u.image; img.alt = u.label;
+                avFrame.appendChild(img);
+            } else {
+                avFrame.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
+            }
+            row.appendChild(avFrame);
+            var info = document.createElement('div');
+            info.className = 'profile-notif-info';
+            var msg = document.createElement('div');
+            msg.className = 'profile-notif-msg';
+            if (n.type === 'follow') {
+                msg.innerHTML = '<strong>' + escHtml(u.label) + '</strong> te ha seguido';
+            } else if (n.type === 'like') {
+                var snippet = n.postText ? n.postText : '';
+                if (snippet.length > 60) snippet = snippet.substring(0, 60) + '…';
+                msg.innerHTML = '<strong>' + escHtml(u.label) + '</strong> le ha dado ❤ a tu publicación'
+                    + (snippet ? ': <em>"' + escHtml(snippet) + '"</em>' : '');
+            } else if (n.type === 'review') {
+                var noun;
+                if (n.category === 'movies')      noun = 'la película';
+                else if (n.category === 'books')  noun = 'el libro';
+                else if (n.category === 'games')  noun = 'el videojuego';
+                else if (n.category === 'music')  noun = (n.mtype === 'album') ? 'el álbum' : 'la canción';
+                else                              noun = '';
+                var itemT = n.itemTitle ? n.itemTitle : '';
+                msg.innerHTML = '<strong>' + escHtml(u.label) + '</strong> ha reseñado '
+                    + (noun ? noun + ' ' : '')
+                    + '<em>"' + escHtml(itemT) + '"</em>';
+            } else {
+                msg.textContent = u.label;
+            }
+            info.appendChild(msg);
+            var t = document.createElement('div');
+            t.className = 'profile-notif-time';
+            t.textContent = relTime(n.createdAt || 0);
+            info.appendChild(t);
+            row.appendChild(info);
+
+            /* Botón "Seguir" para notifs de tipo follow */
+            if (n.type === 'follow') {
+                var fbBtn = document.createElement('button');
+                fbBtn.className = 'button profile-notif-follow-btn';
+                var nowFollowing = ownFollowing.indexOf(n.fromUser) !== -1;
+                fbBtn.textContent = nowFollowing ? '✓ Siguiendo' : '+ Seguir';
+                if (nowFollowing) fbBtn.classList.add('following');
+                (function(uk, b) {
+                    b.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (b.dataset.busy === '1') return;
+                        b.dataset.busy = '1';
+                        fetch('assets/profile/toggle-follow.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ targetUser: uk })
+                        }).then(function(r) { return r.json(); })
+                          .then(function(d) {
+                              b.dataset.busy = '';
+                              if (!d || d.error) { if (d && d.error) alert(d.error); return; }
+                              ownFollowing = Array.isArray(d.list) ? d.list : ownFollowing;
+                              b.textContent = d.following ? '✓ Siguiendo' : '+ Seguir';
+                              b.classList.toggle('following', !!d.following);
+                              renderFollowedNav();
+                              /* Si el perfil que se está viendo es este usuario, sincroniza también el botón principal */
+                              if (viewingUser === uk) updateFollowButton(!!d.following);
+                          }).catch(function() { b.dataset.busy = ''; });
+                    });
+                })(n.fromUser, fbBtn);
+                row.appendChild(fbBtn);
+            }
+
+            (function(uk) {
+                row.addEventListener('click', function() {
+                    closeNotifsWindow();
+                    viewOtherUser(uk);
+                });
+            })(n.fromUser);
+            listEl.appendChild(row);
+        });
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function openNotifsWindow() {
+        var win = document.getElementById('profile-notifs-window');
+        if (!win) return;
+        renderProfileNotifs();
+        win.style.display = 'block';
+        win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        /* Marca todas como leídas en servidor + UI */
+        if (profileNotifs.some(function(n) { return !n.read; })) {
+            fetch('assets/profile/mark-notifs-read.php', { method: 'POST' }).catch(function(){});
+            profileNotifs.forEach(function(n) { n.read = true; });
+            updateNotifBadge(0);
+        }
+    }
+    function closeNotifsWindow() {
+        var win = document.getElementById('profile-notifs-window');
+        if (win) win.style.display = 'none';
+    }
+
+    (function setupNotifBtn() {
+        var btn  = document.getElementById('profile-notif-btn');
+        var clo  = document.getElementById('profile-notifs-close');
+        if (btn) btn.addEventListener('click', openNotifsWindow);
+        if (clo) clo.addEventListener('click', closeNotifsWindow);
+    })();
+
+    (function setupFollowBtn() {
+        var btn = document.getElementById('profile-follow-btn');
+        if (!btn) return;
+        btn.addEventListener('click', function() {
+            if (!viewingUser || btn.dataset.busy === '1') return;
+            btn.dataset.busy = '1';
+            fetch('assets/profile/toggle-follow.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetUser: viewingUser })
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                  btn.dataset.busy = '';
+                  if (!d || d.error) { if (d && d.error) alert(d.error); return; }
+                  ownFollowing = Array.isArray(d.list) ? d.list : ownFollowing;
+                  updateFollowButton(!!d.following);
+                  loadMyFollowers(function() { renderFollowedNav(); updateChatBtn(); });
+              }).catch(function() { btn.dataset.busy = ''; });
+        });
+    })();
 
     /* Exposed globally so external code can open the profile on the music tab */
     window.profileOpenMusic = function() {
@@ -1337,28 +1821,80 @@ var PROFILE_USERS = <?php
             list.appendChild(empty);
             return;
         }
+        var isViewing = !!viewingUser;
         posts.forEach(function(post) {
             var box = document.createElement('div');
             box.className = 'profile-post-box';
+
             var hdr = document.createElement('div');
             hdr.className = 'profile-post-hdr';
             var timeEl = document.createElement('span');
             timeEl.className = 'profile-post-time';
             timeEl.textContent = relTime(post.createdAt || 0);
-            var delBtn = document.createElement('button');
-            delBtn.className = 'button profile-post-del';
-            delBtn.textContent = '×';
-            delBtn.addEventListener('click', function() {
-                confirmFn('¿Eliminar este post?', 'Eliminar', function() {
-                    fetch('assets/profile/delete-post.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: post.id })
-                    }).then(function() { loadProfile(); }).catch(function() {});
-                });
-            });
             hdr.appendChild(timeEl);
-            hdr.appendChild(delBtn);
+
+            /* Like (corazón) en la esquina derecha cuando se ve otro perfil */
+            if (isViewing) {
+                var likes = Array.isArray(post.likes) ? post.likes : [];
+                var likedByMe = likes.indexOf(currentSessionUser) !== -1;
+                var likeWrap = document.createElement('span');
+                likeWrap.className = 'profile-post-like' + (likedByMe ? ' liked' : '');
+                var countEl = document.createElement('span');
+                countEl.className = 'profile-post-like-count';
+                countEl.textContent = likes.length;
+                var heart = document.createElement('span');
+                heart.className = 'profile-post-like-icon';
+                heart.textContent = likedByMe ? '❤' : '♡';
+                likeWrap.appendChild(countEl);
+                likeWrap.appendChild(heart);
+                (function(p, wrap, c, h) {
+                    wrap.addEventListener('click', function() {
+                        if (wrap.dataset.busy === '1') return;
+                        wrap.dataset.busy = '1';
+                        fetch('assets/profile/toggle-post-like.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ targetUser: viewingUser, postId: p.id })
+                        }).then(function(r) { return r.json(); })
+                          .then(function(d) {
+                              wrap.dataset.busy = '';
+                              if (!d || d.error) return;
+                              c.textContent = d.count;
+                              h.textContent = d.liked ? '❤' : '♡';
+                              wrap.classList.toggle('liked', !!d.liked);
+                              /* Actualiza el array local para que el estado persista en re-render */
+                              if (!Array.isArray(p.likes)) p.likes = [];
+                              var idx = p.likes.indexOf(currentSessionUser);
+                              if (d.liked && idx === -1)      p.likes.push(currentSessionUser);
+                              else if (!d.liked && idx !== -1) p.likes.splice(idx, 1);
+                          }).catch(function() { wrap.dataset.busy = ''; });
+                    });
+                })(post, likeWrap, countEl, heart);
+                hdr.appendChild(likeWrap);
+            } else {
+                var rightCol = document.createElement('div');
+                rightCol.className = 'profile-post-right';
+                var delBtn = document.createElement('button');
+                delBtn.className = 'button profile-post-del';
+                delBtn.textContent = '×';
+                delBtn.addEventListener('click', function() {
+                    confirmFn('¿Eliminar este post?', 'Eliminar', function() {
+                        fetch('assets/profile/delete-post.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: post.id })
+                        }).then(function() { loadProfile(); }).catch(function() {});
+                    });
+                });
+                rightCol.appendChild(delBtn);
+                var ownLikes = Array.isArray(post.likes) ? post.likes.length : 0;
+                var ownLikeEl = document.createElement('span');
+                ownLikeEl.className = 'profile-post-like-display';
+                ownLikeEl.innerHTML = '<span class="profile-post-like-count">' + ownLikes + '</span><span class="profile-post-like-icon">❤</span>';
+                rightCol.appendChild(ownLikeEl);
+                hdr.appendChild(rightCol);
+            }
+
             var txt = document.createElement('div');
             txt.className = 'profile-post-text';
             txt.textContent = post.text;
@@ -1403,14 +1939,806 @@ var PROFILE_USERS = <?php
         }
     }
 
+    /* ──── Social: list of other users + read-only view of their profile ──── */
+    var viewingUser  = null;     /* userKey si estamos viendo otro perfil, null si no */
+    var ownLists     = null;     /* backup de las listas propias mientras se ve a otro */
+    var ownFollowing = [];       /* lista (array de userKey) de la gente que sigo */
+    var myFollowers  = [];       /* lista (array de userKey) de la gente que me sigue */
+    var OWN_AVATAR_IMG = <?php echo json_encode(isset($profileImg) ? $profileImg : ''); ?>;
+    var OWN_LABEL      = <?php echo json_encode($desktopLabel); ?>;
+
+    function applyTopbarUser(wrapId, titleEl, icon, ownLabel) {
+        /* Cambia avatar/nombre del topbar y el título según viewingUser */
+        var wrap = document.getElementById(wrapId);
+        if (!wrap) return;
+        var frame = wrap.querySelector('.profile-avatar-frame');
+        var nameEl = wrap.querySelector('.profile-catview-username');
+        var img, label;
+        if (viewingUser && PROFILE_USERS[viewingUser]) {
+            var u = PROFILE_USERS[viewingUser];
+            img   = u.image || '';
+            label = u.label;
+        } else {
+            img   = OWN_AVATAR_IMG;
+            label = OWN_LABEL;
+        }
+        if (frame) {
+            frame.innerHTML = img
+                ? '<img src="' + img + '" alt="" class="profile-avatar-img">'
+                : '<div class="profile-avatar-placeholder">👤</div>';
+        }
+        if (nameEl) nameEl.textContent = label;
+        if (titleEl) titleEl.textContent = icon + ' ' + ownLabel;
+    }
+
+    function showSocialView() {
+        currentCat = null;
+        document.getElementById('profile-view-default').style.display = 'none';
+        document.getElementById('profile-view-cat').style.display     = 'none';
+        var melonV = document.getElementById('profile-view-melon');
+        if (melonV) melonV.style.display = 'none';
+        var mv = document.getElementById('profile-view-music');
+        if (mv) mv.style.display = 'none';
+        document.getElementById('profile-view-social').style.display  = 'flex';
+        document.getElementById('profile-sidebar-back').style.display = 'block';
+        document.getElementById('profile-info-edit-btn').style.display = 'none';
+        renderSocialList();
+        loadProfile(function() { renderSocialList(); });
+    }
+
+    /* ──── Melon reviews ──── */
+    var MELON_LABELS = { year: 'Mejor del año', recent: 'Reciente', alltime: 'Todo el tiempo' };
+    var MELON_ICONS  = { movies: '🎬', books: '📚', games: '🎮', music: '🎵' };
+    var MELON_MUST_VERBS = { movies: 'watch', books: 'read', games: 'play', music: 'listen' };
+    var melonPeriod = null;
+    var melonCat    = null;
+    var melonType   = null;
+    var melonItemsCache = [];
+    var melonPage = 1;
+    var MELON_PAGE_SIZE = 20;
+
+    function addMelonItemToProfile(cat, item) {
+        if (!cat || !item || !item.title) return;
+        var titleLower = item.title.toLowerCase().trim();
+        if (!titleLower) return;
+        var ownLs = ownLists || lists;
+        var arr = ownLs[cat] || [];
+        var dup = arr.some(function(it) { return (it.title || '').toLowerCase().trim() === titleLower; });
+        if (dup) {
+            if (window.notifSystem) {
+                window.notifSystem.show({
+                    id:      'dup_' + Date.now(),
+                    type:    'info',
+                    title:   'Ya en tu perfil',
+                    message: '"' + item.title + '" ya está en tu lista.'
+                });
+            }
+            return;
+        }
+        var entry;
+        if (cat === 'music') {
+            entry = {
+                id:       'music_' + Date.now(),
+                type:     item.mtype || 'song',
+                title:    item.title,
+                artist:   item.artist || '',
+                image:    item.image  || '',
+                featured: false
+            };
+            if (item.ytId)           entry.ytId           = item.ytId;
+            if (item.spotifyId)      entry.spotifyId      = item.spotifyId;
+            if (item.ytPlaylistId)   entry.ytPlaylistId   = item.ytPlaylistId;
+            if (item.spotifyAlbumId) entry.spotifyAlbumId = item.spotifyAlbumId;
+        } else {
+            entry = {
+                id:     'item_' + Date.now(),
+                title:  item.title,
+                image:  item.image || '',
+                status: 'pending'
+            };
+        }
+        if (!ownLs[cat]) ownLs[cat] = [];
+        ownLs[cat].push(entry);
+        var newIdx = ownLs[cat].length - 1;
+        fetch('assets/profile/save-lists.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat, items: ownLs[cat] })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (d && d.error) { alert(d.error); return; }
+              if (window.notifSystem) {
+                  window.notifSystem.show({
+                      id:      'added_' + Date.now(),
+                      type:    'info',
+                      title:   cat === 'music' ? 'Música añadida' : 'Añadido a tu perfil',
+                      message: cat === 'music'
+                          ? '"' + item.title + '" añadido a tu lista.'
+                          : '"' + item.title + '" añadido como pendiente.'
+                  });
+              }
+              if (!viewingUser) updateCounts();
+              if (cat === 'music') showAddedMusicReviewPrompt(newIdx, entry);
+          }).catch(function() { alert('Error al guardar'); });
+    }
+
+    function showMelonView(period) {
+        if (!MELON_LABELS[period]) return;
+        melonPeriod = period;
+        currentCat  = null;
+        document.getElementById('profile-view-default').style.display = 'none';
+        document.getElementById('profile-view-cat').style.display     = 'none';
+        document.getElementById('profile-view-social').style.display  = 'none';
+        var mv = document.getElementById('profile-view-music');
+        if (mv) mv.style.display = 'none';
+        document.getElementById('profile-view-melon').style.display   = 'flex';
+        document.getElementById('profile-sidebar-back').style.display = 'block';
+        document.getElementById('profile-info-edit-btn').style.display = 'none';
+        document.getElementById('profile-melon-title').textContent     = '⭐ ' + MELON_LABELS[period];
+        /* Cargar películas por defecto al entrar */
+        melonCat  = 'movies';
+        melonType = null;
+        document.querySelectorAll('.melon-cat-btn').forEach(function(b) {
+            b.classList.toggle('active', b.dataset.mcat === 'movies' && !b.dataset.mtype);
+        });
+        var listEl = document.getElementById('profile-melon-list');
+        if (listEl) listEl.innerHTML = '';
+        loadMelonItems();
+    }
+
+    function loadMelonItems() {
+        if (!melonPeriod || !melonCat) return;
+        var statusEl = document.getElementById('profile-melon-status');
+        var listEl   = document.getElementById('profile-melon-list');
+        if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Cargando...'; }
+        if (listEl) listEl.innerHTML = '';
+        var url = 'assets/profile/melon-reviews.php?period=' + encodeURIComponent(melonPeriod) + '&cat=' + encodeURIComponent(melonCat);
+        if (melonType) url += '&type=' + encodeURIComponent(melonType);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || !data.ok) {
+                    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = (data && data.error) ? data.error : 'Error'; }
+                    return;
+                }
+                melonItemsCache = data.items || [];
+                melonPage = 1;
+                renderMelonItems();
+            }).catch(function() {
+                if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Error de red'; }
+            });
+    }
+
+    function renderMelonItems() {
+        var statusEl = document.getElementById('profile-melon-status');
+        var listEl   = document.getElementById('profile-melon-list');
+        var pagerEl  = document.getElementById('profile-melon-pager');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        if (pagerEl) pagerEl.innerHTML = '';
+        if (!melonItemsCache.length) {
+            if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'No hay reseñas en este período.'; }
+            return;
+        }
+        if (statusEl) statusEl.style.display = 'none';
+
+        var totalPages = Math.max(1, Math.ceil(melonItemsCache.length / MELON_PAGE_SIZE));
+        if (melonPage > totalPages) melonPage = totalPages;
+        if (melonPage < 1) melonPage = 1;
+        var start = (melonPage - 1) * MELON_PAGE_SIZE;
+        var pageItems = melonItemsCache.slice(start, start + MELON_PAGE_SIZE);
+
+        var isMusic = (melonCat === 'music');
+        pageItems.forEach(function(item) {
+            var isMust = item.avg > 4.4;
+            var slot = document.createElement('div');
+            slot.className = 'profile-encurso-slot filled melon-slot'
+                + (isMusic ? ' melon-slot-music' : '')
+                + (isMust ? ' melon-must' : '');
+
+            if (isMust) {
+                var badge = document.createElement('div');
+                badge.className = 'melon-must-badge';
+                badge.textContent = '★ Melon must ' + (MELON_MUST_VERBS[melonCat] || 'see');
+                slot.appendChild(badge);
+            }
+
+            /* Title bar */
+            var tb = document.createElement('div');
+            tb.className = 'profile-encurso-slot-tb' + (isMusic ? ' music-slot-tb' : '');
+            if (isMusic) {
+                var tbTitle = document.createElement('div');
+                tbTitle.className = 'music-slot-tb-title';
+                tbTitle.textContent = item.title; tbTitle.title = item.title;
+                tb.appendChild(tbTitle);
+                if (item.artist) {
+                    var tbArtist = document.createElement('div');
+                    tbArtist.className = 'music-slot-tb-artist';
+                    tbArtist.textContent = item.artist;
+                    tb.appendChild(tbArtist);
+                }
+                var tbStars = document.createElement('div');
+                tbStars.className = 'music-slot-tb-stars';
+                tbStars.innerHTML = makeStarsHtml(item.avg, 5)
+                    + '<span class="profile-star-num" style="font-size:8px;margin-left:2px;vertical-align:middle;">' + item.avg.toFixed(1) + '</span>'
+                    + '<span style="font-size:8px;margin-left:3px;color:#c0c0c0;">(' + item.count + ')</span>';
+                tb.appendChild(tbStars);
+            } else {
+                tb.textContent = item.title;
+                tb.title = item.title;
+            }
+            slot.appendChild(tb);
+
+            /* Body */
+            var body = document.createElement('div');
+            body.className = 'profile-encurso-slot-body';
+            var fallback = isMusic ? (item.mtype === 'album' ? '💿' : '🎵') : (MELON_ICONS[melonCat] || '🖼');
+            if (item.image) {
+                var img = document.createElement('img');
+                img.src = item.image; img.alt = item.title;
+                (function(b, fb) { img.onerror = function() { b.textContent = fb; }; })(body, fallback);
+                body.appendChild(img);
+            } else {
+                body.textContent = fallback;
+            }
+            slot.appendChild(body);
+
+            /* For non-music slots, add rating below the image */
+            if (!isMusic) {
+                var rating = document.createElement('div');
+                rating.className = 'melon-slot-rating';
+                rating.innerHTML = makeStarsHtml(item.avg, 5)
+                    + '<span class="melon-slot-rating-avg">' + item.avg.toFixed(1) + '</span>'
+                    + '<span class="melon-slot-rating-count">(' + item.count + ')</span>';
+                slot.appendChild(rating);
+            }
+
+            /* Click → ver reseñas */
+            slot.style.cursor = 'pointer';
+            (function(it) { slot.addEventListener('click', function() { showMelonDetails(it); }); })(item);
+
+            /* Click derecho → menú contextual */
+            (function(it, cat) {
+                slot.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    var menuItems = [];
+                    if (isMusic) {
+                        menuItems.push({ label: '▶ Reproducir', action: function() { playMusicItem(it); } });
+                    }
+                    menuItems.push({ label: '+ Añadir a mi perfil', action: function() { addMelonItemToProfile(cat, it); } });
+                    showCtxMenu(e.clientX, e.clientY, menuItems);
+                });
+            })(item, melonCat);
+
+            listEl.appendChild(slot);
+        });
+
+        /* Pagination */
+        if (pagerEl && totalPages > 1) {
+            var prev = document.createElement('button');
+            prev.className = 'button';
+            prev.textContent = '◄';
+            prev.disabled = melonPage <= 1;
+            prev.addEventListener('click', function() { if (melonPage > 1) { melonPage--; renderMelonItems(); } });
+            pagerEl.appendChild(prev);
+            var info = document.createElement('span');
+            info.className = 'melon-pager-info';
+            info.textContent = melonPage + ' / ' + totalPages + '  ·  ' + melonItemsCache.length + ' items';
+            pagerEl.appendChild(info);
+            var next = document.createElement('button');
+            next.className = 'button';
+            next.textContent = '►';
+            next.disabled = melonPage >= totalPages;
+            next.addEventListener('click', function() { if (melonPage < totalPages) { melonPage++; renderMelonItems(); } });
+            pagerEl.appendChild(next);
+        }
+    }
+
+    function showMelonDetails(item) {
+        var win = document.getElementById('profile-melon-details-window');
+        if (!win) return;
+        document.getElementById('profile-melon-details-title').textContent = '⭐ ' + item.title;
+        var list = document.getElementById('profile-melon-details-list');
+        list.innerHTML = '';
+        (item.reviews || []).forEach(function(rev) {
+            var row = document.createElement('div');
+            row.className = 'melon-detail-row';
+            var avFrame = document.createElement('div');
+            avFrame.className = 'profile-avatar-frame melon-detail-av';
+            if (rev.userImg) {
+                var img = document.createElement('img');
+                img.src = rev.userImg; img.alt = rev.userLabel;
+                avFrame.appendChild(img);
+            } else {
+                avFrame.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
+            }
+            row.appendChild(avFrame);
+            var body = document.createElement('div');
+            body.className = 'melon-detail-body';
+            var hdr = document.createElement('div');
+            hdr.className = 'melon-detail-hdr';
+            hdr.innerHTML = '<strong>' + escHtml(rev.userLabel) + '</strong> '
+                + makeStarsHtml(rev.stars, 5)
+                + '<span class="melon-item-avg">' + rev.stars + '</span>';
+            body.appendChild(hdr);
+            if (rev.comment) {
+                var cmt = document.createElement('div');
+                cmt.className = 'melon-detail-comment';
+                cmt.textContent = '" ' + rev.comment + ' "';
+                body.appendChild(cmt);
+            }
+            var t = document.createElement('div');
+            t.className = 'melon-detail-time';
+            t.textContent = rev.reviewedAt ? relTime(rev.reviewedAt) : '';
+            body.appendChild(t);
+            row.appendChild(body);
+            list.appendChild(row);
+        });
+        win.style.display = 'block';
+        win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+    }
+
+    (function setupMelon() {
+        document.querySelectorAll('.melon-cat-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                melonCat  = btn.dataset.mcat;
+                melonType = btn.dataset.mtype || null;
+                document.querySelectorAll('.melon-cat-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+                loadMelonItems();
+            });
+        });
+        var closeBtn = document.getElementById('profile-melon-details-close');
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+            document.getElementById('profile-melon-details-window').style.display = 'none';
+        });
+    })();
+
+    function buildSocialCard(userKey) {
+        var u = PROFILE_USERS[userKey];
+        if (!u) return null;
+        var card = document.createElement('div');
+        card.className = 'profile-social-card';
+        var avWrap = document.createElement('div');
+        avWrap.className = 'profile-avatar-frame';
+        if (u.image) {
+            var img = document.createElement('img');
+            img.className = 'profile-avatar-img';
+            img.src = u.image;
+            img.alt = u.label;
+            avWrap.appendChild(img);
+        } else {
+            avWrap.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
+        }
+        card.appendChild(avWrap);
+        var nameEl = document.createElement('div');
+        nameEl.className = 'profile-social-name';
+        nameEl.textContent = u.label;
+        card.appendChild(nameEl);
+        card.addEventListener('click', function() { viewOtherUser(userKey); });
+        return card;
+    }
+
+    function renderSocialList() {
+        var exploreEl = document.getElementById('profile-social-explore');
+        if (!exploreEl) return;
+        exploreEl.innerHTML = '';
+
+        var followingSet = {};
+        ownFollowing.forEach(function(k) { followingSet[k] = true; });
+        var exploreKeys = Object.keys(PROFILE_USERS)
+            .filter(function(k) { return k !== currentSessionUser && !followingSet[k]; });
+        exploreKeys.sort(function(a, b) {
+            var la = (PROFILE_USERS[a].label || '').toLowerCase();
+            var lb = (PROFILE_USERS[b].label || '').toLowerCase();
+            return la < lb ? -1 : la > lb ? 1 : 0;
+        });
+
+        exploreKeys.forEach(function(k) {
+            var card = buildSocialCard(k);
+            if (card) exploreEl.appendChild(card);
+        });
+        if (!exploreKeys.length) {
+            exploreEl.innerHTML = '<div class="profile-social-empty">No hay más usuarios.</div>';
+        }
+    }
+
+    function renderFollowedNav() {
+        var nav = document.getElementById('profile-followed-nav');
+        if (!nav) return;
+        nav.innerHTML = '';
+        var keys = ownFollowing.filter(function(k) { return PROFILE_USERS[k]; });
+        keys.sort(function(a, b) {
+            var la = (PROFILE_USERS[a].label || '').toLowerCase();
+            var lb = (PROFILE_USERS[b].label || '').toLowerCase();
+            return la < lb ? -1 : la > lb ? 1 : 0;
+        });
+        keys.forEach(function(k) {
+            var u = PROFILE_USERS[k];
+            var item = document.createElement('div');
+            item.className = 'profile-nav-item profile-nav-followed';
+            item.dataset.user = k;
+            var iconWrap = document.createElement('span');
+            iconWrap.className = 'profile-nav-icon';
+            if (u.image) {
+                var img = document.createElement('img');
+                img.className = 'profile-nav-avatar';
+                img.src = u.image; img.alt = u.label;
+                iconWrap.appendChild(img);
+            } else {
+                iconWrap.textContent = '👤';
+            }
+            item.appendChild(iconWrap);
+            var label = document.createElement('span');
+            label.className = 'profile-nav-label';
+            label.textContent = u.label;
+            item.appendChild(label);
+            (function(uk) {
+                item.addEventListener('click', function() { viewOtherUser(uk); });
+            })(k);
+            if (isMutual(k)) {
+                var chatBtn = document.createElement('span');
+                chatBtn.className = 'profile-nav-chat';
+                chatBtn.title = 'Chat con ' + u.label;
+                var ico = document.createElement('span');
+                ico.className = 'profile-nav-chat-ico';
+                ico.textContent = '💬';
+                chatBtn.appendChild(ico);
+                var unread = unreadChats[k] || 0;
+                if (unread > 0) {
+                    var badge = document.createElement('span');
+                    badge.className = 'profile-nav-chat-badge';
+                    badge.textContent = unread > 9 ? '+9' : String(unread);
+                    chatBtn.appendChild(badge);
+                }
+                (function(uk) {
+                    chatBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        openChatWith(uk);
+                    });
+                })(k);
+                item.appendChild(chatBtn);
+            }
+            nav.appendChild(item);
+        });
+    }
+
+    function viewOtherUser(userKey) {
+        fetch('assets/profile/view-user.php?user=' + encodeURIComponent(userKey))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || data.error) { alert(data && data.error ? data.error : 'Error'); return; }
+                if (!ownLists) ownLists = lists;
+                lists = data.lists;
+                viewingUser = data.userKey;
+                /* Pinta cabecera con datos del otro usuario */
+                var u = PROFILE_USERS[data.userKey];
+                var avFrame = document.querySelector('#profile-avatar-col .profile-avatar-frame');
+                if (avFrame) {
+                    avFrame.innerHTML = '';
+                    if (u && u.image) {
+                        var img = document.createElement('img');
+                        img.className = 'profile-avatar-img';
+                        img.src = u.image; img.alt = u.label;
+                        avFrame.appendChild(img);
+                    } else {
+                        avFrame.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
+                    }
+                }
+                var nameEl = document.getElementById('profile-username');
+                if (nameEl) nameEl.textContent = data.label;
+                renderProfileInfo(data.profile);
+                renderPosts(data.profile.posts || []);
+                updateCounts();
+                document.getElementById('profile-view-social').style.display = 'none';
+                document.getElementById('profile-view-cat').style.display     = 'none';
+                var melonV = document.getElementById('profile-view-melon');
+                if (melonV) melonV.style.display = 'none';
+                var mv = document.getElementById('profile-view-music');
+                if (mv) mv.style.display = 'none';
+                document.getElementById('profile-view-default').style.display = 'flex';
+                document.getElementById('profile-sidebar-back').style.display = 'block';
+                document.getElementById('profile-info-edit-btn').style.display = 'none';
+                var newPostEl = document.getElementById('profile-new-post');
+                if (newPostEl) newPostEl.style.display = 'none';
+                updateFollowButton(!!data.isFollowing);
+                var listasHdText = document.getElementById('profile-listas-heading-text');
+                if (listasHdText) listasHdText.textContent = 'Listas de ' + data.label;
+                var socialSec = document.getElementById('profile-social-section');
+                if (socialSec) socialSec.style.display = 'none';
+                var melonSec  = document.getElementById('profile-melon-section');
+                if (melonSec)  melonSec.style.display  = 'none';
+                var notifBtn = document.getElementById('profile-notif-btn');
+                if (notifBtn) notifBtn.style.display = 'none';
+            })
+            .catch(function() { alert('No se pudo cargar el perfil'); });
+    }
+
+    function updateFollowButton(isFollowing) {
+        var btn = document.getElementById('profile-follow-btn');
+        if (!btn) return;
+        if (!viewingUser) { btn.style.display = 'none'; return; }
+        btn.style.display = '';
+        btn.textContent = isFollowing ? '✓ Siguiendo' : '+ Seguir';
+        btn.classList.toggle('following', !!isFollowing);
+        updateChatBtn();
+    }
+
+    function isMutual(userKey) {
+        return ownFollowing.indexOf(userKey) !== -1 && myFollowers.indexOf(userKey) !== -1;
+    }
+
+    function loadMyFollowers(cb) {
+        fetch('assets/profile/get-followers.php')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d && d.ok && Array.isArray(d.followers)) myFollowers = d.followers;
+                if (cb) cb();
+            })
+            .catch(function() { if (cb) cb(); });
+    }
+
+    /* Botón de chat junto al "Seguir" en el perfil visitado */
+    function updateChatBtn() {
+        var avatarCol = document.getElementById('profile-avatar-col');
+        if (!avatarCol) return;
+        var existing = document.getElementById('profile-chat-btn');
+        if (!viewingUser || !isMutual(viewingUser)) {
+            if (existing) existing.remove();
+            return;
+        }
+        if (existing) return;
+        var btn = document.createElement('button');
+        btn.className = 'button';
+        btn.id = 'profile-chat-btn';
+        btn.style.cssText = 'font-size:9px;margin-top:5px;';
+        btn.textContent = '💬 Chat';
+        btn.addEventListener('click', function() { openChatWith(viewingUser); });
+        avatarCol.appendChild(btn);
+    }
+
+    /* ──── Chat ──── */
+    var chatWithUser   = null;
+    var chatLastSeenId = null;
+    var chatPollTimer  = null;
+    var unreadChats    = {};  /* { userKey: count } — mensajes sin leer por chat */
+    var unreadPollTimer = null;
+
+    function openChatWith(userKey) {
+        if (!userKey || !PROFILE_USERS[userKey]) return;
+        chatWithUser = userKey;
+        chatLastSeenId = null;
+        var u = PROFILE_USERS[userKey];
+        document.getElementById('profile-chat-title').textContent = '💬 ' + u.label;
+        var win = document.getElementById('profile-chat-window');
+        win.style.display = 'flex';
+        win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        loadChatMessages();
+        if (chatPollTimer) clearInterval(chatPollTimer);
+        chatPollTimer = setInterval(loadChatMessages, 1500);
+        /* Quita el contador local al abrir el chat */
+        if (unreadChats[userKey]) { delete unreadChats[userKey]; renderFollowedNav(); }
+        setTimeout(function() {
+            var input = document.getElementById('profile-chat-input');
+            if (input) input.focus();
+        }, 50);
+    }
+
+    function loadUnreadChats() {
+        fetch('assets/profile/get-unread-chats.php')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) return;
+                unreadChats = d.counts || {};
+                /* No mostrar contador para el chat actualmente abierto */
+                if (chatWithUser && unreadChats[chatWithUser]) delete unreadChats[chatWithUser];
+                renderFollowedNav();
+            }).catch(function() {});
+    }
+
+    function closeChat() {
+        var win = document.getElementById('profile-chat-window');
+        if (win) win.style.display = 'none';
+        chatWithUser = null;
+        if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+    }
+
+    function loadChatMessages() {
+        if (!chatWithUser) return;
+        fetch('assets/profile/get-messages.php?with=' + encodeURIComponent(chatWithUser))
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok) return;
+                renderChatMessages(d.messages || []);
+            }).catch(function() {});
+    }
+
+    function renderChatMessages(messages) {
+        var listEl = document.getElementById('profile-chat-messages');
+        if (!listEl) return;
+        var lastId = messages.length ? messages[messages.length - 1].id : null;
+        if (lastId === chatLastSeenId) return; /* sin cambios */
+        chatLastSeenId = lastId;
+        var atBottom = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 40;
+        listEl.innerHTML = '';
+        messages.forEach(function(m) {
+            var mine = m.from === currentSessionUser;
+            var row = document.createElement('div');
+            row.className = 'chat-msg' + (mine ? ' chat-msg-mine' : ' chat-msg-theirs');
+            var bubble = document.createElement('div');
+            bubble.className = 'chat-bubble';
+            bubble.textContent = m.text;
+            row.appendChild(bubble);
+            var time = document.createElement('div');
+            time.className = 'chat-time';
+            time.textContent = relTime(m.sentAt || 0);
+            row.appendChild(time);
+            listEl.appendChild(row);
+        });
+        if (atBottom) listEl.scrollTop = listEl.scrollHeight;
+    }
+
+    function sendChatMessage() {
+        if (!chatWithUser) return;
+        var input = document.getElementById('profile-chat-input');
+        if (!input) return;
+        var text = input.value.trim();
+        if (!text) return;
+        input.disabled = true;
+        fetch('assets/profile/send-message.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: chatWithUser, text: text })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              input.disabled = false;
+              if (d && d.error) { alert(d.error); return; }
+              input.value = '';
+              loadChatMessages();
+              input.focus();
+          }).catch(function() { input.disabled = false; });
+    }
+
+    (function setupChat() {
+        var closeBtn = document.getElementById('profile-chat-close');
+        if (closeBtn) closeBtn.addEventListener('click', closeChat);
+        var sendBtn = document.getElementById('profile-chat-send');
+        if (sendBtn) sendBtn.addEventListener('click', sendChatMessage);
+        var input = document.getElementById('profile-chat-input');
+        if (input) input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+        });
+    })();
+
+    function addItemToOwnProfile(cat, item) {
+        if (!viewingUser || !ownLists) return;
+        var copy = JSON.parse(JSON.stringify(item));
+        delete copy.collaborators;
+        delete copy.sharedFrom;
+        delete copy.review;
+        if (cat === 'music') {
+            copy.id = 'music_' + Date.now();
+            copy.featured = false;
+            delete copy.status;
+        } else {
+            copy.id = 'item_' + Date.now();
+            copy.status = 'pending';
+        }
+        var titleLower = (copy.title || '').toLowerCase().trim();
+        if (!titleLower) return;
+        var dup = (ownLists[cat] || []).some(function(it) {
+            return (it.title || '').toLowerCase().trim() === titleLower;
+        });
+        if (dup) {
+            if (window.notifSystem) {
+                window.notifSystem.show({
+                    id:      'dup_' + Date.now(),
+                    type:    'info',
+                    title:   'Ya en tu perfil',
+                    message: '"' + copy.title + '" ya está en tu lista.'
+                });
+            }
+            return;
+        }
+        if (!ownLists[cat]) ownLists[cat] = [];
+        ownLists[cat].push(copy);
+        var newIdx = ownLists[cat].length - 1;
+        fetch('assets/profile/save-lists.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: cat, items: ownLists[cat] })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (d && d.error) { alert(d.error); return; }
+              if (window.notifSystem) {
+                  window.notifSystem.show({
+                      id:      'added_' + Date.now(),
+                      type:    'info',
+                      title:   cat === 'music' ? 'Música añadida' : 'Añadido a tu perfil',
+                      message: cat === 'music'
+                          ? '"' + copy.title + '" añadido a tu lista.'
+                          : '"' + copy.title + '" añadido como pendiente.'
+                  });
+              }
+              if (cat === 'music') {
+                  showAddedMusicReviewPrompt(newIdx, copy);
+              }
+          }).catch(function() { alert('Error al guardar'); });
+    }
+
+    function showAddedMusicReviewPrompt(newIdx, item) {
+        var prompt = document.getElementById('profile-review-prompt');
+        if (!prompt) return;
+        document.getElementById('profile-review-prompt-msg').textContent =
+            '¿Añadir una reseña para "' + item.title + '"?';
+        prompt.style.display = 'block';
+        prompt.style.left = Math.round((window.innerWidth  - prompt.offsetWidth)  / 2) + 'px';
+        prompt.style.top  = Math.round((window.innerHeight - prompt.offsetHeight) / 2) + 'px';
+        var yesBtn = document.getElementById('profile-review-prompt-yes');
+        var noBtn  = document.getElementById('profile-review-prompt-no');
+        var newYes = yesBtn.cloneNode(true); yesBtn.parentNode.replaceChild(newYes, yesBtn);
+        var newNo  = noBtn.cloneNode(true);  noBtn.parentNode.replaceChild(newNo, noBtn);
+        newYes.addEventListener('click', function() {
+            prompt.style.display = 'none';
+            if (viewingUser) exitViewingUser();
+            showMusicView();
+            showMusicReviewWindow(newIdx);
+        });
+        newNo.addEventListener('click', function() {
+            prompt.style.display = 'none';
+        });
+    }
+
+    function exitViewingUser() {
+        viewingUser = null;
+        if (ownLists) { lists = ownLists; ownLists = null; }
+        /* Restaura cabecera al usuario propio */
+        var avFrame = document.querySelector('#profile-avatar-col .profile-avatar-frame');
+        if (avFrame) {
+            avFrame.innerHTML = <?php
+                $ownAv = isset($profileImg) ? $profileImg : '';
+                if ($ownAv) {
+                    echo json_encode('<img src="' . htmlspecialchars($ownAv) . '" alt="" class="profile-avatar-img">');
+                } else {
+                    echo json_encode('<div class="profile-avatar-placeholder">👤</div>');
+                }
+            ?>;
+        }
+        var nameEl = document.getElementById('profile-username');
+        if (nameEl) nameEl.textContent = <?php echo json_encode($desktopLabel); ?>;
+        var newPostEl = document.getElementById('profile-new-post');
+        if (newPostEl) newPostEl.style.display = '';
+        var followBtn = document.getElementById('profile-follow-btn');
+        if (followBtn) followBtn.style.display = 'none';
+        var listasHdText = document.getElementById('profile-listas-heading-text');
+        if (listasHdText) listasHdText.textContent = 'Mis Listas';
+        var socialSec = document.getElementById('profile-social-section');
+        if (socialSec) socialSec.style.display = '';
+        var melonSec  = document.getElementById('profile-melon-section');
+        if (melonSec)  melonSec.style.display  = '';
+        var notifBtn = document.getElementById('profile-notif-btn');
+        if (notifBtn) notifBtn.style.display = '';
+        updateCounts();
+        loadProfile();
+    }
+
     /* ──── Music view ──── */
     function showMusicView() {
         currentCat = 'music';
         document.getElementById('profile-view-default').style.display = 'none';
         document.getElementById('profile-view-cat').style.display = 'none';
+        document.getElementById('profile-view-social').style.display = 'none';
+        var melonV = document.getElementById('profile-view-melon');
+        if (melonV) melonV.style.display = 'none';
         document.getElementById('profile-sidebar-back').style.display = 'block';
+        document.getElementById('profile-info-edit-btn').style.display = 'none';
         var mv = document.getElementById('profile-view-music');
         if (mv) mv.style.display = 'flex';
+        var musicAddBtn = document.getElementById('music-catview-add-btn');
+        if (musicAddBtn) musicAddBtn.style.display = viewingUser ? 'none' : '';
+        var musicTitleEl = document.getElementById('music-catview-title');
+        applyTopbarUser('music-catview-avatar-wrap', musicTitleEl, '🎵', 'Música');
         renderMusicDestacados();
         renderMusicView(currentMusicTab);
     }
@@ -1492,6 +2820,13 @@ var PROFILE_USERS = <?php
                 (function(it) {
                     slot.addEventListener('contextmenu', function(e) {
                         e.preventDefault();
+                        if (viewingUser) {
+                            showCtxMenu(e.clientX, e.clientY, [
+                                { label: '▶ Reproducir',         action: function() { playMusicItem(it); } },
+                                { label: '+ Añadir a mi perfil', action: function() { addItemToOwnProfile('music', it); } }
+                            ]);
+                            return;
+                        }
                         showCtxMenu(e.clientX, e.clientY, [
                             { label: '▶ Reproducir', action: function() { playMusicItem(it); } },
                             { label: '★ Quitar de destacados', action: function() {
@@ -1629,6 +2964,13 @@ var PROFILE_USERS = <?php
             (function(it, i) {
                 row.addEventListener('contextmenu', function(e) {
                     e.preventDefault();
+                    if (viewingUser) {
+                        showCtxMenu(e.clientX, e.clientY, [
+                            { label: '▶ Reproducir',          action: function() { playMusicItem(it); } },
+                            { label: '+ Añadir a mi perfil',  action: function() { addItemToOwnProfile('music', it); } }
+                        ]);
+                        return;
+                    }
                     var isCollab = !!it.sharedFrom;
                     var menuItems = [];
                     menuItems.push({ label: '▶ Reproducir', action: function() { playMusicItem(it); } });
@@ -1722,8 +3064,11 @@ var PROFILE_USERS = <?php
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         newSubmit.addEventListener('click', function() {
             if (!sel) return;
-            lists.music[itemIdx].review = { stars: sel, comment: commentEl.value.trim() };
-            saveCategory('music'); renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
+            var mItem = lists.music[itemIdx];
+            mItem.review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            saveCategory('music');
+            notifyReviewToFollowers('music', mItem.title, mItem.type);
+            renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
         });
     }
 
@@ -1821,10 +3166,11 @@ var PROFILE_USERS = <?php
             if (fetchedMeta.ytPlaylistId)   entry.ytPlaylistId   = fetchedMeta.ytPlaylistId;
             if (fetchedMeta.spotifyAlbumId) entry.spotifyAlbumId = fetchedMeta.spotifyAlbumId;
             if (withReview && reviewRating > 0) {
-                entry.review = { stars: reviewRating, comment: reviewCommentEl.value.trim() };
+                entry.review = { stars: reviewRating, comment: reviewCommentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
             }
             lists.music.push(entry);
             saveCategory('music');
+            if (withReview && reviewRating > 0) notifyReviewToFollowers('music', entry.title, entry.type);
             updateCounts();
             renderMusicView(currentMusicTab);
             renderMusicDestacados();
@@ -1945,15 +3291,19 @@ var PROFILE_USERS = <?php
     /* ──── Nav sidebar items ──── */
     profileWin.querySelectorAll('.profile-nav-item').forEach(function(navItem) {
         navItem.addEventListener('click', function() {
-            var cat = navItem.dataset.cat;
+            var cat   = navItem.dataset.cat;
+            var melon = navItem.dataset.melon;
+            function navigate() {
+                if (melon)              showMelonView(melon);
+                else if (cat === 'social') showSocialView();
+                else if (cat === 'music')  showMusicView();
+                else if (cat)              showCatView(cat);
+            }
             if (!loaded) {
                 loaded = true;
-                loadLists(function() {
-                    updateCounts();
-                    if (cat === 'music') showMusicView(); else showCatView(cat);
-                });
+                loadLists(function() { updateCounts(); navigate(); });
             } else {
-                if (cat === 'music') showMusicView(); else showCatView(cat);
+                navigate();
             }
         });
     });
@@ -1969,10 +3319,19 @@ var PROFILE_USERS = <?php
                 loaded = true;
                 loadLists(updateCounts);
                 loadProfile();
+                loadProfileNotifs();
             }
             startItemNotifStream();
         }
     });
+
+    /* Cargar notificaciones de perfil + polling cada 30s */
+    loadProfileNotifs();
+    setInterval(loadProfileNotifs, 30000);
+
+    /* Cargar contador de mensajes sin leer + polling cada 4s */
+    loadUnreadChats();
+    unreadPollTimer = setInterval(loadUnreadChats, 4000);
 
     document.getElementById('profile-close').addEventListener('click', function() {
         taskbarManager.unregister('profile-window');

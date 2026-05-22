@@ -712,8 +712,9 @@ window.taskbarManager = (function() {
     }
 
     function isRegistered(id) { return !!registry[id]; }
+    function getButton(id) { return registry[id] ? registry[id].btn : null; }
 
-    return { register: register, unregister: unregister, minimize: minimize, restore: restore, toggle: toggle, isRegistered: isRegistered };
+    return { register: register, unregister: unregister, minimize: minimize, restore: restore, toggle: toggle, isRegistered: isRegistered, getButton: getButton };
 })();
 
 document.getElementById('player-close').addEventListener('click', () => {
@@ -1283,15 +1284,28 @@ var addTrackCallback = null;
     function showTrackCtxMenu(e, track) {
         e.preventDefault();
         ctxMenu.innerHTML = '';
-        var item = document.createElement('div');
-        item.className = 'pl-menu-item';
-        item.textContent = '➕ Añadir a otra playlist';
         var ex = e.clientX, ey = e.clientY;
-        item.addEventListener('click', function() {
+
+        var addPl = document.createElement('div');
+        addPl.className = 'pl-menu-item';
+        addPl.textContent = '➕ Añadir a otra playlist';
+        addPl.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
             showAddToPicker(ex, ey, track);
         });
-        ctxMenu.appendChild(item);
+        ctxMenu.appendChild(addPl);
+
+        var addProfile = document.createElement('div');
+        addProfile.className = 'pl-menu-item';
+        addProfile.textContent = '🎵 Añadir a mi perfil';
+        addProfile.addEventListener('click', function() {
+            ctxMenu.style.display = 'none';
+            if (typeof window.profileAddTrackAndReview === 'function') {
+                window.profileAddTrackAndReview(track);
+            }
+        });
+        ctxMenu.appendChild(addProfile);
+
         ctxMenu.style.display = 'block';
         var cw = ctxMenu.offsetWidth, ch = ctxMenu.offsetHeight;
         ctxMenu.style.left = Math.min(ex, window.innerWidth  - cw - 8) + 'px';
