@@ -59,11 +59,16 @@ function desktopIcon($name, $emoji) {
         <div class="desktop-icon-img"><?php echo desktopIcon('calendar', '📅'); ?></div>
         <span>Calendario</span>
     </div>
+    <div class="desktop-icon" id="helldivers-companion-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('companion', '🪐'); ?></div>
+        <span>Companion</span>
+    </div>
     <div class="desktop-icon" id="profile-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('profile', '👤'); ?></div>
         <span>Perfil</span>
     </div>
 </div>
+
 
 <!-- CALENDAR WINDOW -->
 <div class="window" id="calendar-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
@@ -76,6 +81,19 @@ function desktopIcon($name, $emoji) {
         </div>
     </div>
     <iframe id="calendar-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- HELLDIVERS COMPANION WINDOW -->
+<div class="window" id="helldivers-companion-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="helldivers-companion-titlebar">
+        <div class="title-bar-text">🪐 Helldivers 2 Companion</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="helldivers-companion-close"></button>
+        </div>
+    </div>
+    <iframe id="helldivers-companion-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- ARCHIVE WINDOW -->
@@ -368,6 +386,26 @@ window.notifSystem = (function() {
         taskbarManager.unregister('calendar-window');
     });
 })();
+/* =========================
+   HELLDIVERS COMPANION
+========================= */
+(function() {
+    var hdIframe = document.getElementById('helldivers-companion-iframe');
+    var hdLoaded = false;
+
+    document.getElementById('helldivers-companion-icon').addEventListener('dblclick', function() {
+        if (!hdLoaded) { hdIframe.src = 'apps/helldivers-companion.php'; hdLoaded = true; }
+        if (taskbarManager.isRegistered('helldivers-companion-window')) {
+            taskbarManager.restore('helldivers-companion-window');
+        } else {
+            taskbarManager.register('helldivers-companion-window', 'HD2 Companion', '🪐', 'flex');
+        }
+    });
+
+    document.getElementById('helldivers-companion-close').addEventListener('click', function() {
+        taskbarManager.unregister('helldivers-companion-window');
+    });
+})();
 
 /* ──── Player right-click context menu ──── */
 (function() {
@@ -588,21 +626,22 @@ window.notifSystem = (function() {
         });
     }
 
-    ['calendar-window','archive-window','playlist-editor',
+    ['calendar-window','archive-window','helldivers-companion-window','playlist-editor',
      'create-playlist-dialog','profile-window'].forEach(function(id) { setup(id, false); });
     ['music-player','add-track-dialog','import-playlist-dialog',
      'collab-dialog','spotify-import-dialog','confirm-dialog',
      'profile-add-dialog','profile-review-prompt','profile-review-window',
      'profile-review-view','profile-invite-dialog','profile-info-edit-dialog',
-     'music-add-dialog','profile-notifs-window','profile-melon-details-window','profile-chat-window'].forEach(function(id) { setup(id, true); });
+     'music-add-dialog'].forEach(function(id) { setup(id, true); });
 })();
 
 /* ──── Window minimize / maximize ──── */
 (function() {
     var ids = [
-        'calendar-window', 'archive-window',
-        'create-playlist-dialog', 'profile-window'
-    ];
+    'calendar-window', 'archive-window', 'helldivers-companion-window',
+    'create-playlist-dialog', 'profile-window'
+];
+    
     ids.forEach(function(id) {
         var win = document.getElementById(id);
         if (!win) return;
