@@ -1,0 +1,413 @@
+<?php
+/**
+ * Helpers para el sistema de temas custom.
+ *
+ * Arquitectura:
+ *  - Todos los CSS de la app (base, perfil, reproductor, melonarchive,
+ *    calendario, themes) usan var(--token) en lugar de literales hex.
+ *  - tokens.css define los valores por defecto (Win98).
+ *  - themes.css redefine los tokens para body.capi / body.angie.
+ *  - Cada tema custom del usuario produce un archivo en
+ *    assets/themes/<themeName>-<userLabel>.css con un único bloque
+ *    body.<themeName>-<userLabel> { --token: valor; ... }
+ *  - El body recibe la clase <themeName>-<userLabel> y los tokens
+ *    cascadean a TODA la UI sin reglas selector-específicas.
+ */
+
+/* Lista de tokens editables desde la app de Temas. Debe coincidir con
+   COLOR_DEFS en apps/temas.php y con tokens.css. */
+$THEME_COLOR_KEYS = [
+    /* Superficies */
+    'winBg', 'winBodyBg', 'surfaceDeep', 'insetBg',
+    /* Inputs */
+    'inputBg', 'inputText',
+    /* Botones */
+    'btnBg', 'btnText',
+    /* Texto */
+    'text', 'textMuted', 'textFaint', 'textInset',
+    /* Acento / barra de título */
+    'titlebarStart', 'titlebarEnd', 'titlebarText',
+    'accent', 'accentText', 'accentDeep',
+    /* Iconos de la title-bar (close / minimize / maximize) */
+    'titlebarIconColor', 'titlebarIconBg',
+    'titlebarIconBezelLight', 'titlebarIconBezelDark',
+    /* Bordes */
+    'border', 'borderStrong',
+    /* Bezels */
+    'bezelLight1', 'bezelLight2', 'bezelDark1', 'bezelDark2',
+    /* Escritorio */
+    'desktopBg',
+    /* Estados */
+    'linkText', 'errorText', 'warningBg', 'warningText',
+    /* Selección / badges */
+    'selectionBg', 'selectionText', 'badgeBg', 'badgeText',
+    /* Decorativos */
+    'starColor',
+];
+
+/* Mapeo key → variable CSS */
+$THEME_TOKEN_MAP = [
+    'winBg'         => '--win-bg',
+    'winBodyBg'     => '--win-body-bg',
+    'surfaceDeep'   => '--surface-deep',
+    'insetBg'       => '--inset-bg',
+    'inputBg'       => '--input-bg',
+    'inputText'     => '--input-text',
+    'btnBg'         => '--btn-bg',
+    'btnText'       => '--btn-text',
+    'text'          => '--text',
+    'textMuted'     => '--text-muted',
+    'textFaint'     => '--text-faint',
+    'textInset'     => '--text-inset',
+    'titlebarStart' => '--titlebar-start',
+    'titlebarEnd'   => '--titlebar-end',
+    'titlebarText'  => '--titlebar-text',
+    'titlebarIconColor'      => '--titlebar-icon-color',
+    'titlebarIconBg'         => '--titlebar-icon-bg',
+    'titlebarIconBezelLight' => '--titlebar-icon-bezel-light',
+    'titlebarIconBezelDark'  => '--titlebar-icon-bezel-dark',
+    'accent'        => '--accent',
+    'accentText'    => '--accent-text',
+    'accentDeep'    => '--accent-deep',
+    'border'        => '--border',
+    'borderStrong'  => '--border-strong',
+    'bezelLight1'   => '--bezel-light-1',
+    'bezelLight2'   => '--bezel-light-2',
+    'bezelDark1'    => '--bezel-dark-1',
+    'bezelDark2'    => '--bezel-dark-2',
+    'desktopBg'     => '--desktop-bg',
+    'linkText'      => '--link-text',
+    'errorText'     => '--error-text',
+    'warningBg'     => '--warning-bg',
+    'warningText'   => '--warning-text',
+    'selectionBg'   => '--selection-bg',
+    'selectionText' => '--selection-text',
+    'badgeBg'       => '--badge-bg',
+    'badgeText'     => '--badge-text',
+    'starColor'     => '--star-color',
+];
+
+/* Valores por defecto Win98 (usados si el usuario no fija el token). */
+$THEME_DEFAULTS = [
+    'winBg'         => '#c0c0c0',
+    'winBodyBg'     => '#c0c0c0',
+    'surfaceDeep'   => '#c0c0c0',
+    'insetBg'       => '#808080',
+    'inputBg'       => '#ffffff',
+    'inputText'     => '#000000',
+    'btnBg'         => '#c0c0c0',
+    'btnText'       => '#000000',
+    'text'          => '#000000',
+    'textMuted'     => '#666666',
+    'textFaint'     => '#808080',
+    'textInset'     => '#808080',
+    'titlebarStart' => '#000080',
+    'titlebarEnd'   => '#1084d0',
+    'titlebarText'  => '#ffffff',
+    'titlebarIconColor'      => '#000000',
+    'titlebarIconBg'         => '#c0c0c0',
+    'titlebarIconBezelLight' => '#ffffff',
+    'titlebarIconBezelDark'  => '#0a0a0a',
+    'accent'        => '#000080',
+    'accentText'    => '#ffffff',
+    'accentDeep'    => '#00004a',
+    'border'        => '#808080',
+    'borderStrong'  => '#404040',
+    'bezelLight1'   => '#ffffff',
+    'bezelLight2'   => '#dfdfdf',
+    'bezelDark1'    => '#0a0a0a',
+    'bezelDark2'    => '#808080',
+    'desktopBg'     => '#008080',
+    'linkText'      => '#0000ff',
+    'errorText'     => '#c00000',
+    'warningBg'     => '#fffbe6',
+    'warningText'   => '#444444',
+    'selectionBg'   => '#000080',
+    'selectionText' => '#ffffff',
+    'badgeBg'       => '#d72638',
+    'badgeText'     => '#ffffff',
+    'starColor'     => '#ffd700',
+];
+
+/* ── Compat: claves antiguas (themes guardados antes del refactor) ── */
+$THEME_LEGACY_MAP = [
+    'bg'            => 'winBg',
+    'taskbarBg'     => 'surfaceDeep',
+    'windowBg'      => 'winBg',
+    'windowText'    => 'text',
+    'titleBarStart' => 'titlebarStart',
+    'titleBarEnd'   => 'titlebarEnd',
+    'titleBarText'  => 'titlebarText',
+    'windowShadow'  => 'bezelDark1',
+];
+
+/* ── Temas por defecto para los perfiles fijos (Capi / Angie) ──
+   Coinciden EXACTAMENTE con los valores que themes.css aplica a
+   body.capi / body.angie. Sirven como punto de partida editable
+   en la app de Temas. */
+$CAPI_THEME_COLORS = [
+    'winBg'         => '#2d2d2d',
+    'winBodyBg'     => '#222222',
+    'surfaceDeep'   => '#1e1e1e',
+    'insetBg'       => '#111111',
+    'inputBg'       => '#1a1a1a',
+    'inputText'     => '#d0d0d0',
+    'btnBg'         => '#3a3a3a',
+    'btnText'       => '#d0d0d0',
+    'text'          => '#d0d0d0',
+    'textMuted'     => '#888888',
+    'textFaint'     => '#666666',
+    'textInset'     => '#444444',
+    'titlebarStart' => '#6b5500',
+    'titlebarEnd'   => '#EDC001',
+    'titlebarText'  => '#000000',
+    'titlebarIconColor'      => '#000000',
+    'titlebarIconBg'         => '#3a3a3a',
+    'titlebarIconBezelLight' => '#555555',
+    'titlebarIconBezelDark'  => '#111111',
+    'accent'        => '#EDC001',
+    'accentText'    => '#000000',
+    'accentDeep'    => '#c8a000',
+    'border'        => '#3a3a3a',
+    'borderStrong'  => '#555555',
+    'bezelLight1'   => '#555555',
+    'bezelLight2'   => '#444444',
+    'bezelDark1'    => '#111111',
+    'bezelDark2'    => '#1a1a1a',
+    'desktopBg'     => '#1a1a1a',
+    'linkText'      => '#EDC001',
+    'errorText'     => '#ff4f6e',
+    'warningBg'     => '#2a2200',
+    'warningText'   => '#e8cc80',
+    'selectionBg'   => '#EDC001',
+    'selectionText' => '#000000',
+    'badgeBg'       => '#ff4f6e',
+    'badgeText'     => '#ffffff',
+    'starColor'     => '#EDC001',
+];
+
+$ANGIE_THEME_COLORS = [
+    'winBg'         => '#F8D0C8',
+    'winBodyBg'     => '#F8D0C8',
+    'surfaceDeep'   => '#F8D0C8',
+    'insetBg'       => '#F3BABA',
+    'inputBg'       => '#F3BABA',
+    'inputText'     => '#1a1a1a',
+    'btnBg'         => '#5B744B',
+    'btnText'       => '#F9DDD8',
+    'text'          => '#35522B',
+    'textMuted'     => '#5B744B',
+    'textFaint'     => '#799567',
+    'textInset'     => '#799567',
+    'titlebarStart' => '#5B744B',
+    'titlebarEnd'   => '#799567',
+    'titlebarText'  => '#F9DDD8',
+    'titlebarIconColor'      => '#35522B',
+    'titlebarIconBg'         => '#F8D0C8',
+    'titlebarIconBezelLight' => '#F9DDD8',
+    'titlebarIconBezelDark'  => '#35522B',
+    'accent'        => '#799567',
+    'accentText'    => '#F9DDD8',
+    'accentDeep'    => '#5B744B',
+    'border'        => '#F3BABA',
+    'borderStrong'  => '#5B744B',
+    'bezelLight1'   => '#F9DDD8',
+    'bezelLight2'   => '#F8D0C8',
+    'bezelDark1'    => '#35522B',
+    'bezelDark2'    => '#5B744B',
+    'desktopBg'     => '#F9DDD8',
+    'linkText'      => '#5B744B',
+    'errorText'     => '#c8456e',
+    'warningBg'     => '#F3BABA',
+    'warningText'   => '#35522B',
+    'selectionBg'   => '#799567',
+    'selectionText' => '#F9DDD8',
+    'badgeBg'       => '#c8456e',
+    'badgeText'     => '#F9DDD8',
+    'starColor'     => '#c8a000',
+];
+
+function defaultThemeForUser($userKey) {
+    global $CAPI_THEME_COLORS, $ANGIE_THEME_COLORS;
+    if ($userKey === 'user1') return ['name' => 'Capi',  'colors' => $CAPI_THEME_COLORS];
+    if ($userKey === 'user2') return ['name' => 'Angie', 'colors' => $ANGIE_THEME_COLORS];
+    return null;
+}
+
+/**
+ * Siembra el tema por defecto (Capi para user1, Angie para user2)
+ * en la lista de temas del usuario, SOLO si nunca se ha creado su
+ * archivo de temas. Si el usuario lo borra explícitamente, NO se
+ * vuelve a añadir (porque su archivo ya existe).
+ */
+function seedDefaultTheme($userKey, $label) {
+    $def = defaultThemeForUser($userKey);
+    if (!$def) return;
+    $file = userThemesFile($userKey);
+    if (file_exists($file)) return; /* respeta la decisión del usuario */
+    $data = [
+        'themes' => [
+            $def['name'] => [
+                'colors'    => $def['colors'],
+                'updatedAt' => time(),
+                'isDefault' => true,
+            ],
+        ],
+        'active' => '',
+    ];
+    saveUserThemes($userKey, $data);
+    $cssPath = themeCssFile($def['name'], $label);
+    $css = generateThemeCss(themeCssClassName($def['name'], $label), $def['colors']);
+    @file_put_contents($cssPath, $css);
+}
+
+function themesDir() {
+    return __DIR__;
+}
+
+function userThemesFile($userKey) {
+    $safe = preg_replace('/[^a-z0-9_]/i', '', $userKey);
+    return themesDir() . '/' . $safe . '-themes.json';
+}
+
+function loadUserThemes($userKey) {
+    $file = userThemesFile($userKey);
+    if (!file_exists($file)) return ['themes' => new stdClass(), 'active' => ''];
+    $raw = json_decode(file_get_contents($file), true);
+    if (!is_array($raw)) return ['themes' => new stdClass(), 'active' => ''];
+    if (!isset($raw['themes'])) $raw['themes'] = new stdClass();
+    if (!isset($raw['active'])) $raw['active'] = '';
+    return $raw;
+}
+
+function saveUserThemes($userKey, $data) {
+    file_put_contents(userThemesFile($userKey), json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+}
+
+function sanitizeThemeName($name) {
+    return preg_replace('/[^A-Za-z0-9_-]/', '', trim($name));
+}
+
+function themeCssFile($themeName, $label) {
+    $safeTheme = sanitizeThemeName($themeName);
+    $safeLabel = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+    return themesDir() . '/' . $safeTheme . '-' . $safeLabel . '.css';
+}
+
+function themeCssRelPath($themeName, $label) {
+    $safeTheme = sanitizeThemeName($themeName);
+    $safeLabel = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+    return 'assets/themes/' . $safeTheme . '-' . $safeLabel . '.css';
+}
+
+function themeCssClassName($themeName, $label) {
+    $safeTheme = sanitizeThemeName($themeName);
+    $safeLabel = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+    return $safeTheme . '-' . $safeLabel;
+}
+
+/* Normaliza un array de colores: aplica el mapa legacy y rellena defaults. */
+function normalizeThemeColors($colors) {
+    global $THEME_COLOR_KEYS, $THEME_DEFAULTS, $THEME_LEGACY_MAP;
+    if (!is_array($colors)) return $THEME_DEFAULTS;
+    /* Mapear claves legacy a las nuevas */
+    $out = [];
+    foreach ($colors as $k => $v) {
+        if (isset($THEME_LEGACY_MAP[$k]) && !isset($colors[$THEME_LEGACY_MAP[$k]])) {
+            $out[$THEME_LEGACY_MAP[$k]] = $v;
+        } else {
+            $out[$k] = $v;
+        }
+    }
+    /* Migración suave para tokens nuevos: si un tema antiguo no tiene
+       titlebarIcon{Color,Bg,BezelLight,BezelDark}, en vez de irse al
+       default Win98 hereda los colores del botón / bezels generales. */
+    $hex = '/^#[0-9a-f]{3,8}$/i';
+    if (empty($out['titlebarIconColor']) && !empty($out['btnText']) && preg_match($hex, $out['btnText'])) {
+        $out['titlebarIconColor'] = $out['btnText'];
+    }
+    if (empty($out['titlebarIconBg']) && !empty($out['btnBg']) && preg_match($hex, $out['btnBg'])) {
+        $out['titlebarIconBg'] = $out['btnBg'];
+    }
+    if (empty($out['titlebarIconBezelLight']) && !empty($out['bezelLight1']) && preg_match($hex, $out['bezelLight1'])) {
+        $out['titlebarIconBezelLight'] = $out['bezelLight1'];
+    }
+    if (empty($out['titlebarIconBezelDark']) && !empty($out['bezelDark1']) && preg_match($hex, $out['bezelDark1'])) {
+        $out['titlebarIconBezelDark'] = $out['bezelDark1'];
+    }
+    /* Rellenar con defaults los tokens que falten */
+    foreach ($THEME_COLOR_KEYS as $k) {
+        if (!isset($out[$k]) || !is_string($out[$k]) || !preg_match('/^#[0-9a-f]{3,8}$/i', $out[$k])) {
+            $out[$k] = $THEME_DEFAULTS[$k];
+        }
+    }
+    return $out;
+}
+
+function validateThemeColors($colors) {
+    global $THEME_COLOR_KEYS, $THEME_LEGACY_MAP;
+    if (!is_array($colors)) return false;
+    /* Aceptamos temas guardados con claves legacy: si las claves nuevas
+       no están pero hay equivalentes legacy, el tema sigue siendo válido. */
+    foreach ($THEME_COLOR_KEYS as $k) {
+        $val = null;
+        if (isset($colors[$k])) {
+            $val = $colors[$k];
+        } else {
+            $legacyKey = array_search($k, $THEME_LEGACY_MAP, true);
+            if ($legacyKey !== false && isset($colors[$legacyKey])) $val = $colors[$legacyKey];
+        }
+        if ($val === null) continue; /* token ausente → se rellena con default en normalizeThemeColors */
+        if (!preg_match('/^#[0-9a-f]{3,8}$/i', $val)) return false;
+    }
+    return true;
+}
+
+/**
+ * Genera el CSS de un tema personalizado. Produce un único bloque de
+ * variables CSS para body.<className>; el resto de la UI hereda los
+ * estilos token-driven definidos en base/perfil/reproductor/etc.
+ */
+function generateThemeCss($className, $colors) {
+    global $THEME_COLOR_KEYS, $THEME_TOKEN_MAP;
+    $norm = normalizeThemeColors($colors);
+    $sel = 'body.' . $className;
+    $lines = [
+        '/* Generado por la app de Temas. NO editar a mano.',
+        '   Establece los tokens CSS para que cualquier app que use',
+        '   var(--token) reciba la paleta del tema activo. */',
+        '',
+        $sel . ' {',
+    ];
+    foreach ($THEME_COLOR_KEYS as $k) {
+        $var = $THEME_TOKEN_MAP[$k];
+        $val = $norm[$k];
+        $lines[] = '    ' . $var . ': ' . $val . ';';
+    }
+    /* Alias retro-compat (--t-*) para CSS antiguo */
+    $lines[] = '';
+    $lines[] = '    /* Alias retro-compat */';
+    $lines[] = '    --t-bg:           ' . $norm['winBg']       . ';';
+    $lines[] = '    --t-bg-alt:       ' . $norm['winBodyBg']   . ';';
+    $lines[] = '    --t-text:         ' . $norm['text']        . ';';
+    $lines[] = '    --t-text-muted:   ' . $norm['textMuted']   . ';';
+    $lines[] = '    --t-accent:       ' . $norm['accent']      . ';';
+    $lines[] = '    --t-accent-text:  ' . $norm['accentText']  . ';';
+    $lines[] = '    --t-border:       ' . $norm['border']      . ';';
+    $lines[] = '    --t-grad:         linear-gradient(90deg, ' . $norm['titlebarStart'] . ', ' . $norm['titlebarEnd'] . ');';
+    $lines[] = '}';
+    return implode("\n", $lines) . "\n";
+}
+
+/* Regenera el CSS del tema activo (si lo hay) según el generador actual. */
+function refreshActiveThemeCss($userKey, $label) {
+    $data = loadUserThemes($userKey);
+    $active = !empty($data['active']) ? sanitizeThemeName($data['active']) : '';
+    if ($active === '') return;
+    $themes = (array)$data['themes'];
+    if (!isset($themes[$active]) || !isset($themes[$active]['colors'])) return;
+    if (!validateThemeColors($themes[$active]['colors'])) return;
+    $cssPath = themeCssFile($active, $label);
+    $css     = generateThemeCss(themeCssClassName($active, $label), $themes[$active]['colors']);
+    @file_put_contents($cssPath, $css);
+}

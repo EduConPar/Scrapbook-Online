@@ -27,6 +27,19 @@ $stmt->execute([strtolower($userLabel), strtolower($userLabel)]);
 $pareja = $stmt->fetch(PDO::FETCH_ASSOC);
 $parejaId = $pareja ? $pareja['id'] : 0;
 $fechaInicio = $pareja ? $pareja['fecha_inicio'] : null;
+
+/* Tema activo del usuario */
+require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+refreshActiveThemeCss($userKey, $userLabel);
+$_userThemes = loadUserThemes($userKey);
+$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+    $activeThemeCss   = '../' . themeCssRelPath($activeTheme, $userLabel);
+    if (!file_exists(dirname(__DIR__) . '/' . themeCssRelPath($activeTheme, $userLabel))) $activeThemeCss = '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -36,15 +49,24 @@ $fechaInicio = $pareja ? $pareja['fecha_inicio'] : null;
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">
-    <link rel="stylesheet" href="../assets/css/calendario.css">
     <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../assets/css/calendario.css">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
 </head>
-<body class="<?php echo $userKey === 'user1' ? 'capi' : 'angie'; ?>">
+<body class="<?php
+    $bc = [];
+    if ($userKey === 'user1') $bc[] = 'capi';
+    elseif ($userKey === 'user2') $bc[] = 'angie';
+    if ($activeThemeClass) $bc[] = $activeThemeClass;
+    echo htmlspecialchars(implode(' ', $bc));
+?>">
 
 <!-- BARRA SUPERIOR -->
 <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
     <button class="button" onclick="history.back()">◄ Volver</button>
-    <span style="font-size: 13px;">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
+    <span style="font-size: 13px; color: var(--text);">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
     <?php if (!$pareja): ?>
     <button class="button" id="btn-invitar">💌 Invitar a mi pareja</button>
     <?php endif; ?>
@@ -370,7 +392,7 @@ function renderCalendario() {
         } else if (esHoy) {
             cell.style.borderColor = 'transparent';
             const barra = document.createElement('div');
-            barra.style.cssText = 'width:100%; background:#000080; color:#fff; padding: 6px 4px; box-sizing:border-box; text-align:center;';
+            barra.className = 'cal-cell-today';
             barra.textContent = d;
             cell.appendChild(barra);
         } else {

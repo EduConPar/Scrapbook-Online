@@ -1,0 +1,48 @@
+{
+    "themes": {
+        "Capi": {
+            "colors": {
+                "winBg": "#2d2d2d",
+                "winBodyBg": "#222222",
+                "surfaceDeep": "#1e1e1e",
+                "insetBg": "#111111",
+                "inputBg": "#1a1a1a",
+                "inputText": "#d0d0d0",
+                "btnBg": "#3a3a3a",
+                "btnText": "#d0d0d0",
+                "text": "#d0d0d0",
+                "textMuted": "#888888",
+                "textFaint": "#666666",
+                "textInset": "#444444",
+                "titlebarStart": "#6b5500",
+                "titlebarEnd": "#EDC001",
+                "titlebarText": "#ffffff",
+                "accent": "#bc9800",
+                "accentText": "#000000",
+                "accentDeep": "#c8a000",
+                "titlebarIconColor": "#000000",
+                "titlebarIconBg": "#c0c0c0",
+                "titlebarIconBezelLight": "#ffffff",
+                "titlebarIconBezelDark": "#0a0a0a",
+                "border": "#3a3a3a",
+                "borderStrong": "#555555",
+                "bezelLight1": "#555555",
+                "bezelLight2": "#444444",
+                "bezelDark1": "#111111",
+                "bezelDark2": "#1a1a1a",
+                "desktopBg": "#1a1a1a",
+                "linkText": "#EDC001",
+                "errorText": "#ff4f6e",
+                "warningBg": "#2a2200",
+                "warningText": "#e8cc80",
+                "selectionBg": "#EDC001",
+                "selectionText": "#000000",
+                "badgeBg": "#ff4f6e",
+                "badgeText": "#ffffff",
+                "starColor": "#EDC001"
+            },
+            "updatedAt": 1779488432
+        }
+    },
+    "active": "Capi"
+}

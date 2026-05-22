@@ -1,6 +1,7 @@
 <?php
 // perfil.php - Profile window + all profile-related dialogs
 // Included from desktop-base.php; expects $desktopLabel already set.
+require_once dirname(__DIR__) . '/assets/config.php';
 ?>
 <!-- PROFILE WINDOW -->
 <div class="window" id="profile-window">
@@ -1729,7 +1730,7 @@ var PROFILE_USERS = <?php
                   if (!d || d.error) { if (d && d.error) alert(d.error); return; }
                   ownFollowing = Array.isArray(d.list) ? d.list : ownFollowing;
                   updateFollowButton(!!d.following);
-                  loadMyFollowers(function() { renderFollowedNav(); updateChatBtn(); });
+                  loadMyFollowers(function() { renderFollowedNav(); });
               }).catch(function() { btn.dataset.busy = ''; });
         });
     })();
@@ -2461,7 +2462,6 @@ var PROFILE_USERS = <?php
         btn.style.display = '';
         btn.textContent = isFollowing ? '✓ Siguiendo' : '+ Seguir';
         btn.classList.toggle('following', !!isFollowing);
-        updateChatBtn();
     }
 
     function isMutual(userKey) {
@@ -2476,25 +2476,6 @@ var PROFILE_USERS = <?php
                 if (cb) cb();
             })
             .catch(function() { if (cb) cb(); });
-    }
-
-    /* Botón de chat junto al "Seguir" en el perfil visitado */
-    function updateChatBtn() {
-        var avatarCol = document.getElementById('profile-avatar-col');
-        if (!avatarCol) return;
-        var existing = document.getElementById('profile-chat-btn');
-        if (!viewingUser || !isMutual(viewingUser)) {
-            if (existing) existing.remove();
-            return;
-        }
-        if (existing) return;
-        var btn = document.createElement('button');
-        btn.className = 'button';
-        btn.id = 'profile-chat-btn';
-        btn.style.cssText = 'font-size:9px;margin-top:5px;';
-        btn.textContent = '💬 Chat';
-        btn.addEventListener('click', function() { openChatWith(viewingUser); });
-        avatarCol.appendChild(btn);
     }
 
     /* ──── Chat ──── */

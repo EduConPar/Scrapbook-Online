@@ -27,7 +27,7 @@ body { user-select: none; }
 body {
     font-family: "ms_sans_serif", sans-serif;
     font-size: 11px;
-    background-color: #008080;
+    background-color: var(--desktop-bg);
     background-size: cover;
     background-position: center;
     height: 100vh;
@@ -51,9 +51,9 @@ body {
     left: 0;
     right: 0;
     height: 28px;
-    background: #c0c0c0;
-    border-top: 2px solid #fff;
-    box-shadow: 0 -1px 0 #808080;
+    background: var(--surface-deep);
+    border-top: 2px solid var(--bezel-light-1);
+    box-shadow: 0 -1px 0 var(--border);
     display: flex;
     align-items: center;
     padding: 2px 2px;
@@ -86,7 +86,7 @@ body {
 .taskbar-sep {
     width: 2px;
     height: 20px;
-    box-shadow: inset -1px 0 0 #fff, inset 1px 0 0 #808080;
+    box-shadow: inset -1px 0 0 var(--bezel-light-1), inset 1px 0 0 var(--border);
     margin: 0 2px;
     flex-shrink: 0;
 }
@@ -114,8 +114,8 @@ body {
 }
 
 .taskbar-task-btn.taskbar-task-minimized {
-    box-shadow: inset -1px -1px #fff, inset 1px 1px #808080,
-                inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a;
+    box-shadow: inset -1px -1px var(--bezel-light-1), inset 1px 1px var(--border),
+                inset -2px -2px var(--bezel-light-2), inset 2px 2px var(--bezel-dark-1);
 }
 
 #system-tray {
@@ -123,7 +123,9 @@ body {
     align-items: center;
     height: 22px;
     padding: 0 8px;
-    box-shadow: inset 1px 1px #808080, inset -1px -1px #fff;
+    background: var(--surface-deep);
+    color: var(--text);
+    box-shadow: inset 1px 1px var(--border), inset -1px -1px var(--bezel-light-1);
     font-size: 11px;
     flex-shrink: 0;
 }
@@ -147,9 +149,9 @@ body {
     bottom: 28px;
     left: 2px;
     width: 180px;
-    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
-                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
-    background: #c0c0c0;
+    background: var(--win-bg);
+    box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
     z-index: 999;
 }
 
@@ -159,10 +161,10 @@ body {
 
 #start-sidebar {
     width: 22px;
-    background: linear-gradient(to top, #000082, #1a6cd4);
+    background: linear-gradient(to top, var(--titlebar-start), var(--titlebar-end));
     writing-mode: vertical-rl;
     transform: rotate(180deg);
-    color: #fff;
+    color: var(--titlebar-text);
     font-size: 13px;
     font-weight: bold;
     font-style: italic;
@@ -189,20 +191,20 @@ body {
     border: none;
     cursor: default;
     text-align: left;
-    color: #000;
+    color: var(--text);
     text-decoration: none;
     gap: 8px;
 }
 
 .menu-item:hover {
-    background: #000082;
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-text);
 }
 
 .menu-sep {
     height: 1px;
-    background: #808080;
-    box-shadow: 0 1px 0 #fff;
+    background: var(--border);
+    box-shadow: 0 1px 0 var(--bezel-light-1);
     margin: 2px 4px;
 }
 

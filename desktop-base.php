@@ -18,9 +18,22 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
 $wallpaper = getUserWallpaper($desktopLabel);
 $wallpaperStyle = $wallpaper ? "background-image:url('{$wallpaper}')" : '';
 
-$hasPlayer = in_array($desktopUserKey, ['user1', 'user2']);
+$hasPlayer = true; /* Todos los usuarios tienen reproductor */
 
-$_iconTheme = $desktopUserKey === 'user1' ? 'capi' : 'angie';
+/* Tema activo del usuario (si lo tiene) */
+require_once __DIR__ . '/assets/themes/theme-helpers.php';
+refreshActiveThemeCss($desktopUserKey, $desktopLabel);
+$_userThemes = loadUserThemes($desktopUserKey);
+$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $desktopLabel);
+    $activeThemeCss   = themeCssRelPath($activeTheme, $desktopLabel);
+    if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+}
+
+$_iconTheme = $desktopUserKey === 'user1' ? 'capi' : ($desktopUserKey === 'user2' ? 'angie' : 'default');
 function desktopIcon($name, $emoji) {
     global $_iconTheme;
     foreach ([$_iconTheme, 'default'] as $dir) {
@@ -45,9 +58,18 @@ function desktopIcon($name, $emoji) {
     <link rel="stylesheet" href="assets/css/reproductor.css">
     <link rel="stylesheet" href="assets/css/perfil.css">
     <link rel="stylesheet" href="assets/css/themes.css">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
 </head>
 
-<body class="<?php echo $desktopUserKey === 'user1' ? 'capi' : 'angie'; ?>"<?php echo $wallpaperStyle ? " style=\"{$wallpaperStyle}\"" : ''; ?>>
+<body class="<?php
+    $bodyClasses = [];
+    if ($desktopUserKey === 'user1') $bodyClasses[] = 'capi';
+    elseif ($desktopUserKey === 'user2') $bodyClasses[] = 'angie';
+    if ($activeThemeClass) $bodyClasses[] = $activeThemeClass;
+    echo htmlspecialchars(implode(' ', $bodyClasses));
+?>"<?php echo $wallpaperStyle ? " style=\"{$wallpaperStyle}\"" : ''; ?>>
 
 <div id="page-enter"></div>
 <div id="desktop">
@@ -59,16 +81,19 @@ function desktopIcon($name, $emoji) {
         <div class="desktop-icon-img"><?php echo desktopIcon('calendar', '📅'); ?></div>
         <span>Calendario</span>
     </div>
-    <div class="desktop-icon" id="helldivers-companion-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('companion', '🪐'); ?></div>
-        <span>Companion</span>
-    </div>
     <div class="desktop-icon" id="profile-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('profile', '👤'); ?></div>
         <span>Perfil</span>
     </div>
+    <div class="desktop-icon" id="temas-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('temas', '🎨'); ?></div>
+        <span>Temas</span>
+    </div>
+    <div class="desktop-icon" id="companion-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('companion', '💀'); ?></div>
+        <span>Companion</span>
+    </div>
 </div>
-
 
 <!-- CALENDAR WINDOW -->
 <div class="window" id="calendar-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
@@ -83,19 +108,6 @@ function desktopIcon($name, $emoji) {
     <iframe id="calendar-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
-<!-- HELLDIVERS COMPANION WINDOW -->
-<div class="window" id="helldivers-companion-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
-    <div class="title-bar" id="helldivers-companion-titlebar">
-        <div class="title-bar-text">🪐 Helldivers 2 Companion</div>
-        <div class="title-bar-controls">
-            <button aria-label="Minimize"></button>
-            <button aria-label="Maximize"></button>
-            <button aria-label="Close" id="helldivers-companion-close"></button>
-        </div>
-    </div>
-    <iframe id="helldivers-companion-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
-</div>
-
 <!-- ARCHIVE WINDOW -->
 <div class="window" id="archive-window">
     <div class="title-bar" id="archive-titlebar">
@@ -107,6 +119,32 @@ function desktopIcon($name, $emoji) {
         </div>
     </div>
     <iframe id="archive-frame" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- TEMAS WINDOW -->
+<div class="window" id="temas-window" style="display:none; position:fixed; left:10vw; top:6vh; width:80vw; height:80vh; z-index:550; flex-direction:column;">
+    <div class="title-bar" id="temas-titlebar">
+        <div class="title-bar-text">🎨 Temas</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="temas-close"></button>
+        </div>
+    </div>
+    <iframe id="temas-frame" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- COMPANION WINDOW -->
+<div class="window" id="companion-window" style="display:none; position:fixed; left:10vw; top:6vh; width:80vw; height:80vh; z-index:550; flex-direction:column;">
+    <div class="title-bar" id="companion-titlebar">
+        <div class="title-bar-text">💀 Helldivers Companion</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="companion-close"></button>
+        </div>
+    </div>
+    <iframe id="companion-frame" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- NOTIFICATION STACK -->
@@ -172,6 +210,66 @@ updateClock();
 setInterval(updateClock, 1000);
 
 /* =========================
+   TEMA EN VIVO (hot-swap)
+========================= */
+/* Aplica el tema custom al documento dado:
+   - className: clase a poner en el body (vacío = quitar)
+   - cssHref:   ruta al CSS (vacío = quitar)
+*/
+window.applyThemeToDocument = function(doc, className, cssHref) {
+    if (!doc || !doc.body) return;
+    var body = doc.body;
+    /* Conserva sólo capi/angie. Cualquier otra clase custom se elimina. */
+    var keep = (body.className || '').split(/\s+/).filter(function(c) {
+        return c === 'capi' || c === 'angie';
+    });
+    if (className) keep.push(className);
+    body.className = keep.join(' ');
+
+    var existing = doc.getElementById('active-theme-link');
+    if (cssHref) {
+        var bust = (cssHref.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
+        if (existing) {
+            existing.href = cssHref + bust;
+        } else {
+            var link = doc.createElement('link');
+            link.rel  = 'stylesheet';
+            link.id   = 'active-theme-link';
+            link.href = cssHref + bust;
+            doc.head.appendChild(link);
+        }
+    } else if (existing) {
+        existing.remove();
+    }
+};
+
+/* Listener para mensajes desde el iframe de Temas (u otros) */
+window.addEventListener('message', function(e) {
+    if (!e.data) return;
+    if (e.data.type === 'theme-activated') {
+        var className = e.data.className || '';
+        var basePath  = e.data.cssBasePath || ''; /* "assets/themes/<file>.css" o '' */
+        /* Padre */
+        applyThemeToDocument(document, className, basePath);
+        /* Iframes hijos (calendar, archive, temas) — usan "../" + basePath */
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame'].forEach(function(id) {
+            var fr = document.getElementById(id);
+            if (!fr || !fr.contentDocument || !fr.contentDocument.body) return;
+            var childHref = basePath ? '../' + basePath : '';
+            applyThemeToDocument(fr.contentDocument, className, childHref);
+        });
+    } else if (e.data.type === 'wallpaper-changed') {
+        /* Aplica el nuevo wallpaper en vivo al body del escritorio */
+        var wp = e.data.wallpaper || '';
+        if (wp) {
+            document.body.style.backgroundImage = "url('" + wp + "?t=" + Date.now() + "')";
+        } else {
+            document.body.style.backgroundImage = '';
+        }
+    }
+});
+
+/* =========================
    START MENU
 ========================= */
 
@@ -205,6 +303,68 @@ document.querySelectorAll('a[href="logout.php"]').forEach(link => {
         setTimeout(() => { window.location.href = href; }, 450);
     });
 });
+
+/* =========================
+   TASKBAR TASK MANAGER (compartido por todos los usuarios)
+========================= */
+window.taskbarManager = (function() {
+    var tasksEl  = document.getElementById('taskbar-tasks');
+    var registry = {}; /* id → { btn, displayMode } */
+
+    function register(id, label, icon, displayMode) {
+        if (registry[id]) { restore(id); return; }
+        var win = document.getElementById(id);
+        if (!win) return;
+        var btn = document.createElement('button');
+        btn.className = 'button taskbar-task-btn';
+        btn.title = label;
+        btn.textContent = (icon ? icon + ' ' : '') + label;
+        btn.addEventListener('click', function() { toggle(id); });
+        tasksEl.appendChild(btn);
+        registry[id] = { btn: btn, displayMode: displayMode || 'block' };
+        win.style.display = displayMode || 'block';
+    }
+
+    function unregister(id) {
+        if (!registry[id]) return;
+        var win = document.getElementById(id);
+        if (win) win.style.display = 'none';
+        registry[id].btn.remove();
+        delete registry[id];
+    }
+
+    function minimize(id) {
+        var entry = registry[id];
+        if (!entry) return;
+        var win = document.getElementById(id);
+        if (!win || win.style.display === 'none') return;
+        entry.displayMode = win.style.display;
+        win.style.display = 'none';
+        win.classList.remove('win-maximized');
+        entry.btn.classList.add('taskbar-task-minimized');
+    }
+
+    function restore(id) {
+        var entry = registry[id];
+        if (!entry) return;
+        var win = document.getElementById(id);
+        if (!win) return;
+        win.style.display = entry.displayMode || 'block';
+        entry.btn.classList.remove('taskbar-task-minimized');
+    }
+
+    function toggle(id) {
+        var entry = registry[id];
+        if (!entry) return;
+        var win = document.getElementById(id);
+        if (win && win.style.display !== 'none') minimize(id); else restore(id);
+    }
+
+    function isRegistered(id) { return !!registry[id]; }
+    function getButton(id)    { return registry[id] ? registry[id].btn : null; }
+
+    return { register: register, unregister: unregister, minimize: minimize, restore: restore, toggle: toggle, isRegistered: isRegistered, getButton: getButton };
+})();
 
 /* =========================
    SISTEMA UNIFICADO DE NOTIFICACIONES
@@ -386,24 +546,36 @@ window.notifSystem = (function() {
         taskbarManager.unregister('calendar-window');
     });
 })();
-/* =========================
-   HELLDIVERS COMPANION
-========================= */
-(function() {
-    var hdIframe = document.getElementById('helldivers-companion-iframe');
-    var hdLoaded = false;
 
-    document.getElementById('helldivers-companion-icon').addEventListener('dblclick', function() {
-        if (!hdLoaded) { hdIframe.src = 'apps/helldivers-companion.php'; hdLoaded = true; }
-        if (taskbarManager.isRegistered('helldivers-companion-window')) {
-            taskbarManager.restore('helldivers-companion-window');
+(function() {
+    var temasFrame  = document.getElementById('temas-frame');
+    var temasLoaded = false;
+    document.getElementById('temas-icon').addEventListener('dblclick', function() {
+        if (!temasLoaded) { temasFrame.src = 'apps/temas.php'; temasLoaded = true; }
+        if (taskbarManager.isRegistered('temas-window')) {
+            taskbarManager.restore('temas-window');
         } else {
-            taskbarManager.register('helldivers-companion-window', 'HD2 Companion', '🪐', 'flex');
+            taskbarManager.register('temas-window', 'Temas', '🎨', 'flex');
         }
     });
+    document.getElementById('temas-close').addEventListener('click', function() {
+        taskbarManager.unregister('temas-window');
+    });
+})();
 
-    document.getElementById('helldivers-companion-close').addEventListener('click', function() {
-        taskbarManager.unregister('helldivers-companion-window');
+(function() {
+    var companionFrame  = document.getElementById('companion-frame');
+    var companionLoaded = false;
+    document.getElementById('companion-icon').addEventListener('dblclick', function() {
+        if (!companionLoaded) { companionFrame.src = 'apps/helldivers-companion.php'; companionLoaded = true; }
+        if (taskbarManager.isRegistered('companion-window')) {
+            taskbarManager.restore('companion-window');
+        } else {
+            taskbarManager.register('companion-window', 'Companion', '💀', 'flex');
+        }
+    });
+    document.getElementById('companion-close').addEventListener('click', function() {
+        taskbarManager.unregister('companion-window');
     });
 })();
 
@@ -626,22 +798,21 @@ window.notifSystem = (function() {
         });
     }
 
-    ['calendar-window','archive-window','helldivers-companion-window','playlist-editor',
+    ['calendar-window','archive-window','temas-window','playlist-editor',
      'create-playlist-dialog','profile-window'].forEach(function(id) { setup(id, false); });
     ['music-player','add-track-dialog','import-playlist-dialog',
      'collab-dialog','spotify-import-dialog','confirm-dialog',
      'profile-add-dialog','profile-review-prompt','profile-review-window',
      'profile-review-view','profile-invite-dialog','profile-info-edit-dialog',
-     'music-add-dialog'].forEach(function(id) { setup(id, true); });
+     'music-add-dialog','profile-notifs-window','profile-melon-details-window','profile-chat-window'].forEach(function(id) { setup(id, true); });
 })();
 
 /* ──── Window minimize / maximize ──── */
 (function() {
     var ids = [
-    'calendar-window', 'archive-window', 'helldivers-companion-window',
-    'create-playlist-dialog', 'profile-window'
-];
-    
+        'calendar-window', 'archive-window', 'temas-window',
+        'create-playlist-dialog', 'profile-window'
+    ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
         if (!win) return;

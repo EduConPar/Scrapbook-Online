@@ -1,5 +1,12 @@
 [
     {
+        "id": "notif_1779482293_9111",
+        "type": "follow",
+        "fromUser": "user1",
+        "createdAt": 1779482293,
+        "read": true
+    },
+    {
         "id": "notif_1779444730_546",
         "type": "review",
         "fromUser": "user1",
@@ -7,13 +14,6 @@
         "read": true,
         "category": "music",
         "itemTitle": "No Children"
-    },
-    {
-        "id": "notif_1779436657_5377",
-        "type": "follow",
-        "fromUser": "user1",
-        "createdAt": 1779436657,
-        "read": true
     },
     {
         "id": "notif_1779436656_8940",
