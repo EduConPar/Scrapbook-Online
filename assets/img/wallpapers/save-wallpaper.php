@@ -5,7 +5,7 @@
    otra extensión. */
 session_start();
 header('Content-Type: application/json; charset=utf-8');
-require_once dirname(dirname(__DIR__)) . '/assets/config.php';
+require_once dirname(dirname(__DIR__)) . '/config.php';
 
 if (!isset($_SESSION['user'])) { echo json_encode(['error' => 'No autorizado']); exit; }
 $userKey = $_SESSION['user'];
