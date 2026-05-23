@@ -2,6 +2,7 @@
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/assets/config.php';
+@require_once __DIR__ . '/db.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['error' => 'Método no permitido']); exit;
@@ -37,9 +38,36 @@ if (file_exists($jsonFile)) {
 /* 2) Borrar stub de escritorio */
 @unlink(__DIR__ . '/' . $labelLower . '-desktop.php');
 
-/* 3) Borrar avatar (cualquier extensión) */
+/* 3) Borrar avatar (cualquier extensión, label exacto + lowercase) */
+$safeLabel = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
 foreach (['jpg', 'jpeg', 'png', 'gif', 'webp'] as $ext) {
     @unlink(__DIR__ . '/assets/img/' . $label . '.' . $ext);
+    @unlink(__DIR__ . '/assets/img/' . $safeLabel . '.' . $ext);
+}
+
+/* 3b) Borrar wallpaper del usuario */
+foreach (['jpg', 'jpeg', 'png', 'gif', 'webp'] as $ext) {
+    @unlink(__DIR__ . '/assets/img/wallpapers/' . $labelLower . '-wallpaper.' . $ext);
+    @unlink(__DIR__ . '/assets/img/wallpapers/' . strtolower($safeLabel) . '-wallpaper.' . $ext);
+}
+
+/* 3b-bis) Borrar icono del botón inicio del usuario */
+foreach (['png', 'svg', 'webp', 'jpg', 'jpeg', 'gif'] as $ext) {
+    @unlink(__DIR__ . '/assets/img/start-icons/' . $labelLower . '-start-icon.' . $ext);
+    @unlink(__DIR__ . '/assets/img/start-icons/' . strtolower($safeLabel) . '-start-icon.' . $ext);
+}
+
+/* 3c) Borrar temas: JSON + todos los CSS generados para este usuario */
+@unlink(__DIR__ . '/assets/themes/' . $userKey . '-themes.json');
+$themesDir = __DIR__ . '/assets/themes/';
+if (is_dir($themesDir)) {
+    foreach (scandir($themesDir) as $f) {
+        if (substr($f, -4) !== '.css') continue;
+        /* Convención: <Theme>-<Label>.css */
+        if (preg_match('/-' . preg_quote($safeLabel, '/') . '\.css$/', $f)) {
+            @unlink($themesDir . $f);
+        }
+    }
 }
 
 /* 4) Borrar ficheros de datos del usuario */
@@ -52,6 +80,7 @@ $dataFiles = [
     'assets/music/'   . $userKey . '-invites.json',
     'assets/music/'   . $userKey . '-extra.json',
     'assets/music/'   . $userKey . '-custom.json',
+    'assets/couple/'  . $userKey . '-partner-invites.json',
 ];
 foreach ($dataFiles as $rel) {
     @unlink(__DIR__ . '/' . $rel);
@@ -144,6 +173,92 @@ foreach ($loginUsers as $otherKey => $other) {
             }
             if ($modified) @file_put_contents($otherListsFile, json_encode($lists, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
+    }
+
+    /* Item-invites del otro usuario que vinieran de este (fromUser) */
+    $otherItemInvFile = __DIR__ . '/assets/profile/' . $otherKey . '-item-invites.json';
+    if (file_exists($otherItemInvFile)) {
+        $invs = json_decode(file_get_contents($otherItemInvFile), true);
+        if (is_array($invs)) {
+            $filtered = array_values(array_filter($invs, function($n) use ($userKey) {
+                return !(isset($n['fromUser']) && $n['fromUser'] === $userKey);
+            }));
+            if (count($filtered) !== count($invs)) {
+                @file_put_contents($otherItemInvFile, json_encode($filtered, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+        }
+    }
+
+    /* Music invites */
+    $otherMusicInvFile = __DIR__ . '/assets/music/' . $otherKey . '-invites.json';
+    if (file_exists($otherMusicInvFile)) {
+        $invs = json_decode(file_get_contents($otherMusicInvFile), true);
+        if (is_array($invs)) {
+            $filtered = array_values(array_filter($invs, function($n) use ($userKey) {
+                return !(isset($n['fromUser']) && $n['fromUser'] === $userKey);
+            }));
+            if (count($filtered) !== count($invs)) {
+                @file_put_contents($otherMusicInvFile, json_encode($filtered, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+        }
+    }
+
+    /* Partner-invites de la app de calendario */
+    $otherPartnerInvFile = __DIR__ . '/assets/couple/' . $otherKey . '-partner-invites.json';
+    if (file_exists($otherPartnerInvFile)) {
+        $invs = json_decode(file_get_contents($otherPartnerInvFile), true);
+        if (is_array($invs)) {
+            $filtered = array_values(array_filter($invs, function($n) use ($userKey) {
+                return !(isset($n['fromUser']) && $n['fromUser'] === $userKey);
+            }));
+            if (count($filtered) !== count($invs)) {
+                @file_put_contents($otherPartnerInvFile, json_encode($filtered, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+        }
+    }
+}
+
+/* 6b) Limpieza en BD del calendario (parejas, momentos, recordatorios, usuarios)
+       — junto con las fotos de momentos en /uploads/momentos/. */
+if (isset($pdo) && $pdo instanceof PDO) {
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE username = ?");
+        $stmt->execute([strtolower($label)]);
+        $userRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($userRow && isset($userRow['id'])) {
+            $uid = (int)$userRow['id'];
+
+            /* Recoger fotos de momentos del usuario para borrarlas del disco */
+            $stmt = $pdo->prepare("SELECT foto FROM momentos WHERE usuario_id = ? AND foto IS NOT NULL AND foto <> ''");
+            $stmt->execute([$uid]);
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $foto = $row['foto'];
+                if ($foto) @unlink(__DIR__ . '/uploads/momentos/' . $foto);
+            }
+
+            /* Borrar momentos y recordatorios del usuario */
+            $pdo->prepare("DELETE FROM momentos WHERE usuario_id = ?")->execute([$uid]);
+            $pdo->prepare("DELETE FROM recordatorios WHERE usuario_id = ?")->execute([$uid]);
+
+            /* Pareja: además de borrarla, hay que romper la pareja en BD
+               (momentos/recordatorios de la pareja que sean del otro miembro
+               se conservan pero pareja_id se desvincula). */
+            $stmt = $pdo->prepare("SELECT id FROM parejas WHERE usuario1_id = ? OR usuario2_id = ?");
+            $stmt->execute([$uid, $uid]);
+            $parejas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($parejas as $p) {
+                $pid = (int)$p['id'];
+                /* Romper referencia pareja_id en momentos/recordatorios del otro miembro */
+                $pdo->prepare("UPDATE momentos      SET pareja_id = 0 WHERE pareja_id = ?")->execute([$pid]);
+                $pdo->prepare("UPDATE recordatorios SET pareja_id = 0 WHERE pareja_id = ?")->execute([$pid]);
+            }
+            $pdo->prepare("DELETE FROM parejas WHERE usuario1_id = ? OR usuario2_id = ?")->execute([$uid, $uid]);
+
+            /* Y por último, borrar el usuario de la tabla */
+            $pdo->prepare("DELETE FROM usuarios WHERE id = ?")->execute([$uid]);
+        }
+    } catch (Exception $e) {
+        /* No bloquea el borrado del resto. Si falla la BD, los archivos ya están limpios. */
     }
 }
 

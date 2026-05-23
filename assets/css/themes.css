@@ -28,6 +28,8 @@ body.user1 {
     --input-text:          #d0d0d0;
     --btn-bg:              #3a3a3a;
     --btn-text:            #d0d0d0;
+    --start-btn-bg:        #3a3a3a;
+    --start-btn-text:      #d0d0d0;
     --text:                #d0d0d0;
     --text-muted:          #888888;
     --text-faint:          #666666;
@@ -80,6 +82,8 @@ body.user2 {
     --input-text:          #1a1a1a;
     --btn-bg:              #5B744B;
     --btn-text:            #F9DDD8;
+    --start-btn-bg:        #5B744B;
+    --start-btn-text:      #F9DDD8;
     --text:                #35522B;
     --text-muted:          #5B744B;
     --text-faint:          #799567;

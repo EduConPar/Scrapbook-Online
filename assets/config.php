@@ -44,3 +44,14 @@ function getUserWallpaper($label)
     }
     return '';
 }
+
+function getUserStartIcon($label)
+{
+    $safe = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
+    foreach (['png', 'svg', 'webp', 'jpg', 'jpeg', 'gif'] as $ext) {
+        if (file_exists(__DIR__ . "/img/start-icons/{$safe}-start-icon.{$ext}")) {
+            return "assets/img/start-icons/{$safe}-start-icon.{$ext}";
+        }
+    }
+    return '';
+}

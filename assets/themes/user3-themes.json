@@ -10,6 +10,8 @@
                 "inputText": "#000000",
                 "btnBg": "#cb3a3a",
                 "btnText": "#000000",
+                "startBtnBg": "#1a5fb4",
+                "startBtnText": "#000000",
                 "text": "#2ec27e",
                 "textMuted": "#666666",
                 "textFaint": "#808080",
@@ -41,7 +43,7 @@
                 "badgeText": "#f9f06b",
                 "starColor": "#ffd700"
             },
-            "updatedAt": 1779488160
+            "updatedAt": 1779577309
         }
     },
     "active": "Test1"

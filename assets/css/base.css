@@ -18,7 +18,7 @@ body { user-select: none; }
 #page-enter {
     position: fixed;
     inset: 0;
-    background: #000;
+    background: var(--overlay-text-shadow);
     z-index: 9998;
     pointer-events: none;
     animation: fadeOut 0.5s ease-out 0.05s forwards;
@@ -70,6 +70,9 @@ body {
     align-items: center;
     gap: 5px;
     cursor: default;
+    /* Tokens propios del botón inicio (puede divergir del resto de botones) */
+    background: var(--start-btn-bg, var(--btn-bg));
+    color:      var(--start-btn-text, var(--btn-text));
 }
 
 .win-logo {
@@ -82,6 +85,17 @@ body {
 }
 
 .win-logo span { display: block; }
+
+/* Si el usuario sube un icono custom, body.has-start-icon se añade desde
+   PHP (o vía JS al cambiar en vivo) y muestra la imagen, ocultando las
+   cuadrículas por defecto. */
+body.has-start-icon .win-logo {
+    background-image: var(--start-icon-url);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+body.has-start-icon .win-logo span { display: none; }
 
 .taskbar-sep {
     width: 2px;
@@ -239,8 +253,8 @@ body {
 
 .desktop-icon span {
     font-size: 11px;
-    color: #fff;
-    text-shadow: 1px 1px 1px #000, -1px -1px 1px #000;
+    color: var(--overlay-text);
+    text-shadow: 1px 1px 1px var(--overlay-text-shadow), -1px -1px 1px var(--overlay-text-shadow);
     word-break: break-word;
     line-height: 1.2;
     pointer-events: none;

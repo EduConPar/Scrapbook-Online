@@ -29,6 +29,8 @@
     /* ──────── Botones ──────── */
     --btn-bg:              #c0c0c0;
     --btn-text:            #000000;
+    --start-btn-bg:        #c0c0c0;   /* botón Inicio del taskbar (puede divergir) */
+    --start-btn-text:      #000000;
 
     /* ──────── Texto ──────── */
     --text:                #000000;   /* texto principal */
@@ -75,6 +77,13 @@
 
     /* ──────── Decorativos ──────── */
     --star-color:          #ffd700;   /* color de las estrellas (rating) */
+
+    /* ──────── Overlay sobre imagen ──────── */
+    /* Texto sobre wallpaper / foto del usuario. Por defecto blanco con
+       sombra negra para legibilidad sobre cualquier imagen — los temas
+       pueden cambiarlos si lo prefieren. */
+    --overlay-text:        #ffffff;
+    --overlay-text-shadow: #000000;
 
     /* ──────── Compat (alias retro-compatibles) ──────── */
     --w98-bg:              #c0c0c0;

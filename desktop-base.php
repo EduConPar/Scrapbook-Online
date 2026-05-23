@@ -16,7 +16,17 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
 }
 
 $wallpaper = getUserWallpaper($desktopLabel);
-$wallpaperStyle = $wallpaper ? "background-image:url('{$wallpaper}')" : '';
+$startIcon = getUserStartIcon($desktopLabel);
+
+/* URL base del proyecto — necesaria porque las url() dentro de custom
+   properties pueden resolverse relativas al CSS que las consume (no al
+   documento) en algunos navegadores. */
+$projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
+
+$bodyStyles = [];
+if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
+if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
+$wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $hasPlayer = true; /* Todos los usuarios tienen reproductor */
 
@@ -68,6 +78,7 @@ function desktopIcon($name, $emoji) {
     if ($desktopUserKey === 'user1') $bodyClasses[] = 'capi';
     elseif ($desktopUserKey === 'user2') $bodyClasses[] = 'angie';
     if ($activeThemeClass) $bodyClasses[] = $activeThemeClass;
+    if ($startIcon) $bodyClasses[] = 'has-start-icon';
     echo htmlspecialchars(implode(' ', $bodyClasses));
 ?>"<?php echo $wallpaperStyle ? " style=\"{$wallpaperStyle}\"" : ''; ?>>
 
@@ -266,6 +277,45 @@ window.addEventListener('message', function(e) {
         } else {
             document.body.style.backgroundImage = '';
         }
+    } else if (e.data.type === 'start-icon-changed') {
+        /* Aplica el nuevo icono del botón inicio en vivo.
+           Resuelve a URL absoluta porque algunos navegadores (Firefox/Zen)
+           re-resuelven url() de custom properties relativa al CSS que las
+           consume (base.css → assets/css/) y no al documento. */
+        var si = e.data.icon || '';
+        if (si) {
+            var abs = new URL(si, location.href).href;
+            document.body.style.setProperty('--start-icon-url', "url('" + abs + "?t=" + Date.now() + "')");
+            document.body.classList.add('has-start-icon');
+        } else {
+            document.body.style.removeProperty('--start-icon-url');
+            document.body.classList.remove('has-start-icon');
+        }
+    } else if (e.data.type === 'profile-photo-changed') {
+        /* Refresca todos los <img> cuyo basename coincida con el del usuario
+           (apunta tanto al avatar viejo como al nuevo, así también funciona si
+           cambió la extensión del archivo). */
+        var newPath = e.data.photo || '';
+        if (!newPath) return;
+        var m = newPath.match(/\/([^/]+)\.[^/]+$/);
+        if (!m) return;
+        var basename = m[1].toLowerCase();
+        function refreshImgs(doc) {
+            if (!doc) return;
+            var imgs = doc.querySelectorAll('img');
+            for (var i = 0; i < imgs.length; i++) {
+                var src = imgs[i].getAttribute('src') || '';
+                var sm = src.match(/\/([^/?]+)\.[a-zA-Z0-9]+(?:\?|$)/);
+                if (sm && sm[1].toLowerCase() === basename) {
+                    imgs[i].src = newPath + '?t=' + Date.now();
+                }
+            }
+        }
+        refreshImgs(document);
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame'].forEach(function(id) {
+            var fr = document.getElementById(id);
+            if (fr && fr.contentDocument) refreshImgs(fr.contentDocument);
+        });
     }
 });
 

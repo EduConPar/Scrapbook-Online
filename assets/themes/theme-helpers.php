@@ -23,6 +23,8 @@ $THEME_COLOR_KEYS = [
     'inputBg', 'inputText',
     /* Botones */
     'btnBg', 'btnText',
+    /* Botón de inicio (taskbar) */
+    'startBtnBg', 'startBtnText',
     /* Texto */
     'text', 'textMuted', 'textFaint', 'textInset',
     /* Acento / barra de título */
@@ -55,6 +57,8 @@ $THEME_TOKEN_MAP = [
     'inputText'     => '--input-text',
     'btnBg'         => '--btn-bg',
     'btnText'       => '--btn-text',
+    'startBtnBg'    => '--start-btn-bg',
+    'startBtnText'  => '--start-btn-text',
     'text'          => '--text',
     'textMuted'     => '--text-muted',
     'textFaint'     => '--text-faint',
@@ -97,6 +101,8 @@ $THEME_DEFAULTS = [
     'inputText'     => '#000000',
     'btnBg'         => '#c0c0c0',
     'btnText'       => '#000000',
+    'startBtnBg'    => '#c0c0c0',
+    'startBtnText'  => '#000000',
     'text'          => '#000000',
     'textMuted'     => '#666666',
     'textFaint'     => '#808080',
@@ -154,6 +160,8 @@ $CAPI_THEME_COLORS = [
     'inputText'     => '#d0d0d0',
     'btnBg'         => '#3a3a3a',
     'btnText'       => '#d0d0d0',
+    'startBtnBg'    => '#3a3a3a',
+    'startBtnText'  => '#d0d0d0',
     'text'          => '#d0d0d0',
     'textMuted'     => '#888888',
     'textFaint'     => '#666666',
@@ -195,6 +203,8 @@ $ANGIE_THEME_COLORS = [
     'inputText'     => '#1a1a1a',
     'btnBg'         => '#5B744B',
     'btnText'       => '#F9DDD8',
+    'startBtnBg'    => '#5B744B',
+    'startBtnText'  => '#F9DDD8',
     'text'          => '#35522B',
     'textMuted'     => '#5B744B',
     'textFaint'     => '#799567',
@@ -270,6 +280,7 @@ function userThemesFile($userKey) {
     return themesDir() . '/' . $safe . '-themes.json';
 }
 
+
 function loadUserThemes($userKey) {
     $file = userThemesFile($userKey);
     if (!file_exists($file)) return ['themes' => new stdClass(), 'active' => ''];
@@ -334,6 +345,14 @@ function normalizeThemeColors($colors) {
     }
     if (empty($out['titlebarIconBezelDark']) && !empty($out['bezelDark1']) && preg_match($hex, $out['bezelDark1'])) {
         $out['titlebarIconBezelDark'] = $out['bezelDark1'];
+    }
+    /* Migración suave: si el tema no tiene startBtn{Bg,Text}, hereda los
+       colores del botón normal para no romper el look existente. */
+    if (empty($out['startBtnBg']) && !empty($out['btnBg']) && preg_match($hex, $out['btnBg'])) {
+        $out['startBtnBg'] = $out['btnBg'];
+    }
+    if (empty($out['startBtnText']) && !empty($out['btnText']) && preg_match($hex, $out['btnText'])) {
+        $out['startBtnText'] = $out['btnText'];
     }
     /* Rellenar con defaults los tokens que falten */
     foreach ($THEME_COLOR_KEYS as $k) {

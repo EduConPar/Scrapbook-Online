@@ -12,7 +12,7 @@
    wallpaper que setea desktop-base.php por inline style.
 ========================================================= */
 
-html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: #008080; }
+html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--desktop-bg); }
 
 .popup-overlay {
     display: none;
@@ -54,9 +54,9 @@ html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: 
 .cal-cell-foto {
     background-size: cover;
     background-position: center;
-    color: #fff !important;
-    text-shadow: 0 0 3px #000, 0 0 6px #000;
-    border: 2px solid #fff !important;
+    color: var(--overlay-text) !important;
+    text-shadow: 0 0 3px var(--overlay-text-shadow), 0 0 6px var(--overlay-text-shadow);
+    border: 2px solid var(--overlay-text) !important;
 }
 
 /* Inputs del calendario: en vez del bezel hundido por defecto de los

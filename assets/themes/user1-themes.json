@@ -10,6 +10,8 @@
                 "inputText": "#d0d0d0",
                 "btnBg": "#3a3a3a",
                 "btnText": "#d0d0d0",
+                "startBtnBg": "#c8a000",
+                "startBtnText": "#000000",
                 "text": "#d0d0d0",
                 "textMuted": "#888888",
                 "textFaint": "#666666",
@@ -41,7 +43,7 @@
                 "badgeText": "#ffffff",
                 "starColor": "#EDC001"
             },
-            "updatedAt": 1779488432
+            "updatedAt": 1779577345
         }
     },
     "active": "Capi"

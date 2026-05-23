@@ -124,6 +124,49 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                         inset 2px 2px var(--bezel-dark-2),
                         inset -2px -2px var(--bezel-light-2);
         }
+        #temas-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 4px 4px 0 4px;
+            flex-shrink: 0;
+        }
+        .temas-tab-btn {
+            flex: 1;
+            font-size: 10px;
+            padding: 3px 6px;
+            min-height: 22px;
+        }
+        .temas-tab-btn.active {
+            background: var(--accent);
+            color: var(--accent-text);
+        }
+        .temas-tab-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .temas-tab-pane[hidden] { display: none; }
+        #temas-starticon-area {
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        #temas-starticon-preview {
+            width: 64px;
+            height: 64px;
+            align-self: center;
+            background-color: var(--inset-bg);
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            box-shadow: inset 1px 1px var(--bezel-dark-1),
+                        inset -1px -1px var(--bezel-light-1),
+                        inset 2px 2px var(--bezel-dark-2),
+                        inset -2px -2px var(--bezel-light-2);
+        }
         #temas-toolbar {
             background: var(--win-bg);
             color: var(--text);
@@ -199,23 +242,46 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
 <div id="temas-app">
     <div id="temas-sidebar">
-        <div class="temas-side-head">🎨 Mis temas</div>
-        <div id="temas-list"></div>
-        <div id="temas-sidebar-footer">
-            <button class="button" id="temas-new">+ Nuevo</button>
-            <button class="button" id="temas-deactivate">Usar default</button>
+        <div id="temas-tabs">
+            <button class="button temas-tab-btn active" data-tab="themes">🎨 Mis temas</button>
+            <button class="button temas-tab-btn" data-tab="personalize">🖌 Personalización</button>
         </div>
 
-        <div class="temas-side-head" style="border-top:1px solid var(--border);">🖼 Fondo</div>
-        <div id="temas-wallpaper-area">
-            <div id="temas-wallpaper-preview"></div>
-            <div class="field-row" style="gap:4px;">
-                <input type="text" id="temas-wallpaper-name" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
-                <button class="button" id="temas-wallpaper-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
+        <!-- Tab: Mis temas -->
+        <div class="temas-tab-pane" id="temas-pane-themes">
+            <div id="temas-list"></div>
+            <div id="temas-sidebar-footer">
+                <button class="button" id="temas-new">+ Nuevo</button>
+                <button class="button" id="temas-deactivate">Usar default</button>
             </div>
-            <input type="file" id="temas-wallpaper-file" accept="image/*" style="display:none;">
-            <button class="button" id="temas-wallpaper-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
-            <p id="temas-wallpaper-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
+        </div>
+
+        <!-- Tab: Personalización -->
+        <div class="temas-tab-pane" id="temas-pane-personalize" hidden>
+            <div class="temas-side-head">🖼 Fondo</div>
+            <div id="temas-wallpaper-area">
+                <div id="temas-wallpaper-preview"></div>
+                <div class="field-row" style="gap:4px;">
+                    <input type="text" id="temas-wallpaper-name" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
+                    <button class="button" id="temas-wallpaper-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
+                </div>
+                <input type="file" id="temas-wallpaper-file" accept="image/*" style="display:none;">
+                <button class="button" id="temas-wallpaper-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
+                <p id="temas-wallpaper-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
+            </div>
+
+            <div class="temas-side-head" style="border-top:1px solid var(--border);">▶ Icono de inicio</div>
+            <div id="temas-starticon-area">
+                <div id="temas-starticon-preview"></div>
+                <div class="field-row" style="gap:4px;">
+                    <input type="text" id="temas-starticon-name" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
+                    <button class="button" id="temas-starticon-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
+                </div>
+                <input type="file" id="temas-starticon-file" accept="image/*,image/svg+xml" style="display:none;">
+                <button class="button" id="temas-starticon-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
+                <p id="temas-starticon-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
+            </div>
+
         </div>
     </div>
 
@@ -249,6 +315,8 @@ const COLOR_DEFS = [
     /* — Botones — */
     { key: 'btnBg',         label: 'Fondo del botón',           def: '#c0c0c0', group: 'Botones' },
     { key: 'btnText',       label: 'Texto del botón',           def: '#000000', group: 'Botones' },
+    { key: 'startBtnBg',    label: 'Fondo del botón Inicio',    def: '#c0c0c0', group: 'Botones' },
+    { key: 'startBtnText',  label: 'Texto del botón Inicio',    def: '#000000', group: 'Botones' },
     /* — Texto — */
     { key: 'text',          label: 'Texto principal',           def: '#000000', group: 'Texto' },
     { key: 'textMuted',     label: 'Texto secundario',          def: '#666666', group: 'Texto' },
@@ -572,6 +640,28 @@ resetEditor();
 loadThemes();
 
 /* =========================================================
+   TABS DE LA SIDEBAR (Mis temas / Personalización)
+========================================================= */
+(function() {
+    var tabs  = document.querySelectorAll('.temas-tab-btn');
+    var panes = {
+        themes:      document.getElementById('temas-pane-themes'),
+        personalize: document.getElementById('temas-pane-personalize')
+    };
+    tabs.forEach(function(t) {
+        t.addEventListener('click', function() {
+            tabs.forEach(function(b) { b.classList.remove('active'); });
+            t.classList.add('active');
+            var which = t.dataset.tab;
+            Object.keys(panes).forEach(function(k) {
+                if (k === which) panes[k].removeAttribute('hidden');
+                else             panes[k].setAttribute('hidden', '');
+            });
+        });
+    });
+})();
+
+/* =========================================================
    FONDO DE PANTALLA
 ========================================================= */
 (function() {
@@ -625,6 +715,59 @@ loadThemes();
             .catch(function() { wpSave.classList.remove('btn-busy'); wpStatus.textContent = 'Error de red.'; });
     });
 })();
+
+/* =========================================================
+   ICONO DEL BOTÓN DE INICIO
+========================================================= */
+(function() {
+    var siFile    = document.getElementById('temas-starticon-file');
+    var siName    = document.getElementById('temas-starticon-name');
+    var siBrowse  = document.getElementById('temas-starticon-browse');
+    var siSave    = document.getElementById('temas-starticon-save');
+    var siPreview = document.getElementById('temas-starticon-preview');
+    var siStatus  = document.getElementById('temas-starticon-status');
+
+    var currentSi = <?php echo json_encode(getUserStartIcon($userLabel)); ?>;
+
+    function setPreview(rel) {
+        if (rel) {
+            siPreview.style.backgroundImage = 'url("../' + rel + '?t=' + Date.now() + '")';
+        } else {
+            siPreview.style.backgroundImage = '';
+        }
+    }
+    setPreview(currentSi);
+
+    siBrowse.addEventListener('click', function() { siFile.click(); });
+    siFile.addEventListener('change', function() {
+        siName.value = this.files.length ? this.files[0].name : '';
+        siStatus.textContent = '';
+    });
+
+    siSave.addEventListener('click', function() {
+        if (!siFile.files.length) { siStatus.textContent = 'Elige una imagen primero.'; return; }
+        var fd = new FormData();
+        fd.append('icon', siFile.files[0]);
+        siStatus.textContent = 'Subiendo…';
+        siSave.classList.add('btn-busy');
+        fetch('../assets/img/start-icons/save-start-icon.php', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                siSave.classList.remove('btn-busy');
+                if (!d || d.error) { siStatus.textContent = (d && d.error) ? d.error : 'Error'; return; }
+                siStatus.textContent = 'Icono actualizado.';
+                currentSi = d.icon;
+                setPreview(currentSi);
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'start-icon-changed', icon: currentSi }, '*');
+                }
+                siFile.value = '';
+                siName.value = '';
+            })
+            .catch(function() { siSave.classList.remove('btn-busy'); siStatus.textContent = 'Error de red.'; });
+    });
+})();
+
 </script>
 
 </body>
