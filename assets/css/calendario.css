@@ -12,7 +12,7 @@
    wallpaper que setea desktop-base.php por inline style.
 ========================================================= */
 
-html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--desktop-bg); }
 
 .popup-overlay {
     display: none;
@@ -30,35 +30,64 @@ html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
     padding: 0;
     cursor: pointer;
     border-radius: 4px;
-    border: 1px dashed rgba(0,0,0,0.15);
+    border: 1px dashed color-mix(in srgb, var(--text) 25%, transparent);
     position: relative;
     overflow: hidden;
     text-align: center;
     transition: border-color 0.15s, background 0.15s;
 }
 .cal-cell:hover {
-    border-color: rgba(0,0,0,0.35);
-    background: rgba(255,255,255,0.3);
+    border-color: color-mix(in srgb, var(--text) 55%, transparent);
+    background: color-mix(in srgb, var(--win-bg) 35%, transparent);
 }
 .cal-cell-num {
     padding: 6px 4px;
 }
+.cal-cell-today {
+    width: 100%;
+    background: var(--accent);
+    color: var(--accent-text);
+    padding: 6px 4px;
+    box-sizing: border-box;
+    text-align: center;
+}
 .cal-cell-foto {
     background-size: cover;
     background-position: center;
-    color: #fff !important;
-    text-shadow: 0 0 3px #000, 0 0 6px #000;
-    border: 2px solid #fff !important;
+    color: var(--overlay-text) !important;
+    text-shadow: 0 0 3px var(--overlay-text-shadow), 0 0 6px var(--overlay-text-shadow);
+    border: 2px solid var(--overlay-text) !important;
+}
+
+/* Inputs del calendario: en vez del bezel hundido por defecto de los
+   inputs, usamos el mismo bezel "saliente" que los botones — más coherente
+   con el resto del UI dentro del calendario.
+   Selector reforzado con body para ganar especificidad sobre themes.css y
+   98.css aunque cambie el orden de carga. */
+body input[type="text"],
+body input[type="date"],
+body input[type="number"],
+body input[type="email"],
+body input[type="password"],
+body input[type="search"],
+body input[type="tel"],
+body input[type="url"],
+body textarea,
+body select {
+    box-shadow: inset -1px -1px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2),
+                inset  2px  2px var(--bezel-light-2) !important;
 }
 
 /* ── Wallpapers por tema (scope: calendario) ── */
 body.capi {
-    background-image: url('../img/capi-wallpaper.jpg') !important;
+    background-image: url('../img/wallpapers/capi-wallpaper.jpg') !important;
     background-size: cover;
     background-position: center;
 }
 body.angie {
-    background-image: url('../img/angie-wallpaper.png') !important;
+    background-image: url('../img/wallpapers/angie-wallpaper.png') !important;
     background-size: cover;
     background-position: center;
 }

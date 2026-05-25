@@ -4,7 +4,7 @@
    Reproductor flotante, editor de playlists, diálogos
    (añadir track / importar / crear playlist / Spotify /
    colaboradores), notificaciones SSE y warning de Spotify.
-   Solo estilos base — los overrides de tema viven en themes.css.
+   Usa los tokens de tokens.css / themes.css.
 ========================================================= */
 
 #yt-player {
@@ -64,11 +64,11 @@
     width: 72px;
     height: 72px;
     box-shadow:
-        -1px -1px 0 #0a0a0a,
-         1px  1px 0 #ffffff,
-        -2px -2px 0 #808080,
-         2px  2px 0 #dfdfdf;
-    background: #808080;
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+    background: var(--inset-bg);
     overflow: hidden;
 }
 
@@ -90,11 +90,12 @@
     white-space: nowrap;
     width: max-content;
     margin-bottom: 4px;
+    color: var(--text);
 }
 
 #player-artist {
     font-size: 10px;
-    color: #444;
+    color: var(--text-muted);
 }
 
 #player-addedby {
@@ -107,11 +108,11 @@
     width: 22px;
     height: 22px;
     box-shadow:
-        -1px -1px 0 #0a0a0a,
-         1px  1px 0 #ffffff,
-        -2px -2px 0 #808080,
-         2px  2px 0 #dfdfdf;
-    background: #808080;
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+    background: var(--inset-bg);
     overflow: hidden;
     flex-shrink: 0;
 }
@@ -128,9 +129,9 @@
     appearance: none;
     width: 100%;
     height: 16px;
-    background: #fff;
-    box-shadow: inset -1px -1px #fff, inset 1px 1px #808080,
-                inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a;
+    background: var(--input-bg);
+    box-shadow: inset -1px -1px var(--bezel-light-1), inset 1px 1px var(--bezel-dark-1),
+                inset -2px -2px var(--bezel-light-2), inset 2px 2px var(--bezel-dark-2);
     outline: none;
     cursor: default;
     padding: 0;
@@ -142,19 +143,19 @@
     -webkit-appearance: none;
     width: 11px;
     height: 22px;
-    background: #c0c0c0;
-    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
-                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    background: var(--btn-bg);
+    box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
     cursor: default;
 }
 
 #player-progress::-moz-range-thumb {
     width: 11px;
     height: 22px;
-    background: #c0c0c0;
+    background: var(--btn-bg);
     border: none;
-    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
-                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
     cursor: default;
 }
 
@@ -163,6 +164,7 @@
     justify-content: space-between;
     font-size: 10px;
     margin-bottom: 8px;
+    color: var(--text);
 }
 
 #player-controls {
@@ -190,9 +192,10 @@
 }
 
 .btn-active {
-    background: #000080 !important;
-    color: #ffffff !important;
-    box-shadow: inset -1px -1px 0 #ffffff, inset 1px 1px 0 #0a0a0a, inset -2px -2px 0 #dfdfdf, inset 2px 2px 0 #808080;
+    background: var(--accent) !important;
+    color: var(--accent-text) !important;
+    box-shadow: inset -1px -1px 0 var(--bezel-light-1), inset 1px 1px 0 var(--bezel-dark-1),
+                inset -2px -2px 0 var(--bezel-light-2), inset 2px 2px 0 var(--bezel-dark-2);
 }
 
 /* --- Volumen vertical --- */
@@ -212,10 +215,10 @@
     justify-content: center;
     width: 16px;
     height: 130px;
-    box-shadow: inset 1px 1px #808080, inset -1px -1px #fff,
-                inset 2px 2px #0a0a0a, inset -2px -2px #dfdfdf;
-    background: #c0c0c0;
-    border: 2px solid #d0d0d0;
+    box-shadow: inset 1px 1px var(--bezel-dark-1), inset -1px -1px var(--bezel-light-1),
+                inset 2px 2px var(--bezel-dark-2), inset -2px -2px var(--bezel-light-2);
+    background: var(--win-bg);
+    border: 2px solid var(--text);
     overflow: hidden;
 }
 
@@ -223,7 +226,7 @@
     font-size: 9px;
     line-height: 1;
     flex-shrink: 0;
-    color: #444;
+    color: var(--text-muted);
     letter-spacing: -1px;
 }
 
@@ -248,9 +251,9 @@
     -webkit-appearance: none;
     width: 24px;
     height: 40px;
-    background: #d4d4d4;
-    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
-                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    background: var(--btn-bg);
+    box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
     cursor: default;
 }
 
@@ -267,10 +270,10 @@
 #player-volume::-moz-range-thumb {
     width: 24px;
     height: 40px;
-    background: #d4d4d4;
+    background: var(--btn-bg);
     border: none;
-    box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
-                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
     cursor: default;
 }
 
@@ -298,9 +301,9 @@
         width: 12px;
         height: 24px;
         border: none;
-        background: #d4d4d4;
-        box-shadow: inset -1px -1px #0a0a0a, inset 1px 1px #fff,
-                    inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+        background: var(--btn-bg);
+        box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+                    inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
         cursor: default;
     }
 }
@@ -341,7 +344,7 @@
 }
 
 #add-track-error {
-    color: #c00;
+    color: var(--c-error);
     font-size: 10px;
     min-height: 14px;
     margin-bottom: 4px;
@@ -405,7 +408,7 @@
 
 #pl-home-footer {
     padding-top: 4px;
-    border-top: 1px solid #808080;
+    border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
 }
@@ -414,7 +417,7 @@
     display: flex;
     align-items: center;
     padding: 4px 4px;
-    border-bottom: 1px solid #c0c0c0;
+    border-bottom: 1px solid var(--border);
     gap: 4px;
 }
 
@@ -434,11 +437,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text);
 }
 
 .pl-home-meta {
     font-size: 10px;
-    color: #666;
+    color: var(--text-faint);
 }
 
 .pl-home-btns {
@@ -450,7 +454,7 @@
 .pl-home-msg {
     padding: 8px 4px;
     font-size: 11px;
-    color: #808080;
+    color: var(--text-muted);
 }
 
 #pl-name-row {
@@ -483,7 +487,7 @@
     min-height: 0;
     overflow-y: auto;
     margin-bottom: 6px;
-    border: 1px solid #808080;
+    border: 1px solid var(--border);
 }
 
 #create-playlist-dialog {
@@ -507,7 +511,8 @@
     align-items: center;
     gap: 4px;
     padding: 5px 4px;
-    border-bottom: 1px solid #dfdfdf;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
 }
 
 .pl-item:last-child { border-bottom: none; }
@@ -515,7 +520,7 @@
 .pl-drag-handle {
     cursor: grab;
     padding: 0 3px;
-    color: #808080;
+    color: var(--text-muted);
     font-size: 14px;
     flex-shrink: 0;
     line-height: 1;
@@ -526,11 +531,11 @@
 .pl-item.dragging { opacity: 0.35; }
 
 .pl-item.drag-over {
-    border-top: 2px solid #000080;
+    border-top: 2px solid var(--accent);
 }
 
 .pl-item--playing {
-    border-left: 3px solid #000080;
+    border-left: 3px solid var(--accent);
 }
 
 .pl-item-thumb-wrap {
@@ -538,12 +543,12 @@
     height: 44px;
     flex-shrink: 0;
     overflow: hidden;
-    background: #808080;
+    background: var(--inset-bg);
     box-shadow:
-        -1px -1px 0 #0a0a0a,
-         1px  1px 0 #ffffff,
-        -2px -2px 0 #808080,
-         2px  2px 0 #dfdfdf;
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
 }
 
 .pl-item-thumb-wrap img {
@@ -577,7 +582,7 @@
 
 .pl-item-artist-text {
     font-size: 10px;
-    color: #666;
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -587,7 +592,7 @@
 
 .pl-item-addedby {
     font-size: 9px;
-    color: #808080;
+    color: var(--text-faint);
     white-space: nowrap;
     flex-shrink: 0;
     font-style: italic;
@@ -657,11 +662,12 @@
     cursor: pointer;
     white-space: nowrap;
     font-size: 11px;
+    color: var(--text);
 }
 
 .pl-menu-item:hover {
-    background: #000080;
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-text);
 }
 
 #import-playlist-dialog,
@@ -681,18 +687,25 @@
     margin: 4px 0 0;
     font-size: 11px;
     min-height: 14px;
-    color: #800000;
+    color: var(--error-text);
 }
 
-#spotify-import-hint   { color: #444; }
+#spotify-import-hint   { color: var(--text-muted); }
 #spotify-import-dialog { isolation: isolate; }
 
 /* Warning visual del importador de Spotify */
 .spotify-warn {
-    border: 1px solid #808080;
-    background: #fffbe6;
-    color: #444;
-    padding: 5px 7px;
+    /* Derivado del tema activo: tinte de acento sobre el fondo de la
+       ventana + borde de acento. Así siempre coincide con la paleta
+       aunque el tema no defina --warning-bg explícitamente. */
+    background: color-mix(in srgb, var(--accent) 14%, var(--win-bg));
+    color: var(--text);
+    border: 1px solid var(--accent);
+    box-shadow: inset -1px -1px var(--bezel-light-1),
+                inset  1px  1px var(--bezel-dark-1),
+                inset -2px -2px var(--bezel-light-2),
+                inset  2px  2px var(--bezel-dark-2);
+    padding: 6px 8px;
     margin: 0 0 8px;
     font-size: 10px;
     line-height: 1.5;
@@ -715,11 +728,11 @@
     width: 26px;
     height: 26px;
     box-shadow:
-        -1px -1px 0 #0a0a0a,
-         1px  1px 0 #ffffff,
-        -2px -2px 0 #808080,
-         2px  2px 0 #dfdfdf;
-    background: #808080;
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+    background: var(--inset-bg);
     overflow: hidden;
 }
 
@@ -746,13 +759,14 @@
     gap: 8px;
     justify-content: space-between;
     padding: 4px 0;
-    border-bottom: 1px solid #dfdfdf;
+    border-bottom: 1px solid var(--border);
     font-size: 11px;
+    color: var(--text);
 }
 
 #collab-status {
     font-size: 10px;
-    color: #808080;
+    color: var(--text-muted);
     min-height: 14px;
     margin: 4px 0 0;
 }
@@ -805,6 +819,6 @@
 
 .notif-time {
     font-size: 10px;
-    color: #808080;
+    color: var(--text-faint);
     display: block;
 }

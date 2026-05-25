@@ -7,6 +7,20 @@ if (!$userKey || !isset($loginUsers[$userKey])) {
     header('Location: ../index.php');
     exit;
 }
+$userLabel = $loginUsers[$userKey]['label'];
+
+/* Tema activo del usuario */
+require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+refreshActiveThemeCss($userKey, $userLabel);
+$_userThemes = loadUserThemes($userKey);
+$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+    $activeThemeCss   = '../' . themeCssRelPath($activeTheme, $userLabel);
+    if (!file_exists(dirname(__DIR__) . '/' . themeCssRelPath($activeTheme, $userLabel))) $activeThemeCss = '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -18,8 +32,17 @@ if (!$userKey || !isset($loginUsers[$userKey])) {
     <link rel="stylesheet" href="../assets/css/base.css">
     <link rel="stylesheet" href="../assets/css/melonarchive.css">
     <link rel="stylesheet" href="../assets/css/themes.css">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
 </head>
-<body class="<?php echo $userKey === 'user1' ? 'capi' : 'angie'; ?>">
+<body class="<?php
+    $bc = [];
+    if ($userKey === 'user1') $bc[] = 'capi';
+    elseif ($userKey === 'user2') $bc[] = 'angie';
+    if ($activeThemeClass) $bc[] = $activeThemeClass;
+    echo htmlspecialchars(implode(' ', $bc));
+?>">
 
 <div id="archive-root">
     <div id="archive-toolbar">

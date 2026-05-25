@@ -1,0 +1,48 @@
+{
+    "themes": {
+        "Payico": {
+            "colors": {
+                "winBg": "#f9f06b",
+                "winBodyBg": "#613583",
+                "surfaceDeep": "#241f31",
+                "insetBg": "#808080",
+                "inputBg": "#ffffff",
+                "inputText": "#000000",
+                "btnBg": "#c0c0c0",
+                "btnText": "#000000",
+                "text": "#000000",
+                "textMuted": "#666666",
+                "textFaint": "#808080",
+                "textInset": "#808080",
+                "titlebarStart": "#613583",
+                "titlebarEnd": "#c061cb",
+                "titlebarText": "#ffffff",
+                "accent": "#000080",
+                "accentText": "#ffffff",
+                "accentDeep": "#00004a",
+                "titlebarIconColor": "#000000",
+                "titlebarIconBg": "#c0c0c0",
+                "titlebarIconBezelLight": "#ffffff",
+                "titlebarIconBezelDark": "#0a0a0a",
+                "border": "#808080",
+                "borderStrong": "#404040",
+                "bezelLight1": "#ffffff",
+                "bezelLight2": "#dfdfdf",
+                "bezelDark1": "#0a0a0a",
+                "bezelDark2": "#808080",
+                "desktopBg": "#008080",
+                "linkText": "#0000ff",
+                "errorText": "#c00000",
+                "warningBg": "#fffbe6",
+                "warningText": "#444444",
+                "selectionBg": "#000080",
+                "selectionText": "#ffffff",
+                "badgeBg": "#d72638",
+                "badgeText": "#ffffff",
+                "starColor": "#ffd700"
+            },
+            "updatedAt": 1779494999
+        }
+    },
+    "active": ""
+}

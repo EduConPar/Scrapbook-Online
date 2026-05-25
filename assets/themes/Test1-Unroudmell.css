@@ -1,0 +1,56 @@
+/* Generado por la app de Temas. NO editar a mano.
+   Establece los tokens CSS para que cualquier app que use
+   var(--token) reciba la paleta del tema activo. */
+
+body.Test1-Unroudmell {
+    --win-bg: #f9f06b;
+    --win-body-bg: #241f31;
+    --surface-deep: #26203c;
+    --inset-bg: #808080;
+    --input-bg: #241f31;
+    --input-text: #000000;
+    --btn-bg: #cb3a3a;
+    --btn-text: #000000;
+    --start-btn-bg: #1a5fb4;
+    --start-btn-text: #000000;
+    --text: #2ec27e;
+    --text-muted: #666666;
+    --text-faint: #808080;
+    --text-inset: #808080;
+    --titlebar-start: #57e389;
+    --titlebar-end: #26a269;
+    --titlebar-text: #e60000;
+    --accent: #813d9c;
+    --accent-text: #792a2a;
+    --accent-deep: #00004a;
+    --titlebar-icon-color: #000000;
+    --titlebar-icon-bg: #c0c0c0;
+    --titlebar-icon-bezel-light: #ffffff;
+    --titlebar-icon-bezel-dark: #0a0a0a;
+    --border: #808080;
+    --border-strong: #404040;
+    --bezel-light-1: #000000;
+    --bezel-light-2: #613583;
+    --bezel-dark-1: #9141ac;
+    --bezel-dark-2: #000000;
+    --desktop-bg: #008080;
+    --link-text: #f5c211;
+    --error-text: #c00000;
+    --warning-bg: #fffbe6;
+    --warning-text: #444444;
+    --selection-bg: #000080;
+    --selection-text: #f9f06b;
+    --badge-bg: #d72638;
+    --badge-text: #f9f06b;
+    --star-color: #ffd700;
+
+    /* Alias retro-compat */
+    --t-bg:           #f9f06b;
+    --t-bg-alt:       #241f31;
+    --t-text:         #2ec27e;
+    --t-text-muted:   #666666;
+    --t-accent:       #813d9c;
+    --t-accent-text:  #792a2a;
+    --t-border:       #808080;
+    --t-grad:         linear-gradient(90deg, #57e389, #26a269);
+}

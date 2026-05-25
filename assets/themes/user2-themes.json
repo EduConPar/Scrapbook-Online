@@ -1,0 +1,49 @@
+{
+    "themes": {
+        "Angie": {
+            "colors": {
+                "winBg": "#F8D0C8",
+                "winBodyBg": "#F8D0C8",
+                "surfaceDeep": "#F8D0C8",
+                "insetBg": "#F3BABA",
+                "inputBg": "#F3BABA",
+                "inputText": "#1a1a1a",
+                "btnBg": "#5B744B",
+                "btnText": "#F9DDD8",
+                "text": "#35522B",
+                "textMuted": "#5B744B",
+                "textFaint": "#799567",
+                "textInset": "#799567",
+                "titlebarStart": "#5B744B",
+                "titlebarEnd": "#799567",
+                "titlebarText": "#F9DDD8",
+                "titlebarIconColor": "#35522B",
+                "titlebarIconBg": "#F8D0C8",
+                "titlebarIconBezelLight": "#F9DDD8",
+                "titlebarIconBezelDark": "#35522B",
+                "accent": "#799567",
+                "accentText": "#F9DDD8",
+                "accentDeep": "#5B744B",
+                "border": "#F3BABA",
+                "borderStrong": "#5B744B",
+                "bezelLight1": "#F9DDD8",
+                "bezelLight2": "#F8D0C8",
+                "bezelDark1": "#35522B",
+                "bezelDark2": "#5B744B",
+                "desktopBg": "#F9DDD8",
+                "linkText": "#5B744B",
+                "errorText": "#c8456e",
+                "warningBg": "#F3BABA",
+                "warningText": "#35522B",
+                "selectionBg": "#799567",
+                "selectionText": "#F9DDD8",
+                "badgeBg": "#c8456e",
+                "badgeText": "#F9DDD8",
+                "starColor": "#c8a000"
+            },
+            "updatedAt": 0,
+            "isDefault": true
+        }
+    },
+    "active": "Angie"
+}

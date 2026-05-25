@@ -18,9 +18,6 @@
             ]
         }
     ],
-    "following": [
-        "user2"
-    ],
     "bio": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut a",
     "pronouns": "I\/Me\/Myself",
     "age": "19",
@@ -28,5 +25,8 @@
     "steam": "ada",
     "discord": "CapiWasTaken_",
     "twitter": "CapiWasTaken",
-    "instagram": "capiwastaken"
+    "instagram": "capiwastaken",
+    "following": [
+        "user2"
+    ]
 }

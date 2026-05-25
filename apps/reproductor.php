@@ -1,6 +1,7 @@
 <?php
 // reproductor.php - All player HTML + PHP setup
 // Included from desktop-base.php; expects $desktopUserKey and $hasPlayer already set.
+require_once dirname(__DIR__) . '/assets/config.php';
 
 $youtubePlaylist = [];
 $customFile = dirname(__DIR__) . '/assets/music/' . $desktopUserKey . '-custom.json';
@@ -656,66 +657,6 @@ volSlider.addEventListener('input', function() {
     } catch(e) {}
 })();
 
-
-/* ──── Taskbar task manager ──── */
-window.taskbarManager = (function() {
-    var tasksEl  = document.getElementById('taskbar-tasks');
-    var registry = {}; /* id → { btn, displayMode } */
-
-    function register(id, label, icon, displayMode) {
-        if (registry[id]) { restore(id); return; }
-        var win = document.getElementById(id);
-        if (!win) return;
-        var btn = document.createElement('button');
-        btn.className = 'button taskbar-task-btn';
-        btn.title = label;
-        btn.textContent = (icon ? icon + ' ' : '') + label;
-        btn.addEventListener('click', function() { toggle(id); });
-        tasksEl.appendChild(btn);
-        registry[id] = { btn: btn, displayMode: displayMode || 'block' };
-        win.style.display = displayMode || 'block';
-    }
-
-    function unregister(id) {
-        if (!registry[id]) return;
-        var win = document.getElementById(id);
-        if (win) win.style.display = 'none';
-        registry[id].btn.remove();
-        delete registry[id];
-    }
-
-    function minimize(id) {
-        var entry = registry[id];
-        if (!entry) return;
-        var win = document.getElementById(id);
-        if (!win || win.style.display === 'none') return;
-        entry.displayMode = win.style.display;
-        win.style.display = 'none';
-        win.classList.remove('win-maximized');
-        entry.btn.classList.add('taskbar-task-minimized');
-    }
-
-    function restore(id) {
-        var entry = registry[id];
-        if (!entry) return;
-        var win = document.getElementById(id);
-        if (!win) return;
-        win.style.display = entry.displayMode || 'block';
-        entry.btn.classList.remove('taskbar-task-minimized');
-    }
-
-    function toggle(id) {
-        var entry = registry[id];
-        if (!entry) return;
-        var win = document.getElementById(id);
-        if (win && win.style.display !== 'none') minimize(id); else restore(id);
-    }
-
-    function isRegistered(id) { return !!registry[id]; }
-    function getButton(id) { return registry[id] ? registry[id].btn : null; }
-
-    return { register: register, unregister: unregister, minimize: minimize, restore: restore, toggle: toggle, isRegistered: isRegistered, getButton: getButton };
-})();
 
 document.getElementById('player-close').addEventListener('click', () => {
     if (ytPlayer) ytPlayer.pauseVideo();

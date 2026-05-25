@@ -1,6 +1,7 @@
 <?php
 // perfil.php - Profile window + all profile-related dialogs
 // Included from desktop-base.php; expects $desktopLabel already set.
+require_once dirname(__DIR__) . '/assets/config.php';
 ?>
 <!-- PROFILE WINDOW -->
 <div class="window" id="profile-window">
@@ -68,6 +69,9 @@
                     <button class="button" id="profile-catview-back">← Volver</button>
                 </div>
                 <button class="button" id="profile-info-edit-btn">✏ Editar perfil</button>
+                <button class="button" id="profile-info-edit-save-btn" style="display:none;">💾 Guardar</button>
+                <button class="button" id="profile-info-edit-cancel-btn" style="display:none;">Cancelar</button>
+                <input type="file" id="profile-photo-input" accept="image/*" style="display:none;">
             </div>
         </div>
         <!-- CONTENIDO PRINCIPAL -->
@@ -348,53 +352,57 @@
 </div>
 
 
-<!-- PROFILE INFO EDIT DIALOG -->
-<div class="window" id="profile-info-edit-dialog" style="display:none;position:fixed;z-index:10002;width:300px;">
+<!-- PROFILE PHOTO CROP DIALOG -->
+<div class="window" id="profile-photo-crop-dialog" style="display:none;position:fixed;z-index:10003;width:420px;">
     <div class="title-bar">
-        <div class="title-bar-text">✏ Editar perfil</div>
+        <div class="title-bar-text">✂ Recortar foto (1:1)</div>
         <div class="title-bar-controls">
-            <button aria-label="Close" id="profile-info-edit-close"></button>
+            <button aria-label="Close" id="profile-photo-crop-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:10px 12px 12px;">
+        <p style="font-size:10px;margin:0 0 6px;color:var(--text-muted);">Arrastra el recuadro para mover, las esquinas para redimensionar.</p>
+        <div id="profile-photo-crop-stage">
+            <img id="profile-photo-crop-img" alt="">
+            <div id="profile-photo-crop-region">
+                <div class="photo-crop-handle" data-corner="nw"></div>
+                <div class="photo-crop-handle" data-corner="ne"></div>
+                <div class="photo-crop-handle" data-corner="sw"></div>
+                <div class="photo-crop-handle" data-corner="se"></div>
+            </div>
+        </div>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:10px;">
+            <button class="button" id="profile-photo-crop-cancel">Cancelar</button>
+            <button class="button" id="profile-photo-crop-confirm">Recortar y aplicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- PROFILE SOCIAL LINK ADD DIALOG (edit mode) -->
+<div class="window" id="profile-social-add-dialog" style="display:none;position:fixed;z-index:10002;width:280px;">
+    <div class="title-bar">
+        <div class="title-bar-text">+ Añadir conexión</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="profile-social-add-close"></button>
         </div>
     </div>
     <div class="window-body" style="padding:10px 12px 12px;">
         <div class="field-row-stacked">
-            <label for="pinfo-bio" style="font-size:10px;">Bio</label>
-            <textarea id="pinfo-bio" rows="2" maxlength="200" placeholder="Cuéntanos algo sobre ti..." style="resize:none;width:100%;box-sizing:border-box;font-size:10px;"></textarea>
-        </div>
-        <div class="field-row" style="gap:6px;margin-top:6px;">
-            <div class="field-row-stacked" style="flex:1;min-width:0;">
-                <label for="pinfo-pronouns" style="font-size:10px;">Pronombres</label>
-                <input type="text" id="pinfo-pronouns" maxlength="30" placeholder="él/ella/elle..." style="width:100%;box-sizing:border-box;">
-            </div>
-            <div class="field-row-stacked" style="flex:1;min-width:0;">
-                <label for="pinfo-age" style="font-size:10px;">Edad</label>
-                <input type="number" id="pinfo-age" min="1" max="120" placeholder="..." style="width:100%;box-sizing:border-box;">
-            </div>
+            <label for="profile-social-add-platform" style="font-size:10px;">Plataforma</label>
+            <select id="profile-social-add-platform" style="width:100%;box-sizing:border-box;">
+                <option value="steam">🎮 Steam</option>
+                <option value="discord">💬 Discord</option>
+                <option value="twitter">🐦 Twitter / X</option>
+                <option value="instagram">📷 Instagram</option>
+            </select>
         </div>
         <div class="field-row-stacked" style="margin-top:6px;">
-            <label for="pinfo-country" style="font-size:10px;">País</label>
-            <input type="text" id="pinfo-country" maxlength="50" placeholder="España..." style="width:100%;box-sizing:border-box;">
-        </div>
-        <div style="margin-top:8px;font-size:10px;font-weight:bold;border-bottom:1px solid #808080;padding-bottom:2px;margin-bottom:5px;">Redes sociales</div>
-        <div class="field-row-stacked" style="margin-top:4px;">
-            <label for="pinfo-steam" style="font-size:10px;">🎮 Steam (URL o usuario)</label>
-            <input type="text" id="pinfo-steam" maxlength="200" placeholder="https://steamcommunity.com/id/..." style="width:100%;box-sizing:border-box;">
-        </div>
-        <div class="field-row-stacked" style="margin-top:4px;">
-            <label for="pinfo-discord" style="font-size:10px;">💬 Discord (usuario)</label>
-            <input type="text" id="pinfo-discord" maxlength="100" placeholder="usuario o usuario#1234" style="width:100%;box-sizing:border-box;">
-        </div>
-        <div class="field-row-stacked" style="margin-top:4px;">
-            <label for="pinfo-twitter" style="font-size:10px;">🐦 Twitter / X</label>
-            <input type="text" id="pinfo-twitter" maxlength="100" placeholder="@usuario" style="width:100%;box-sizing:border-box;">
-        </div>
-        <div class="field-row-stacked" style="margin-top:4px;">
-            <label for="pinfo-instagram" style="font-size:10px;">📷 Instagram</label>
-            <input type="text" id="pinfo-instagram" maxlength="100" placeholder="@usuario" style="width:100%;box-sizing:border-box;">
+            <label for="profile-social-add-value" style="font-size:10px;">Usuario o URL</label>
+            <input type="text" id="profile-social-add-value" maxlength="200" placeholder="@usuario o https://..." style="width:100%;box-sizing:border-box;">
         </div>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:10px;">
-            <button class="button" id="profile-info-edit-cancel">Cancelar</button>
-            <button class="button" id="profile-info-edit-save">Guardar</button>
+            <button class="button" id="profile-social-add-cancel">Cancelar</button>
+            <button class="button" id="profile-social-add-confirm">Añadir</button>
         </div>
     </div>
 </div>
@@ -1046,6 +1054,7 @@ var PROFILE_USERS = <?php
     var catPage = { pending: 1, done: 1 };
 
     function showCatView(cat) {
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         currentCat = cat;
         catPage = { pending: 1, done: 1 };
         document.getElementById('profile-view-default').style.display = 'none';
@@ -1069,6 +1078,8 @@ var PROFILE_USERS = <?php
     }
 
     function showDefaultView() {
+        /* Si vamos al perfil de OTRO usuario, sal del modo edición */
+        if (viewingUser) document.dispatchEvent(new Event('profile-edit-cancel'));
         currentCat = null;
         document.getElementById('profile-view-cat').style.display = 'none';
         document.getElementById('profile-view-social').style.display = 'none';
@@ -1729,7 +1740,7 @@ var PROFILE_USERS = <?php
                   if (!d || d.error) { if (d && d.error) alert(d.error); return; }
                   ownFollowing = Array.isArray(d.list) ? d.list : ownFollowing;
                   updateFollowButton(!!d.following);
-                  loadMyFollowers(function() { renderFollowedNav(); updateChatBtn(); });
+                  loadMyFollowers(function() { renderFollowedNav(); });
               }).catch(function() { btn.dataset.busy = ''; });
         });
     })();
@@ -1972,6 +1983,7 @@ var PROFILE_USERS = <?php
     }
 
     function showSocialView() {
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         currentCat = null;
         document.getElementById('profile-view-default').style.display = 'none';
         document.getElementById('profile-view-cat').style.display     = 'none';
@@ -2063,6 +2075,7 @@ var PROFILE_USERS = <?php
     }
 
     function showMelonView(period) {
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         if (!MELON_LABELS[period]) return;
         melonPeriod = period;
         currentCat  = null;
@@ -2404,6 +2417,8 @@ var PROFILE_USERS = <?php
     }
 
     function viewOtherUser(userKey) {
+        /* Al ver el perfil de otra persona, salimos de modo edición */
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         fetch('assets/profile/view-user.php?user=' + encodeURIComponent(userKey))
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -2461,7 +2476,6 @@ var PROFILE_USERS = <?php
         btn.style.display = '';
         btn.textContent = isFollowing ? '✓ Siguiendo' : '+ Seguir';
         btn.classList.toggle('following', !!isFollowing);
-        updateChatBtn();
     }
 
     function isMutual(userKey) {
@@ -2476,25 +2490,6 @@ var PROFILE_USERS = <?php
                 if (cb) cb();
             })
             .catch(function() { if (cb) cb(); });
-    }
-
-    /* Botón de chat junto al "Seguir" en el perfil visitado */
-    function updateChatBtn() {
-        var avatarCol = document.getElementById('profile-avatar-col');
-        if (!avatarCol) return;
-        var existing = document.getElementById('profile-chat-btn');
-        if (!viewingUser || !isMutual(viewingUser)) {
-            if (existing) existing.remove();
-            return;
-        }
-        if (existing) return;
-        var btn = document.createElement('button');
-        btn.className = 'button';
-        btn.id = 'profile-chat-btn';
-        btn.style.cssText = 'font-size:9px;margin-top:5px;';
-        btn.textContent = '💬 Chat';
-        btn.addEventListener('click', function() { openChatWith(viewingUser); });
-        avatarCol.appendChild(btn);
     }
 
     /* ──── Chat ──── */
@@ -2725,6 +2720,7 @@ var PROFILE_USERS = <?php
 
     /* ──── Music view ──── */
     function showMusicView() {
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         currentCat = 'music';
         document.getElementById('profile-view-default').style.display = 'none';
         document.getElementById('profile-view-cat').style.display = 'none';
@@ -3247,44 +3243,446 @@ var PROFILE_USERS = <?php
         });
     })();
 
-    /* ──── Profile info edit dialog ──── */
+    /* ──── Profile info INLINE edit mode ──── */
     (function() {
-        var dlg       = document.getElementById('profile-info-edit-dialog');
         var editBtn   = document.getElementById('profile-info-edit-btn');
-        var closeBtn  = document.getElementById('profile-info-edit-close');
-        var cancelBtn = document.getElementById('profile-info-edit-cancel');
-        var saveBtn   = document.getElementById('profile-info-edit-save');
-        var FIELDS    = ['bio', 'pronouns', 'age', 'country', 'steam', 'discord', 'twitter', 'instagram'];
+        var saveBtn   = document.getElementById('profile-info-edit-save-btn');
+        var cancelBtn = document.getElementById('profile-info-edit-cancel-btn');
+        var photoIn   = document.getElementById('profile-photo-input');
+        var avatarCol = document.getElementById('profile-avatar-col');
 
-        function openDialog() {
+        /* Diálogo flotante para añadir una conexión social */
+        var addDlg    = document.getElementById('profile-social-add-dialog');
+        var addClose  = document.getElementById('profile-social-add-close');
+        var addCancel = document.getElementById('profile-social-add-cancel');
+        var addConfirm= document.getElementById('profile-social-add-confirm');
+        var addPlat   = document.getElementById('profile-social-add-platform');
+        var addVal    = document.getElementById('profile-social-add-value');
+
+        var FIELDS = ['bio', 'pronouns', 'age', 'country'];
+        var SOCIALS = ['steam', 'discord', 'twitter', 'instagram'];
+        var SOCIAL_ICONS = { steam: '🎮', discord: '💬', twitter: '🐦', instagram: '📷' };
+        var SOCIAL_LABELS = { steam: 'Steam', discord: 'Discord', twitter: 'Twitter', instagram: 'Instagram' };
+        var SOCIAL_PLACEHOLDERS = {
+            steam:     'https://steamcommunity.com/id/...',
+            discord:   'usuario o usuario#1234',
+            twitter:   '@usuario',
+            instagram: '@usuario'
+        };
+
+        /* Estado de edición */
+        var editing = false;
+        var draft   = null;     /* copia mutable de los datos en edición */
+        var newPhotoFile = null;/* archivo de foto pendiente de subir (null = sin cambios) */
+
+        function buildMetaInputs(d) {
+            var metaEl = document.getElementById('profile-info-meta');
+            if (!metaEl) return;
+            metaEl.innerHTML = '';
+            metaEl.style.flexDirection = 'column';
+            metaEl.style.gap = '3px';
+            function row(key, ph, type, maxlen) {
+                var inp = document.createElement('input');
+                inp.type = type || 'text';
+                if (maxlen) inp.maxLength = maxlen;
+                inp.placeholder = ph;
+                inp.value = d[key] || '';
+                inp.style.cssText = 'width:100%;box-sizing:border-box;font-size:10px;';
+                inp.dataset.field = key;
+                inp.addEventListener('input', function() { draft[key] = this.value; });
+                metaEl.appendChild(inp);
+                return inp;
+            }
+            row('pronouns', 'pronombres (él/ella/elle...)', 'text',   30);
+            row('age',      'edad',                          'number', 3);
+            row('country',  '📍 país',                        'text',   50);
+        }
+
+        function buildBioTextarea(d) {
+            var bioEl = document.getElementById('profile-info-bio');
+            if (!bioEl) return;
+            bioEl.innerHTML = '';
+            bioEl.style.display = '';
+            var ta = document.createElement('textarea');
+            ta.maxLength = 200;
+            ta.placeholder = 'Cuéntanos algo sobre ti...';
+            ta.rows = 3;
+            ta.style.cssText = 'width:100%;height:100%;box-sizing:border-box;resize:none;font-size:11px;font-style:italic;background:transparent;';
+            ta.value = d.bio || '';
+            ta.addEventListener('input', function() { draft.bio = this.value; });
+            bioEl.appendChild(ta);
+        }
+
+        var MAX_SOCIALS = 4;
+
+        function countSocials(d) {
+            var n = 0;
+            SOCIALS.forEach(function(k) { if (d[k]) n++; });
+            return n;
+        }
+
+        function buildSocialEditable(d) {
+            var linksEl = document.getElementById('profile-info-links');
+            if (!linksEl) return;
+            linksEl.innerHTML = '';
+            SOCIALS.forEach(function(k) {
+                if (!d[k]) return;
+                var wrap = document.createElement('div');
+                wrap.style.cssText = 'position:relative;display:inline-flex;';
+                var span = document.createElement('span');
+                span.className = 'pinfo-social';
+                span.textContent = SOCIAL_ICONS[k] || '🔗';
+                span.title = (SOCIAL_LABELS[k] || k) + ': ' + d[k];
+                wrap.appendChild(span);
+                var del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'profile-social-remove-btn';
+                del.title = 'Quitar';
+                del.innerHTML = '×';
+                del.addEventListener('click', function(e) {
+                    e.preventDefault(); e.stopPropagation();
+                    delete draft[k];
+                    buildSocialEditable(draft);
+                });
+                wrap.appendChild(del);
+                linksEl.appendChild(wrap);
+            });
+            /* Botón + para añadir conexión — solo si quedan huecos (max 4) */
+            if (countSocials(d) < MAX_SOCIALS) {
+                var addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.className = 'pinfo-social-add';
+                addBtn.title = 'Añadir conexión';
+                addBtn.textContent = '+';
+                addBtn.addEventListener('click', openAddSocial);
+                linksEl.appendChild(addBtn);
+            }
+        }
+
+        function openAddSocial() {
+            /* Por defecto, primera plataforma disponible (no ocupada) */
+            var first = SOCIALS.find(function(s) { return !draft[s]; }) || 'steam';
+            addPlat.value = first;
+            addVal.value = '';
+            addVal.placeholder = SOCIAL_PLACEHOLDERS[first] || '';
+            addDlg.style.display = 'block';
+            addDlg.style.left = Math.round((window.innerWidth  - addDlg.offsetWidth)  / 2) + 'px';
+            addDlg.style.top  = Math.round((window.innerHeight - addDlg.offsetHeight) / 2) + 'px';
+            setTimeout(function() { addVal.focus(); }, 50);
+        }
+        function closeAddSocial() { addDlg.style.display = 'none'; }
+        addPlat.addEventListener('change', function() {
+            addVal.placeholder = SOCIAL_PLACEHOLDERS[addPlat.value] || '';
+        });
+        addClose.addEventListener('click', closeAddSocial);
+        addCancel.addEventListener('click', closeAddSocial);
+        addConfirm.addEventListener('click', function() {
+            var plat = addPlat.value;
+            var val  = (addVal.value || '').trim();
+            if (!plat || !val) return;
+            draft[plat] = val;
+            buildSocialEditable(draft);
+            closeAddSocial();
+        });
+        addVal.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); addConfirm.click(); }
+        });
+
+        function enterEditMode() {
             fetch('assets/profile/get-profile.php')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    FIELDS.forEach(function(f) {
-                        var el = document.getElementById('pinfo-' + f);
-                        if (el) el.value = data[f] || '';
-                    });
-                }).catch(function() {});
-            dlg.style.display = 'block';
-            dlg.style.left = Math.round((window.innerWidth  - dlg.offsetWidth)  / 2) + 'px';
-            dlg.style.top  = Math.round((window.innerHeight - dlg.offsetHeight) / 2) + 'px';
+                    draft = Object.assign({}, data || {});
+                    newPhotoFile = null;
+                    editing = true;
+                    editBtn.style.display    = 'none';
+                    saveBtn.style.display    = '';
+                    cancelBtn.style.display  = '';
+                    avatarCol.classList.add('profile-edit-avatar');
+                    buildMetaInputs(draft);
+                    buildBioTextarea(draft);
+                    buildSocialEditable(draft);
+                })
+                .catch(function() {});
         }
-        function closeDialog() { dlg.style.display = 'none'; }
 
-        if (editBtn)   editBtn.addEventListener('click',   openDialog);
-        if (closeBtn)  closeBtn.addEventListener('click',  closeDialog);
-        if (cancelBtn) cancelBtn.addEventListener('click', closeDialog);
-        if (saveBtn) saveBtn.addEventListener('click', function() {
+        function exitEditMode(saved) {
+            editing = false;
+            editBtn.style.display    = '';
+            saveBtn.style.display    = 'none';
+            cancelBtn.style.display  = 'none';
+            avatarCol.classList.remove('profile-edit-avatar');
+            /* Restaurar layout del meta */
+            var metaEl = document.getElementById('profile-info-meta');
+            if (metaEl) { metaEl.style.flexDirection = ''; metaEl.style.gap = ''; }
+            /* Re-renderizar con datos finales (draft si guardado, recarga si cancelado) */
+            if (saved) {
+                renderProfileInfo(draft);
+            } else {
+                loadProfile();
+            }
+        }
+
+        function saveAll() {
+            saveBtn.classList.add('btn-busy');
+            /* Compone payload con todos los campos editables */
             var payload = {};
-            FIELDS.forEach(function(f) { var el = document.getElementById('pinfo-' + f); payload[f] = el ? el.value.trim() : ''; });
-            fetch('assets/profile/save-info.php', {
+            FIELDS.forEach(function(f) { payload[f] = (draft[f] || '').toString().trim(); });
+            SOCIALS.forEach(function(f) { payload[f] = (draft[f] || '').toString().trim(); });
+
+            var infoPromise = fetch('assets/profile/save-info.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(d) { if (d.ok) { renderProfileInfo(payload); closeDialog(); } })
-            .catch(function() {});
+            }).then(function(r) { return r.json(); });
+
+            var photoPromise = Promise.resolve(null);
+            if (newPhotoFile) {
+                var fd = new FormData();
+                fd.append('photo', newPhotoFile);
+                photoPromise = fetch('assets/img/save-profile-photo.php', {
+                    method: 'POST', body: fd
+                }).then(function(r) { return r.json(); });
+            }
+
+            Promise.all([infoPromise, photoPromise]).then(function(res) {
+                saveBtn.classList.remove('btn-busy');
+                var infoRes  = res[0] || {};
+                var photoRes = res[1];
+                if (infoRes.error) { alert(infoRes.error); return; }
+                if (photoRes && photoRes.error) { alert(photoRes.error); }
+                /* Refresca avatares del escritorio */
+                if (photoRes && photoRes.ok && window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'profile-photo-changed', photo: photoRes.photo }, '*');
+                }
+                /* Actualiza los <img> del propio iframe de perfil */
+                if (photoRes && photoRes.ok) {
+                    var nm = photoRes.photo.match(/\/([^/]+)\.[^/]+$/);
+                    var bn = nm ? nm[1].toLowerCase() : '';
+                    document.querySelectorAll('img').forEach(function(img) {
+                        var src = img.getAttribute('src') || '';
+                        var sm = src.match(/\/([^/?]+)\.[a-zA-Z0-9]+(?:\?|$)/);
+                        if (sm && sm[1].toLowerCase() === bn) {
+                            img.src = photoRes.photo + '?t=' + Date.now();
+                        }
+                    });
+                }
+                exitEditMode(true);
+            }).catch(function() {
+                saveBtn.classList.remove('btn-busy');
+                alert('Error de red al guardar.');
+            });
+        }
+
+        /* Click en el avatar (en modo edición) → abre file picker */
+        avatarCol.addEventListener('click', function(e) {
+            if (!editing) return;
+            /* Solo si clickaste en el marco o la imagen, no en el username/botón */
+            var t = e.target;
+            if (t === avatarCol) photoIn.click();
+            else if (t.classList && (t.classList.contains('profile-avatar-frame') || t.classList.contains('profile-avatar-img') || t.classList.contains('profile-avatar-placeholder'))) {
+                photoIn.click();
+            } else if (t.closest && t.closest('.profile-avatar-frame')) {
+                photoIn.click();
+            }
+        });
+        photoIn.addEventListener('change', function() {
+            if (!editing || !this.files.length) return;
+            openCropDialog(this.files[0]);
+            this.value = ''; /* permite reabrir con el mismo archivo */
+        });
+
+        /* ──── Crop dialog ──── */
+        var cropDlg     = document.getElementById('profile-photo-crop-dialog');
+        var cropStage   = document.getElementById('profile-photo-crop-stage');
+        var cropImg     = document.getElementById('profile-photo-crop-img');
+        var cropRegion  = document.getElementById('profile-photo-crop-region');
+        var cropClose   = document.getElementById('profile-photo-crop-close');
+        var cropCancel  = document.getElementById('profile-photo-crop-cancel');
+        var cropConfirm = document.getElementById('profile-photo-crop-confirm');
+
+        /* Estado del cropper */
+        var cropSrcFile = null;     /* File original elegido */
+        var cropImgNat  = { w: 0, h: 0 };    /* tamaño natural de la imagen */
+        var cropImgDisp = { w: 0, h: 0, x: 0, y: 0 };  /* tamaño/posición renderizada en el stage */
+        var cropRect    = { x: 0, y: 0, size: 0 };     /* en coords del stage */
+
+        function openCropDialog(file) {
+            cropSrcFile = file;
+            var url = URL.createObjectURL(file);
+            cropImg.onload = function() {
+                cropImgNat.w = cropImg.naturalWidth;
+                cropImgNat.h = cropImg.naturalHeight;
+                layoutImage();
+                /* Crop inicial: cuadrado centrado, 80% del lado menor del área visible */
+                var minSide = Math.min(cropImgDisp.w, cropImgDisp.h);
+                cropRect.size = Math.floor(minSide * 0.8);
+                cropRect.x = cropImgDisp.x + Math.floor((cropImgDisp.w - cropRect.size) / 2);
+                cropRect.y = cropImgDisp.y + Math.floor((cropImgDisp.h - cropRect.size) / 2);
+                drawRegion();
+            };
+            cropImg.src = url;
+            cropDlg.style.display = 'block';
+            cropDlg.style.left = Math.round((window.innerWidth  - cropDlg.offsetWidth)  / 2) + 'px';
+            cropDlg.style.top  = Math.round((window.innerHeight - cropDlg.offsetHeight) / 2) + 'px';
+        }
+
+        function closeCropDialog() {
+            cropDlg.style.display = 'none';
+            if (cropImg.src) URL.revokeObjectURL(cropImg.src);
+            cropImg.src = '';
+            cropSrcFile = null;
+        }
+
+        /* Ajusta la imagen al stage manteniendo aspecto (contain) */
+        function layoutImage() {
+            var sw = cropStage.clientWidth, sh = cropStage.clientHeight;
+            var ratio = cropImgNat.w / cropImgNat.h;
+            var w, h;
+            if (sw / sh > ratio) { h = sh; w = h * ratio; }
+            else                 { w = sw; h = w / ratio; }
+            cropImgDisp.w = Math.floor(w);
+            cropImgDisp.h = Math.floor(h);
+            cropImgDisp.x = Math.floor((sw - w) / 2);
+            cropImgDisp.y = Math.floor((sh - h) / 2);
+            cropImg.style.left   = cropImgDisp.x + 'px';
+            cropImg.style.top    = cropImgDisp.y + 'px';
+            cropImg.style.width  = cropImgDisp.w + 'px';
+            cropImg.style.height = cropImgDisp.h + 'px';
+        }
+
+        function drawRegion() {
+            cropRegion.style.left   = cropRect.x + 'px';
+            cropRegion.style.top    = cropRect.y + 'px';
+            cropRegion.style.width  = cropRect.size + 'px';
+            cropRegion.style.height = cropRect.size + 'px';
+        }
+
+        /* Mantiene cropRect dentro de la imagen visible */
+        function clampRect() {
+            var maxSize = Math.min(cropImgDisp.w, cropImgDisp.h);
+            if (cropRect.size > maxSize) cropRect.size = maxSize;
+            if (cropRect.size < 32)      cropRect.size = 32;
+            if (cropRect.x < cropImgDisp.x) cropRect.x = cropImgDisp.x;
+            if (cropRect.y < cropImgDisp.y) cropRect.y = cropImgDisp.y;
+            var maxX = cropImgDisp.x + cropImgDisp.w - cropRect.size;
+            var maxY = cropImgDisp.y + cropImgDisp.h - cropRect.size;
+            if (cropRect.x > maxX) cropRect.x = maxX;
+            if (cropRect.y > maxY) cropRect.y = maxY;
+        }
+
+        /* Drag del recuadro completo */
+        cropRegion.addEventListener('pointerdown', function(e) {
+            if (e.target !== cropRegion) return; /* ignora si pinchas en un handle */
+            e.preventDefault();
+            cropRegion.setPointerCapture(e.pointerId);
+            var sx = e.clientX, sy = e.clientY;
+            var origX = cropRect.x, origY = cropRect.y;
+            function onMove(ev) {
+                cropRect.x = origX + (ev.clientX - sx);
+                cropRect.y = origY + (ev.clientY - sy);
+                clampRect();
+                drawRegion();
+            }
+            function onUp(ev) {
+                cropRegion.removeEventListener('pointermove', onMove);
+                cropRegion.removeEventListener('pointerup', onUp);
+                cropRegion.releasePointerCapture(ev.pointerId);
+            }
+            cropRegion.addEventListener('pointermove', onMove);
+            cropRegion.addEventListener('pointerup', onUp);
+        });
+
+        /* Resize desde cualquier esquina (1:1) */
+        cropRegion.querySelectorAll('.photo-crop-handle').forEach(function(h) {
+            h.addEventListener('pointerdown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                h.setPointerCapture(e.pointerId);
+                var corner = h.dataset.corner;
+                var sx = e.clientX, sy = e.clientY;
+                var orig = { x: cropRect.x, y: cropRect.y, size: cropRect.size };
+                function onMove(ev) {
+                    var dx = ev.clientX - sx;
+                    var dy = ev.clientY - sy;
+                    /* Convierte el delta en cambio de tamaño según esquina */
+                    var sizeDelta;
+                    if (corner === 'se')      sizeDelta =  Math.max(dx, dy);
+                    else if (corner === 'nw') sizeDelta =  Math.max(-dx, -dy);
+                    else if (corner === 'ne') sizeDelta =  Math.max(dx, -dy);
+                    else                      sizeDelta =  Math.max(-dx, dy); /* sw */
+                    var newSize = orig.size + sizeDelta;
+                    /* Aplica límites antes de mover el origen */
+                    var maxSize = Math.min(cropImgDisp.w, cropImgDisp.h);
+                    if (newSize > maxSize) newSize = maxSize;
+                    if (newSize < 32)      newSize = 32;
+                    var newX = orig.x, newY = orig.y;
+                    if (corner === 'nw' || corner === 'sw') newX = orig.x + (orig.size - newSize);
+                    if (corner === 'nw' || corner === 'ne') newY = orig.y + (orig.size - newSize);
+                    cropRect.x = newX; cropRect.y = newY; cropRect.size = newSize;
+                    clampRect();
+                    drawRegion();
+                }
+                function onUp(ev) {
+                    h.removeEventListener('pointermove', onMove);
+                    h.removeEventListener('pointerup', onUp);
+                    h.releasePointerCapture(ev.pointerId);
+                }
+                h.addEventListener('pointermove', onMove);
+                h.addEventListener('pointerup', onUp);
+            });
+        });
+
+        function applyCrop() {
+            if (!cropSrcFile) return;
+            /* Pasar de coords del stage a coords originales de la imagen */
+            var scale = cropImgNat.w / cropImgDisp.w; /* mismo en x e y por contain */
+            var srcX = Math.max(0, Math.round((cropRect.x - cropImgDisp.x) * scale));
+            var srcY = Math.max(0, Math.round((cropRect.y - cropImgDisp.y) * scale));
+            var srcS = Math.round(cropRect.size * scale);
+            /* Salida cuadrada — tope 1024 para no generar archivos enormes */
+            var outSide = Math.min(1024, srcS);
+            var canvas = document.createElement('canvas');
+            canvas.width  = outSide;
+            canvas.height = outSide;
+            var ctx = canvas.getContext('2d');
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(cropImg, srcX, srcY, srcS, srcS, 0, 0, outSide, outSide);
+            /* Conservamos el tipo MIME original si es png/webp; si no, jpeg */
+            var ext = (cropSrcFile.name.split('.').pop() || 'jpg').toLowerCase();
+            var mime = (ext === 'png') ? 'image/png' : (ext === 'webp' ? 'image/webp' : 'image/jpeg');
+            canvas.toBlob(function(blob) {
+                if (!blob) return;
+                /* Convertir Blob en File para mantener el nombre con extensión */
+                var fileName = cropSrcFile.name.replace(/\.[^.]+$/, '') + '-crop.' + (mime === 'image/png' ? 'png' : (mime === 'image/webp' ? 'webp' : 'jpg'));
+                try { newPhotoFile = new File([blob], fileName, { type: mime }); }
+                catch (err) { newPhotoFile = blob; newPhotoFile.name = fileName; }
+                /* Preview local en el avatar */
+                var previewUrl = URL.createObjectURL(blob);
+                avatarCol.querySelectorAll('.profile-avatar-img').forEach(function(img) { img.src = previewUrl; });
+                var ph = avatarCol.querySelector('.profile-avatar-placeholder');
+                if (ph) {
+                    var imgNew = document.createElement('img');
+                    imgNew.className = 'profile-avatar-img';
+                    imgNew.src = previewUrl;
+                    ph.replaceWith(imgNew);
+                }
+                closeCropDialog();
+            }, mime, 0.92);
+        }
+
+        cropClose.addEventListener('click', closeCropDialog);
+        cropCancel.addEventListener('click', closeCropDialog);
+        cropConfirm.addEventListener('click', applyCrop);
+
+        if (editBtn)   editBtn.addEventListener('click', enterEditMode);
+        if (cancelBtn) cancelBtn.addEventListener('click', function() { exitEditMode(false); });
+        if (saveBtn)   saveBtn.addEventListener('click', saveAll);
+
+        /* Salir de edición cuando alguien externo lo pide (cerrar perfil,
+           cambiar de sección, ver perfil de otro usuario). */
+        document.addEventListener('profile-edit-cancel', function() {
+            if (editing) exitEditMode(false);
         });
     })();
 
@@ -3334,6 +3732,7 @@ var PROFILE_USERS = <?php
     unreadPollTimer = setInterval(loadUnreadChats, 4000);
 
     document.getElementById('profile-close').addEventListener('click', function() {
+        document.dispatchEvent(new Event('profile-edit-cancel'));
         taskbarManager.unregister('profile-window');
     });
 
