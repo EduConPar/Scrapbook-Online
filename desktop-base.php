@@ -617,7 +617,7 @@ window.notifSystem = (function() {
     var companionFrame  = document.getElementById('companion-frame');
     var companionLoaded = false;
     document.getElementById('companion-icon').addEventListener('dblclick', function() {
-        if (!companionLoaded) { companionFrame.src = 'apps/helldivers-companion.php'; companionLoaded = true; }
+        if (!companionLoaded) { companionFrame.src = 'https://helldiverscompanion.com'; companionLoaded = true; }
         if (taskbarManager.isRegistered('companion-window')) {
             taskbarManager.restore('companion-window');
         } else {
@@ -849,7 +849,7 @@ window.notifSystem = (function() {
     }
 
     ['calendar-window','archive-window','temas-window','playlist-editor',
-     'create-playlist-dialog','profile-window'].forEach(function(id) { setup(id, false); });
+     'create-playlist-dialog','profile-window','companion-window'].forEach(function(id) { setup(id, false); });
     ['music-player','add-track-dialog','import-playlist-dialog',
      'collab-dialog','spotify-import-dialog','confirm-dialog',
      'profile-add-dialog','profile-review-prompt','profile-review-window',
@@ -861,7 +861,7 @@ window.notifSystem = (function() {
 (function() {
     var ids = [
         'calendar-window', 'archive-window', 'temas-window',
-        'create-playlist-dialog', 'profile-window'
+        'create-playlist-dialog', 'profile-window', 'companion-window'
     ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
