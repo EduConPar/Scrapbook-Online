@@ -200,7 +200,9 @@
         "id": "pl_1779182747435",
         "name": "test",
         "owner": "user1",
-        "collaborators": [],
+        "collaborators": [
+            "user3"
+        ],
         "tracks": [
             {
                 "videoId": "yZkPe7TEuyk",

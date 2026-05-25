@@ -193,7 +193,8 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                 </div>
                 <div class="login-actions">
                     <button class="button" type="button" id="changeUser">Cambiar usuario</button>
-                    <button class="button" type="button" id="deleteUser" style="display:none;">🗑 Eliminar</button>
+                    <?php $_showDel = $showLogin && $selectedUser !== '' && $selectedUser !== 'user1' && $selectedUser !== 'user2'; ?>
+                    <button class="button" type="button" id="deleteUser" style="display:<?php echo $_showDel ? 'inline-block' : 'none'; ?>;">🗑 Eliminar</button>
                     <button class="button default" type="submit">Ingresar</button>
                 </div>
             </form>

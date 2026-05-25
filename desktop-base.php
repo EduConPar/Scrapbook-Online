@@ -243,8 +243,9 @@ setInterval(updateClock, 1000);
 window.applyThemeToDocument = function(doc, className, cssHref) {
     if (!doc || !doc.body) return;
     var body = doc.body;
+    /* Conserva sólo capi/angie. Cualquier otra clase custom se elimina. */
     var keep = (body.className || '').split(/\s+/).filter(function(c) {
-        return c === 'capi' || c === 'angie';
+        return c === 'capi' || c === 'angie' || c === 'has-start-icon';
     });
     if (className) keep.push(className);
     body.className = keep.join(' ');

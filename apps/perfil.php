@@ -1536,8 +1536,6 @@ var PROFILE_USERS = <?php
         document.querySelectorAll('.profile-catview-section-head').forEach(function(h) { makeCollapsible(h); });
         document.querySelectorAll('#profile-catview-encurso .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
         document.querySelectorAll('#music-catview-destacados .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
-        var postsHeader = document.getElementById('profile-posts-header');
-        if (postsHeader) makeCollapsible(postsHeader);
         /* Mis Listas pliega sólo su contenedor de nav (NO el resto del sidebar) */
         var listasHd  = document.getElementById('profile-listas-heading');
         var listasNav = document.getElementById('profile-listas-nav');
