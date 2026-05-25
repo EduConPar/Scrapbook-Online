@@ -67,6 +67,10 @@ function desktopIcon($name, $emoji) {
         <div class="desktop-icon-img"><?php echo desktopIcon('profile', '👤'); ?></div>
         <span>Perfil</span>
     </div>
+    <div class="desktop-icon" id="dnd-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('dnd', '⚔'); ?></div>
+        <span>Fichas D&amp;D</span>
+    </div>
 </div>
 
 
@@ -94,6 +98,19 @@ function desktopIcon($name, $emoji) {
         </div>
     </div>
     <iframe id="helldivers-companion-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- DND WINDOW -->
+<div class="window" id="dnd-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="dnd-titlebar">
+        <div class="title-bar-text">⚔ Fichas D&amp;D</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="dnd-close"></button>
+        </div>
+    </div>
+    <iframe id="dnd-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- ARCHIVE WINDOW -->
@@ -369,7 +386,6 @@ window.notifSystem = (function() {
 })();
 
 (function() {
-    var calWin    = document.getElementById('calendar-window');
     var calIframe = document.getElementById('calendar-iframe');
     var calLoaded = false;
 
@@ -386,6 +402,7 @@ window.notifSystem = (function() {
         taskbarManager.unregister('calendar-window');
     });
 })();
+
 /* =========================
    HELLDIVERS COMPANION
 ========================= */
@@ -404,6 +421,27 @@ window.notifSystem = (function() {
 
     document.getElementById('helldivers-companion-close').addEventListener('click', function() {
         taskbarManager.unregister('helldivers-companion-window');
+    });
+})();
+
+/* =========================
+   D&D FICHAS
+========================= */
+(function() {
+    var dndIframe = document.getElementById('dnd-iframe');
+    var dndLoaded = false;
+
+    document.getElementById('dnd-icon').addEventListener('dblclick', function() {
+        if (!dndLoaded) { dndIframe.src = 'apps/dnd.php'; dndLoaded = true; }
+        if (taskbarManager.isRegistered('dnd-window')) {
+            taskbarManager.restore('dnd-window');
+        } else {
+            taskbarManager.register('dnd-window', 'Fichas D&D', '⚔', 'flex');
+        }
+    });
+
+    document.getElementById('dnd-close').addEventListener('click', function() {
+        taskbarManager.unregister('dnd-window');
     });
 })();
 
@@ -526,6 +564,7 @@ window.notifSystem = (function() {
     document.addEventListener('mousedown', function(e) {
         if (!ctxMenu.contains(e.target) && !picker.contains(e.target)) closeAll();
     });
+
 })();
 
 /* ──── Generic drag + resize for all windows ──── */
@@ -626,7 +665,7 @@ window.notifSystem = (function() {
         });
     }
 
-    ['calendar-window','archive-window','helldivers-companion-window','playlist-editor',
+    ['calendar-window','archive-window','helldivers-companion-window','dnd-window','playlist-editor',
      'create-playlist-dialog','profile-window'].forEach(function(id) { setup(id, false); });
     ['music-player','add-track-dialog','import-playlist-dialog',
      'collab-dialog','spotify-import-dialog','confirm-dialog',
@@ -638,10 +677,10 @@ window.notifSystem = (function() {
 /* ──── Window minimize / maximize ──── */
 (function() {
     var ids = [
-    'calendar-window', 'archive-window', 'helldivers-companion-window',
-    'create-playlist-dialog', 'profile-window'
-];
-    
+        'calendar-window', 'archive-window', 'helldivers-companion-window', 'dnd-window',
+        'create-playlist-dialog', 'profile-window'
+    ];
+
     ids.forEach(function(id) {
         var win = document.getElementById(id);
         if (!win) return;
