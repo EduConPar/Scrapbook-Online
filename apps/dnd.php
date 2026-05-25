@@ -1,75 +1,93 @@
-<?php header('Content-Type: text/html; charset=UTF-8'); ?>
+<?php
+session_start();
+require_once dirname(__DIR__) . '/assets/config.php';
+header('Content-Type: text/html; charset=UTF-8');
+
+$userKey   = $_SESSION['user'] ?? null;
+$userLabel = ($userKey && isset($loginUsers[$userKey])) ? $loginUsers[$userKey]['label'] : '';
+
+/* Tema activo del usuario (mismo patrón que calendario.php) */
+$activeThemeClass = '';
+$activeThemeCss   = '';
+$themeHelpers = dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+if ($userKey && file_exists($themeHelpers)) {
+    require_once $themeHelpers;
+    refreshActiveThemeCss($userKey, $userLabel);
+    $_userThemes = loadUserThemes($userKey);
+    $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+    if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+        $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+        $rel = themeCssRelPath($activeTheme, $userLabel);
+        if (file_exists(dirname(__DIR__) . '/' . $rel)) $activeThemeCss = '../' . $rel;
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>D&D Fichas</title>
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/themes.css">
+<?php if ($activeThemeCss): ?>
+<link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+<?php endif; ?>
 <style>
 @font-face { font-family:'Allison'; src:url('../assets/fonts/Allison-Regular.ttf') format('truetype'); }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
-/*
-  ── PALETA DE SISTEMA ──────────────────────────────────────────
-  Usamos únicamente CSS system color keywords para adaptarse
-  automáticamente al tema del escritorio (claro, oscuro, alto contraste).
-
-  ButtonFace       → fondo de controles (gris claro / gris oscuro)
-  ButtonHighlight  → borde iluminado superior-izquierdo
-  ButtonShadow     → borde sombra inferior-derecho
-  ButtonText       → texto sobre controles
-  Window           → fondo de área de contenido (blanco / negro)
-  WindowText       → texto sobre Window
-  Canvas           → fondo de página (body)
-  CanvasText       → texto general
-  Highlight        → color de selección / acento activo
-  HighlightText    → texto sobre Highlight
-  GrayText         → texto desactivado / secundario
-  ActiveCaption    → barra de título de ventana activa
-  ActiveBorderText → texto sobre ActiveCaption  (alias: CaptionText)
-  ─────────────────────────────────────────────────────────────*/
-
 body{
     font-family:'ms_sans_serif','Microsoft Sans Serif',sans-serif;
     font-size:11px;
-    background:Canvas;
-    color:CanvasText;
+    background:var(--win-body-bg);
+    color:var(--text);
     height:100vh;overflow:hidden;display:flex;flex-direction:column;
 }
 
 /* ── TOOLBAR ── */
 #dnd-toolbar{
-    background:ButtonFace;
-    border-bottom:2px solid ButtonShadow;
+    background:var(--btn-bg);
+    border-bottom:2px solid var(--bezel-dark-2);
     padding:4px 6px;display:flex;gap:4px;align-items:center;flex-shrink:0;flex-wrap:wrap;
+    position:relative;z-index:20;   /* tooltips encima de page-tabs / sheet-area */
 }
 .tb-btn{
     font-family:'ms_sans_serif',sans-serif;font-size:11px;
     padding:2px 10px;cursor:pointer;
-    background:ButtonFace;color:ButtonText;
-    border-top:2px solid ButtonHighlight;border-left:2px solid ButtonHighlight;
-    border-right:2px solid ButtonShadow;border-bottom:2px solid ButtonShadow;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
     white-space:nowrap;user-select:none;
 }
 .tb-btn:active,.tb-btn.active{
-    border-top:2px solid ButtonShadow;border-left:2px solid ButtonShadow;
-    border-right:2px solid ButtonHighlight;border-bottom:2px solid ButtonHighlight;
-    background:ButtonFace;filter:brightness(0.93);
+    border-top:2px solid var(--bezel-dark-2);border-left:2px solid var(--bezel-dark-2);
+    border-right:2px solid var(--bezel-light-1);border-bottom:2px solid var(--bezel-light-1);
+    background:var(--btn-bg);filter:brightness(0.93);
 }
 .tb-btn:hover:not(.active):not(:active){filter:brightness(1.06);}
-.tb-sep{width:1px;background:ButtonShadow;height:20px;margin:0 2px;}
+
+/* Tabs de selección de ficha activas → color de acento del SO */
+#tab-oficial.active, #tab-melon.active, #tab-misfichas.active{
+    background:var(--accent);
+    color:var(--accent-text);
+    filter:none;
+    font-weight:bold;
+}
+.tb-sep{width:1px;background:var(--bezel-dark-2);height:20px;margin:0 2px;}
 .tb-spacer{flex:1;}
-#status-msg{font-size:10px;color:LinkText;min-width:180px;padding:0 4px;transition:opacity .3s;}
+#status-msg{font-size:10px;color:var(--link-text);min-width:180px;padding:0 4px;transition:opacity .3s;}
 #status-msg.fade{opacity:0;}
 
-/* Font controls */
-#font-controls{display:flex;align-items:center;gap:5px;}
-#font-controls label{font-size:10px;color:GrayText;}
-#font-size-slider{width:70px;cursor:pointer;accent-color:Highlight;}
-#font-size-val{
-    font-size:10px;width:28px;text-align:center;
-    background:Window;color:WindowText;
-    border:1px inset ButtonShadow;padding:1px 2px;
+/* Zoom controls */
+#zoom-controls{display:flex;align-items:center;gap:4px;}
+#zoom-controls label{font-size:10px;color:var(--text-muted);}
+#zoom-controls .tb-btn{padding:1px 6px;min-width:18px;font-weight:bold;}
+#zoom-slider{width:110px;cursor:pointer;accent-color:var(--accent);}
+#zoom-val{
+    font-size:10px;width:40px;text-align:center;
+    background:var(--input-bg);color:var(--input-text);
+    border:1px inset var(--bezel-dark-2);padding:1px 2px;
 }
 
 /* Tooltip global */
@@ -77,180 +95,252 @@ body{
 .has-tip:hover::after{
     content:attr(data-tip);position:absolute;
     bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);
-    background:InfoBackground;color:InfoText;
+    background:var(--warning-bg);color:var(--warning-text);
     font-size:10px;padding:3px 7px;border-radius:3px;
     white-space:nowrap;z-index:9999;pointer-events:none;
-    border:1px solid ButtonShadow;
+    border:1px solid var(--bezel-dark-2);
+}
+/* Botones pegados al borde superior del iframe → tooltip BAJO el botón
+   (si quedan arriba se recortan fuera de la ventana) */
+#dnd-toolbar .has-tip:hover::after,
+#mf-toolbar  .has-tip:hover::after{
+    bottom:auto;
+    top:calc(100% + 4px);
+    /* permitir que tooltips largos hagan wrap en lugar de extenderse a los lados */
+    white-space:normal;
+    max-width:260px;
+    text-align:center;
+}
+/* Tooltips de los primeros botones de la izquierda → anclar al borde izquierdo
+   del botón (en vez de centrar) para que no se corten por la ventana */
+#tab-oficial:hover::after,
+#tab-melon:hover::after,
+#tab-misfichas:hover::after{
+    left:0;
+    transform:none;
 }
 
-/* ── CONTEXT MENU ── */
-#field-ctx-menu{
-    display:none;position:fixed;z-index:9000;
-    background:ButtonFace;color:ButtonText;
-    border-top:2px solid ButtonHighlight;border-left:2px solid ButtonHighlight;
-    border-right:2px solid ButtonShadow;border-bottom:2px solid ButtonShadow;
-    padding:8px 10px;min-width:190px;
-    box-shadow:2px 2px 6px rgba(0,0,0,.35);
-}
-#field-ctx-menu .ctx-title{
-    font-size:10px;color:GrayText;
-    margin-bottom:6px;border-bottom:1px solid ButtonShadow;padding-bottom:4px;
-}
-#field-ctx-menu .ctx-row{display:flex;align-items:center;gap:6px;}
-#ctx-fs-slider{width:90px;cursor:pointer;accent-color:Highlight;}
-#ctx-fs-val{font-size:11px;font-weight:bold;width:24px;text-align:center;color:ButtonText;}
-#ctx-reset{
-    font-family:'ms_sans_serif',sans-serif;font-size:10px;
-    padding:1px 6px;cursor:pointer;margin-top:6px;width:100%;
-    background:ButtonFace;color:ButtonText;
-    border-top:1px solid ButtonHighlight;border-left:1px solid ButtonHighlight;
-    border-right:1px solid ButtonShadow;border-bottom:1px solid ButtonShadow;
-}
-#ctx-reset:hover{filter:brightness(1.06);}
-
-/* ── TABS ── */
+/* ── TABS (estilo Win98 ─ borde elevado, tab activa hundida en la página) ── */
 #page-tabs{
-    background:ButtonFace;
-    border-bottom:1px solid ButtonShadow;
-    padding:3px 6px 0;display:flex;gap:2px;flex-shrink:0;min-height:26px;
+    background:var(--btn-bg);
+    border-top:2px solid var(--bezel-light-1);
+    border-bottom:2px solid var(--bezel-dark-2);
+    padding:4px 6px 0;display:flex;gap:2px;flex-shrink:0;min-height:28px;
 }
 .pg-tab{
-    font-family:'ms_sans_serif',sans-serif;font-size:10px;
-    padding:2px 14px;cursor:pointer;
-    background:ButtonFace;color:ButtonText;
-    border:1px solid ButtonShadow;border-bottom:none;
-    border-radius:3px 3px 0 0;position:relative;top:1px;user-select:none;
+    font-family:'ms_sans_serif',sans-serif;font-size:11px;
+    padding:3px 16px 4px;cursor:pointer;
+    background:var(--btn-bg);color:var(--btn-text);
+    /* Tab elevada al estilo Win98 */
+    border-top:2px solid var(--bezel-light-1);
+    border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);
+    border-bottom:none;
+    border-radius:4px 4px 0 0;
+    position:relative;top:2px;user-select:none;
 }
 .pg-tab:hover:not(.active){filter:brightness(1.06);}
-.pg-tab.active{background:Window;color:WindowText;font-weight:bold;z-index:1;}
+.pg-tab.active{
+    background:var(--btn-bg);color:var(--btn-text);font-weight:bold;z-index:1;
+    padding-top:5px;padding-bottom:5px;top:0;     /* tab activa "sale" hacia arriba */
+}
 
-/* ── SHEET AREA ── */
+/* ── SHEET AREA: fondo liso del tema, borde hundido Win98 ── */
 #sheet-area{
     flex:1;overflow:auto;
-    background:color-mix(in srgb, Canvas 60%, ButtonShadow 40%);
+    background:var(--win-body-bg);
+    border-top:2px solid var(--bezel-dark-2);
+    border-left:2px solid var(--bezel-dark-2);
+    border-right:2px solid var(--bezel-light-1);
+    border-bottom:2px solid var(--bezel-light-1);
     padding:10px;display:flex;justify-content:center;align-items:flex-start;
 }
 .sheet-page{display:none;}
 .sheet-page.visible{display:block;}
-.page-canvas{position:relative;display:inline-block;line-height:0;box-shadow:3px 3px 12px rgba(0,0,0,.6);}
-.page-canvas img{display:block;width:100%;user-select:none;pointer-events:none;}
 
-/* ── CAMPOS sobre la ficha ──
-   El texto se escribe con la fuente manuscrita Allison en marrón oscuro
-   (que contrasta bien con el papel de la ficha) → este color NO sigue el
-   tema del sistema porque es texto sobre una imagen de papel impreso. */
-.page-canvas input[type="text"],
-.page-canvas input[type="number"],
-.page-canvas textarea{
-    position:absolute;background:transparent;border:none;outline:none;
-    font-family:'Allison',cursive;
-    color:#1a0800;        /* tinta sobre papel: no cambia con el tema */
-    caret-color:#1a0800;
-    padding:0 2px;line-height:1.15;
+/* ── PDF PAGE ── */
+.pdf-page-container{
+    position:relative;display:inline-block;
+    box-shadow:3px 3px 12px rgba(0,0,0,.6);
+    background:#fff;
 }
-/* Campos calculados: azul cobalto sobre papel */
-.page-canvas input.auto-calc{color:#00008b;font-weight:bold;cursor:default;}
-
-/* Focus y hover sobre la ficha — semitransparentes para no tapar el papel */
-.page-canvas input:focus:not(.auto-calc),
-.page-canvas textarea:focus{background:rgba(255,235,160,0.45);border-radius:2px;}
-.page-canvas input[type="text"]:hover:not(.auto-calc):not(:focus),
-.page-canvas input[type="number"]:hover:not(:focus),
-.page-canvas textarea:hover:not(:focus){background:rgba(180,210,255,0.22);border-radius:2px;}
-
-.page-canvas textarea{resize:none;overflow:hidden;}
-.page-canvas input[type="checkbox"]{
-    position:absolute;cursor:pointer;
-    width:12px!important;height:12px!important;
-    background:transparent;accent-color:Highlight;
+.pdf-canvas{display:block;user-select:none;}
+.pdf-form-layer{
+    position:absolute;inset:0;
+    pointer-events:none; /* los hijos sí reciben eventos */
+}
+.pdf-form-layer input,
+.pdf-form-layer textarea,
+.pdf-form-layer select{
+    position:absolute;
+    pointer-events:auto;
+    font-family:Helvetica,'Helvetica Neue',Arial,sans-serif;
+    padding:0 1px;
+    line-height:1.15;
+    box-sizing:border-box;
+    outline:none;
+    margin:0;
+}
+.pdf-form-layer input[type="text"],
+.pdf-form-layer input[type="number"],
+.pdf-form-layer input[type="password"]{
+    line-height:1;        /* single-line: el browser centra verticalmente */
+}
+/* Inputs del PDF: NO siguen el tema. Fondo y borde semi-transparentes para
+   marcar dónde están las cajas sin tapar el PDF. */
+.pdf-form-layer input[type="text"],
+.pdf-form-layer input[type="number"],
+.pdf-form-layer input[type="password"],
+.pdf-form-layer textarea{
+    background:rgba(255,255,255,0.25) !important;
+    color:#000 !important;
+    border:1px solid rgba(0,0,0,0.18) !important;
+    border-radius:0 !important;
+    box-shadow:0 1px 2px rgba(0,0,0,0.08) !important;
+}
+.pdf-form-layer input[type="text"]:hover:not(:focus),
+.pdf-form-layer input[type="number"]:hover:not(:focus),
+.pdf-form-layer textarea:hover:not(:focus){
+    background:rgba(180,210,255,0.30) !important;
+    border-color:rgba(0,0,0,0.28) !important;
+}
+.pdf-form-layer input[type="text"]:focus,
+.pdf-form-layer input[type="number"]:focus,
+.pdf-form-layer textarea:focus{
+    background:rgba(255,235,160,0.50) !important;
+    border-color:rgba(0,0,0,0.45) !important;
+    box-shadow:0 1px 3px rgba(0,0,0,0.15) !important;
+}
+.pdf-form-layer textarea{resize:none;overflow:auto;}
+/* Checkboxes/radios: default del navegador, sin accent del tema */
+.pdf-form-layer input[type="checkbox"],
+.pdf-form-layer input[type="radio"]{
+    cursor:pointer;
+}
+/* Select: sin borde, sólo caja blanca legible y flechita */
+.pdf-form-layer select{
+    appearance:none;-webkit-appearance:none;
+    cursor:pointer;
+    padding-right:14px;
+    background-color:#fff !important;
+    color:#000 !important;
+    border:none !important;
+    box-shadow:none !important;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #000 50%),
+        linear-gradient(135deg, #000 50%, transparent 50%) !important;
+    background-position:
+        calc(100% - 8px) 50%,
+        calc(100% - 4px) 50%;
+    background-size:4px 4px, 4px 4px;
+    background-repeat:no-repeat;
+}
+/* Readonly: tono apagado neutro (anula override de themes.css) */
+.pdf-form-layer input[readonly],
+.pdf-form-layer textarea[readonly]{
+    background:transparent !important;
+    color:#333 !important;
 }
 
 /* ── MIS FICHAS ── */
-#mis-fichas-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:ButtonFace;}
+#mis-fichas-panel{display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--btn-bg);}
 #mis-fichas-panel.visible{display:flex;}
 #mf-toolbar{
-    background:ButtonFace;border-bottom:1px solid ButtonShadow;
-    padding:5px 8px;display:flex;gap:6px;align-items:center;flex-shrink:0;
+    background:var(--btn-bg);border-bottom:1px solid var(--bezel-dark-2);
+    padding:5px 8px;display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap;
+    position:relative;z-index:20;   /* tooltip queda por encima de #mf-list */
 }
-#mf-toolbar strong{color:ButtonText;}
+#mf-toolbar .tb-btn{flex-shrink:0;}
+#mf-toolbar strong{color:var(--btn-text);}
 #mf-toolbar input{
     font-family:'ms_sans_serif',sans-serif;font-size:11px;
-    border:1px inset ButtonShadow;background:Window;color:WindowText;
+    border:1px inset var(--bezel-dark-2);background:var(--input-bg);color:var(--input-text);
     padding:2px 4px;flex:1;max-width:220px;
 }
 #mf-list{flex:1;overflow:auto;padding:10px;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;}
 .ficha-card{
-    background:ButtonFace;color:ButtonText;
-    border-top:2px solid ButtonHighlight;border-left:2px solid ButtonHighlight;
-    border-right:2px solid ButtonShadow;border-bottom:2px solid ButtonShadow;
-    width:185px;padding:8px 10px;position:relative;cursor:default;transition:filter .1s;
+    background:var(--btn-bg);color:var(--text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+    width:260px;padding:14px 16px;position:relative;cursor:default;transition:filter .1s;
 }
 .ficha-card:hover{filter:brightness(1.05);}
-.fc-tipo{font-size:9px;color:GrayText;margin-bottom:2px;}
-.fc-nombre{font-size:15px;font-family:'Allison',cursive;color:#1a0800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;}
-.fc-info{font-size:9px;color:ButtonText;line-height:1.5;}
-.fc-fecha{font-size:9px;color:GrayText;margin-top:3px;}
-.fc-btns{margin-top:6px;display:flex;gap:4px;}
+.fc-tipo{font-size:11px;color:var(--text);margin-bottom:6px;font-weight:bold;}
+.fc-nombre{
+    font-size:20px;font-family:'ms_sans_serif',sans-serif;font-weight:bold;
+    color:var(--text);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px;
+}
+.fc-info{font-size:11px;color:var(--text);line-height:1.5;}
+.fc-fecha{font-size:11px;color:var(--text);margin-top:6px;}
+.fc-btns{margin-top:10px;display:flex;gap:6px;}
 .fc-btns button,.fc-del{
-    font-family:'ms_sans_serif',sans-serif;font-size:9px;padding:1px 6px;cursor:pointer;
-    background:ButtonFace;color:ButtonText;
-    border-top:1px solid ButtonHighlight;border-left:1px solid ButtonHighlight;
-    border-right:1px solid ButtonShadow;border-bottom:1px solid ButtonShadow;
+    font-family:'ms_sans_serif',sans-serif;font-size:11px;padding:3px 10px;cursor:pointer;
+    background:var(--btn-bg);color:var(--text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
 }
 .fc-btns button:hover,.fc-del:hover{filter:brightness(1.06);}
-.fc-del{position:absolute;top:4px;right:4px;padding:1px 4px;color:LinkText;}
-#mf-empty{width:100%;text-align:center;color:GrayText;padding:40px 20px;line-height:2;}
+.fc-del{position:absolute;top:6px;right:6px;padding:2px 7px;font-size:11px;color:var(--text);}
+#mf-empty{width:100%;text-align:center;color:var(--text-muted);padding:40px 20px;line-height:2;}
 
 /* ── BOTTOM BAR ── */
 #bottom-bar{
-    background:ButtonFace;border-top:2px solid ButtonShadow;
+    background:var(--btn-bg);border-top:2px solid var(--bezel-dark-2);
     padding:4px 8px;display:flex;gap:6px;align-items:center;flex-shrink:0;
 }
-#bottom-bar .info{font-size:10px;color:GrayText;flex:1;}
+#bottom-bar .info{font-size:10px;color:var(--text-muted);flex:1;}
 #autosave-dot{
     width:8px;height:8px;border-radius:50%;
-    background:GrayText;display:inline-block;margin-right:4px;transition:background .3s;
+    background:var(--text-muted);display:inline-block;margin-right:4px;transition:background .3s;
 }
-#autosave-dot.saved{background:LinkText;}
-#autosave-dot.saving{background:Mark;}
+#autosave-dot.saved{background:var(--link-text);}
+#autosave-dot.saving{background:var(--warning-bg);}
 
 /* ── MODALES ── */
-#modal-guardar,#modal-confirm{
+#modal-confirm,#modal-import{
     display:none;position:fixed;inset:0;
     background:rgba(0,0,0,.45);z-index:8000;
     align-items:center;justify-content:center;
 }
-#modal-guardar.show,#modal-confirm.show{display:flex;}
+#modal-confirm.show,#modal-import.show{display:flex;}
+#import-box{
+    background:var(--btn-bg);color:var(--text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+    min-width:320px;max-width:420px;
+}
+#import-body{padding:14px 18px;}
 #modal-confirm{z-index:8500;}
 #modal-box,#confirm-box{
-    background:ButtonFace;color:ButtonText;
-    border-top:2px solid ButtonHighlight;border-left:2px solid ButtonHighlight;
-    border-right:2px solid ButtonShadow;border-bottom:2px solid ButtonShadow;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
     min-width:300px;
 }
 #confirm-box{min-width:260px;}
 .modal-titlebar{
-    background:ActiveCaption;color:CaptionText;
+    background:var(--titlebar-start);color:var(--titlebar-text);
     font-weight:bold;font-size:11px;padding:3px 6px;
     display:flex;justify-content:space-between;align-items:center;user-select:none;
 }
 .modal-titlebar button{
-    background:ButtonFace;color:ButtonText;
-    border-top:1px solid ButtonHighlight;border-left:1px solid ButtonHighlight;
-    border-right:1px solid ButtonShadow;border-bottom:1px solid ButtonShadow;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:1px solid var(--bezel-light-1);border-left:1px solid var(--bezel-light-1);
+    border-right:1px solid var(--bezel-dark-2);border-bottom:1px solid var(--bezel-dark-2);
     font-size:9px;width:16px;height:14px;cursor:pointer;
 }
 #modal-body{padding:12px 16px;}
-#modal-body label{display:block;margin-bottom:4px;font-size:11px;color:ButtonText;}
+#modal-body label{display:block;margin-bottom:4px;font-size:11px;color:var(--btn-text);}
 #modal-body input{
     font-family:'ms_sans_serif',sans-serif;font-size:11px;
-    border:1px inset ButtonShadow;background:Window;color:WindowText;
+    border:1px inset var(--bezel-dark-2);background:var(--input-bg);color:var(--input-text);
     padding:2px 4px;width:100%;margin-bottom:10px;
 }
 .modal-btns{display:flex;gap:6px;justify-content:flex-end;}
-#confirm-body{padding:14px 18px;font-size:11px;line-height:1.6;color:ButtonText;}
+#confirm-body{padding:14px 18px;font-size:11px;line-height:1.6;color:var(--btn-text);}
 #confirm-btns{padding:0 18px 12px;display:flex;gap:6px;justify-content:flex-end;}
-#confirm-ok{color:LinkText;}
+#confirm-ok{color:var(--link-text);}
 
 /* ── PROGRESS ── */
 #progress-overlay{
@@ -260,47 +350,55 @@ body{
 }
 #progress-overlay.show{display:flex;}
 #progress-box{
-    background:ButtonFace;color:ButtonText;
-    border-top:2px solid ButtonHighlight;border-left:2px solid ButtonHighlight;
-    border-right:2px solid ButtonShadow;border-bottom:2px solid ButtonShadow;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
     padding:16px 24px;text-align:center;min-width:260px;
 }
-#progress-box p{margin-bottom:10px;font-size:11px;color:ButtonText;}
-#pb-wrap{width:100%;height:16px;background:Window;border:1px inset ButtonShadow;}
-#pb{height:100%;background:Highlight;width:0%;transition:width .25s;}
+#progress-box p{margin-bottom:10px;font-size:11px;color:var(--btn-text);}
+#pb-wrap{width:100%;height:16px;background:var(--input-bg);border:1px inset var(--bezel-dark-2);}
+#pb{height:100%;background:var(--accent);width:0%;transition:width .25s;}
 
 /* ── TOAST ── */
 #toast{
     position:fixed;bottom:50px;left:50%;transform:translateX(-50%) translateY(20px);
-    background:ButtonFace;color:ButtonText;
-    border:1px solid ButtonShadow;
+    background:var(--btn-bg);color:var(--btn-text);
+    border:1px solid var(--bezel-dark-2);
     font-size:11px;padding:6px 16px;border-radius:3px;
     opacity:0;transition:opacity .25s, transform .25s;
     pointer-events:none;z-index:9990;
     box-shadow:1px 1px 4px rgba(0,0,0,.3);
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-
-/* ── UNDO INDICATOR ── */
-#undo-hint{font-size:10px;color:GrayText;padding:0 6px;}
 </style>
 </head>
-<body>
+<body class="<?php
+    $bc = [];
+    if ($userKey === 'user1') $bc[] = 'capi';
+    elseif ($userKey === 'user2') $bc[] = 'angie';
+    if ($activeThemeClass) $bc[] = $activeThemeClass;
+    echo htmlspecialchars(implode(' ', $bc));
+?>">
 
 <!-- TOOLBAR -->
 <div id="dnd-toolbar">
-    <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (3 páginas)">📜 Oficial</button>
-    <button class="tb-btn has-tip"        id="tab-artistica" onclick="switchSheet('artistica')" data-tip="Ficha artística alternativa">🎨 Artística</button>
+    <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (PDF editable, 5 páginas)">📜 Oficial</button>
+    <button class="tb-btn has-tip"        id="tab-melon" onclick="switchSheet('melon')" data-tip="Ficha melon alternativa">🎨 Melon</button>
     <button class="tb-btn has-tip"        id="tab-misfichas" onclick="switchToMisFichas()"      data-tip="Ver todas tus fichas guardadas">📁 Mis Fichas</button>
     <div class="tb-sep"></div>
-    <div id="font-controls">
-        <label>Letra:</label>
-        <input type="range" id="font-size-slider" min="8" max="24" value="12" step="1" oninput="changeFontSize(this.value)">
-        <span id="font-size-val">12</span>
+    <div id="zoom-controls">
+        <label>Zoom:</label>
+        <button class="tb-btn" onclick="zoomStep(-10)" title="Alejar">−</button>
+        <input type="range" id="zoom-slider" min="40" max="300" value="100" step="10" oninput="setZoom(this.value)">
+        <button class="tb-btn" onclick="zoomStep(10)" title="Acercar">+</button>
+        <span id="zoom-val">100%</span>
+        <button class="tb-btn" onclick="resetZoom()" title="Ajustar al alto">⛶</button>
     </div>
     <div class="tb-sep"></div>
-    <button class="tb-btn has-tip" onclick="undoLast()" id="btn-undo" data-tip="Deshacer último cambio (Ctrl+Z)">↩ Deshacer</button>
-    <button class="tb-btn has-tip" onclick="clearAll()" data-tip="Borrar todos los campos de la ficha actual">🗑 Limpiar</button>
+    <span id="sheet-tools" style="display:flex;gap:4px;align-items:center;">
+        <button class="tb-btn has-tip" onclick="undoLast()" id="btn-undo" data-tip="Deshacer último cambio (Ctrl+Z)">↩ Deshacer</button>
+        <button class="tb-btn has-tip" onclick="clearAll()" data-tip="Borrar todos los campos de la ficha actual">🗑 Limpiar</button>
+    </span>
     <div class="tb-spacer"></div>
     <span id="status-msg"></span>
 </div>
@@ -314,35 +412,39 @@ body{
 <!-- MIS FICHAS -->
 <div id="mis-fichas-panel">
     <div id="mf-toolbar">
-        <strong>📁 Mis Fichas</strong>
+        <strong>📁 Mis Fichas <span style="font-weight:normal;color:var(--text-muted);">(Google Drive)</span></strong>
         <input type="text" id="mf-search" placeholder="Buscar por nombre..." oninput="renderFichasList()">
-        <span id="mf-count" style="font-size:10px;color:#555;"></span>
+        <span id="mf-count" style="font-size:10px;color:var(--text-muted);"></span>
+        <button class="tb-btn has-tip" onclick="triggerImport()" data-tip="Importar un PDF con datos">⬆ Importar</button>
+        <input type="file" id="import-file" accept="application/pdf,.pdf" style="display:none" onchange="onImportFile(event)">
+        <button class="tb-btn has-tip" onclick="fetchAndRenderFichas()" data-tip="Recargar lista">↻</button>
+        <button class="tb-btn has-tip" onclick="disconnectDrive()" data-tip="Cerrar sesión de Drive">🔌</button>
     </div>
     <div id="mf-list"></div>
 </div>
 
 <!-- BOTTOM BAR -->
 <div id="bottom-bar">
-    <button class="tb-btn has-tip" onclick="saveLocal()" data-tip="Guardar en el navegador">💾 Guardar</button>
-    <button class="tb-btn has-tip" onclick="loadLocal()" data-tip="Recargar desde el navegador">📂 Cargar</button>
-    <button class="tb-btn has-tip" onclick="openModalGuardar()" data-tip="Guardar una copia nombrada">⭐ Guardar como...</button>
-    <button class="tb-btn has-tip" onclick="exportPDF()" data-tip="Descargar PDF rellenado">⬇ PDF</button>
+    <button class="tb-btn has-tip" onclick="saveToDrive()" id="btn-drive-save" data-tip="Guardar el PDF rellenado en tu Google Drive">☁ Guardar Drive</button>
+    <button class="tb-btn has-tip" onclick="exportPDF()" data-tip="Descargar el PDF al disco local">⬇ PDF</button>
+    <span id="drive-status" style="font-size:10px;color:var(--text-muted);margin-left:4px;"></span>
     <div class="info">
-        <span id="autosave-dot"></span>Guardado automático activo
+        <span id="autosave-dot"></span>Autosave local
     </div>
-    <span id="undo-hint"></span>
 </div>
 
-<!-- MODAL GUARDAR EN MIS FICHAS -->
-<div id="modal-guardar">
-    <div id="modal-box">
-        <div class="modal-titlebar"><span>⭐ Guardar en Mis Fichas</span><button onclick="closeModal()">✕</button></div>
-        <div id="modal-body">
-            <label>Nombre para identificar esta ficha:</label>
-            <input type="text" id="modal-nombre" placeholder="Ej: Aldric el Paladín" autocomplete="off">
+<!-- MODAL ELEGIR HOJA AL IMPORTAR -->
+<div id="modal-import">
+    <div id="import-box">
+        <div class="modal-titlebar"><span>⬆ Importar PDF</span><button onclick="closeImportModal()">✕</button></div>
+        <div id="import-body">
+            <p style="margin-bottom:14px;font-size:11px;color:var(--text);">
+                ¿A qué hoja pertenece <strong id="import-file-name"></strong>?
+            </p>
             <div class="modal-btns">
-                <button class="tb-btn" onclick="closeModal()">Cancelar</button>
-                <button class="tb-btn" onclick="confirmarGuardar()">✔ Guardar</button>
+                <button class="tb-btn" onclick="doImport('oficial')">📜 Oficial</button>
+                <button class="tb-btn" onclick="doImport('melon')">🎨 Melon</button>
+                <button class="tb-btn" onclick="closeImportModal()">Cancelar</button>
             </div>
         </div>
     </div>
@@ -365,495 +467,436 @@ body{
     <div id="progress-box"><p id="pb-text">Generando PDF...</p><div id="pb-wrap"><div id="pb"></div></div></div>
 </div>
 
-<!-- CONTEXT MENU (clic derecho en campo) -->
-<div id="field-ctx-menu">
-    <div class="ctx-title" id="ctx-field-name">Campo</div>
-    <div class="ctx-row">
-        <span style="font-size:9px;color:#555">A</span>
-        <input type="range" id="ctx-fs-slider" min="6" max="30" value="12" step="1" oninput="ctxFsChange(this.value)">
-        <span style="font-size:15px;color:#333">A</span>
-        <span id="ctx-fs-val">12</span>px
-    </div>
-    <button id="ctx-reset" onclick="ctxFsReset()">↺ Restaurar tamaño por defecto</button>
-</div>
-
 <!-- TOAST -->
 <div id="toast"></div>
 
-<script src="../assets/img/dnd/dnd_imgs.js"></script>
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Google Identity Services (OAuth para Drive) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 /* ════════════════════════════════════════
-   HELPERS DE CAMPO
-   f  → text    fn → number    ft → textarea
-   fc → checkbox   fa → auto-calc (readonly, azul)
+   CONFIG
 ════════════════════════════════════════ */
-function f(id,l,t,w,fs,opts)  { return Object.assign({id,l,t,w,fs:fs||12,type:'text'},opts||{}); }
-function fn(id,l,t,w,fs,opts) { return Object.assign({id,l,t,w,fs:fs||12,type:'number'},opts||{}); }
-function ft(id,l,t,w,h,fs)    { return {id,l,t,w,h:h||4,fs:fs||11,type:'textarea'}; }
-function fc(id,l,t)            { return {id,l,t,w:1.4,h:1.4,type:'checkbox'}; }
-function fa(id,l,t,w,fs)      { return {id,l,t,w,fs:fs||12,type:'text',calc:true}; }
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-/* ════════════════════════════════════════
-   DEFINICIÓN DE FICHAS
-   CORRECCIÓN: en la ficha oficial, cada stat tiene:
-   - caja pequeña del MODIFICADOR  → arriba  (t menor)
-   - caja grande del VALOR BASE    → abajo   (t mayor)
-   Se han intercambiado las coordenadas t respecto a la versión anterior.
-════════════════════════════════════════ */
 var SHEETS = {
-  oficial: {
-    storageKey:'dnd_oficial',
-    pdfUrl:'../assets/pdf/Hoja_de_personaje_Editable.pdf',
-    pages:[
-      { imgKey:'ofic_0', fields:[
-          /* ── Cabecera ── */
-          f('o-nombre',        7.6,  7.6, 32.8, 18),   /* nombre: grande y prominente */
-          f('o-clase',        43.9,  5.9, 15.2, 14),   /* clase/raza: campos principales */
-          f('o-transfondo',   61.7,  6.1,  9.9, 13),
-          f('o-jugador',      77.4,  6.1, 14.9, 13),
-          f('o-raza',         43.9,  9.5, 15.9, 14),
-          f('o-alineamiento', 62.2,  9.6,  9.8, 13),
-          fn('o-xp',          77.5,  9.4, 15.0,  9,{align:'center'}), /* XP: pequeño */
-
-          /* ── Stats ──
-             LAYOUT REAL D&D 5e:
-               [pequeño óvalo ARRIBA]  ← MODIFICADOR calculado  → fs pequeño
-               [caja grande ABAJO]     ← VALOR BASE que escribe el jugador → fs grande */
-          fa('o-mod-fue',      7.8, 19.5,  3.7, 11),   /* mod: pequeño arriba */
-          fn('o-fue',          5.5, 23.2,  7.0, 20,{align:'center'}), /* stat: grande abajo */
-
-          fa('o-mod-des',      7.5, 28.4,  4.2, 11),
-          fn('o-des',          5.5, 32.1,  7.0, 20,{align:'center'}),
-
-          fa('o-mod-con',      7.8, 37.1,  3.3, 11),
-          fn('o-con',          5.5, 41.0,  7.0, 20,{align:'center'}),
-
-          fa('o-mod-int',      7.8, 46.2,  2.6, 11),
-          fn('o-int',          5.5, 50.1,  7.0, 20,{align:'center'}),
-
-          fa('o-mod-sab',      7.8, 55.1,  3.3, 11),
-          fn('o-sab',          5.5, 58.9,  7.0, 20,{align:'center'}),
-
-          fa('o-mod-car',      7.8, 63.8,  3.9, 11),
-          fn('o-car',          5.5, 67.8,  7.0, 20,{align:'center'}),
-
-          /* ── Inspiración / Competencia: números compactos ── */
-          fn('o-inspiracion',  15.8, 16.4,  3.4, 11,{align:'center'}),
-          fn('o-competencia',  15.8, 21.1,  3.8, 11,{align:'center'}),
-
-          /* ── Tiradas de salvación: compactas ── */
-          fc('o-sv-c-fue', 17.0, 25.8), fa('o-sv-fue', 18.3, 25.8, 2.5, 10),
-          fc('o-sv-c-des', 17.0, 27.5), fa('o-sv-des', 18.4, 27.5, 2.7, 10),
-          fc('o-sv-c-con', 17.0, 29.1), fa('o-sv-con', 18.6, 29.1, 2.2, 10),
-          fc('o-sv-c-int', 17.0, 30.6), fa('o-sv-int', 17.9, 30.6, 3.1, 10),
-          fc('o-sv-c-sab', 17.0, 32.3), fa('o-sv-sab', 18.0, 32.3, 3.0, 10),
-          fc('o-sv-c-car', 17.0, 34.1), fa('o-sv-car', 18.0, 34.1, 3.0, 10),
-
-          /* ── Habilidades: compactas ── */
-          fc('o-sk-c-acro', 17.0, 40.2), fa('o-sk-acro', 18.0, 40.2, 2.7, 10),
-          fc('o-sk-c-atle', 17.0, 42.2), fa('o-sk-atle', 18.2, 42.2, 2.5, 10),
-          fc('o-sk-c-carc', 17.0, 43.7), fa('o-sk-carc', 18.2, 43.7, 2.6, 10),
-          fc('o-sk-c-enga', 17.0, 45.4), fa('o-sk-enga', 18.0, 45.4, 2.7, 10),
-          fc('o-sk-c-hist', 17.0, 47.0), fa('o-sk-hist', 17.9, 47.0, 3.3, 10),
-          fc('o-sk-c-inte', 17.0, 48.9), fa('o-sk-inte', 18.0, 48.9, 2.9, 10),
-          fc('o-sk-c-inti', 17.0, 50.5), fa('o-sk-inti', 18.0, 50.5, 3.0, 10),
-          fc('o-sk-c-inve', 17.0, 52.2), fa('o-sk-inve', 17.9, 52.2, 3.1, 10),
-          fc('o-sk-c-jdm',  17.0, 54.0), fa('o-sk-jdm',  17.8, 54.0, 3.3, 10),
-          fc('o-sk-c-medi', 17.0, 55.6), fa('o-sk-medi', 17.9, 55.6, 2.9, 10),
-          fc('o-sk-c-natu', 17.0, 57.3), fa('o-sk-natu', 17.9, 57.3, 3.0, 10),
-          fc('o-sk-c-perc', 17.0, 59.0), fa('o-sk-perc', 17.9, 59.0, 3.1, 10),
-          fc('o-sk-c-pers', 17.0, 60.5), fa('o-sk-pers', 17.9, 60.5, 3.3, 10),
-          fc('o-sk-c-pers2',17.0, 62.2), fa('o-sk-pers2',17.8, 62.2, 3.3, 10),
-          fc('o-sk-c-reli', 17.0, 64.0), fa('o-sk-reli', 17.8, 64.0, 3.5, 10),
-          fc('o-sk-c-sigi', 17.0, 65.8), fa('o-sk-sigi', 17.8, 65.8, 3.4, 10),
-          fc('o-sk-c-supe', 17.0, 67.5), fa('o-sk-supe', 18.0, 67.5, 3.0, 10),
-          fc('o-sk-c-tani', 17.0, 69.1), fa('o-sk-tani', 17.9, 69.1, 3.3, 10),
-
-          /* ── Percepción pasiva calculada ── */
-          fa('o-perc-pasiva', 4.6, 74.4, 5.0, 13),
-
-          /* ── Otras competencias: textarea de rol ── */
-          ft('o-competencias', 5.4, 79.3, 27.5, 14, 11),
-
-          /* ── Combate: números de referencia rápida ── */
-          fn('o-ca',         37.6, 19.6,  5.8, 17,{align:'center'}), /* CA: grande */
-          fa('o-iniciativa', 46.1, 18.9,  6.8, 17),                  /* ini: grande */
-          fn('o-velocidad',  55.7, 18.8,  6.9, 15),                  /* vel: grande */
-
-          /* ── Puntos de golpe ── */
-          fn('o-pg-max',     49.9, 24.8, 12.8,  9),  /* PG máx: pequeño, es referencia */
-          fn('o-pg-act',     37.5, 26.7, 25.2, 18),  /* PG actual: grande, se usa mucho */
-          fn('o-pg-temp',    37.0, 33.2, 26.3, 18),  /* PG temp: grande */
-
-          /* ── Dados de golpe ── */
-          f('o-dg-total',    40.3, 40.3,  7.8, 10),
-          f('o-dg-tipo',     36.9, 41.6, 12.4, 12),
-
-          /* ── Ataques: nombre grande, bono y daño pequeños ── */
-          f('o-atk1-nom',  36.6, 49.8,  9.7, 13),
-          f('o-atk1-bon',  48.0, 49.9,  4.7,  9),
-          f('o-atk1-dao',  53.7, 49.8,  9.3, 11),
-          f('o-atk2-nom',  36.2, 52.5, 10.5, 13),
-          f('o-atk2-bon',  47.8, 52.3,  5.0,  9),
-          f('o-atk2-dao',  53.3, 52.4, 10.1, 11),
-          f('o-atk3-nom',  35.9, 54.3, 10.5, 13),
-          f('o-atk3-bon',  47.3, 54.8,  5.5,  9),
-          f('o-atk3-dao',  53.1, 54.6,  9.9, 11),
-          ft('o-atk-notas',36.1, 57.1, 27.5, 3.0, 10),
-
-          /* ── Monedas: pequeñas, es contabilidad ── */
-          fn('o-pc',  37.1, 75.8,  5.5,  9,{align:'center'}),
-          fn('o-pe',  37.0, 79.0,  5.8,  9,{align:'center'}),
-          fn('o-pp',  36.9, 82.3,  5.9,  9,{align:'center'}),
-          fn('o-po',  37.3, 85.3,  5.5,  9,{align:'center'}),
-          fn('o-pe2', 36.6, 88.6,  6.5,  9,{align:'center'}),
-          fn('o-mon-pc', 44.1, 75.7, 4.0,  9,{align:'center'}),
-
-          /* ── Equipo: textarea cómoda ── */
-          ft('o-equipo', 67.1, 48.5, 28.8, 25.0, 11),
-
-          /* ── Personalidad / Ideales / Vínculos / Defectos: rol, legible ── */
-          ft('o-personalidad', 68.4, 18.0, 24.6,  6.5, 11),
-          ft('o-ideales',      68.1, 26.8, 25.8,  5.5, 11),
-          ft('o-vinculos',     67.8, 33.5, 25.8,  5.5, 11),
-          ft('o-defectos',     68.1, 40.7, 25.6,  5.5, 11),
-
-          /* ── Rasgos y atributos ── */
-          ft('o-int-4',  67.1, 48.5, 28.8, 20.0, 11),
-          ft('o-int-12',  5.4, 79.3, 27.5, 14.0, 11),
-      ]},
-
-      { imgKey:'ofic_1', fields:[
-          f('o2-nombre',   7.1,  7.7, 34.8, 18),  /* nombre grande */
-          f('o2-edad',    43.3,  6.1, 11.2, 13),
-          f('o2-altura',  42.7,  8.8, 12.7, 13),
-          f('o2-ojos',    56.9,  6.3, 14.9, 13),
-          f('o2-piel',    57.6,  9.2, 12.0, 13),
-          f('o2-peso',    77.0,  6.1, 16.7, 13),
-          f('o2-pelo',    77.3,  9.2, 16.9, 13),
-          ft('o2-aspecto',   5.6, 16.7, 26.9, 28.0, 11),
-          ft('o2-aliados',  36.3, 16.5, 30.3, 28.0, 11),
-          ft('o2-ali-sym',  68.9, 19.5, 22.9, 14.0, 11),
-          ft('o2-rasgos',    5.4, 48.7, 27.5, 24.0, 11),
-          ft('o2-historia',  5.4, 48.7, 27.5, 24.0, 11),
-          ft('o2-tesoro',   36.5, 47.5, 58.8, 24.0, 11),
-          ft('o2-rasgos2',  35.9, 76.0, 59.1, 18.0, 11),
-      ]},
-
-      { imgKey:'ofic_2', fields:[
-          f('o3-clase',    7.2,  7.6, 34.5, 12),
-          f('o3-apt',     46.7,  6.8, 10.2, 11,{align:'center'}),
-          f('o3-cd',      62.6,  7.0, 10.8, 11,{align:'center'}),
-          f('o3-bon',     79.7,  6.7, 11.0, 11,{align:'center'}),
-          ft('o3-sp0',     4.8, 21.7, 28.9, 15.0, 10),
-          fn('o3-e1t',    39.1, 18.5,  7.2, 10,{align:'center'}),
-          f('o3-e1g',     47.6, 18.5, 16.1, 10),
-          ft('o3-sp1',    37.5, 22.1, 27.5, 14.0, 10),
-          fn('o3-e2t',    68.6, 18.3,  8.4, 10,{align:'center'}),
-          f('o3-e2g',     77.8, 18.5, 16.9, 10),
-          ft('o3-sp2',    66.8, 22.1, 28.2, 14.0, 10),
-          fn('o3-e3t',     7.5, 39.5,  8.1, 10,{align:'center'}),
-          f('o3-e3g',     16.1, 39.5, 17.1, 10),
-          ft('o3-sp3',     6.1, 43.7, 27.7, 14.0, 10),
-          fn('o3-e4t',    39.1, 46.8,  7.1, 10,{align:'center'}),
-          f('o3-e4g',     48.0, 46.9, 15.6, 10),
-          ft('o3-sp4',    37.3, 50.7, 27.5, 14.0, 10),
-          fn('o3-e5t',    68.9, 39.7,  7.7, 10,{align:'center'}),
-          f('o3-e5g',     77.8, 40.1, 17.0, 10),
-          ft('o3-sp5',    66.5, 43.9, 28.5, 14.0, 10),
-          fn('o3-e6t',     8.4, 68.4,  6.5, 10,{align:'center'}),
-          f('o3-e6g',     16.6, 68.8, 16.1, 10),
-          ft('o3-sp6',     6.4, 72.3, 26.7, 14.0, 10),
-          fn('o3-e7t',    39.3, 75.7,  6.8, 10,{align:'center'}),
-          f('o3-e7g',     47.6, 75.9, 15.9, 10),
-          ft('o3-sp7',    37.5, 79.7, 27.2, 14.0, 10),
-          fn('o3-e8t',    69.4, 61.1,  7.3, 10,{align:'center'}),
-          f('o3-e8g',     78.3, 61.4, 16.1, 10),
-          ft('o3-sp8',    67.8, 65.1, 26.8, 14.0, 10),
-          fn('o3-e9t',    69.5, 79.2,  7.2, 10,{align:'center'}),
-          f('o3-e9g',     77.8, 79.3, 16.6, 10),
-          ft('o3-sp9',    67.7, 82.5, 27.1, 14.0, 10),
-      ]}
-    ]
-  },
-
-  artistica: {
-    storageKey:'dnd_artistica',
-    pdfUrl:'../assets/pdf/Hoja_DND.pdf',
-    pages:[
-      { imgKey:'art_0', fields:[
-          f('a-nombre',      12.8, 12.9, 26.7, 16),
-          f('a-clase',       55.9, 13.4, 18.4, 12),
-          f('a-raza',        55.9, 16.9, 10.7, 12),
-          fn('a-ini',        33.1, 22.1,  5.6, 14,{align:'center'}),
-          fn('a-ca',         42.0, 22.0,  5.8, 14,{align:'center'}),
-          fn('a-vel',        50.7, 22.1,  6.3, 12,{align:'center'}),
-          fn('a-competencia',14.5, 29.1,  6.5, 12,{align:'center'}),
-
-          /* Stats artística (misma lógica: mod arriba, valor abajo) */
-          fa('a-mod-fue',    24.9, 28.7,  4.5, 12),
-          fn('a-fue',        15.3, 36.6,  5.6, 16,{align:'center'}),
-          fa('a-mod-des',    32.7, 37.0,  4.5, 12),
-          fn('a-des',        15.6, 44.7,  5.8, 16,{align:'center'}),
-          fa('a-mod-con',    32.7, 38.9,  4.0, 12),
-          fn('a-con',        15.6, 32.9,  4.9, 16,{align:'center'}),
-          fa('a-mod-int',    32.6, 40.7,  4.2, 12),
-          fn('a-int',        15.5, 40.5,  5.1, 16,{align:'center'}),
-          fa('a-mod-sab',    33.4, 42.5,  3.1, 12),
-          fn('a-sab',        15.5, 53.0,  6.3, 16,{align:'center'}),
-          fa('a-mod-car',    33.3, 44.2,  3.5, 12),
-          fn('a-car',        16.3, 57.0,  5.1, 16,{align:'center'}),
-
-          /* PG */
-          fn('a-pg-max',     49.1, 28.9, 10.9, 12),
-          fn('a-pg-act',     49.3, 31.0, 10.8, 14),
-          fn('a-pg-temp',    47.9, 34.7, 11.7, 12),
-
-          /* Salvaciones */
-          fa('a-sv-fue', 33.4, 46.5,  3.8, 11),
-          fa('a-sv-des', 40.9, 41.3, 10.3, 11),
-          fa('a-sv-con', 51.9, 41.2,  9.5, 11),
-          fa('a-sv-int', 63.3, 24.4, 15.8, 11),
-          fa('a-sv-sab', 44.9, 62.4,  4.9, 11),
-          fa('a-sv-car', 15.0, 60.3,  7.1, 11),
-          fc('a-sv-c-fue', 36.4, 53.0),
-          fc('a-sv-c-des', 36.6, 54.3),
-          fc('a-sv-c-con', 36.7, 55.9),
-          fc('a-sv-c-int', 37.0, 57.1),
-          fc('a-sv-c-sab', 36.8, 58.3),
-          fc('a-sv-c-car', 37.1, 59.7),
-
-          /* Habilidades */
-          fc('a-sk-c-acro', 33.5, 65.8), fa('a-sk-acro', 34.8, 65.8, 1.9, 11),
-          fc('a-sk-c-atle', 33.4, 68.0), fa('a-sk-atle', 34.7, 68.0, 2.0, 11),
-          fc('a-sk-c-jdm',  33.2, 70.3), fa('a-sk-jdm',  34.5, 70.3, 2.3, 11),
-          fc('a-sk-c-sigi', 16.2, 66.5), fa('a-sk-sigi', 16.3, 66.5, 6.2, 11),
-          fc('a-sk-c-tani', 16.0, 64.8), fa('a-sk-tani', 16.3, 64.8, 5.3, 11),
-          fc('a-sk-c-agua', 15.6, 68.7), fa('a-sk-agua', 16.3, 68.7, 6.3, 11),
-          fa('a-sk-perc',   40.6, 70.8, 8.1, 11),
-          fa('a-sk-pers',   40.3, 74.9, 8.3, 11),
-          fa('a-sk-carc',   40.7, 79.2, 8.4, 11),
-          fc('a-sk-c-perc', 49.8, 70.8),
-          fc('a-sk-c-pers', 49.6, 74.6),
-          fc('a-sk-c-carc', 49.9, 79.1),
-
-          fa('a-ini-calc',  16.3, 72.8, 5.0, 12),
-          f('a-dg',         53.2, 70.6, 7.4, 12),
-
-          fc('a-m-e1',40.6,70.8), fc('a-m-e2',49.8,70.8), fc('a-m-e3',53.2,70.8),
-          fc('a-m-f1',40.3,74.9), fc('a-m-f2',49.6,74.9), fc('a-m-f3',52.9,74.9),
-
-          f('a-mb-nom',40.4, 83.8, 22.4, 11),
-          f('a-mm-bon',54.0, 79.1,  6.6, 11),
-          ft('a-comps',  8.8, 78.2, 25.8, 16.0, 10),
-          ft('a-rasgos',63.3, 24.4, 15.8, 50.0, 10),
-      ]},
-
-      { imgKey:'art_1', fields:[
-          f('a2-slots',  3.0,  7.2, 14.2, 12),
-          ft('a2-moch1', 5.7, 20.4, 41.7, 74.0, 11),
-          ft('a2-moch2',53.5, 20.3, 40.0, 74.0, 11),
-      ]},
-
-      { imgKey:'art_2', fields:[
-          f('a3-apt',   26.2,  4.0, 12.7, 12,{align:'center'}),
-          f('a3-cd',    42.9,  4.4, 12.2, 12,{align:'center'}),
-          f('a3-bon',   59.5,  3.8, 13.0, 12,{align:'center'}),
-          ft('a3-sp0',   4.9, 20.6, 28.5, 14.0, 10),
-          fn('a3-e1t',  41.0, 17.1,  5.0, 10,{align:'center'}),
-          f('a3-e1g',   47.8, 17.0, 15.8, 10),
-          ft('a3-sp1',  37.9, 20.8, 28.5, 14.0, 10),
-          fn('a3-e2t',  72.0, 17.0,  4.9, 10,{align:'center'}),
-          f('a3-e2g',   78.4, 16.9, 16.4, 10),
-          ft('a3-sp2',  68.7, 20.8, 27.6, 14.0, 10),
-          fn('a3-e3t',  10.2, 38.6,  4.5, 10,{align:'center'}),
-          f('a3-e3g',   16.5, 38.6, 16.3, 10),
-          ft('a3-sp3',   6.4, 44.8, 28.5, 14.0, 10),
-          fn('a3-e4t',  40.9, 45.8,  5.6, 10,{align:'center'}),
-          f('a3-e4g',   47.6, 45.8, 16.9, 10),
-          ft('a3-sp4',  37.8, 49.8, 27.6, 14.0, 10),
-          fn('a3-e5t',  71.9, 38.7,  4.9, 10,{align:'center'}),
-          f('a3-e5g',   78.4, 38.9, 16.7, 10),
-          ft('a3-sp5',  68.7, 42.6, 27.8, 14.0, 10),
-          fn('a3-e6t',   9.7, 68.0,  5.7, 10,{align:'center'}),
-          f('a3-e6g',   16.6, 68.8, 16.1, 10),
-          ft('a3-sp6',   6.6, 72.4, 28.7, 14.0, 10),
-          fn('a3-e7t',  40.8, 75.2,  4.7, 10,{align:'center'}),
-          f('a3-e7g',   47.2, 75.4, 16.4, 10),
-          ft('a3-sp7',  37.3, 79.3, 28.3, 14.0, 10),
-          fn('a3-e8t',  71.7, 60.6,  5.8, 10,{align:'center'}),
-          f('a3-e8g',   78.3, 60.8, 17.0, 10),
-          ft('a3-sp8',  68.3, 64.7, 28.4, 14.0, 10),
-          fn('a3-e9t',  72.3, 79.3,  5.1, 10,{align:'center'}),
-          f('a3-e9g',   79.3, 79.3, 15.7, 10),
-          ft('a3-sp9',  68.8, 83.0, 28.3, 14.0, 10),
-      ]}
-    ]
-  }
+    oficial: {
+        pdfUrl:     '../assets/pdf/Hoja_de_personaje_Editable.pdf',
+        storageKey: 'dnd_pdf_oficial',
+        nameField:  'CharacterName',
+        infoFields: ['ClassLevel','Race','Background'],
+        defaultFont:'Helvetica, Arial, sans-serif'
+    },
+    melon: {
+        pdfUrl:     '../assets/pdf/Hoja DND.pdf',
+        storageKey: 'dnd_pdf_melon',
+        nameField:  'doc_0_doc_0_Text_1',   /* primer textbox arriba-izquierda = Nombre */
+        infoFields: [],
+        defaultFont:"'Allison', cursive"
+    }
 };
 
-/* ════════════════════════════════════════
-   CÁLCULOS D&D 5e
-════════════════════════════════════════ */
-var SKILL_STAT = {
-  'acro':'des','atle':'fue','carc':'int','enga':'car',
-  'hist':'int','inte':'car','inti':'car','inve':'int',
-  'jdm':'des','medi':'sab','natu':'int','perc':'sab',
-  'pers':'sab','pers2':'car','reli':'int','sigi':'des',
-  'supe':'sab','tani':'sab',
-  'agua':'fue'
-};
-function getMod(val){ return Math.floor(((parseInt(val)||10)-10)/2); }
-function fmtMod(m){ return (m>=0?'+':'')+m; }
-
-function runCalcs(prefix){
-    var p = prefix+'-';
-    ['fue','des','con','int','sab','car'].forEach(function(s){
-        var el  = document.getElementById(p+s);
-        var mel = document.getElementById(p+'mod-'+s);
-        if(el && mel) mel.value = fmtMod(getMod(el.value));
-    });
-    var compEl  = document.getElementById(prefix==='o'?'o-competencia':'a-competencia');
-    var compVal = compEl ? (parseInt(compEl.value)||2) : 2;
-
-    ['fue','des','con','int','sab','car'].forEach(function(s){
-        var mod = getMod((document.getElementById(p+s)||{value:'10'}).value);
-        var chk = document.getElementById(p+'sv-c-'+s);
-        var out = document.getElementById(p+'sv-'+s);
-        if(out) out.value = fmtMod(mod+(chk&&chk.checked?compVal:0));
-    });
-
-    Object.keys(SKILL_STAT).forEach(function(sk){
-        var mod = getMod((document.getElementById(p+SKILL_STAT[sk])||{value:'10'}).value);
-        var chk = document.getElementById(p+'sk-c-'+sk);
-        var out = document.getElementById(p+'sk-'+sk);
-        if(out) out.value = fmtMod(mod+(chk&&chk.checked?compVal:0));
-    });
-
-    if(prefix==='o'){
-        var percEl = document.getElementById('o-sk-perc');
-        var ppEl   = document.getElementById('o-perc-pasiva');
-        if(ppEl) ppEl.value = 10+(percEl?(parseInt(percEl.value.replace('+',''))||0):0);
-    }
-
-    var desEl = document.getElementById(p+'des');
-    var iniEl = document.getElementById(p+'iniciativa')||document.getElementById(p+'ini-calc');
-    if(desEl&&iniEl) iniEl.value = fmtMod(getMod(desEl.value));
-}
-
-function attachCalcListeners(prefix){
-    var p = prefix+'-';
-    ['fue','des','con','int','sab','car'].forEach(function(s){
-        var el = document.getElementById(p+s);
-        if(el) el.addEventListener('input',function(){ runCalcs(prefix); markDirty(); });
-    });
-    var compEl = document.getElementById(p+'competencia');
-    if(compEl) compEl.addEventListener('input',function(){ runCalcs(prefix); markDirty(); });
-    document.querySelectorAll('[id^="'+p+'sv-c-"],[id^="'+p+'sk-c-"]').forEach(function(el){
-        el.addEventListener('change',function(){ runCalcs(prefix); markDirty(); });
-    });
-    runCalcs(prefix);
-}
-
-/* ════════════════════════════════════════
-   TAMAÑO DE LETRA — global + por campo
-════════════════════════════════════════ */
-var globalFontScale = 1.0;
-var fieldFontSizes  = {};
-var ctxFieldId      = null;
-
-function changeFontSize(val){
-    document.getElementById('font-size-val').textContent = val;
-    globalFontScale = val/12;
-    reRenderFields();
-}
-
-function reRenderFields(){
-    var sheet = SHEETS[currentSheet];
-    sheet.pages.forEach(function(pg,pi){
-        var wrap   = document.getElementById(currentSheet+'-pg-'+pi); if(!wrap) return;
-        var canvas = wrap.querySelector('.page-canvas');
-        var img    = canvas&&canvas.querySelector('img');
-        if(img&&img.offsetWidth) placeFields(canvas,pg.fields,img);
-    });
-    var stored = loadStored(SHEETS[currentSheet].storageKey);
-    if(stored) setTimeout(function(){ applyData(stored); runCalcs(currentSheet==='oficial'?'o':'a'); },100);
-}
-
-function openCtxMenu(e,fieldId,currentFs){
-    e.preventDefault(); e.stopPropagation();
-    ctxFieldId = fieldId;
-    var customFs = fieldFontSizes[fieldId]||currentFs;
-    document.getElementById('ctx-field-name').textContent = '✏ '+fieldId;
-    document.getElementById('ctx-fs-slider').value = customFs;
-    document.getElementById('ctx-fs-val').textContent = customFs;
-    var menu = document.getElementById('field-ctx-menu');
-    var x=e.clientX, y=e.clientY;
-    if(x+210>window.innerWidth)  x=window.innerWidth-215;
-    if(y+110>window.innerHeight) y=window.innerHeight-115;
-    menu.style.left=x+'px'; menu.style.top=y+'px'; menu.style.display='block';
-}
-
-function ctxFsChange(val){
-    document.getElementById('ctx-fs-val').textContent = val;
-    if(!ctxFieldId) return;
-    fieldFontSizes[ctxFieldId] = parseInt(val);
-    var el = document.getElementById(ctxFieldId);
-    if(el) el.style.fontSize = val+'px';
-    saveFieldFontSizes();
-}
-
-function ctxFsReset(){
-    if(!ctxFieldId) return;
-    delete fieldFontSizes[ctxFieldId];
-    saveFieldFontSizes();
-    var sheet=SHEETS[currentSheet]; var fd=null;
-    sheet.pages.forEach(function(pg){ pg.fields.forEach(function(f){ if(f.id===ctxFieldId) fd=f; }); });
-    if(fd){
-        var fs=(fd.fs||12)*globalFontScale;
-        var el=document.getElementById(ctxFieldId);
-        if(el) el.style.fontSize=fs+'px';
-        document.getElementById('ctx-fs-slider').value=fd.fs||12;
-        document.getElementById('ctx-fs-val').textContent=fd.fs||12;
-    }
-}
-
-function saveFieldFontSizes(){ try{ localStorage.setItem(SHEETS[currentSheet].storageKey+'_fs',JSON.stringify(fieldFontSizes)); }catch(e){} }
-function loadFieldFontSizes(){ try{ var r=localStorage.getItem(SHEETS[currentSheet].storageKey+'_fs'); fieldFontSizes=r?JSON.parse(r):{}; }catch(e){ fieldFontSizes={}; } }
-
-document.addEventListener('click',function(e){ var m=document.getElementById('field-ctx-menu'); if(m&&!m.contains(e.target)) m.style.display='none'; });
-document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'){ document.getElementById('field-ctx-menu').style.display='none'; closeModal(); }
-    if((e.ctrlKey||e.metaKey)&&e.key==='z'){ e.preventDefault(); undoLast(); }
-    if((e.ctrlKey||e.metaKey)&&e.key==='s'){ e.preventDefault(); saveLocal(); }
-});
-
-/* ════════════════════════════════════════
-   ESTADO GLOBAL
-════════════════════════════════════════ */
 var currentSheet = 'oficial';
 var currentPage  = 0;
 var inMisFichas  = false;
+var fitScale     = 1.0;                 // escala que hace que la página ocupe todo el alto
+var userZoom     = 1.0;                 // multiplicador del usuario (slider). 1.0 = ajuste-al-alto
+var currentZoom  = 1.5;                 // = fitScale * userZoom (usado por PDF.js)
+var pdfDocs      = {};                  // cache de PDFDocumentProxy por sheet
+var sheetState   = {};                  // sheet → { pageCount, fieldNames:Set }
 
-/* ── Historial undo (simple: guarda snapshots) ── */
+/* ════════════════════════════════════════
+   CARGA Y RENDER
+════════════════════════════════════════ */
+async function buildSheet(key){
+    currentSheet = key; currentPage = 0; inMisFichas = false;
+    undoStack = [];
+
+    var area = document.getElementById('sheet-area');
+    var tabs = document.getElementById('page-tabs');
+    area.innerHTML = ''; tabs.innerHTML = '';
+    area.style.display = 'flex';
+    document.getElementById('bottom-bar').style.display = 'flex';
+    document.getElementById('mis-fichas-panel').classList.remove('visible');
+
+    var sheet = SHEETS[key];
+    setStatus('Cargando PDF…');
+    try {
+        var pdf = pdfDocs[key];
+        if(!pdf){
+            pdf = await pdfjsLib.getDocument(sheet.pdfUrl).promise;
+            pdfDocs[key] = pdf;
+        }
+        var state = { pageCount: pdf.numPages, fieldNames: new Set() };
+        sheetState[key] = state;
+
+        // Auto-fit vertical sobre 1ª página + multiplicador del usuario
+        fitScale    = await computeFitScale(pdf);
+        currentZoom = Math.max(0.2, fitScale * userZoom);
+
+        for(var pi=0; pi<pdf.numPages; pi++){
+            var tab = document.createElement('button');
+            tab.className = 'pg-tab'+(pi===0?' active':'');
+            tab.textContent = 'Pág.'+(pi+1);
+            tab.dataset.pi = pi;
+            (function(idx){ tab.onclick = function(){ showPage(idx); }; })(pi);
+            tabs.appendChild(tab);
+
+            var wrap = document.createElement('div');
+            wrap.className = 'sheet-page'+(pi===0?' visible':'');
+            wrap.id = key+'-pg-'+pi;
+            area.appendChild(wrap);
+
+            await renderPage(pdf, pi, wrap, state);
+        }
+
+        // Aplicar datos guardados
+        var stored = loadStored(sheet.storageKey);
+        if(stored) applyData(stored);
+        runCalcs();
+        attachChangeListeners();
+        _lastSavedState = JSON.stringify(collectData());
+        setStatus('✔ Cargado ('+pdf.numPages+' páginas)');
+    } catch(e){
+        console.error(e);
+        setStatus('✗ Error: '+e.message);
+        showToast('✗ No se pudo cargar el PDF');
+    }
+}
+
+async function renderPage(pdf, pageIndex, wrap, state){
+    var page = await pdf.getPage(pageIndex+1);
+    var viewport = page.getViewport({ scale: currentZoom });
+
+    var container = document.createElement('div');
+    container.className = 'pdf-page-container';
+    container.style.width  = viewport.width+'px';
+    container.style.height = viewport.height+'px';
+    wrap.appendChild(container);
+
+    var canvas = document.createElement('canvas');
+    canvas.className = 'pdf-canvas';
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    container.appendChild(canvas);
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+
+    var formLayer = document.createElement('div');
+    formLayer.className = 'pdf-form-layer';
+    container.appendChild(formLayer);
+
+    var annotations = await page.getAnnotations();
+    annotations.forEach(function(annot){
+        if(annot.subtype !== 'Widget') return;
+        if(!annot.fieldName) return;
+        createFormField(formLayer, annot, viewport, pageIndex, state);
+    });
+}
+
+/* Crea un input/textarea/checkbox/select para una anotación AcroForm */
+function createFormField(layer, annot, viewport, pageIndex, state){
+    // Coordenadas: rect = [x1,y1,x2,y2] en puntos PDF (origen abajo-izquierda)
+    var r = pdfjsLib.Util.normalizeRect(annot.rect);
+    var tl = viewport.convertToViewportPoint(r[0], r[3]); // top-left
+    var br = viewport.convertToViewportPoint(r[2], r[1]); // bottom-right
+    var left   = Math.min(tl[0], br[0]);
+    var top    = Math.min(tl[1], br[1]);
+    var width  = Math.abs(br[0] - tl[0]);
+    var height = Math.abs(br[1] - tl[1]);
+
+    var el = null;
+    var ft = annot.fieldType;
+
+    if(ft === 'Tx'){
+        if(annot.multiLine){
+            el = document.createElement('textarea');
+        } else {
+            el = document.createElement('input');
+            el.type = annot.password ? 'password' : 'text';
+        }
+        if(annot.maxLen) el.maxLength = annot.maxLen;
+        var v = annot.fieldValue;
+        if(v !== undefined && v !== null) el.value = Array.isArray(v) ? v.join('\n') : String(v);
+    }
+    else if(ft === 'Btn'){
+        if(annot.checkBox){
+            el = document.createElement('input');
+            el.type = 'checkbox';
+            el.checked = !!annot.fieldValue && annot.fieldValue !== 'Off';
+        } else if(annot.radioButton){
+            el = document.createElement('input');
+            el.type = 'radio';
+            el.name = annot.fieldName;
+            el.value = annot.buttonValue || 'On';
+            el.checked = annot.fieldValue === el.value;
+        } else {
+            return; // pushButton: no es campo de datos
+        }
+    }
+    else if(ft === 'Ch'){
+        el = document.createElement('select');
+        var blank = document.createElement('option');
+        blank.value = ''; blank.textContent = '—';
+        el.appendChild(blank);
+        (annot.options||[]).forEach(function(o){
+            var opt = document.createElement('option');
+            opt.value = o.exportValue != null ? o.exportValue : o.displayValue;
+            opt.textContent = o.displayValue;
+            el.appendChild(opt);
+        });
+        if(annot.fieldValue) el.value = annot.fieldValue;
+    }
+    else {
+        return; // Sig u otros: omitir
+    }
+
+    el.dataset.fieldName = annot.fieldName;
+    el.dataset.pageIndex = pageIndex;
+    state.fieldNames.add(annot.fieldName);
+
+    el.style.left   = left+'px';
+    el.style.top    = top+'px';
+    el.style.width  = width+'px';
+    el.style.height = height+'px';
+
+    // Font: la fuente del PDF (Helv/HeBo). Si el sheet define defaultFont propio
+    // (p.ej. melon → Allison), se usa ese como fallback.
+    var sheetCfg = SHEETS[currentSheet] || {};
+    var da = annot.defaultAppearanceData || {};
+    var fs;
+    if(da.fontSize && da.fontSize > 0){
+        fs = da.fontSize * viewport.scale;             // tamaño fijo PDF → px
+    } else {
+        // auto-fit: ~65 % del alto pero capado a 14pt (lo que hace Acrobat para
+        // que un nombre largo no se desborde y no aparezca texto enorme).
+        fs = Math.min(14 * viewport.scale, Math.max(8, height * 0.65));
+    }
+    el.style.fontFamily = mapPdfFont(da.fontName, sheetCfg.defaultFont);
+    // Detectar variantes bold (HeBo, Helvetica-Bold, Times-Bold, etc.)
+    if(da.fontName && /bo|bold/i.test(da.fontName)) el.style.fontWeight = 'bold';
+    if(da.fontName && /(it|italic|ob|oblique)$/i.test(da.fontName)) el.style.fontStyle = 'italic';
+    if(el.tagName !== 'INPUT' || (el.type !== 'checkbox' && el.type !== 'radio')){
+        el.style.fontSize = fs+'px';
+    }
+    if(annot.textAlignment === 1) el.style.textAlign = 'center';
+    if(annot.textAlignment === 2) el.style.textAlign = 'right';
+    if(annot.readOnly){ el.readOnly = true; el.tabIndex = -1; el.style.opacity = 0.85; }
+    // Campos auto-calculados: bloquear edición (sin alterar colores del PDF)
+    if(currentSheet === 'oficial' && isCalcField(annot.fieldName) && ft === 'Tx'){
+        el.readOnly = true; el.tabIndex = -1;
+        el.title = 'Campo auto-calculado';
+    }
+
+    layer.appendChild(el);
+}
+
+function mapPdfFont(name, defaultFont){
+    var fallback = defaultFont || 'Helvetica, Arial, sans-serif';
+    if(!name) return fallback;
+    var n = String(name).toLowerCase();
+    // Helvetica family (Helv, HeBo = Helvetica-Bold) → fallback del sheet (Helvetica)
+    if(n.indexOf('helv') !== -1 || n.indexOf('hebo') !== -1 ||
+       n.indexOf('arial') !== -1) return fallback;
+    if(n.indexOf('time') !== -1 || n.indexOf('roman') !== -1 ||
+       n.indexOf('tibo') !== -1) return "'Times New Roman', Times, serif";
+    if(n.indexOf('cour') !== -1 || n.indexOf('mono') !== -1) return "'Courier New', Courier, monospace";
+    if(n.indexOf('allison') !== -1) return "'Allison', cursive";
+    return fallback;
+}
+
+/* ════════════════════════════════════════
+   AUTO-FIT VERTICAL + ZOOM
+════════════════════════════════════════ */
+async function computeFitScale(pdf){
+    var page = await pdf.getPage(1);
+    var base = page.getViewport({ scale: 1 });
+    var area = document.getElementById('sheet-area');
+    // Esperar a que el layout esté hecho (clientHeight puede ser 0 al principio)
+    if(area.clientHeight < 200){
+        await new Promise(function(r){ requestAnimationFrame(function(){ requestAnimationFrame(r); }); });
+    }
+    var availH = Math.max(300, area.clientHeight - 20);
+    // Sin suelo: PDFs grandes (melon = 2480x3508) necesitan escalas <0.4
+    return availH / base.height;
+}
+
+function rerenderPreservingData(){
+    if(!pdfDocs[currentSheet]) return;
+    var data = collectData();
+    buildSheet(currentSheet).then(function(){ applyData(data); });
+}
+
+var _zoomRebuildTimer = null;
+function setZoom(val){
+    userZoom = parseInt(val) / 100;
+    document.getElementById('zoom-val').textContent = val + '%';
+    document.getElementById('zoom-slider').value = val;
+    clearTimeout(_zoomRebuildTimer);
+    _zoomRebuildTimer = setTimeout(rerenderPreservingData, 220);
+}
+function zoomStep(delta){
+    var s = document.getElementById('zoom-slider');
+    var v = Math.max(parseInt(s.min), Math.min(parseInt(s.max), parseInt(s.value) + delta));
+    setZoom(v);
+}
+function resetZoom(){ setZoom(100); }
+
+var _resizeTimer = null;
+window.addEventListener('resize', function(){
+    if(inMisFichas) return;
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(rerenderPreservingData, 220);
+});
+
+/* Ctrl + rueda del ratón = zoom in/out sobre la ficha */
+document.getElementById('sheet-area').addEventListener('wheel', function(e){
+    if(!(e.ctrlKey || e.metaKey)) return;   // sin ctrl/cmd: scroll normal
+    e.preventDefault();
+    zoomStep(e.deltaY < 0 ? 10 : -10);
+}, { passive: false });
+
+/* ════════════════════════════════════════
+   DATOS (basados en fieldName del AcroForm)
+════════════════════════════════════════ */
+function collectData(){
+    var data = {};
+    document.querySelectorAll('.pdf-form-layer input, .pdf-form-layer textarea, .pdf-form-layer select').forEach(function(el){
+        var name = el.dataset.fieldName; if(!name) return;
+        if(el.type === 'checkbox'){
+            data[name] = el.checked;
+        } else if(el.type === 'radio'){
+            if(el.checked) data[name] = el.value;
+        } else {
+            data[name] = el.value;
+        }
+    });
+    return data;
+}
+function applyData(data){
+    if(!data) return;
+    document.querySelectorAll('.pdf-form-layer input, .pdf-form-layer textarea, .pdf-form-layer select').forEach(function(el){
+        var name = el.dataset.fieldName; if(!name) return;
+        if(!(name in data)) return;
+        var v = data[name];
+        if(el.type === 'checkbox') el.checked = !!v;
+        else if(el.type === 'radio') el.checked = (el.value === v);
+        else el.value = (v == null ? '' : v);
+    });
+}
+function loadStored(key){ try{ var r=localStorage.getItem(key); return r?JSON.parse(r):null; }catch(e){ return null; } }
+
+/* ════════════════════════════════════════
+   CÁLCULOS AUTOMÁTICOS DEL PDF OFICIAL
+   Replican los scripts /C (Calculate) del AcroForm.
+════════════════════════════════════════ */
+var ABILITIES = ['STR','DEX','CON','INT','WIS','CHA'];
+var SKILL_MAP = {
+    Acrobatics:    { stat:'DEX', prof:'acroPROF'    },
+    AnHan:         { stat:'WIS', prof:'anhanPROF'   },
+    Arcana:        { stat:'INT', prof:'arcanaPROF'  },
+    Athletics:     { stat:'STR', prof:'athPROF'     },
+    Deception:     { stat:'CHA', prof:'decepPROF'   },
+    History:       { stat:'INT', prof:'histPROF'    },
+    Insight:       { stat:'WIS', prof:'insightPROF' },
+    Intimidation:  { stat:'CHA', prof:'intimPROF'   },
+    Investigation: { stat:'INT', prof:'investPROF'  },
+    Medicine:      { stat:'WIS', prof:'medPROF'     },
+    Nature:        { stat:'INT', prof:'naturePROF'  },
+    Perception:    { stat:'WIS', prof:'perPROF'     },
+    Performance:   { stat:'CHA', prof:'perfPROF'    },
+    Persuasion:    { stat:'CHA', prof:'persPROF'    },
+    Religion:      { stat:'INT', prof:'religPROF'   },
+    SleightofHand: { stat:'DEX', prof:'sohPROF'     },
+    Stealth:       { stat:'DEX', prof:'stealthPROF' },
+    Survival:      { stat:'WIS', prof:'survPROF'    }
+};
+var CALC_FIELDS = [
+    'STRbonus','DEXbonus','CONbonus','INTbonus','WISbonus','CHAbonus',
+    'STRsave','DEXsave','CONsave','INTsave','WISsave','CHAsave',
+    'Acrobatics','AnHan','Arcana','Athletics','Deception','History','Insight',
+    'Intimidation','Investigation','Medicine','Nature','Perception',
+    'Performance','Persuasion','Religion','SleightofHand','Stealth','Survival',
+    'PWP','SpellSaveDC','SAB','ProfBonus'   // ProfBonus se reformatea con signo
+];
+function isCalcField(name){ return CALC_FIELDS.indexOf(name) !== -1; }
+
+function _qField(name){
+    return document.querySelector('.pdf-form-layer [data-field-name="'+ name.replace(/"/g,'\\"') +'"]');
+}
+function _fldNum(name){
+    var el = _qField(name); if(!el) return null;
+    var v = (el.value||'').toString().replace(/^\+/,'').trim();
+    if(v === '') return null;
+    var n = parseFloat(v); return isNaN(n) ? null : n;
+}
+function _fldChk(name){ var el = _qField(name); return !!(el && el.checked); }
+function _fldSet(name, val){ var el = _qField(name); if(el) el.value = (val === null || val === undefined) ? '' : val; }
+function _fmtMod(n){ return n > 0 ? '+'+n : String(n); }
+
+function runCalcs(){
+    if(currentSheet !== 'oficial') return;
+    var prof = _fldNum('ProfBonus');
+    if(prof !== null) _fldSet('ProfBonus', _fmtMod(prof));
+
+    var bonuses = {};
+    ABILITIES.forEach(function(ab){
+        var score = _fldNum(ab+'score');
+        var bonus;
+        if(score === null){ bonus = null; _fldSet(ab+'bonus',''); }
+        else { bonus = Math.floor((score - 10) / 2); _fldSet(ab+'bonus', _fmtMod(bonus)); }
+        bonuses[ab] = bonus;
+        if(score === null){ _fldSet(ab+'save',''); }
+        else {
+            var sv = bonus + (_fldChk(ab+'savePROF') && prof !== null ? prof : 0);
+            _fldSet(ab+'save', _fmtMod(sv));
+        }
+    });
+
+    Object.keys(SKILL_MAP).forEach(function(skill){
+        var m = SKILL_MAP[skill]; var bn = bonuses[m.stat];
+        if(bn === null){ _fldSet(skill, ''); return; }
+        var v = bn + (_fldChk(m.prof) && prof !== null ? prof : 0);
+        _fldSet(skill, _fmtMod(v));
+    });
+
+    // Percepción pasiva: 10 + WISbonus + (perPROF ? ProfBonus : 0)
+    if(bonuses.WIS === null) _fldSet('PWP','');
+    else _fldSet('PWP', 10 + bonuses.WIS + (_fldChk('perPROF') && prof !== null ? prof : 0));
+
+    // SpellSaveDC y SAB: dependen del SpellAbility (1=INT, 2=WIS, 3=CHA)
+    var sa = _qField('SpellAbility');
+    var saVal = sa ? sa.value : '';
+    var saMap = { '1':'INT', '2':'WIS', '3':'CHA' };
+    var sk = saMap[saVal];
+    if(sk && bonuses[sk] !== null && prof !== null){
+        _fldSet('SpellSaveDC', 8 + prof + bonuses[sk]);
+        _fldSet('SAB',             prof + bonuses[sk]);
+    } else {
+        _fldSet('SpellSaveDC',''); _fldSet('SAB','');
+    }
+}
+
+/* ════════════════════════════════════════
+   AUTOSAVE / UNDO / LISTENERS
+════════════════════════════════════════ */
 var undoStack = [];
-var MAX_UNDO  = 20;
-
+var MAX_UNDO  = 30;
 function pushUndo(){
-    var snap = collectData();
-    undoStack.push(JSON.stringify(snap));
-    if(undoStack.length>MAX_UNDO) undoStack.shift();
+    undoStack.push(JSON.stringify(collectData()));
+    if(undoStack.length > MAX_UNDO) undoStack.shift();
 }
 function undoLast(){
     if(!undoStack.length){ showToast('Sin cambios para deshacer'); return; }
     var prev = JSON.parse(undoStack.pop());
     applyData(prev);
-    runCalcs(currentSheet==='oficial'?'o':'a');
-    showToast('↩ Deshecho');
+    runCalcs();
     saveLocal(true);
+    showToast('↩ Deshecho');
 }
 
-/* ── Autosave / dirty tracking ── */
 var _autosaveTimer  = null;
 var _lastSavedState = null;
 function markDirty(){
@@ -871,378 +914,705 @@ function markDirty(){
 }
 function setAutosaveDot(state){
     var dot = document.getElementById('autosave-dot');
-    dot.className = state ? 'saved' : '';
-    if(state==='saving') dot.className = 'saving';
+    dot.className = state === 'saving' ? 'saving' : (state ? 'saved' : '');
 }
 
-/* Adjuntar listeners de cambio a todos los campos normales */
+var _pushUndoTimer = null;
+function fieldChanged(){
+    clearTimeout(_pushUndoTimer);
+    _pushUndoTimer = setTimeout(pushUndo, 500);
+    markDirty();
+    runCalcs();
+    markDirtyDrive();
+}
 function attachChangeListeners(){
-    document.querySelectorAll('.page-canvas input:not(.auto-calc),.page-canvas textarea').forEach(function(el){
+    document.querySelectorAll('.pdf-form-layer input, .pdf-form-layer textarea, .pdf-form-layer select').forEach(function(el){
         el.removeEventListener('input',  fieldChanged);
         el.removeEventListener('change', fieldChanged);
         el.addEventListener('input',  fieldChanged);
         el.addEventListener('change', fieldChanged);
     });
 }
-var _pushUndo_timer = null;
-function fieldChanged(){
-    clearTimeout(_pushUndo_timer);
-    _pushUndo_timer = setTimeout(pushUndo, 500);
-    markDirty();
-}
-
-/* ════════════════════════════════════════
-   BUILD DOM
-════════════════════════════════════════ */
-function buildSheet(key){
-    currentPage=0; inMisFichas=false;
-    loadFieldFontSizes();
-    var sheet=SHEETS[key];
-    var area=document.getElementById('sheet-area');
-    var tabs=document.getElementById('page-tabs');
-    var mfp=document.getElementById('mis-fichas-panel');
-    var bbar=document.getElementById('bottom-bar');
-    area.innerHTML=''; tabs.innerHTML='';
-    area.style.display='flex'; bbar.style.display='flex';
-    mfp.classList.remove('visible');
-    undoStack=[];
-
-    sheet.pages.forEach(function(pg,pi){
-        var tab=document.createElement('button');
-        tab.className='pg-tab'+(pi===0?' active':'');
-        tab.textContent='Pág.'+(pi+1);
-        tab.dataset.pi=pi;
-        tab.onclick=function(){ showPage(pi); };
-        tabs.appendChild(tab);
-
-        var wrap=document.createElement('div');
-        wrap.className='sheet-page'+(pi===0?' visible':'');
-        wrap.id=key+'-pg-'+pi;
-        var canvas=document.createElement('div');
-        canvas.className='page-canvas';
-        var img=document.createElement('img');
-        img.src=(typeof DND_IMGS!=='undefined'&&DND_IMGS[pg.imgKey])?DND_IMGS[pg.imgKey]:'';
-        img.alt='Página '+(pi+1);
-        img.style.maxWidth=key==='oficial'?'780px':'800px';
-        canvas.appendChild(img);
-        function doPos(){ if(img.offsetWidth>0) placeFields(canvas,pg.fields,img); else setTimeout(doPos,60); }
-        img.onload=doPos;
-        if(img.complete&&img.naturalWidth>0) doPos();
-        wrap.appendChild(canvas); area.appendChild(wrap);
-    });
-
-    var stored=loadStored(sheet.storageKey);
-    if(stored){
-        setTimeout(function(){
-            applyData(stored);
-            setTimeout(function(){
-                runCalcs(key==='oficial'?'o':'a');
-                attachChangeListeners();
-                _lastSavedState=JSON.stringify(collectData());
-            },150);
-        },200);
-    } else {
-        setTimeout(function(){ attachChangeListeners(); },400);
-    }
-
-    document.getElementById('font-size-slider').value=12;
-    document.getElementById('font-size-val').textContent=12;
-    globalFontScale=1.0;
-}
-
-function placeFields(canvas,fields,img){
-    var W=img.offsetWidth, H=img.offsetHeight;
-    if(!W||!H){ setTimeout(function(){ placeFields(canvas,fields,img); },60); return; }
-
-    fields.forEach(function(fd){
-        var old=canvas.querySelector('#'+CSS.escape(fd.id));
-        if(old) old.remove();
-        var el;
-        if(fd.type==='textarea'){ el=document.createElement('textarea'); }
-        else { el=document.createElement('input'); el.type=fd.type==='checkbox'?'checkbox':(fd.type==='number'?'number':'text'); }
-        el.id=fd.id;
-        el.style.left  =(fd.l/100*W)+'px';
-        el.style.top   =(fd.t/100*H)+'px';
-        el.style.width =(fd.w/100*W)+'px';
-        if(fd.h) el.style.height=(fd.h/100*H)+'px';
-
-        var basefs = fd.fs||12;
-        var fs = fieldFontSizes[fd.id]!==undefined ? fieldFontSizes[fd.id] : (basefs*globalFontScale);
-        el.style.fontSize = fs+'px';
-        if(fd.align) el.style.textAlign=fd.align;
-        if(fd.calc){ el.readOnly=true; el.classList.add('auto-calc'); el.tabIndex=-1; }
-
-        /* Clic derecho → menú tamaño (solo en campos editables) */
-        if(fd.type!=='checkbox'){
-            el.addEventListener('contextmenu',function(e){
-                var curfs=fieldFontSizes[fd.id]!==undefined?fieldFontSizes[fd.id]:Math.round(basefs*globalFontScale);
-                openCtxMenu(e,fd.id,curfs);
-            });
-        }
-
-        /* Tab order natural (salta campos de solo lectura) */
-        if(fd.calc||fd.type==='checkbox') el.tabIndex=-1;
-
-        canvas.appendChild(el);
-    });
-
-    var sheetKey=currentSheet;
-    setTimeout(function(){
-        attachCalcListeners(sheetKey==='oficial'?'o':'a');
-        attachChangeListeners();
-    },80);
-}
 
 /* ════════════════════════════════════════
    NAVEGACIÓN
 ════════════════════════════════════════ */
 function switchSheet(key){
-    saveLocal(true); currentSheet=key;
-    document.getElementById('tab-oficial').classList.toggle('active',key==='oficial');
-    document.getElementById('tab-artistica').classList.toggle('active',key==='artistica');
+    saveLocal(true);
+    currentSheet = key;
+    document.getElementById('tab-oficial').classList.toggle('active', key==='oficial');
+    document.getElementById('tab-melon').classList.toggle('active', key==='melon');
     document.getElementById('tab-misfichas').classList.remove('active');
-    buildSheet(key);
+    // Reset zoom al ajuste vertical por defecto al cambiar de hoja
+    userZoom = 1.0;
+    var s = document.getElementById('zoom-slider'); if(s) s.value = 100;
+    var v = document.getElementById('zoom-val');    if(v) v.textContent = '100%';
+    document.getElementById('zoom-controls').style.display = 'flex'; // visible en hojas
+    document.getElementById('sheet-tools').style.display = 'flex';
+    return buildSheet(key);   // devolver promise para que callers puedan await
 }
 function switchToMisFichas(){
-    saveLocal(true); inMisFichas=true;
+    saveLocal(true); inMisFichas = true;
     document.getElementById('tab-oficial').classList.remove('active');
-    document.getElementById('tab-artistica').classList.remove('active');
+    document.getElementById('tab-melon').classList.remove('active');
     document.getElementById('tab-misfichas').classList.add('active');
-    document.getElementById('sheet-area').style.display='none';
-    document.getElementById('bottom-bar').style.display='none';
-    document.getElementById('page-tabs').innerHTML='';
+    document.getElementById('sheet-area').style.display = 'none';
+    document.getElementById('bottom-bar').style.display = 'none';
+    document.getElementById('page-tabs').innerHTML = '';
     document.getElementById('mis-fichas-panel').classList.add('visible');
-    renderFichasList();
+    // Zoom y herramientas de hoja no aplican en Mis Fichas
+    document.getElementById('zoom-controls').style.display = 'none';
+    document.getElementById('sheet-tools').style.display = 'none';
+    fetchAndRenderFichas();
 }
 function showPage(pi){
-    currentPage=pi;
-    document.querySelectorAll('.pg-tab').forEach(function(t){ t.classList.toggle('active',parseInt(t.dataset.pi)===pi); });
-    document.querySelectorAll('.sheet-page').forEach(function(p,i){ p.classList.toggle('visible',i===pi); });
-    document.getElementById('sheet-area').scrollTop=0;
+    currentPage = pi;
+    document.querySelectorAll('.pg-tab').forEach(function(t){ t.classList.toggle('active', parseInt(t.dataset.pi)===pi); });
+    document.querySelectorAll('.sheet-page').forEach(function(p,i){ p.classList.toggle('visible', i===pi); });
+    document.getElementById('sheet-area').scrollTop = 0;
 }
-var _rt;
-window.addEventListener('resize',function(){
-    clearTimeout(_rt); _rt=setTimeout(function(){
-        if(inMisFichas) return;
-        SHEETS[currentSheet].pages.forEach(function(pg,pi){
-            var wrap=document.getElementById(currentSheet+'-pg-'+pi); if(!wrap) return;
-            var canvas=wrap.querySelector('.page-canvas');
-            var img=canvas&&canvas.querySelector('img');
-            if(img&&img.offsetWidth) placeFields(canvas,pg.fields,img);
-        });
-    },150);
-});
 
 /* ════════════════════════════════════════
-   DATOS
+   STORAGE LOCAL (solo autosave silencioso)
 ════════════════════════════════════════ */
-function collectData(){
-    var data={};
-    document.querySelectorAll('.page-canvas input:not(.auto-calc),.page-canvas textarea').forEach(function(el){
-        if(!el.id) return;
-        data[el.id]=el.type==='checkbox'?el.checked:el.value;
-    });
-    return data;
-}
-function applyData(data){
-    Object.keys(data).forEach(function(id){
-        var el=document.getElementById(id); if(!el) return;
-        if(el.type==='checkbox') el.checked=data[id]; else el.value=data[id];
-    });
-}
-function loadStored(key){ try{ var r=localStorage.getItem(key); return r?JSON.parse(r):null; }catch(e){ return null; } }
-
 function saveLocal(silent){
     try{
-        var data=collectData();
-        localStorage.setItem(SHEETS[currentSheet].storageKey,JSON.stringify(data));
-        _lastSavedState=JSON.stringify(data);
-        if(!silent){ setStatus('✔ Guardado'); showToast('💾 Guardado'); setAutosaveDot('saved'); setTimeout(function(){ setAutosaveDot(''); },2000); }
-    }catch(e){ if(!silent){ setStatus('✗ Error al guardar'); showToast('✗ Error al guardar'); } }
+        var data = collectData();
+        localStorage.setItem(SHEETS[currentSheet].storageKey, JSON.stringify(data));
+        _lastSavedState = JSON.stringify(data);
+        if(!silent){ setStatus('✔ Guardado'); setAutosaveDot('saved'); setTimeout(function(){ setAutosaveDot(''); },2000); }
+    }catch(e){ if(!silent){ setStatus('✗ Error al guardar'); showToast('✗ Error: '+e.message); } }
 }
-function loadLocal(){
-    var data=loadStored(SHEETS[currentSheet].storageKey);
-    if(!data){ showToast('Sin datos guardados'); return; }
-    pushUndo();
-    applyData(data); runCalcs(currentSheet==='oficial'?'o':'a');
-    showToast('✔ Datos cargados');
-}
-
 function clearAll(){
-    showConfirm('¿Borrar todos los campos de la ficha actual?<br><small style="color:#666">Esta acción es reversible con Deshacer.</small>',function(){
+    showConfirm('¿Borrar todos los campos de la ficha actual?<br><small style="color:#666">Esta acción es reversible con Deshacer.</small>', function(){
         pushUndo();
-        document.querySelectorAll('.page-canvas input:not(.auto-calc),.page-canvas textarea').forEach(function(el){
-            if(el.type==='checkbox') el.checked=false; else el.value='';
+        document.querySelectorAll('.pdf-form-layer input, .pdf-form-layer textarea, .pdf-form-layer select').forEach(function(el){
+            if(el.readOnly) return; // no tocar calc fields, runCalcs los limpiará
+            if(el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+            else el.value = '';
         });
-        runCalcs(currentSheet==='oficial'?'o':'a');
+        runCalcs();
         saveLocal(true);
         showToast('🗑 Ficha limpiada');
     });
 }
-
-window.addEventListener('beforeunload',function(){ saveLocal(true); });
+window.addEventListener('beforeunload', function(){ saveLocal(true); });
 
 /* ════════════════════════════════════════
-   MIS FICHAS
+   MIS FICHAS (listado desde Google Drive)
 ════════════════════════════════════════ */
-var MF_KEY='dnd_mis_fichas';
-function getMisFichas(){ try{ var r=localStorage.getItem(MF_KEY); return r?JSON.parse(r):[]; }catch(e){ return []; } }
-function setMisFichas(arr){ try{ localStorage.setItem(MF_KEY,JSON.stringify(arr)); }catch(e){} }
+var _driveFichasCache = [];
 
-function openModalGuardar(){
-    var el=document.getElementById('o-nombre')||document.getElementById('a-nombre');
-    document.getElementById('modal-nombre').value=el?(el.value||''):'';
-    document.getElementById('modal-guardar').classList.add('show');
-    setTimeout(function(){ document.getElementById('modal-nombre').focus(); document.getElementById('modal-nombre').select(); },50);
+function getCurrentName(){
+    var sheet = SHEETS[currentSheet];
+    if(sheet.nameField){
+        var el = document.querySelector('.pdf-form-layer [data-field-name="'+cssAttr(sheet.nameField)+'"]');
+        if(el && el.value) return el.value;
+    }
+    var first = document.querySelector('.pdf-form-layer input[type="text"]');
+    return (first && first.value) ? first.value : '';
 }
-function closeModal(){ document.getElementById('modal-guardar').classList.remove('show'); }
-function confirmarGuardar(){
-    var nombre=document.getElementById('modal-nombre').value.trim();
-    if(!nombre){ document.getElementById('modal-nombre').focus(); return; }
-    var fichas=getMisFichas();
-    fichas.unshift({
-        id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),
-        nombre, tipo:currentSheet, data:collectData(),
-        fecha:new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'})
+
+function fetchAndRenderFichas(){
+    var list = document.getElementById('mf-list');
+    list.innerHTML = '<div id="mf-empty">☁ Cargando desde Drive…</div>';
+    document.getElementById('mf-count').textContent = '';
+    ensureDriveAuth(async function(){
+        try {
+            var folderId = await ensureDriveFolder();
+            var q = "'" + folderId + "' in parents and trashed=false and mimeType='application/pdf'";
+            var r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                                     '&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc');
+            var d = await r.json();
+            _driveFichasCache = d.files || [];
+            renderFichasList();
+        } catch(e){
+            list.innerHTML = '';
+            var x = document.createElement('div'); x.id = 'mf-empty';
+            x.innerHTML = '✗ Error de Drive: ' + esc(e.message);
+            list.appendChild(x);
+        }
     });
-    setMisFichas(fichas); closeModal();
-    showToast('⭐ Guardada: "'+nombre+'"');
 }
 
 function renderFichasList(){
-    var fichas=getMisFichas();
-    var busq=(document.getElementById('mf-search').value||'').toLowerCase();
-    if(busq) fichas=fichas.filter(function(f){ return f.nombre.toLowerCase().indexOf(busq)!==-1; });
-    document.getElementById('mf-count').textContent=fichas.length+' ficha'+(fichas.length!==1?'s':'');
-    var list=document.getElementById('mf-list'); list.innerHTML='';
+    var busq = (document.getElementById('mf-search').value||'').toLowerCase();
+    var fichas = _driveFichasCache.filter(function(f){
+        return !busq || f.name.toLowerCase().indexOf(busq) !== -1;
+    });
+    document.getElementById('mf-count').textContent = fichas.length+' ficha'+(fichas.length!==1?'s':'');
+    var list = document.getElementById('mf-list'); list.innerHTML = '';
     if(!fichas.length){
-        var e=document.createElement('div'); e.id='mf-empty';
-        e.innerHTML=busq?'🔍 Sin resultados para "'+esc(busq)+'".':'📂 No hay fichas guardadas.<br>Rellena una ficha y pulsa <strong>⭐ Guardar como…</strong>';
+        var e = document.createElement('div'); e.id = 'mf-empty';
+        e.innerHTML = busq ? '🔍 Sin resultados para "'+esc(busq)+'".'
+                           : '☁ No hay fichas en tu Drive todavía.<br>Pulsa <strong>☁ Guardar Drive</strong> desde una hoja.';
         list.appendChild(e); return;
     }
-    fichas.forEach(function(ficha){
-        var card=document.createElement('div'); card.className='ficha-card';
-        var d=ficha.data||{};
-        var info=[d['o-clase']||d['a-clase']||'',d['o-raza']||d['a-raza']||''].filter(Boolean).join(' · ');
-        card.innerHTML=
-            '<button class="fc-del" title="Eliminar ficha">✕</button>'+
-            '<div class="fc-tipo">'+(ficha.tipo==='oficial'?'📜 Oficial':'🎨 Artística')+'</div>'+
-            '<div class="fc-nombre">'+esc(ficha.nombre)+'</div>'+
-            (info?'<div class="fc-info">'+esc(info)+'</div>':'')+
-            '<div class="fc-fecha">📅 '+esc(ficha.fecha)+'</div>'+
-            '<div class="fc-btns"><button data-a="cargar">📂 Cargar</button><button data-a="pdf">⬇ PDF</button></div>';
-        card.querySelector('.fc-del').onclick=function(e){
+    fichas.forEach(function(f){
+        var tipo = /_melon\.pdf$/i.test(f.name) ? 'melon'
+                 : /_oficial\.pdf$/i.test(f.name)   ? 'oficial'
+                 : 'desconocida';
+        var nombreLimpio = f.name.replace(/_(oficial|melon)\.pdf$/i,'').replace(/\.pdf$/i,'').replace(/_/g,' ');
+        var fecha = new Date(f.modifiedTime).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'});
+        var tipoLbl = tipo==='oficial'?'📜 Oficial':tipo==='melon'?'🎨 Melon':'❓ Otro';
+        var card = document.createElement('div'); card.className = 'ficha-card';
+        card.innerHTML =
+            '<button class="fc-del" title="Eliminar de Drive">✕</button>'+
+            '<div class="fc-tipo">'+tipoLbl+'</div>'+
+            '<div class="fc-nombre">'+esc(nombreLimpio)+'</div>'+
+            '<div class="fc-fecha">📅 '+esc(fecha)+'</div>'+
+            '<div class="fc-btns"><button data-a="cargar">📂 Cargar</button></div>';
+        card.querySelector('.fc-del').onclick = function(e){
             e.stopPropagation();
-            showConfirm('¿Eliminar la ficha <strong>'+esc(ficha.nombre)+'</strong>?',function(){
-                setMisFichas(getMisFichas().filter(function(f){ return f.id!==ficha.id; }));
-                renderFichasList();
-                showToast('Ficha eliminada');
+            showConfirm('¿Eliminar <strong>'+esc(nombreLimpio)+'</strong> de Drive?', function(){
+                deleteDriveFile(f);
             });
         };
-        card.querySelector('[data-a="cargar"]').onclick=function(e){
+        card.querySelector('[data-a="cargar"]').onclick = function(e){
             e.stopPropagation();
-            try{ localStorage.setItem(SHEETS[ficha.tipo].storageKey,JSON.stringify(ficha.data)); }catch(ex){}
-            switchSheet(ficha.tipo);
-            setTimeout(function(){ applyData(ficha.data); runCalcs(ficha.tipo==='oficial'?'o':'a'); showToast('✔ "'+ficha.nombre+'" cargada'); },400);
-        };
-        card.querySelector('[data-a="pdf"]').onclick=function(e){
-            e.stopPropagation(); exportPDFFromData(ficha.tipo,ficha.data,ficha.nombre);
+            loadDriveFile(f);
         };
         list.appendChild(card);
     });
 }
+
+async function deleteDriveFile(f){
+    try {
+        await driveFetch('https://www.googleapis.com/drive/v3/files/' + f.id, { method: 'DELETE' });
+        _driveFichasCache = _driveFichasCache.filter(function(x){ return x.id !== f.id; });
+        renderFichasList();
+        showToast('Eliminada de Drive');
+    } catch(e){ showToast('✗ '+e.message); }
+}
+
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function cssAttr(s){ return String(s).replace(/"/g,'\\"'); }
+
+/* ────── Importar PDF local ────── */
+var _pendingImportBytes = null;
+var _pendingImportName  = '';
+
+function triggerImport(){
+    document.getElementById('import-file').click();
+}
+function onImportFile(ev){
+    var file = ev.target.files && ev.target.files[0];
+    ev.target.value = '';
+    if(!file) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+        _pendingImportBytes = rd.result;
+        _pendingImportName  = file.name;
+        document.getElementById('import-file-name').textContent = file.name;
+        document.getElementById('modal-import').classList.add('show');
+    };
+    rd.onerror = function(){ showToast('✗ No se pudo leer el archivo'); };
+    rd.readAsArrayBuffer(file);
+}
+function closeImportModal(){
+    document.getElementById('modal-import').classList.remove('show');
+    _pendingImportBytes = null;
+    _pendingImportName  = '';
+}
+async function doImport(sheetKey){
+    if(!_pendingImportBytes){ closeImportModal(); return; }
+    var bytes = _pendingImportBytes;
+    var fname = _pendingImportName;
+    _pendingImportBytes = null; _pendingImportName = '';
+    document.getElementById('modal-import').classList.remove('show');
+    showProg(true); setProgress(20, 'Leyendo AcroForm…');
+    try {
+        if(!window.PDFLib) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+        var doc = await window.PDFLib.PDFDocument.load(bytes);
+        var form = doc.getForm();
+        var data = {};
+        form.getFields().forEach(function(f){
+            var name = f.getName();
+            try {
+                if(typeof f.isChecked === 'function') data[name] = f.isChecked();
+                else if(typeof f.getText === 'function') data[name] = f.getText() || '';
+                else if(typeof f.getSelected === 'function'){
+                    var s = f.getSelected();
+                    data[name] = Array.isArray(s) ? (s[0]||'') : (s||'');
+                }
+            } catch(e){}
+        });
+        try { localStorage.setItem(SHEETS[sheetKey].storageKey, JSON.stringify(data)); } catch(e){}
+        setProgress(70, 'Renderizando hoja…');
+        await switchSheet(sheetKey);
+        applyData(data);
+        runCalcs();
+        showProg(false);
+        showToast('⬆ Importado: '+fname);
+        // Forzar autosave a Drive (sin esperar al debounce) si conectado
+        if(_driveToken && _driveToken.expires_at > Date.now()) markDirtyDrive();
+    } catch(e){
+        showProg(false);
+        showToast('✗ Error: '+e.message);
+        console.error(e);
+    }
+}
+
+document.getElementById('modal-import').addEventListener('click', function(e){
+    if(e.target === this) closeImportModal();
+});
 
 /* ════════════════════════════════════════
-   PDF
+   EXPORT PDF (rellena el AcroForm con pdf-lib)
 ════════════════════════════════════════ */
 async function exportPDF(){
     saveLocal(true);
-    var stored=loadStored(SHEETS[currentSheet].storageKey)||{};
-    var nombre=stored['o-nombre']||stored['a-nombre']||'personaje';
-    await exportPDFFromData(currentSheet,stored,nombre);
+    var sheet = SHEETS[currentSheet];
+    var stored = loadStored(sheet.storageKey) || {};
+    var nombre = (sheet.nameField && stored[sheet.nameField]) || getCurrentName() || 'personaje';
+    await exportPDFFromData(currentSheet, stored, nombre);
 }
-async function exportPDFFromData(sheetKey,stored,nombre){
-    setProgress(0,'Cargando pdf-lib…'); showProg(true);
+async function exportPDFFromData(sheetKey, stored, nombre){
+    setProgress(0, 'Cargando pdf-lib…'); showProg(true);
     try{
-        if(!window.PDFLib) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
-        const{PDFDocument,rgb}=window.PDFLib;
-        const sheet=SHEETS[sheetKey];
-        setProgress(10,'Cargando PDF…');
-        const pdfBytes=await fetch(sheet.pdfUrl).then(r=>r.arrayBuffer());
-        const srcDoc=await PDFDocument.load(pdfBytes);
-        setProgress(20,'Cargando fuente…');
-        const fontBytes=await fetch('../assets/fonts/Allison-Regular.ttf').then(r=>r.arrayBuffer());
-        const outDoc=await PDFDocument.create();
-        const font=await outDoc.embedFont(fontBytes);
-        for(let pi=0;pi<sheet.pages.length;pi++){
-            setProgress(20+Math.round(70*pi/sheet.pages.length),'Página '+(pi+1)+'…');
-            const[cp]=await outDoc.copyPages(srcDoc,[pi]);
-            outDoc.addPage(cp);
-            const page=outDoc.getPage(pi);
-            const{width:pW,height:pH}=page.getSize();
-            sheet.pages[pi].fields.forEach(function(fd){
-                if(fd.type==='checkbox') return;
-                var val=stored[fd.id]; if(!val&&val!==0) return;
-                val=String(val); if(!val.trim()) return;
-                var xPt=(fd.l/100)*pW, yPt=pH-((fd.t/100)*pH)-(fd.fs*0.85), maxW=(fd.w/100)*pW;
-                try{
-                    if(fd.type==='textarea'){ val.split('\n').forEach(function(line,li){ if(!line.trim()) return; page.drawText(line,{x:xPt,y:yPt-li*fd.fs*1.35,size:fd.fs,font,color:rgb(0.1,0.05,0),maxWidth:maxW}); }); }
-                    else{ page.drawText(val,{x:xPt,y:yPt,size:fd.fs,font,color:rgb(0.1,0.05,0),maxWidth:maxW}); }
-                }catch(e){}
-            });
+        if(!window.PDFLib){
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
         }
-        setProgress(95,'Guardando…');
-        const bytes=await outDoc.save();
-        const a=document.createElement('a');
-        a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-        a.download=(nombre||'personaje').replace(/\s+/g,'_')+'_'+sheetKey+'.pdf';
+        var PDFDocument = window.PDFLib.PDFDocument;
+        var sheet = SHEETS[sheetKey];
+
+        setProgress(20, 'Leyendo PDF…');
+        var pdfBytes = await fetch(sheet.pdfUrl).then(function(r){ return r.arrayBuffer(); });
+        var doc = await PDFDocument.load(pdfBytes);
+        var form = doc.getForm();
+
+        setProgress(50, 'Rellenando campos…');
+        var fields = form.getFields();
+        var byName = {}; fields.forEach(function(f){ byName[f.getName()] = f; });
+
+        Object.keys(stored).forEach(function(name){
+            var fld = byName[name]; if(!fld) return;
+            var val = stored[name];
+            try {
+                if(typeof fld.isChecked === 'function'){
+                    if(val) fld.check(); else fld.uncheck();
+                } else if(typeof fld.setText === 'function'){
+                    fld.setText(val == null ? '' : String(val));
+                } else if(typeof fld.select === 'function'){
+                    if(val) fld.select(String(val));
+                }
+            } catch(e){ /* ignorar campo problemático */ }
+        });
+
+        setProgress(85, 'Guardando…');
+        var bytes = await doc.save({ updateFieldAppearances: true });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([bytes], {type:'application/pdf'}));
+        a.download = String(nombre||'personaje').replace(/\s+/g,'_') + '_' + sheetKey + '.pdf';
         a.click(); URL.revokeObjectURL(a.href);
-        setProgress(100,'¡Listo!');
-        setTimeout(function(){ showProg(false); showToast('✔ PDF descargado'); },600);
-    }catch(e){ showProg(false); showToast('✗ Error: '+e.message); console.error(e); }
+
+        setProgress(100, '¡Listo!');
+        setTimeout(function(){ showProg(false); showToast('✔ PDF descargado'); }, 600);
+    } catch(e){
+        showProg(false);
+        showToast('✗ Error: '+e.message);
+        console.error(e);
+    }
 }
-function loadScript(src){ return new Promise(function(res,rej){ var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
-function showProg(v){ document.getElementById('progress-overlay').classList.toggle('show',v); }
-function setProgress(pct,msg){ document.getElementById('pb').style.width=pct+'%'; document.getElementById('pb-text').textContent=msg; }
+function loadScript(src){
+    return new Promise(function(res, rej){
+        var s = document.createElement('script');
+        s.src = src; s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+    });
+}
+function showProg(v){ document.getElementById('progress-overlay').classList.toggle('show', v); }
+function setProgress(pct, msg){
+    document.getElementById('pb').style.width = pct+'%';
+    document.getElementById('pb-text').textContent = msg;
+}
 
 /* ════════════════════════════════════════
    UI HELPERS
 ════════════════════════════════════════ */
-var _statusTimer=null;
+var _statusTimer = null;
 function setStatus(msg){
-    var el=document.getElementById('status-msg');
-    el.textContent=msg; el.classList.remove('fade');
+    var el = document.getElementById('status-msg');
+    el.textContent = msg; el.classList.remove('fade');
     clearTimeout(_statusTimer);
-    _statusTimer=setTimeout(function(){ el.classList.add('fade'); setTimeout(function(){ el.textContent=''; el.classList.remove('fade'); },300); },3000);
+    _statusTimer = setTimeout(function(){
+        el.classList.add('fade');
+        setTimeout(function(){ el.textContent = ''; el.classList.remove('fade'); }, 300);
+    }, 3000);
 }
-
-var _toastTimer=null;
+var _toastTimer = null;
 function showToast(msg){
-    var t=document.getElementById('toast');
-    t.textContent=msg; t.classList.add('show');
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
     clearTimeout(_toastTimer);
-    _toastTimer=setTimeout(function(){ t.classList.remove('show'); },2000);
+    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2000);
 }
-
-/* Modal de confirmación reutilizable */
 function showConfirm(html, onOk){
-    document.getElementById('confirm-body').innerHTML=html;
+    document.getElementById('confirm-body').innerHTML = html;
     document.getElementById('modal-confirm').classList.add('show');
-    var ok=document.getElementById('confirm-ok');
-    var cancel=document.getElementById('confirm-cancel');
-    function cleanup(){ document.getElementById('modal-confirm').classList.remove('show'); ok.onclick=null; cancel.onclick=null; }
-    ok.onclick=function(){ cleanup(); onOk(); };
-    cancel.onclick=cleanup;
+    var ok = document.getElementById('confirm-ok');
+    var cancel = document.getElementById('confirm-cancel');
+    function cleanup(){ document.getElementById('modal-confirm').classList.remove('show'); ok.onclick = null; cancel.onclick = null; }
+    ok.onclick = function(){ cleanup(); onOk(); };
+    cancel.onclick = cleanup;
 }
 
-/* Teclado modal guardar */
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeModal(); document.getElementById('modal-confirm').classList.remove('show'); } });
-document.getElementById('modal-guardar').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
-document.getElementById('modal-nombre').addEventListener('keydown',function(e){ if(e.key==='Enter') confirmarGuardar(); });
+document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){
+        document.getElementById('modal-confirm').classList.remove('show');
+    }
+    if((e.ctrlKey || e.metaKey) && e.key === 'z'){ e.preventDefault(); undoLast(); }
+    if((e.ctrlKey || e.metaKey) && e.key === 's'){ e.preventDefault(); saveToDrive(); }
+});
+
+/* ════════════════════════════════════════
+   GOOGLE DRIVE INTEGRATION
+   - OAuth con Google Identity Services (token client)
+   - Sube/baja el PDF rellenado a una carpeta "D&D Fichas" en el Drive del usuario
+   - El AcroForm guarda el estado dentro del propio PDF → al recargar se lee
+     con pdf-lib y se repuebla la UI
+════════════════════════════════════════ */
+var GOOGLE_CLIENT_ID  = '579281248790-bhn33madtdvrfeeoi3f3lc9sh8lshu7m.apps.googleusercontent.com';
+var GDRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file';
+var GDRIVE_FOLDER     = 'D&D Fichas';
+var _tokenClient      = null;
+var _driveToken       = null;       // { access_token, expires_at }
+var _driveFolderId    = null;
+var _pendingDriveCb   = null;
+
+(function tryRestoreToken(){
+    try {
+        var s = sessionStorage.getItem('dnd_drive_token');
+        if(!s) return;
+        var t = JSON.parse(s);
+        if(t && t.expires_at > Date.now() + 30000) _driveToken = t;
+    } catch(e){}
+})();
+
+function _initTokenClient(){
+    if(_tokenClient) return _tokenClient;
+    if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
+        return null;
+    }
+    _tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope:     GDRIVE_SCOPE,
+        callback: function(resp){
+            if(resp.error){
+                showToast('✗ Drive: '+resp.error);
+                _pendingDriveCb = null;
+                return;
+            }
+            _driveToken = {
+                access_token: resp.access_token,
+                expires_at:   Date.now() + (resp.expires_in * 1000) - 60000
+            };
+            sessionStorage.setItem('dnd_drive_token', JSON.stringify(_driveToken));
+            updateDriveStatus();
+            showToast('☁ Drive conectado');
+            if(_pendingDriveCb){ var fn = _pendingDriveCb; _pendingDriveCb = null; fn(); }
+        }
+    });
+    return _tokenClient;
+}
+
+function ensureDriveAuth(fn){
+    if(_driveToken && _driveToken.expires_at > Date.now() + 30000){ fn(); return; }
+    _pendingDriveCb = fn;
+    var c = _initTokenClient();
+    if(!c){
+        // GIS aún no cargó; esperar
+        var attempts = 0;
+        var iv = setInterval(function(){
+            attempts++;
+            c = _initTokenClient();
+            if(c){
+                clearInterval(iv);
+                c.requestAccessToken({ prompt: '' });
+            } else if(attempts > 40){
+                clearInterval(iv);
+                showToast('✗ No se pudo cargar Google Identity Services');
+                _pendingDriveCb = null;
+            }
+        }, 250);
+        return;
+    }
+    c.requestAccessToken({ prompt: '' });
+}
+
+function disconnectDrive(){
+    if(_driveToken && typeof google !== 'undefined' && google.accounts){
+        try { google.accounts.oauth2.revoke(_driveToken.access_token, function(){}); } catch(e){}
+    }
+    _driveToken = null;
+    sessionStorage.removeItem('dnd_drive_token');
+    updateDriveStatus();
+    showToast('Drive desconectado');
+    if(inMisFichas){
+        // Vaciar la lista para evitar mostrar datos obsoletos
+        _driveFichasCache = [];
+        renderFichasList();
+    }
+}
+
+function updateDriveStatus(state){
+    var s = document.getElementById('drive-status');
+    if(!s) return;
+    var connected = !!(_driveToken && _driveToken.expires_at > Date.now());
+    if(!connected){ s.textContent = ''; return; }
+    if(state === 'saving')      s.textContent = '☁ subiendo…';
+    else if(state === 'saved')  s.textContent = '☁ guardado';
+    else if(state === 'error')  s.textContent = '☁ ✗ error';
+    else                        s.textContent = '● conectado';
+}
+
+/* ────── Autosave a Drive con debounce ────── */
+var _driveAutoTimer = null;
+var _driveSaving    = false;
+var DRIVE_AUTOSAVE_MS = 6000;     // 6 s tras la última edición
+
+function markDirtyDrive(){
+    if(!_driveToken || _driveToken.expires_at < Date.now()) return; // no conectado
+    clearTimeout(_driveAutoTimer);
+    _driveAutoTimer = setTimeout(autoSaveToDrive, DRIVE_AUTOSAVE_MS);
+}
+
+async function autoSaveToDrive(){
+    if(_driveSaving) {                       // re-encolar si hay otro en vuelo
+        clearTimeout(_driveAutoTimer);
+        _driveAutoTimer = setTimeout(autoSaveToDrive, 2000);
+        return;
+    }
+    if(!_driveToken || _driveToken.expires_at < Date.now()) return;
+    _driveSaving = true;
+    updateDriveStatus('saving');
+    try {
+        var sheet = SHEETS[currentSheet];
+        var folderId = await ensureDriveFolder();
+        saveLocal(true);
+        var stored = collectData();
+        var bytes = await buildFilledPdfBytes(currentSheet, stored);
+        var rawName = (sheet.nameField && stored[sheet.nameField]) || getCurrentName() || 'personaje';
+        var fileName = String(rawName).replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') + '_' + currentSheet + '.pdf';
+
+        var q = "name='" + fileName.replace(/'/g,"\\'") + "' and '" + folderId + "' in parents and trashed=false";
+        var fr = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                                  '&fields=files(id)&spaces=drive');
+        var fd = await fr.json();
+        var existing = fd.files && fd.files[0] && fd.files[0].id;
+
+        if(existing){
+            await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + existing + '?uploadType=media', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/pdf' },
+                body: bytes
+            });
+        } else {
+            var boundary = '-------dnd_' + Math.random().toString(36).slice(2);
+            var delim = '\r\n--' + boundary + '\r\n';
+            var close = '\r\n--' + boundary + '--';
+            var metadata = { name: fileName, parents: [folderId], mimeType: 'application/pdf' };
+            var head = delim + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
+                       delim + 'Content-Type: application/pdf\r\n\r\n';
+            var headBytes = new TextEncoder().encode(head);
+            var tailBytes = new TextEncoder().encode(close);
+            var body = new Uint8Array(headBytes.length + bytes.byteLength + tailBytes.length);
+            body.set(headBytes, 0);
+            body.set(new Uint8Array(bytes), headBytes.length);
+            body.set(tailBytes, headBytes.length + bytes.byteLength);
+            await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+                body: body
+            });
+        }
+        updateDriveStatus('saved');
+        setTimeout(function(){ updateDriveStatus(); }, 2000);
+    } catch(e){
+        console.error('Drive autosave fallido:', e);
+        updateDriveStatus('error');
+        setTimeout(function(){ updateDriveStatus(); }, 3000);
+    } finally {
+        _driveSaving = false;
+    }
+}
+
+/* Wrapper de fetch que añade el Authorization. Reintenta una vez si 401. */
+async function driveFetch(url, opts, retried){
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+        Authorization: 'Bearer ' + _driveToken.access_token
+    });
+    var r = await fetch(url, opts);
+    if(r.status === 401 && !retried){
+        // Token expirado: forzar reauth y reintentar
+        _driveToken = null;
+        sessionStorage.removeItem('dnd_drive_token');
+        return new Promise(function(resolve, reject){
+            ensureDriveAuth(function(){
+                driveFetch(url, opts, true).then(resolve, reject);
+            });
+        });
+    }
+    if(!r.ok){
+        var t = ''; try { t = await r.text(); } catch(e){}
+        throw new Error('Drive '+r.status+': '+t.slice(0,160));
+    }
+    return r;
+}
+
+async function ensureDriveFolder(){
+    if(_driveFolderId) return _driveFolderId;
+    var q = "mimeType='application/vnd.google-apps.folder' and name='" + GDRIVE_FOLDER.replace(/'/g,"\\'") + "' and trashed=false";
+    var r = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                             '&fields=files(id,name)&spaces=drive');
+    var d = await r.json();
+    if(d.files && d.files.length){
+        _driveFolderId = d.files[0].id;
+        return _driveFolderId;
+    }
+    var cr = await driveFetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: GDRIVE_FOLDER, mimeType: 'application/vnd.google-apps.folder' })
+    });
+    var c = await cr.json();
+    _driveFolderId = c.id;
+    return _driveFolderId;
+}
+
+/* Genera bytes del PDF rellenado (misma lógica que exportPDFFromData pero devolviendo bytes) */
+async function buildFilledPdfBytes(sheetKey, stored){
+    if(!window.PDFLib) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+    var PDFDocument = window.PDFLib.PDFDocument;
+    var sheet = SHEETS[sheetKey];
+    var pdfBytes = await fetch(sheet.pdfUrl).then(function(r){ return r.arrayBuffer(); });
+    var doc = await PDFDocument.load(pdfBytes);
+    var form = doc.getForm();
+    var byName = {}; form.getFields().forEach(function(f){ byName[f.getName()] = f; });
+    Object.keys(stored).forEach(function(name){
+        var fld = byName[name]; if(!fld) return;
+        var v = stored[name];
+        try {
+            if(typeof fld.isChecked === 'function'){
+                if(v) fld.check(); else fld.uncheck();
+            } else if(typeof fld.setText === 'function'){
+                fld.setText(v == null ? '' : String(v));
+            } else if(typeof fld.select === 'function'){
+                if(v) fld.select(String(v));
+            }
+        } catch(e){}
+    });
+    return doc.save({ updateFieldAppearances: true });
+}
+
+async function saveToDrive(){
+    ensureDriveAuth(async function(){
+        showProg(true); setProgress(10, 'Carpeta Drive…');
+        try {
+            var folderId = await ensureDriveFolder();
+            saveLocal(true);
+            setProgress(30, 'Rellenando PDF…');
+            var stored = collectData();
+            var sheet = SHEETS[currentSheet];
+            var bytes = await buildFilledPdfBytes(currentSheet, stored);
+            var rawName = (sheet.nameField && stored[sheet.nameField]) || getCurrentName() || 'personaje';
+            var fileName = String(rawName).replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,'_') + '_' + currentSheet + '.pdf';
+            setProgress(60, 'Subiendo a Drive…');
+
+            // ¿Ya existe? → update; si no → create multipart
+            var q = "name='" + fileName.replace(/'/g,"\\'") + "' and '" + folderId + "' in parents and trashed=false";
+            var fr = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) +
+                                      '&fields=files(id)&spaces=drive');
+            var fd = await fr.json();
+            var existing = fd.files && fd.files[0] && fd.files[0].id;
+
+            if(existing){
+                await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + existing + '?uploadType=media', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/pdf' },
+                    body: bytes
+                });
+            } else {
+                var boundary = '-------dnd_' + Math.random().toString(36).slice(2);
+                var delim = '\r\n--' + boundary + '\r\n';
+                var close = '\r\n--' + boundary + '--';
+                var metadata = { name: fileName, parents: [folderId], mimeType: 'application/pdf' };
+                var head = delim + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
+                           delim + 'Content-Type: application/pdf\r\n\r\n';
+                var tail = close;
+                var headBytes = new TextEncoder().encode(head);
+                var tailBytes = new TextEncoder().encode(tail);
+                var body = new Uint8Array(headBytes.length + bytes.byteLength + tailBytes.length);
+                body.set(headBytes, 0);
+                body.set(new Uint8Array(bytes), headBytes.length);
+                body.set(tailBytes, headBytes.length + bytes.byteLength);
+                await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+                    body: body
+                });
+            }
+
+            setProgress(100, 'Listo'); setTimeout(function(){ showProg(false); }, 500);
+            showToast('☁ Guardado: ' + fileName);
+        } catch(e){
+            showProg(false); showToast('✗ Drive: ' + e.message); console.error(e);
+        }
+    });
+}
+
+async function loadDriveFile(file){
+    showProg(true); setProgress(20, 'Descargando '+file.name+'…');
+    try {
+        var r = await driveFetch('https://www.googleapis.com/drive/v3/files/' + file.id + '?alt=media');
+        var bytes = await r.arrayBuffer();
+        setProgress(60, 'Leyendo AcroForm…');
+        if(!window.PDFLib) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+        var doc = await window.PDFLib.PDFDocument.load(bytes);
+        var form = doc.getForm();
+        var data = {};
+        form.getFields().forEach(function(f){
+            var name = f.getName();
+            try {
+                if(typeof f.isChecked === 'function'){
+                    data[name] = f.isChecked();
+                } else if(typeof f.getText === 'function'){
+                    data[name] = f.getText() || '';
+                } else if(typeof f.getSelected === 'function'){
+                    var s = f.getSelected();
+                    data[name] = Array.isArray(s) ? (s[0]||'') : (s||'');
+                }
+            } catch(e){}
+        });
+        var nonEmpty = Object.keys(data).filter(function(k){
+            var v = data[k]; return v !== '' && v !== false && v != null;
+        }).length;
+        console.log('[Drive load] '+Object.keys(data).length+' campos leídos, '+nonEmpty+' con valor');
+
+        // Detectar a qué hoja pertenece: sufijo en el nombre
+        var targetSheet = currentSheet;
+        if(/_melon\.pdf$/i.test(file.name)) targetSheet = 'melon';
+        else if(/_oficial\.pdf$/i.test(file.name)) targetSheet = 'oficial';
+
+        // Persistimos los datos y AWAIT al render antes de aplicar
+        try { localStorage.setItem(SHEETS[targetSheet].storageKey, JSON.stringify(data)); } catch(e){}
+        setProgress(80, 'Renderizando hoja…');
+        await switchSheet(targetSheet);   // ahora devuelve la promise de buildSheet
+        applyData(data);
+        runCalcs();
+        showProg(false);
+        showToast('☁ Cargada: '+file.name);
+    } catch(e){
+        showProg(false); showToast('✗ Drive: '+e.message); console.error(e);
+    }
+}
+
+/* Status inicial */
+updateDriveStatus();
 
 /* ── INIT ── */
-buildSheet('oficial');
+window.addEventListener('load', function(){ buildSheet('oficial'); });
 </script>
 </body>
 </html>
