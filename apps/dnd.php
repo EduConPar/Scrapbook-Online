@@ -235,6 +235,26 @@ body{
     background-size:4px 4px, 4px 4px;
     background-repeat:no-repeat;
 }
+/* Aptitud mágica (melon): mismo look que un input + compacto.
+   El font-size se asigna en JS al ~70% de la fuente normal del campo para
+   que escale con el zoom como el resto y nunca quede gigante. */
+.pdf-form-layer select.spell-ability{
+    background-color:rgba(255,255,255,0.25) !important;
+    border:1px solid rgba(0,0,0,0.18) !important;
+    border-radius:0 !important;
+    box-shadow:0 1px 2px rgba(0,0,0,0.08) !important;
+    padding:0 14px 0 2px;
+    line-height:1.1;
+}
+.pdf-form-layer select.spell-ability:hover:not(:focus){
+    background-color:rgba(180,210,255,0.30) !important;
+    border-color:rgba(0,0,0,0.28) !important;
+}
+.pdf-form-layer select.spell-ability:focus{
+    background-color:rgba(255,235,160,0.50) !important;
+    border-color:rgba(0,0,0,0.45) !important;
+    box-shadow:0 1px 3px rgba(0,0,0,0.15) !important;
+}
 /* Readonly: tono apagado neutro (anula override de themes.css) */
 .pdf-form-layer input[readonly],
 .pdf-form-layer textarea[readonly]{
@@ -610,7 +630,22 @@ function createFormField(layer, annot, viewport, pageIndex, state){
     var el = null;
     var ft = annot.fieldType;
 
-    if(ft === 'Tx'){
+    /* Override universal: en la hoja melon el campo de aptitud mágica
+       siempre se presenta como <select> CHA/SAB/INT, sin importar si en el
+       PDF original es Tx (text) o Ch (choice) con otras opciones. */
+    if(currentSheet === 'melon' && annot.fieldName === MELON_SPELL_ABILITY){
+        el = document.createElement('select');
+        el.className = 'spell-ability';
+        [['','—'],['CHA','Carisma'],['WIS','Sabiduría'],['INT','Inteligencia']].forEach(function(o){
+            var opt = document.createElement('option');
+            opt.value = o[0]; opt.textContent = o[1];
+            el.appendChild(opt);
+        });
+        var fv0 = annot.fieldValue;
+        if(typeof fv0 === 'string' && ['CHA','WIS','INT'].indexOf(fv0) !== -1) el.value = fv0;
+        ft = 'Tx'; /* que el resto del flujo lo trate como editable normal */
+    }
+    else if(ft === 'Tx'){
         if(annot.multiLine){
             el = document.createElement('textarea');
         } else {
@@ -679,13 +714,25 @@ function createFormField(layer, annot, viewport, pageIndex, state){
     if(da.fontName && /bo|bold/i.test(da.fontName)) el.style.fontWeight = 'bold';
     if(da.fontName && /(it|italic|ob|oblique)$/i.test(da.fontName)) el.style.fontStyle = 'italic';
     if(el.tagName !== 'INPUT' || (el.type !== 'checkbox' && el.type !== 'radio')){
-        el.style.fontSize = fs+'px';
+        /* El dropdown de aptitud mágica va al ~45% para no quedar enorme:
+           es muy corto (3 letras) y el cuadro original del PDF es grande. */
+        var isSpell = el.classList && el.classList.contains('spell-ability');
+        el.style.fontSize = (isSpell ? fs * 0.45 : fs) + 'px';
+        if(isSpell){
+            /* Bajar también el alto para que no quede una caja gigante */
+            el.style.height = Math.max(14, height * 0.45) + 'px';
+            /* Recolocar verticalmente para mantenerlo centrado en el hueco */
+            el.style.top = (top + (height - parseFloat(el.style.height)) / 2) + 'px';
+        }
     }
     if(annot.textAlignment === 1) el.style.textAlign = 'center';
     if(annot.textAlignment === 2) el.style.textAlign = 'right';
     if(annot.readOnly){ el.readOnly = true; el.tabIndex = -1; el.style.opacity = 0.85; }
     // Campos auto-calculados: bloquear edición (sin alterar colores del PDF)
-    if(currentSheet === 'oficial' && isCalcField(annot.fieldName) && ft === 'Tx'){
+    if(ft === 'Tx' && (
+        (currentSheet === 'oficial' && isCalcField(annot.fieldName)) ||
+        (currentSheet === 'melon'   && isMelonCalcField(annot.fieldName))
+    )){
         el.readOnly = true; el.tabIndex = -1;
         el.title = 'Campo auto-calculado';
     }
@@ -726,7 +773,25 @@ async function computeFitScale(pdf){
 function rerenderPreservingData(){
     if(!pdfDocs[currentSheet]) return;
     var data = collectData();
-    buildSheet(currentSheet).then(function(){ applyData(data); });
+    var pageBefore = currentPage;
+    /* Cancelar autosave pendiente: durante el rebuild el DOM se vacía y el
+       timer dispararía collectData() sobre 0 inputs, clobbering localStorage.
+       Volcamos AHORA el snapshot bueno a disco para que tampoco se pierda si
+       el rebuild fallara a medias. */
+    clearTimeout(_autosaveTimer);
+    clearTimeout(_pushUndoTimer);
+    try {
+        localStorage.setItem(SHEETS[currentSheet].storageKey, JSON.stringify(data));
+        _lastSavedState = JSON.stringify(data);
+    } catch(e){}
+    buildSheet(currentSheet).then(function(){
+        applyData(data);
+        runCalcs();
+        _lastSavedState = JSON.stringify(collectData());
+        /* Restaurar la página que estaba viendo el usuario; buildSheet
+           reinicia currentPage=0 siempre. */
+        if(pageBefore > 0 && typeof showPage === 'function') showPage(pageBefore);
+    });
 }
 
 var _zoomRebuildTimer = null;
@@ -819,9 +884,57 @@ var CALC_FIELDS = [
     'Acrobatics','AnHan','Arcana','Athletics','Deception','History','Insight',
     'Intimidation','Investigation','Medicine','Nature','Perception',
     'Performance','Persuasion','Religion','SleightofHand','Stealth','Survival',
-    'PWP','SpellSaveDC','SAB','ProfBonus'   // ProfBonus se reformatea con signo
+    'PWP','SpellSaveDC','SAB'
 ];
 function isCalcField(name){ return CALC_FIELDS.indexOf(name) !== -1; }
+
+/* Mapeo de los campos opacos del PDF melon a la semántica STR/DEX/etc.
+   - `score`: lo escribe el usuario
+   - `bonus`: auto-calc floor((score-10)/2)
+   - `save`:  auto-calc bonus + (savePROF? ProfBonus : 0)
+   - `savePROF`: checkbox de competencia en salvación
+   Los `bonus` y `save` se marcan readOnly al renderizar la página. */
+var MELON_PROF_FIELD  = 'doc_0_doc_0_Text_25';
+/* Campos de aptitud mágica (página 3 del melon): el primero se convierte
+   en dropdown CHA/SAB/INT; los otros dos se auto-calculan.
+   Estos sí van sin prefijo doc_0_doc_X_ (la página 3 los registra al root). */
+var MELON_SPELL_ABILITY = 'Text_1';
+var MELON_SPELL_DC      = 'Text_2';
+var MELON_SPELL_ATK     = 'Text_3';
+var MELON_MAP = {
+    STR: { score: 'doc_0_doc_0_Text_58', bonus: 'doc_0_doc_0_Text_52', save: 'doc_0_doc_0_Text_29', savePROF: 'doc_0_doc_0_Checkbox_1' },
+    DEX: { score: 'doc_0_doc_0_Text_59', bonus: 'doc_0_doc_0_Text_53', save: 'doc_0_doc_0_Text_30', savePROF: 'doc_0_doc_0_Checkbox_2' },
+    CON: { score: 'doc_0_doc_0_Text_60', bonus: 'doc_0_doc_0_Text_54', save: 'doc_0_doc_0_Text_31', savePROF: 'doc_0_doc_0_Checkbox_3' },
+    INT: { score: 'doc_0_doc_0_Text_61', bonus: 'doc_0_doc_0_Text_55', save: 'doc_0_doc_0_Text_32', savePROF: 'doc_0_doc_0_Checkbox_4' },
+    WIS: { score: 'doc_0_doc_0_Text_62', bonus: 'doc_0_doc_0_Text_56', save: 'doc_0_doc_0_Text_33', savePROF: 'doc_0_doc_0_Checkbox_5' },
+    CHA: { score: 'doc_0_doc_0_Text_63', bonus: 'doc_0_doc_0_Text_57', save: 'doc_0_doc_0_Text_34', savePROF: 'doc_0_doc_0_Checkbox_6' }
+};
+/* Skills (activas) y pasivas. Cada entrada: stat=ability base, field=campo
+   donde se escribe el resultado, prof=checkbox de competencia, passive=
+   true para las "pasivas" (10 + bonus + competencia). */
+var MELON_SKILL_MAP = [
+    /* ACTIVAS */
+    { name: 'Acrobacias',  stat: 'DEX', field: 'doc_0_doc_0_Text_35', prof: 'doc_0_doc_0_Checkbox_7'  },
+    { name: 'Aguante',     stat: 'CON', field: 'doc_0_doc_0_Text_36', prof: 'doc_0_doc_0_Checkbox_8'  },
+    { name: 'Atletismo',   stat: 'STR', field: 'doc_0_doc_0_Text_37', prof: 'doc_0_doc_0_Checkbox_9'  },
+    { name: 'JuegoManos',  stat: 'DEX', field: 'doc_0_doc_0_Text_38', prof: 'doc_0_doc_0_Checkbox_10' },
+    { name: 'Sigilo',      stat: 'DEX', field: 'doc_0_doc_0_Text_39', prof: 'doc_0_doc_0_Checkbox_11' },
+    { name: 'TAnimales',   stat: 'WIS', field: 'doc_0_doc_0_Text_40', prof: 'doc_0_doc_0_Checkbox_12' },
+    /* PASIVAS (10 + bonus + competencia) */
+    { name: 'Percepcion',  stat: 'WIS', field: 'doc_0_doc_0_Text_41', prof: 'doc_0_doc_0_Checkbox_13', passive: true },
+    { name: 'Perspicacia', stat: 'CHA', field: 'doc_0_doc_0_Text_42', prof: 'doc_0_doc_0_Checkbox_14', passive: true },
+    { name: 'CArcano',     stat: 'INT', field: 'doc_0_doc_0_Text_43', prof: 'doc_0_doc_0_Checkbox_15', passive: true }
+];
+var MELON_CALC_FIELDS = (function(){
+    var f = [];
+    Object.keys(MELON_MAP).forEach(function(k){
+        f.push(MELON_MAP[k].bonus, MELON_MAP[k].save);
+    });
+    MELON_SKILL_MAP.forEach(function(s){ f.push(s.field); });
+    f.push(MELON_SPELL_DC, MELON_SPELL_ATK);
+    return f;
+})();
+function isMelonCalcField(name){ return MELON_CALC_FIELDS.indexOf(name) !== -1; }
 
 function _qField(name){
     return document.querySelector('.pdf-form-layer [data-field-name="'+ name.replace(/"/g,'\\"') +'"]');
@@ -837,9 +950,11 @@ function _fldSet(name, val){ var el = _qField(name); if(el) el.value = (val === 
 function _fmtMod(n){ return n > 0 ? '+'+n : String(n); }
 
 function runCalcs(){
+    if(currentSheet === 'melon'){ runCalcsMelon(); return; }
     if(currentSheet !== 'oficial') return;
+    /* ProfBonus es editable por el usuario; _fldNum acepta tanto "2" como
+       "+2", así que no hace falta reformatearlo en cada keystroke. */
     var prof = _fldNum('ProfBonus');
-    if(prof !== null) _fldSet('ProfBonus', _fmtMod(prof));
 
     var bonuses = {};
     ABILITIES.forEach(function(ab){
@@ -876,6 +991,50 @@ function runCalcs(){
         _fldSet('SAB',             prof + bonuses[sk]);
     } else {
         _fldSet('SpellSaveDC',''); _fldSet('SAB','');
+    }
+}
+
+/* Cálculos de la hoja melon:
+   - Modificador: floor((score-10)/2). 15 → +2.
+   - Salvación: modificador + (checkbox PROF marcada ? ProfBonus : 0).
+   - Skill activa:  modificador + (PROF ? ProfBonus : 0).
+   - Skill pasiva:  10 + modificador + (PROF ? ProfBonus : 0). */
+function runCalcsMelon(){
+    var prof = _fldNum(MELON_PROF_FIELD);
+    var bonuses = {};
+    ABILITIES.forEach(function(ab){
+        var m = MELON_MAP[ab]; if(!m) return;
+        var score = _fldNum(m.score);
+        if(score === null){
+            bonuses[ab] = null;
+            _fldSet(m.bonus, '');
+            _fldSet(m.save,  '');
+            return;
+        }
+        var bonus = Math.floor((score - 10) / 2);
+        bonuses[ab] = bonus;
+        _fldSet(m.bonus, _fmtMod(bonus));
+        var sv = bonus + (_fldChk(m.savePROF) && prof !== null ? prof : 0);
+        _fldSet(m.save, _fmtMod(sv));
+    });
+    MELON_SKILL_MAP.forEach(function(s){
+        var b = bonuses[s.stat];
+        if(b === null || b === undefined){ _fldSet(s.field, ''); return; }
+        var extra = (_fldChk(s.prof) && prof !== null) ? prof : 0;
+        var v = b + extra;
+        _fldSet(s.field, s.passive ? String(10 + v) : _fmtMod(v));
+    });
+    /* Aptitud mágica: CD = 8 + prof + mod, BAC = prof + mod (mod del stat
+       elegido en el dropdown). Vacío si no hay aptitud, prof o score. */
+    var sa  = _qField(MELON_SPELL_ABILITY);
+    var stat = sa ? sa.value : '';
+    var bn   = bonuses[stat];
+    if(stat && bn !== null && bn !== undefined && prof !== null){
+        _fldSet(MELON_SPELL_DC,  String(8 + prof + bn));
+        _fldSet(MELON_SPELL_ATK, _fmtMod(prof + bn));
+    } else {
+        _fldSet(MELON_SPELL_DC, '');
+        _fldSet(MELON_SPELL_ATK, '');
     }
 }
 
