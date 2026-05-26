@@ -1,0 +1,43 @@
+# ─── Seguridad mínima para hosting compartido ─────────────────────────
+# Bloquea acceso web a ficheros con credenciales y a fuentes PHP que no
+# deben llamarse directamente (db.php, config.php, helpers, etc.).
+# Los endpoints reales (index.php, register-user.php, *-desktop.php,
+# assets/*/api.php, assets/*/notifications-stream.php) sí son accesibles.
+
+<FilesMatch "^\.env|^\.htaccess$|^\.gitignore$|^\.git">
+    Require all denied
+</FilesMatch>
+
+<Files "db.php">
+    Require all denied
+</Files>
+
+<Files "env.php">
+    Require all denied
+</Files>
+
+# Sin listado de directorios
+Options -Indexes
+
+# UTF-8 por defecto para PHP
+AddDefaultCharset UTF-8
+
+# Cache mediano para estáticos
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 7 days"
+    ExpiresByType image/png  "access plus 7 days"
+    ExpiresByType image/webp "access plus 7 days"
+    ExpiresByType image/gif  "access plus 7 days"
+    ExpiresByType text/css   "access plus 1 day"
+    ExpiresByType application/javascript "access plus 1 day"
+</IfModule>
+
+# Subidas de imágenes (avatar, wallpapers, momentos): hasta 5 MB
+<IfModule mod_php.c>
+    php_value upload_max_filesize 5M
+    php_value post_max_size       6M
+</IfModule>
+
+# Subir el tamaño max para los formularios con foto (configurable también
+# desde php.ini si el host no permite php_value en .htaccess)

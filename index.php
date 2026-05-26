@@ -106,12 +106,89 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
 <head>
     <meta charset="UTF-8">
     <title>Scrapbook Melon</title>
+    <!-- Favicon vacío para evitar 404 automático cuando el host no tiene
+         /favicon.ico (InfinityFree intercepta esos 404 con su redirect). -->
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/login.css">
     <link rel="stylesheet" href="assets/css/themes.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <script src="assets/js/win98-dialogs.js"></script>
+    <script>
+    /* Win98 dialogs — inline para no depender de un fichero JS externo
+       (algunos hosts compartidos rechazan /assets/js/ recién creados sin
+       refresh de la web app). Lógica idéntica a assets/js/win98-dialogs.js. */
+    (function(){
+        if (window.__win98DialogsLoaded) return;
+        window.__win98DialogsLoaded = true;
+        var Z = 999999;
+        function build(opts){
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.25);z-index:' + (Z++) + ';display:flex;align-items:center;justify-content:center;';
+            var win = document.createElement('div');
+            win.className = 'window';
+            win.style.cssText = 'min-width:300px;max-width:480px;z-index:' + (Z++) + ';';
+            var bar = document.createElement('div'); bar.className = 'title-bar';
+            var barText = document.createElement('div'); barText.className = 'title-bar-text';
+            barText.textContent = opts.title || (opts.type === 'alert' ? 'Aviso' : opts.type === 'confirm' ? 'Confirmar' : 'Introduce un valor');
+            var barCtl = document.createElement('div'); barCtl.className = 'title-bar-controls';
+            var closeBtn = document.createElement('button'); closeBtn.setAttribute('aria-label','Close');
+            barCtl.appendChild(closeBtn); bar.appendChild(barText); bar.appendChild(barCtl);
+            var body = document.createElement('div'); body.className = 'window-body'; body.style.cssText = 'padding:12px 14px;';
+            var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:12px;align-items:flex-start;';
+            var icon = document.createElement('div');
+            icon.textContent = opts.type === 'confirm' ? '❓' : opts.type === 'prompt' ? '✏️' : 'ℹ️';
+            icon.style.cssText = 'font-size:24px;line-height:1;flex:0 0 28px;';
+            var msg = document.createElement('div');
+            msg.style.cssText = 'flex:1;font-size:11px;white-space:pre-wrap;line-height:1.4;';
+            msg.textContent = opts.message || '';
+            row.appendChild(icon); row.appendChild(msg); body.appendChild(row);
+            var input = null;
+            if (opts.type === 'prompt') {
+                input = document.createElement('input'); input.type = 'text';
+                input.value = (opts.defaultVal != null ? String(opts.defaultVal) : '');
+                input.style.cssText = 'width:100%;margin-top:10px;box-sizing:border-box;';
+                body.appendChild(input);
+            }
+            var btns = document.createElement('div');
+            btns.style.cssText = 'display:flex;justify-content:flex-end;gap:6px;margin-top:14px;';
+            var okBtn = document.createElement('button'); okBtn.className = 'default'; okBtn.textContent = opts.okLabel || 'Aceptar';
+            var cancelBtn = null;
+            if (opts.type !== 'alert') {
+                cancelBtn = document.createElement('button'); cancelBtn.textContent = opts.cancelLabel || 'Cancelar';
+                btns.appendChild(cancelBtn);
+            }
+            btns.appendChild(okBtn); body.appendChild(btns);
+            win.appendChild(bar); win.appendChild(body);
+            overlay.appendChild(win); document.body.appendChild(overlay);
+            if (input) setTimeout(function(){ input.focus(); input.select(); }, 30);
+            else       setTimeout(function(){ okBtn.focus(); }, 30);
+            function close(){ document.removeEventListener('keydown', onKey, true); overlay.remove(); }
+            function doOk(){ close(); if (opts.onOk) opts.onOk(input ? input.value : true); }
+            function doCancel(){ close(); if (opts.onCancel) opts.onCancel(); }
+            function onKey(e){
+                if (e.key === 'Enter')      { e.preventDefault(); doOk(); }
+                else if (e.key === 'Escape'){ e.preventDefault(); doCancel(); }
+            }
+            document.addEventListener('keydown', onKey, true);
+            okBtn.addEventListener('click', doOk);
+            if (cancelBtn) cancelBtn.addEventListener('click', doCancel);
+            closeBtn.addEventListener('click', doCancel);
+        }
+        window.win98Alert = function(message, title, onOk){
+            if (typeof title === 'function') { onOk = title; title = undefined; }
+            build({ type:'alert', message:String(message), title:title, onOk:onOk });
+        };
+        window.win98Confirm = function(message, title, onOk, onCancel){
+            if (typeof title === 'function') { onCancel = onOk; onOk = title; title = undefined; }
+            build({ type:'confirm', message:String(message), title:title, onOk:onOk, onCancel:onCancel });
+        };
+        window.win98Prompt = function(message, defaultVal, onOk, onCancel, title){
+            build({ type:'prompt', message:String(message), defaultVal:defaultVal, onOk:onOk, onCancel:onCancel, title:title });
+        };
+        window.alert = function(message){ window.win98Alert(message); };
+    })();
+    </script>
     <?php if ($baseWallpaper): ?>
     <style>body::before{ background-image:url('<?php echo htmlspecialchars($baseWallpaper); ?>'); opacity:1; }</style>
     <?php endif; ?>
@@ -159,6 +236,12 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
         </div>
         <div class="window-body">
             <div class="user-list">
+                <?php if (empty($users) && !empty($GLOBALS['_loginUsersError'])): ?>
+                    <p style="font-size:11px;color:#c00;margin:0 0 8px;padding:6px;background:#fee;border:1px solid #fcc;">
+                        <strong>No hay usuarios para mostrar.</strong><br>
+                        <span style="font-size:10px;"><?php echo htmlspecialchars($GLOBALS['_loginUsersError']); ?></span>
+                    </p>
+                <?php endif; ?>
                 <?php foreach ($users as $key => $user):
                     $_theme = getUserActiveTheme($key, $user['label']);
                 ?>
@@ -477,7 +560,15 @@ registerForm.addEventListener('submit', function(e) {
     registerSubmit.disabled = true;
     var fd = new FormData(registerForm);
     fetch('register-user.php', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            return r.text().then(function(body) {
+                /* Si no es 2xx o el body no es JSON parseable, lo enseñamos
+                   tal cual (truncado) para ver el error real del servidor. */
+                if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + body.slice(0, 200));
+                try { return JSON.parse(body); }
+                catch (err) { throw new Error('Respuesta no JSON: ' + body.slice(0, 200)); }
+            });
+        })
         .then(function(d) {
             registerSubmit.disabled = false;
             if (!d || d.error) {
@@ -488,9 +579,9 @@ registerForm.addEventListener('submit', function(e) {
             /* Recargar para que la lista de usuarios incluya al nuevo */
             window.location.href = 'index.php?nointro=1';
         })
-        .catch(function() {
+        .catch(function(err) {
             registerSubmit.disabled = false;
-            registerStatus.textContent = 'Error de red';
+            registerStatus.textContent = err.message || 'Error de red';
             registerStatus.style.display = '';
         });
 });

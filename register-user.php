@@ -1,8 +1,37 @@
 <?php
 /* Registro de usuario: INSERT en `usuarios` con password bcrypt + crea
-   stub de escritorio + (opcional) sube foto de perfil. Sin tocar JSON. */
+   stub de escritorio + (opcional) sube foto de perfil. Sin tocar JSON.
+
+   IMPORTANTE: garantizamos que SIEMPRE se devuelva JSON, incluso si hay un
+   fatal error de PHP o el DB connect falla. Si no, el frontend ve la página
+   HTML de error del host (InfinityFree etc.) y muestra "Error de red". */
 header('Content-Type: application/json; charset=utf-8');
-require_once __DIR__ . '/db.php';   /* trae también assets/config.php */
+ob_start();   // capturar cualquier output accidental (warnings, BOM, etc.)
+
+/* Handler de error/fatal que SI O SI emite JSON parseable */
+function _regFatal($msg, $http = 500) {
+    while (ob_get_level() > 0) ob_end_clean();
+    http_response_code($http);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => $msg]);
+    exit;
+}
+set_error_handler(function($severity, $msg, $file, $line) {
+    if (!(error_reporting() & $severity)) return false;
+    _regFatal('PHP error: ' . $msg . ' @ ' . basename($file) . ':' . $line);
+});
+register_shutdown_function(function() {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR], true)) {
+        _regFatal('Fatal: ' . $e['message'] . ' @ ' . basename($e['file']) . ':' . $e['line']);
+    }
+});
+
+try {
+    require_once __DIR__ . '/db.php';   /* trae también assets/config.php */
+} catch (Throwable $e) {
+    _regFatal('DB include: ' . $e->getMessage());
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['error' => 'Método no permitido']); exit;
