@@ -500,7 +500,7 @@ function renderList() {
 }
 
 function loadThemes() {
-    fetch('../assets/themes/get-themes.php')
+    fetch('../assets/themes/api.php?action=get')
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d || !d.ok) return;
@@ -519,7 +519,7 @@ function loadThemes() {
 
 document.getElementById('temas-new').addEventListener('click', resetEditor);
 document.getElementById('temas-deactivate').addEventListener('click', function() {
-    fetch('../assets/themes/set-active.php', {
+    fetch('../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: '' })
@@ -538,7 +538,7 @@ document.getElementById('theme-save').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Falta el nombre.'; return; }
     var colors = getEditorColors();
-    fetch('../assets/themes/save-theme.php', {
+    fetch('../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, colors: colors })
@@ -554,7 +554,7 @@ document.getElementById('theme-activate').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Selecciona un tema primero.'; return; }
     if (!savedThemes[name]) { statusEl.textContent = 'Guarda el tema antes de activarlo.'; return; }
-    fetch('../assets/themes/set-active.php', {
+    fetch('../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name })
@@ -621,18 +621,19 @@ function applyToDocLocal(doc, className, cssHref) {
 document.getElementById('theme-delete').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name || !savedThemes[name]) { statusEl.textContent = 'Selecciona un tema guardado.'; return; }
-    if (!confirm('¿Eliminar el tema "' + name + '"?')) return;
-    fetch('../assets/themes/delete-theme.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name })
-    }).then(function(r) { return r.json(); })
-      .then(function(d) {
-          if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
-          statusEl.textContent = 'Tema "' + name + '" eliminado.';
-          resetEditor();
-          loadThemes();
-      });
+    window._w98ConfirmDeleteTheme(name, function() {
+        fetch('../assets/themes/api.php?action=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
+              statusEl.textContent = 'Tema "' + name + '" eliminado.';
+              resetEditor();
+              loadThemes();
+          });
+    });
 });
 
 buildEditor();
@@ -768,6 +769,58 @@ loadThemes();
     });
 })();
 
+</script>
+
+<!-- Modal Win98 para confirmar eliminación de tema -->
+<div class="window" id="theme-delete-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:8500; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text">Confirmar eliminación de tema</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="theme-delete-x"></button>
+        </div>
+    </div>
+    <div class="window-body w98-confirm-body">
+        <div class="w98-confirm-row">
+            <div class="w98-icon-question"></div>
+            <div class="w98-confirm-text" id="theme-delete-text">¿Eliminar el tema?</div>
+        </div>
+        <div class="w98-confirm-btns">
+            <button id="theme-delete-ok" class="default">Sí</button>
+            <button id="theme-delete-cancel">No</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* Modal Win98 para confirmar borrado (sustituye al confirm() nativo). */
+(function(){
+    var modal = document.getElementById('theme-delete-modal');
+    function openConfirm(name, onOk){
+        document.getElementById('theme-delete-text').innerHTML =
+            '¿Eliminar el tema <strong>' + name.replace(/[&<>]/g, function(c){
+                return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];
+            }) + '</strong>?';
+        modal.style.display = 'flex';
+        function cleanup(){
+            modal.style.display = 'none';
+            document.getElementById('theme-delete-ok').onclick = null;
+            document.getElementById('theme-delete-cancel').onclick = null;
+            document.getElementById('theme-delete-x').onclick = null;
+            document.removeEventListener('keydown', keyHandler);
+        }
+        function ok(){ cleanup(); onOk(); }
+        function cancel(){ cleanup(); }
+        function keyHandler(ev){
+            if(ev.key === 'Enter'){ ev.preventDefault(); ok(); }
+            else if(ev.key === 'Escape'){ ev.preventDefault(); cancel(); }
+        }
+        document.getElementById('theme-delete-ok').onclick = ok;
+        document.getElementById('theme-delete-cancel').onclick = cancel;
+        document.getElementById('theme-delete-x').onclick = cancel;
+        document.addEventListener('keydown', keyHandler);
+    }
+    window._w98ConfirmDeleteTheme = openConfirm;
+})();
 </script>
 
 </body>

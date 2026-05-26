@@ -509,7 +509,7 @@ var PROFILE_USERS = <?php
 
     /* ──── Data ──── */
     function loadLists(cb) {
-        fetch('assets/profile/get-lists.php')
+        fetch('assets/profile/api.php?action=get-lists')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data && !data.error) {
@@ -523,7 +523,7 @@ var PROFILE_USERS = <?php
     }
 
     function saveCategory(cat) {
-        fetch('assets/profile/save-lists.php', {
+        fetch('assets/profile/api.php?action=save-lists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: cat, items: lists[cat] })
@@ -709,7 +709,7 @@ var PROFILE_USERS = <?php
     var currentSessionUser = <?php echo json_encode($desktopUserKey); ?>;
 
     function postItemAction(id, action) {
-        return fetch('assets/profile/respond-item-invite.php', {
+        return fetch('assets/profile/api.php?action=respond-item-invite', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ inviteId: id, action: action })
         });
@@ -834,7 +834,7 @@ var PROFILE_USERS = <?php
             }
             var othersSec = document.createElement('div');
             list.appendChild(othersSec);
-            fetch('assets/profile/get-item-collabs.php?category=' + encodeURIComponent(cat) + '&itemId=' + encodeURIComponent(item.id))
+            fetch('assets/profile/api.php?action=get-item-collabs&category=' + encodeURIComponent(cat) + '&itemId=' + encodeURIComponent(item.id))
                 .then(function(r) { return r.json(); })
                 .then(function(d) {
                     var others = (d.collaborators || []).filter(function(k) { return k !== currentSessionUser; });
@@ -858,7 +858,7 @@ var PROFILE_USERS = <?php
                             btn.addEventListener('click', function() {
                                 confirmFn('¿Eliminar a ' + cLabel + ' como colaborador?', 'Eliminar colaborador', function() {
                                     statusEl.textContent = 'Eliminando…';
-                                    fetch('assets/profile/leave-collab.php', {
+                                    fetch('assets/profile/api.php?action=leave-collab', {
                                         method: 'POST', headers: {'Content-Type':'application/json'},
                                         body: JSON.stringify({ action: 'remove', category: cat, itemId: item.id, collaboratorUser: cKey })
                                     }).then(function(r) { return r.json(); }).then(function(d) {
@@ -898,7 +898,7 @@ var PROFILE_USERS = <?php
                             btn.addEventListener('click', function() {
                                 btn.disabled = true; btn.textContent = '…';
                                 statusEl.textContent = 'Enviando…';
-                                fetch('assets/profile/send-item-invite.php', {
+                                fetch('assets/profile/api.php?action=send-item-invite', {
                                     method: 'POST', headers: {'Content-Type':'application/json'},
                                     body: JSON.stringify({ toUser: key, category: cat, itemId: item.id })
                                 }).then(function(r) { return r.json(); }).then(function(d) {
@@ -1042,7 +1042,7 @@ var PROFILE_USERS = <?php
     function notifyReviewToFollowers(cat, itemTitle, mtype) {
         if (!itemTitle) return;
         if (viewingUser) return; /* sólo notifica reseñas hechas en MI perfil */
-        fetch('assets/profile/notify-review.php', {
+        fetch('assets/profile/api.php?action=notify-review', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: cat, itemTitle: itemTitle, mtype: mtype || '' })
@@ -1288,7 +1288,7 @@ var PROFILE_USERS = <?php
                         if (isCollab) {
                             menuItems.push({ label: '🚪 Abandonar actividad', action: function() {
                                 confirmFn('¿Abandonar "' + it.title + '"?', 'Abandonar', function() {
-                                    fetch('assets/profile/leave-collab.php', {
+                                    fetch('assets/profile/api.php?action=leave-collab', {
                                         method: 'POST', headers: {'Content-Type':'application/json'},
                                         body: JSON.stringify({ action: 'leave', category: cat, itemId: it.id })
                                     }).then(function(r) { return r.json(); }).then(function(d) {
@@ -1395,7 +1395,7 @@ var PROFILE_USERS = <?php
     }
 
     function loadProfile(cb) {
-        fetch('assets/profile/get-profile.php')
+        fetch('assets/profile/api.php?action=get-profile')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data && !data.error) {
@@ -1536,8 +1536,6 @@ var PROFILE_USERS = <?php
         document.querySelectorAll('.profile-catview-section-head').forEach(function(h) { makeCollapsible(h); });
         document.querySelectorAll('#profile-catview-encurso .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
         document.querySelectorAll('#music-catview-destacados .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
-        var postsHeader = document.getElementById('profile-posts-header');
-        if (postsHeader) makeCollapsible(postsHeader);
         /* Mis Listas pliega sólo su contenedor de nav (NO el resto del sidebar) */
         var listasHd  = document.getElementById('profile-listas-heading');
         var listasNav = document.getElementById('profile-listas-nav');
@@ -1555,7 +1553,7 @@ var PROFILE_USERS = <?php
     var profileNotifs = [];
 
     function loadProfileNotifs(cb) {
-        fetch('assets/profile/get-profile-notifs.php')
+        fetch('assets/profile/api.php?action=get-profile-notifs')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data && data.ok) {
@@ -1664,7 +1662,7 @@ var PROFILE_USERS = <?php
                         e.stopPropagation();
                         if (b.dataset.busy === '1') return;
                         b.dataset.busy = '1';
-                        fetch('assets/profile/toggle-follow.php', {
+                        fetch('assets/profile/api.php?action=toggle-follow', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ targetUser: uk })
@@ -1707,7 +1705,7 @@ var PROFILE_USERS = <?php
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
         /* Marca todas como leídas en servidor + UI */
         if (profileNotifs.some(function(n) { return !n.read; })) {
-            fetch('assets/profile/mark-notifs-read.php', { method: 'POST' }).catch(function(){});
+            fetch('assets/profile/api.php?action=mark-notifs-read', { method: 'POST' }).catch(function(){});
             profileNotifs.forEach(function(n) { n.read = true; });
             updateNotifBadge(0);
         }
@@ -1730,7 +1728,7 @@ var PROFILE_USERS = <?php
         btn.addEventListener('click', function() {
             if (!viewingUser || btn.dataset.busy === '1') return;
             btn.dataset.busy = '1';
-            fetch('assets/profile/toggle-follow.php', {
+            fetch('assets/profile/api.php?action=toggle-follow', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ targetUser: viewingUser })
@@ -1862,7 +1860,7 @@ var PROFILE_USERS = <?php
                     wrap.addEventListener('click', function() {
                         if (wrap.dataset.busy === '1') return;
                         wrap.dataset.busy = '1';
-                        fetch('assets/profile/toggle-post-like.php', {
+                        fetch('assets/profile/api.php?action=toggle-post-like', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ targetUser: viewingUser, postId: p.id })
@@ -1890,7 +1888,7 @@ var PROFILE_USERS = <?php
                 delBtn.textContent = '×';
                 delBtn.addEventListener('click', function() {
                     confirmFn('¿Eliminar este post?', 'Eliminar', function() {
-                        fetch('assets/profile/delete-post.php', {
+                        fetch('assets/profile/api.php?action=delete-post', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id: post.id })
@@ -1921,7 +1919,7 @@ var PROFILE_USERS = <?php
         postBtn.addEventListener('click', function() {
             var text = postInput ? postInput.value.trim() : '';
             if (!text) return;
-            fetch('assets/profile/add-post.php', {
+            fetch('assets/profile/api.php?action=add-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: text })
@@ -2052,7 +2050,7 @@ var PROFILE_USERS = <?php
         if (!ownLs[cat]) ownLs[cat] = [];
         ownLs[cat].push(entry);
         var newIdx = ownLs[cat].length - 1;
-        fetch('assets/profile/save-lists.php', {
+        fetch('assets/profile/api.php?action=save-lists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: cat, items: ownLs[cat] })
@@ -2105,7 +2103,7 @@ var PROFILE_USERS = <?php
         var listEl   = document.getElementById('profile-melon-list');
         if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Cargando...'; }
         if (listEl) listEl.innerHTML = '';
-        var url = 'assets/profile/melon-reviews.php?period=' + encodeURIComponent(melonPeriod) + '&cat=' + encodeURIComponent(melonCat);
+        var url = 'assets/profile/api.php?action=melon-reviews&period=' + encodeURIComponent(melonPeriod) + '&cat=' + encodeURIComponent(melonCat);
         if (melonType) url += '&type=' + encodeURIComponent(melonType);
         fetch(url)
             .then(function(r) { return r.json(); })
@@ -2419,7 +2417,7 @@ var PROFILE_USERS = <?php
     function viewOtherUser(userKey) {
         /* Al ver el perfil de otra persona, salimos de modo edición */
         document.dispatchEvent(new Event('profile-edit-cancel'));
-        fetch('assets/profile/view-user.php?user=' + encodeURIComponent(userKey))
+        fetch('assets/profile/api.php?action=view-user&user=' + encodeURIComponent(userKey))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data || data.error) { alert(data && data.error ? data.error : 'Error'); return; }
@@ -2483,7 +2481,7 @@ var PROFILE_USERS = <?php
     }
 
     function loadMyFollowers(cb) {
-        fetch('assets/profile/get-followers.php')
+        fetch('assets/profile/api.php?action=get-followers')
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d && d.ok && Array.isArray(d.followers)) myFollowers = d.followers;
@@ -2521,7 +2519,7 @@ var PROFILE_USERS = <?php
     }
 
     function loadUnreadChats() {
-        fetch('assets/profile/get-unread-chats.php')
+        fetch('assets/profile/api.php?action=get-unread-chats')
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (!d || !d.ok) return;
@@ -2541,7 +2539,7 @@ var PROFILE_USERS = <?php
 
     function loadChatMessages() {
         if (!chatWithUser) return;
-        fetch('assets/profile/get-messages.php?with=' + encodeURIComponent(chatWithUser))
+        fetch('assets/profile/api.php?action=get-messages&with=' + encodeURIComponent(chatWithUser))
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (!d || !d.ok) return;
@@ -2581,7 +2579,7 @@ var PROFILE_USERS = <?php
         var text = input.value.trim();
         if (!text) return;
         input.disabled = true;
-        fetch('assets/profile/send-message.php', {
+        fetch('assets/profile/api.php?action=send-message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to: chatWithUser, text: text })
@@ -2639,7 +2637,7 @@ var PROFILE_USERS = <?php
         if (!ownLists[cat]) ownLists[cat] = [];
         ownLists[cat].push(copy);
         var newIdx = ownLists[cat].length - 1;
-        fetch('assets/profile/save-lists.php', {
+        fetch('assets/profile/api.php?action=save-lists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: cat, items: ownLists[cat] })
@@ -2840,7 +2838,7 @@ var PROFILE_USERS = <?php
 
     function playMusicItem(item) {
         updatePlayerTitle('⏳ Cargando…');
-        fetch('assets/profile/play-music-item.php', {
+        fetch('assets/profile/api.php?action=play-music-item', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2986,7 +2984,7 @@ var PROFILE_USERS = <?php
                     if (isCollab) {
                         menuItems.push({ label: '🚪 Abandonar actividad', action: function() {
                             confirmFn('¿Abandonar "' + it.title + '"?', 'Abandonar', function() {
-                                fetch('assets/profile/leave-collab.php', {
+                                fetch('assets/profile/api.php?action=leave-collab', {
                                     method: 'POST', headers: {'Content-Type':'application/json'},
                                     body: JSON.stringify({ action: 'leave', category: 'music', itemId: it.id })
                                 }).then(function(r) { return r.json(); }).then(function(d) {
@@ -3198,7 +3196,7 @@ var PROFILE_USERS = <?php
             if (!raw) { preview.textContent = ''; return; }
             preview.textContent = 'Buscando...';
             fetchTimer = setTimeout(function() {
-                fetch('assets/profile/resolve-music-item.php?url=' + encodeURIComponent(raw) + '&itemType=' + currentType)
+                fetch('assets/profile/api.php?action=resolve-music-item&url=' + encodeURIComponent(raw) + '&itemType=' + currentType)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.error) { preview.textContent = data.error; preview.style.color = '#c00'; return; }
@@ -3389,7 +3387,7 @@ var PROFILE_USERS = <?php
         });
 
         function enterEditMode() {
-            fetch('assets/profile/get-profile.php')
+            fetch('assets/profile/api.php?action=get-profile')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     draft = Object.assign({}, data || {});
@@ -3430,7 +3428,7 @@ var PROFILE_USERS = <?php
             FIELDS.forEach(function(f) { payload[f] = (draft[f] || '').toString().trim(); });
             SOCIALS.forEach(function(f) { payload[f] = (draft[f] || '').toString().trim(); });
 
-            var infoPromise = fetch('assets/profile/save-info.php', {
+            var infoPromise = fetch('assets/profile/api.php?action=save-info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

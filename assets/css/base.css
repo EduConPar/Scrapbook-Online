@@ -245,6 +245,158 @@ body.has-start-icon .win-logo span { display: none; }
     background: rgba(0,0,128,0.25);
 }
 
+/* Long-press drag */
+.desktop-icon.dragging {
+    opacity: 0.75;
+    transform: scale(1.06);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    z-index: 100000;        /* siempre encima de ventanas y carpetas abiertas */
+    cursor: grabbing;
+    pointer-events: none;   /* mientras arrastra, los hijos no roban eventos */
+}
+.desktop-icon.long-pressing {
+    transform: scale(1.04);
+    transition: transform 0.18s ease;
+}
+.desktop-icon.snapping {
+    transition: left 0.18s ease-out, top 0.18s ease-out;
+}
+
+/* Folder drop target highlight */
+.desktop-icon.folder-receive {
+    background: rgba(0,200,100,0.35);
+    border-color: rgba(0,255,128,0.85);
+    box-shadow: 0 0 0 2px rgba(0,255,128,0.4);
+}
+.folder-window-receive {
+    outline: 2px solid rgba(0,255,128,0.9);
+    outline-offset: -2px;
+}
+.folder-window-receive #folder-content {
+    background: rgba(0,200,100,0.10);
+}
+
+/* Right-click context menu (estilo Win98 nativo del proyecto) */
+.desk-ctx {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    list-style: none;
+    margin: 0;
+    padding: 2px;
+    min-width: 180px;
+    background: var(--btn-bg);
+    color: var(--text);
+    border-top: 2px solid var(--bezel-light-1);
+    border-left: 2px solid var(--bezel-light-1);
+    border-right: 2px solid var(--bezel-dark-2);
+    border-bottom: 2px solid var(--bezel-dark-2);
+    box-shadow: 2px 2px 6px rgba(0,0,0,.35);
+    font-family: 'ms_sans_serif', sans-serif;
+    font-size: 11px;
+    user-select: none;
+}
+.desk-ctx.show { display: block; }
+.desk-ctx li {
+    padding: 4px 18px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.desk-ctx li:hover {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+/* Folder window content (clase usada por todas las ventanas de carpeta) */
+.folder-content {
+    flex: 1;
+    overflow: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-content: flex-start;
+    background: var(--win-body-bg);
+}
+.folder-item {
+    position: relative;
+    width: 80px;
+    text-align: center;
+    cursor: pointer;
+    padding: 6px 4px;
+    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.folder-item:hover {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--bezel-dark-2);
+}
+.folder-item .fi-img { font-size: 30px; line-height: 1; pointer-events: none; }
+.folder-item .fi-label {
+    font-size: 11px; line-height: 1.2;
+    word-break: break-word; pointer-events: none;
+}
+.folder-empty {
+    padding: 30px 12px; width: 100%; text-align: center;
+    color: var(--text-muted); font-style: italic;
+}
+
+/* =========================================================
+   Diálogo de confirmación Windows 98 (Sí / No)
+========================================================= */
+.w98-confirm-body {
+    padding: 14px 12px 10px 12px !important;
+}
+.w98-confirm-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+.w98-confirm-text {
+    flex: 1;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text);
+}
+.w98-confirm-btns {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+}
+.w98-confirm-btns button {
+    min-width: 75px;
+}
+
+/* Icono de interrogación estilo Win98: círculo bezelado con "?" azul marino */
+.w98-icon-question {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    background: var(--input-bg);
+    border-radius: 50%;
+    border: 2px solid;
+    border-color: var(--bezel-dark-2) var(--bezel-light-1) var(--bezel-light-1) var(--bezel-dark-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Times New Roman', Times, serif;
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 30px;
+    line-height: 1;
+    user-select: none;
+    box-shadow:
+        inset 1px 1px 0 var(--bezel-light-1),
+        inset -1px -1px 0 var(--bezel-dark-1);
+}
+.w98-icon-question::before { content: '?'; margin-top: -4px; }
+
 .desktop-icon-img {
     font-size: 30px;
     line-height: 1;

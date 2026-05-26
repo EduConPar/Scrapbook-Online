@@ -1,0 +1,57 @@
+{
+    "movies": [
+        {
+            "id": "item_1779278930622",
+            "title": "Nosferatu",
+            "image": "https:\/\/fr.web.img5.acsta.net\/img\/c2\/9d\/c29d5399c46015e461fec21f990fe294.jpg",
+            "status": "completed",
+            "review": {
+                "stars": 4.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "item_1779278975304",
+            "title": "Oppenheimer",
+            "image": "https:\/\/static1.srcdn.com\/wordpress\/wp-content\/uploads\/2023\/05\/oppenheimer-poster.jpg",
+            "status": "completed",
+            "review": {
+                "stars": 3.5,
+                "comment": "adad"
+            },
+            "collaborators": [
+                "user1"
+            ]
+        }
+    ],
+    "books": [],
+    "games": [],
+    "music": [
+        {
+            "id": "music_1779366739148",
+            "title": "Take Care",
+            "image": "https:\/\/img.youtube.com\/vi\/sYeWkKyebQQ\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Heaven Pierce Her",
+            "featured": true,
+            "ytId": "sYeWkKyebQQ",
+            "review": {
+                "stars": 3.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779445004987",
+            "title": "Gone Angels",
+            "image": "https:\/\/img.youtube.com\/vi\/qh7CFsnfdpk\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Mili",
+            "featured": true,
+            "ytId": "qh7CFsnfdpk",
+            "review": {
+                "stars": 5,
+                "comment": "god"
+            }
+        }
+    ]
+}

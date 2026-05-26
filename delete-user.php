@@ -57,13 +57,32 @@ foreach (['png', 'svg', 'webp', 'jpg', 'jpeg', 'gif'] as $ext) {
     @unlink(__DIR__ . '/assets/img/start-icons/' . strtolower($safeLabel) . '-start-icon.' . $ext);
 }
 
-/* 3c) Borrar temas: JSON + todos los CSS generados para este usuario */
-@unlink(__DIR__ . '/assets/themes/' . $userKey . '-themes.json');
-$themesDir = __DIR__ . '/assets/themes/';
-if (is_dir($themesDir)) {
+/* 3c) Borrar temas: JSON + todos los CSS generados para este usuario.
+       Primero leemos el JSON para conocer los nombres EXACTOS de los temas
+       y borrar sus CSS por path explícito; después un barrido por regex
+       como red de seguridad para huérfanos con la convención
+       <Theme>-<Label>.css. */
+$themesDir      = __DIR__ . '/assets/themes/';
+$userThemesJson = $themesDir . $userKey . '-themes.json';
+
+if (file_exists($userThemesJson)) {
+    $themesData = json_decode(file_get_contents($userThemesJson), true);
+    if (is_array($themesData) && isset($themesData['themes']) && is_array($themesData['themes'])) {
+        foreach (array_keys($themesData['themes']) as $themeName) {
+            $safeTheme = preg_replace('/[^A-Za-z0-9_-]/', '', trim((string)$themeName));
+            if ($safeTheme === '' || $safeLabel === '') continue;
+            @unlink($themesDir . $safeTheme . '-' . $safeLabel . '.css');
+        }
+    }
+    @unlink($userThemesJson);
+}
+
+/* Barrido de seguridad por la convención <Theme>-<Label>.css.
+   Sólo si $safeLabel no es vacío (si lo fuera, el regex coincidiría
+   con cualquier *.css huérfano de otros usuarios). */
+if (is_dir($themesDir) && $safeLabel !== '') {
     foreach (scandir($themesDir) as $f) {
         if (substr($f, -4) !== '.css') continue;
-        /* Convención: <Theme>-<Label>.css */
         if (preg_match('/-' . preg_quote($safeLabel, '/') . '\.css$/', $f)) {
             @unlink($themesDir . $f);
         }

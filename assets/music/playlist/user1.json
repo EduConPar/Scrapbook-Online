@@ -200,7 +200,9 @@
         "id": "pl_1779182747435",
         "name": "test",
         "owner": "user1",
-        "collaborators": [],
+        "collaborators": [
+            "user3"
+        ],
         "tracks": [
             {
                 "videoId": "yZkPe7TEuyk",
@@ -651,6 +653,13 @@
     {
         "id": "pl_1779269656007",
         "name": "test5",
+        "owner": "user1",
+        "collaborators": [],
+        "tracks": []
+    },
+    {
+        "id": "pl_1779813689332",
+        "name": "dad",
         "owner": "user1",
         "collaborators": [],
         "tracks": []

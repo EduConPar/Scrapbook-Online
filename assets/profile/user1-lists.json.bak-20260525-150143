@@ -1,0 +1,197 @@
+{
+    "movies": [
+        {
+            "id": "item_1779278975304",
+            "title": "Oppenheimer",
+            "image": "https:\/\/static1.srcdn.com\/wordpress\/wp-content\/uploads\/2023\/05\/oppenheimer-poster.jpg",
+            "status": "completed",
+            "review": {
+                "stars": 4,
+                "comment": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut a"
+            },
+            "sharedFrom": "user2"
+        },
+        {
+            "id": "item_1779433190913",
+            "title": "Nosferatu",
+            "image": "https:\/\/fr.web.img5.acsta.net\/img\/c2\/9d\/c29d5399c46015e461fec21f990fe294.jpg",
+            "status": "pending"
+        }
+    ],
+    "books": [
+        {
+            "id": "item_1779354364924",
+            "title": "La peste",
+            "image": "https:\/\/image-hamelyn.b-cdn.net\/products\/9788435009348\/1.webp?width=600&height=900",
+            "status": "in-progress"
+        }
+    ],
+    "games": [],
+    "music": [
+        {
+            "id": "music_1779366125665",
+            "title": "The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum",
+            "image": "https:\/\/img.youtube.com\/vi\/NVqXG3QNav0\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Heaven Pierce Her",
+            "featured": true,
+            "ytId": "NVqXG3QNav0",
+            "review": {
+                "stars": 3.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779366186334",
+            "title": "Everything is a Lot",
+            "image": "https:\/\/i.scdn.co\/image\/ab67616d00001e0249f11718fc738475de83a296",
+            "type": "album",
+            "artist": "Will Wood",
+            "featured": true,
+            "spotifyAlbumId": "4x833aD0AmISeZZE2lx3Hn",
+            "review": {
+                "stars": 4.5,
+                "comment": "god"
+            }
+        },
+        {
+            "id": "music_1779366724316",
+            "title": "FIRE!!!",
+            "image": "https:\/\/img.youtube.com\/vi\/yZkPe7TEuyk\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Vane Lily",
+            "featured": false,
+            "ytId": "yZkPe7TEuyk",
+            "review": {
+                "stars": 5,
+                "comment": "god"
+            }
+        },
+        {
+            "id": "music_1779367051754",
+            "title": "Laplace’s Angel (Hurt People? Hurt People!)",
+            "image": "https:\/\/i.scdn.co\/image\/ab67616d00001e0232a57eb1fae94aa3fed0c49b",
+            "type": "song",
+            "artist": "Will Wood",
+            "featured": false,
+            "spotifyId": "1oHbgg5WYa7WOJC8VoBVYi",
+            "review": {
+                "stars": 4.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779370845716",
+            "title": "Duel (Versus Reprise)",
+            "image": "https:\/\/img.youtube.com\/vi\/bcOUS1o6bwM\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Heaven Pierce Her",
+            "featured": false,
+            "ytId": "bcOUS1o6bwM",
+            "review": {
+                "stars": 3.5,
+                "comment": "ada"
+            }
+        },
+        {
+            "id": "music_1779433421487",
+            "title": "Take Care",
+            "image": "https:\/\/img.youtube.com\/vi\/sYeWkKyebQQ\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Heaven Pierce Her",
+            "featured": false,
+            "ytId": "sYeWkKyebQQ"
+        },
+        {
+            "id": "music_1779440783266",
+            "title": "Salt, Pepper, Birds, and the Thought Police",
+            "image": "https:\/\/img.youtube.com\/vi\/Dca9gJyjoAg\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Mili",
+            "featured": false,
+            "ytId": "Dca9gJyjoAg",
+            "review": {
+                "stars": 3.5,
+                "comment": "muy buena"
+            }
+        },
+        {
+            "id": "music_1779440794859",
+            "title": "One Way Or Another - Remastered 2001",
+            "image": "https:\/\/img.youtube.com\/vi\/Fnb1xYDViDs\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Blondie",
+            "featured": false,
+            "ytId": "Fnb1xYDViDs",
+            "review": {
+                "stars": 3.5,
+                "comment": "At the crossroads dont turn left"
+            }
+        },
+        {
+            "id": "music_1779444150772",
+            "title": "The Mind Electric",
+            "image": "https:\/\/img.youtube.com\/vi\/0vfZjdK8Ktw\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Miracle Musical",
+            "featured": false,
+            "ytId": "0vfZjdK8Ktw",
+            "review": {
+                "stars": 4,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779444184609",
+            "title": "Abnormality Dancin' Girl",
+            "image": "https:\/\/img.youtube.com\/vi\/XFPdJM8YQoA\/mqdefault.jpg",
+            "type": "song",
+            "artist": "MICCHI;Drazically",
+            "featured": false,
+            "ytId": "XFPdJM8YQoA",
+            "review": {
+                "stars": 3.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779444191029",
+            "title": "ラグトレイン",
+            "image": "https:\/\/img.youtube.com\/vi\/UnIhRpIT7nc\/mqdefault.jpg",
+            "type": "song",
+            "artist": "稲葉曇",
+            "featured": false,
+            "ytId": "UnIhRpIT7nc",
+            "review": {
+                "stars": 4,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779444197311",
+            "title": "Gone Angels",
+            "image": "https:\/\/img.youtube.com\/vi\/qh7CFsnfdpk\/mqdefault.jpg",
+            "type": "song",
+            "artist": "Mili",
+            "featured": false,
+            "ytId": "qh7CFsnfdpk",
+            "review": {
+                "stars": 4.5,
+                "comment": ""
+            }
+        },
+        {
+            "id": "music_1779444727905",
+            "title": "No Children",
+            "image": "https:\/\/img.youtube.com\/vi\/fqGKZ3fzN1M\/mqdefault.jpg",
+            "type": "song",
+            "artist": "The Mountain Goats",
+            "featured": false,
+            "ytId": "fqGKZ3fzN1M",
+            "review": {
+                "stars": 3.5,
+                "comment": ""
+            }
+        }
+    ]
+}
