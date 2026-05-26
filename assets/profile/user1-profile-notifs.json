@@ -4,7 +4,7 @@
         "type": "review",
         "fromUser": "user2",
         "createdAt": 1779727051,
-        "read": false,
+        "read": true,
         "category": "movies",
         "itemTitle": "bsdds",
         "mtype": ""

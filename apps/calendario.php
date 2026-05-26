@@ -269,8 +269,8 @@ const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
 
 function cargarTodo() {
     Promise.all([
-        fetch('../assets/couple/get-momentos.php?pareja_id=' + parejaId).then(r => r.json()),
-        fetch('../assets/couple/get-recordatorios.php?pareja_id=' + parejaId).then(r => r.json())
+        fetch('../assets/couple/api.php?action=get-momentos&pareja_id=' + parejaId).then(r => r.json()),
+        fetch('../assets/couple/api.php?action=get-recordatorios&pareja_id=' + parejaId).then(r => r.json())
     ]).then(([momentos, recordatorios]) => {
         todosMomentos = momentos;
         momentosPorFecha = {};
@@ -520,7 +520,7 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
     status.style.color = '#808080';
     status.textContent = 'Guardando...';
 
-    fetch('../assets/couple/save-momento.php', {
+    fetch('../assets/couple/api.php?action=save-momento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, emocion })
@@ -536,7 +536,7 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
             formData.append('foto', fotoInput.files[0]);
             formData.append('momento_id', momentoId);
 
-            return fetch('../assets/couple/upload-foto.php', {
+            return fetch('../assets/couple/api.php?action=upload-foto', {
                 method: 'POST',
                 body: formData
             })
@@ -568,7 +568,7 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
 
     if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
 
-    fetch('../assets/couple/save-recordatorio.php', {
+    fetch('../assets/couple/api.php?action=save-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, tipo, descripcion: desc })
@@ -584,23 +584,28 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
 });
 
 function eliminarMomento(id) {
-    if (!confirm('¿Eliminar este momento?')) return;
-    fetch('../assets/couple/delete-momento.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: id })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { alert(data.error); return; }
-        document.getElementById('popup-dia').classList.remove('active');
-        cargarTodo();
+    window._calConfirm('¿Eliminar este <strong>momento</strong>?', function(){
+        fetch('../assets/couple/api.php?action=delete-momento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); return; }
+            document.getElementById('popup-dia').classList.remove('active');
+            cargarTodo();
+        });
     });
 }
 
 function eliminarRecordatorio(id) {
-    if (!confirm('¿Eliminar este recordatorio?')) return;
-    fetch('../assets/couple/delete-recordatorio.php', {
+    window._calConfirm('¿Eliminar este <strong>recordatorio</strong>?', function(){
+        _doEliminarRecordatorio(id);
+    });
+}
+function _doEliminarRecordatorio(id) {
+    fetch('../assets/couple/api.php?action=delete-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: id })
@@ -616,7 +621,7 @@ function eliminarRecordatorio(id) {
 <?php if (!$pareja): ?>
 document.getElementById('btn-invitar').addEventListener('click', function() {
     document.getElementById('invite-window').style.display = 'block';
-    fetch('../assets/couple/get-users.php')
+    fetch('../assets/couple/api.php?action=get-users')
     .then(r => r.json())
     .then(users => {
         const list = document.getElementById('user-list');
@@ -629,7 +634,7 @@ document.getElementById('btn-invitar').addEventListener('click', function() {
             btn.style.cssText = 'width:100%;margin-bottom:4px;';
             btn.addEventListener('click', function() {
                 btn.disabled = true;
-                fetch('../assets/couple/invite-partner.php', {
+                fetch('../assets/couple/api.php?action=invite-partner', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ toUser: u.key })
@@ -654,7 +659,7 @@ document.getElementById('invite-close').addEventListener('click', function() {
 let currentPartnerInvite = null;
 
 function checkPartnerInvites() {
-    fetch('../assets/couple/get-partner-invites.php')
+    fetch('../assets/couple/api.php?action=get-partner-invites')
     .then(r => r.json())
     .then(data => {
         if (!Array.isArray(data) || !data.length) return;
@@ -671,7 +676,7 @@ function respondInvite(action) {
     if (!currentPartnerInvite) return;
     const fecha = document.getElementById('partner-fecha').value;
     if (action === 'accept' && !fecha) { alert('Por favor introduce la fecha en que empezasteis.'); return; }
-    fetch('../assets/couple/respond-partner-invite.php', {
+    fetch('../assets/couple/api.php?action=respond-partner-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteId: currentPartnerInvite.id, action: action, fecha: fecha })
@@ -699,7 +704,54 @@ document.getElementById('momento-foto').addEventListener('change', function() {
 });
 
 cargarTodo();
+
+/* ─── Modal Win98 de confirmación (reemplaza al confirm() nativo) ─── */
+(function(){
+    function open(text, onOk){
+        var modal = document.getElementById('cal-confirm-modal');
+        document.getElementById('cal-confirm-text').innerHTML = text;
+        modal.style.display = 'flex';
+        function cleanup(){
+            modal.style.display = 'none';
+            document.getElementById('cal-confirm-ok').onclick = null;
+            document.getElementById('cal-confirm-cancel').onclick = null;
+            document.getElementById('cal-confirm-x').onclick = null;
+            document.removeEventListener('keydown', keyHandler);
+        }
+        function ok(){ cleanup(); onOk(); }
+        function cancel(){ cleanup(); }
+        function keyHandler(ev){
+            if(ev.key === 'Enter'){ ev.preventDefault(); ok(); }
+            else if(ev.key === 'Escape'){ ev.preventDefault(); cancel(); }
+        }
+        document.getElementById('cal-confirm-ok').onclick = ok;
+        document.getElementById('cal-confirm-cancel').onclick = cancel;
+        document.getElementById('cal-confirm-x').onclick = cancel;
+        document.addEventListener('keydown', keyHandler);
+    }
+    window._calConfirm = open;
+})();
 </script>
+
+<!-- Modal Win98 compartido para confirmar eliminaciones -->
+<div class="window" id="cal-confirm-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:8500; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="cal-confirm-title">Confirmar eliminación</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="cal-confirm-x"></button>
+        </div>
+    </div>
+    <div class="window-body w98-confirm-body">
+        <div class="w98-confirm-row">
+            <div class="w98-icon-question"></div>
+            <div class="w98-confirm-text" id="cal-confirm-text">¿Eliminar?</div>
+        </div>
+        <div class="w98-confirm-btns">
+            <button id="cal-confirm-ok" class="default">Sí</button>
+            <button id="cal-confirm-cancel">No</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

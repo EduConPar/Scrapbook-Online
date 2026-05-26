@@ -1280,9 +1280,12 @@ var _driveToken       = null;       // { access_token, expires_at }
 var _driveFolderId    = null;
 var _pendingDriveCb   = null;
 
+var DRIVE_TOKEN_KEY     = 'dnd_drive_token';
+var DRIVE_EVER_AUTH_KEY = 'dnd_drive_ever_auth';
+
 (function tryRestoreToken(){
     try {
-        var s = sessionStorage.getItem('dnd_drive_token');
+        var s = localStorage.getItem(DRIVE_TOKEN_KEY);
         if(!s) return;
         var t = JSON.parse(s);
         if(t && t.expires_at > Date.now() + 30000) _driveToken = t;
@@ -1299,7 +1302,9 @@ function _initTokenClient(){
         scope:     GDRIVE_SCOPE,
         callback: function(resp){
             if(resp.error){
-                showToast('✗ Drive: '+resp.error);
+                // Errores de silent refresh no se reportan al usuario
+                if(!_silentRefreshInFlight) showToast('✗ Drive: '+resp.error);
+                _silentRefreshInFlight = false;
                 _pendingDriveCb = null;
                 return;
             }
@@ -1307,13 +1312,58 @@ function _initTokenClient(){
                 access_token: resp.access_token,
                 expires_at:   Date.now() + (resp.expires_in * 1000) - 60000
             };
-            sessionStorage.setItem('dnd_drive_token', JSON.stringify(_driveToken));
+            localStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify(_driveToken));
+            localStorage.setItem(DRIVE_EVER_AUTH_KEY, '1');
             updateDriveStatus();
-            showToast('☁ Drive conectado');
+            scheduleSilentRefresh();
+            if(!_silentRefreshInFlight) showToast('☁ Drive conectado');
+            _silentRefreshInFlight = false;
             if(_pendingDriveCb){ var fn = _pendingDriveCb; _pendingDriveCb = null; fn(); }
         }
     });
     return _tokenClient;
+}
+
+/* Renovación silenciosa del token antes de que caduque (1 h) */
+var _silentRefreshTimer    = null;
+var _silentRefreshInFlight = false;
+
+function scheduleSilentRefresh(){
+    clearTimeout(_silentRefreshTimer);
+    if(!_driveToken) return;
+    var ms = _driveToken.expires_at - Date.now() - 5*60*1000; // 5 min antes
+    if(ms < 1000) ms = 1000;
+    _silentRefreshTimer = setTimeout(silentRefresh, ms);
+}
+
+function silentRefresh(){
+    var c = _initTokenClient();
+    if(!c) return;
+    _silentRefreshInFlight = true;
+    try { c.requestAccessToken({ prompt: '' }); }
+    catch(e){ _silentRefreshInFlight = false; }
+}
+
+/* Al cargar: si el usuario consintió previamente, intenta restaurar sesión
+   sin UI. Si el token cacheado sigue válido, no se llama a Google. */
+function tryAutoConnectDrive(){
+    if(!localStorage.getItem(DRIVE_EVER_AUTH_KEY)) return;
+    if(_driveToken && _driveToken.expires_at > Date.now() + 30000){
+        scheduleSilentRefresh();
+        updateDriveStatus();
+        return;
+    }
+    // Token caducado o ausente → pedir uno nuevo en silencio
+    var attempts = 0;
+    var iv = setInterval(function(){
+        attempts++;
+        if(typeof google !== 'undefined' && google.accounts && google.accounts.oauth2){
+            clearInterval(iv);
+            silentRefresh();
+        } else if(attempts > 60){   // 15 s
+            clearInterval(iv);
+        }
+    }, 250);
 }
 
 function ensureDriveAuth(fn){
@@ -1345,11 +1395,12 @@ function disconnectDrive(){
         try { google.accounts.oauth2.revoke(_driveToken.access_token, function(){}); } catch(e){}
     }
     _driveToken = null;
-    sessionStorage.removeItem('dnd_drive_token');
+    clearTimeout(_silentRefreshTimer);
+    localStorage.removeItem(DRIVE_TOKEN_KEY);
+    localStorage.removeItem(DRIVE_EVER_AUTH_KEY);
     updateDriveStatus();
     showToast('Drive desconectado');
     if(inMisFichas){
-        // Vaciar la lista para evitar mostrar datos obsoletos
         _driveFichasCache = [];
         renderFichasList();
     }
@@ -1445,9 +1496,9 @@ async function driveFetch(url, opts, retried){
     });
     var r = await fetch(url, opts);
     if(r.status === 401 && !retried){
-        // Token expirado: forzar reauth y reintentar
+        // Token rechazado: limpiar y pedir uno nuevo (silencioso si hay consentimiento previo)
         _driveToken = null;
-        sessionStorage.removeItem('dnd_drive_token');
+        localStorage.removeItem(DRIVE_TOKEN_KEY);
         return new Promise(function(resolve, reject){
             ensureDriveAuth(function(){
                 driveFetch(url, opts, true).then(resolve, reject);
@@ -1608,8 +1659,9 @@ async function loadDriveFile(file){
     }
 }
 
-/* Status inicial */
+/* Status inicial + intento de reconexión silenciosa */
 updateDriveStatus();
+tryAutoConnectDrive();
 
 /* ── INIT ── */
 window.addEventListener('load', function(){ buildSheet('oficial'); });

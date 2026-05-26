@@ -530,7 +530,7 @@ function onYouTubeIframeAPIReady()
                 }
 
                 if (saved && saved.playlistId) {
-                    fetch('assets/music/get-playlists.php')
+                    fetch('assets/music/api.php?action=get-playlists')
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (!Array.isArray(data)) { restoreDefault(); return; }
@@ -769,7 +769,7 @@ var addTrackCallback = null;
         if (/open\.spotify\.com\/.+\/track\/|spotify:track:/.test(raw)) {
             titlePreview.textContent = 'Buscando en Spotify...';
             fetchTimer = setTimeout(function() {
-                fetch('assets/music/spotify-track.php?url=' + encodeURIComponent(raw))
+                fetch('assets/music/api.php?action=spotify-track&url=' + encodeURIComponent(raw))
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.error) {
@@ -797,7 +797,7 @@ var addTrackCallback = null;
         if (!videoId) return;
         titlePreview.textContent = 'Obteniendo título...';
         fetchTimer = setTimeout(function() {
-            fetch('assets/music/yt-title.php?id=' + videoId)
+            fetch('assets/music/api.php?action=yt-title&id=' + videoId)
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.title) {
@@ -815,7 +815,7 @@ var addTrackCallback = null;
                 titlePreview.style.color = '#c00';
             });
 
-            fetch('assets/music/yt-duration.php?id=' + videoId)
+            fetch('assets/music/api.php?action=yt-duration&id=' + videoId)
             .then(function(r) { return r.json(); })
             .then(function(data) { if (data.duration) fetchedDuration = data.duration; })
             .catch(function() {});
@@ -843,7 +843,7 @@ var addTrackCallback = null;
             return;
         }
 
-        fetch('assets/music/add-track.php', {
+        fetch('assets/music/api.php?action=add-track', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newTrack)
@@ -912,7 +912,7 @@ var addTrackCallback = null;
 
     function loadPlaylists() {
         plHomeList.innerHTML = '<div class="pl-home-msg">Cargando...</div>';
-        fetch('assets/music/get-playlists.php')
+        fetch('assets/music/api.php?action=get-playlists')
         .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function(data) {
             if (data.error) { plHomeList.innerHTML = '<div class="pl-home-msg">Error: ' + data.error + '</div>'; return; }
@@ -984,7 +984,7 @@ var addTrackCallback = null;
             if (pl.sharedFrom) {
                 delBtn = makeBtn('⊗', 'pl-action-btn', function() {
                     win98Confirm('¿Abandonar la playlist "' + pl.name + '"?', 'Abandonar playlist', function() {
-                        fetch('assets/music/leave-playlist.php', {
+                        fetch('assets/music/api.php?action=leave-playlist', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id: pl.id, sharedFrom: pl.sharedFrom })
@@ -1002,7 +1002,7 @@ var addTrackCallback = null;
             } else {
                 delBtn = makeBtn('✕', 'pl-action-btn', function() {
                     win98Confirm('¿Eliminar la playlist "' + pl.name + '"?', 'Eliminar playlist', function() {
-                        fetch('assets/music/delete-playlist.php', {
+                        fetch('assets/music/api.php?action=delete-playlist', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ id: pl.id })
@@ -1204,7 +1204,7 @@ var addTrackCallback = null;
                     addToPicker.style.display = 'none';
                     var already = pl.tracks.some(function(t) { return t.videoId === track.videoId; });
                     if (!already) pl.tracks.push(Object.assign({}, track));
-                    fetch('assets/music/save-playlist-item.php', {
+                    fetch('assets/music/api.php?action=save-playlist-item', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ id: pl.id, name: pl.name, tracks: pl.tracks })
@@ -1290,7 +1290,7 @@ var addTrackCallback = null;
         pl.tracks = editList.slice();
         var savePayload = { id: pl.id, name: pl.name, tracks: pl.tracks };
         if (pl.sharedFrom) savePayload.sharedFrom = pl.sharedFrom;
-        fetch('assets/music/save-playlist-item.php', {
+        fetch('assets/music/api.php?action=save-playlist-item', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(savePayload)
@@ -1351,7 +1351,7 @@ var addTrackCallback = null;
             if (!name) return;
             closeCreateDlg();
             var newPl = { id: 'pl_' + Date.now(), name: name, tracks: [] };
-            fetch('assets/music/save-playlist-item.php', {
+            fetch('assets/music/api.php?action=save-playlist-item', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newPl)
@@ -1402,7 +1402,7 @@ var addTrackCallback = null;
             if (!url) return;
             importStat.textContent = 'Importando...';
             importBtn.style.pointerEvents = 'none'; importBtn.classList.add('btn-busy');
-            fetch('assets/music/import-playlist.php', {
+            fetch('assets/music/api.php?action=import-playlist', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url })
@@ -1519,7 +1519,7 @@ var addTrackCallback = null;
                 function nextBatch(offset) {
                     if (signal.aborted || offset >= total) return Promise.resolve();
                     var chunk = tracks.slice(offset, offset + BATCH);
-                    return fetch('assets/music/yt-search-batch.php', {
+                    return fetch('assets/music/api.php?action=yt-search-batch', {
                         method:  'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body:    JSON.stringify({ tracks: chunk }),
@@ -1577,7 +1577,7 @@ var addTrackCallback = null;
             collabStatus.textContent = '';
             collabUserList.innerHTML = '<div style="font-size:11px;color:#808080;">Cargando...</div>';
             collabDlg.style.display = 'block';
-            fetch('assets/music/get-users.php')
+            fetch('assets/music/api.php?action=get-users')
             .then(function(r) { return r.json(); })
             .then(function(users) {
                 collabUserList.innerHTML = '';
@@ -1606,7 +1606,7 @@ var addTrackCallback = null;
                         var removeBtn = makeBtn('Eliminar', 'collab-invite-btn', function() {
                             collabStatus.textContent = 'Eliminando...';
                             removeBtn.disabled = true;
-                            fetch('assets/music/remove-collaborator.php', {
+                            fetch('assets/music/api.php?action=remove-collaborator', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ playlistId: pl.id, collaborator: u.key })
@@ -1629,7 +1629,7 @@ var addTrackCallback = null;
                         var invBtn = makeBtn('Invitar', 'collab-invite-btn', function() {
                             collabStatus.textContent = 'Enviando...';
                             invBtn.disabled = true;
-                            fetch('assets/music/invite-collaborator.php', {
+                            fetch('assets/music/api.php?action=invite-collaborator', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ playlistId: pl.id, toUser: u.key })
@@ -1685,7 +1685,7 @@ var addTrackCallback = null;
 
     setInterval(function() {
         if (editor.style.display !== 'block') return;
-        fetch('assets/music/get-playlists.php')
+        fetch('assets/music/api.php?action=get-playlists')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!Array.isArray(data) || data.error) return;
@@ -1707,7 +1707,7 @@ function relTime(sentAt) {
 /* Notificaciones del reproductor (playlist invites / collab) */
 (function() {
     function serverPost(id, action) {
-        return fetch('assets/music/respond-invite.php', {
+        return fetch('assets/music/api.php?action=respond-invite', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ inviteId: id, action: action })

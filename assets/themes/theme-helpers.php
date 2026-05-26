@@ -245,10 +245,15 @@ function defaultThemeForUser($userKey) {
 }
 
 /**
- * Siembra el tema por defecto (Capi para user1, Angie para user2)
- * en la lista de temas del usuario, SOLO si nunca se ha creado su
- * archivo de temas. Si el usuario lo borra explícitamente, NO se
- * vuelve a añadir (porque su archivo ya existe).
+ * Siembra UNA VEZ el tema personal del usuario en su lista de temas:
+ *  - user1 (Capi)  → tema "Capi"
+ *  - user2 (Angie) → tema "Angie"
+ *  - resto         → no se siembra nada (cae al Win98 por defecto de tokens.css)
+ *
+ * Solo se ejecuta si el usuario nunca ha tenido fichero de temas. Una vez
+ * creado el fichero — incluso si el usuario borra ese tema — no se vuelve
+ * a sembrar nada. El "tema por defecto" real es el Win98 (gris + azul) que
+ * sale cuando no hay clase de tema en el body.
  */
 function seedDefaultTheme($userKey, $label) {
     $def = defaultThemeForUser($userKey);
@@ -260,14 +265,13 @@ function seedDefaultTheme($userKey, $label) {
             $def['name'] => [
                 'colors'    => $def['colors'],
                 'updatedAt' => time(),
-                'isDefault' => true,
             ],
         ],
         'active' => '',
     ];
     saveUserThemes($userKey, $data);
     $cssPath = themeCssFile($def['name'], $label);
-    $css = generateThemeCss(themeCssClassName($def['name'], $label), $def['colors']);
+    $css     = generateThemeCss(themeCssClassName($def['name'], $label), $def['colors']);
     @file_put_contents($cssPath, $css);
 }
 
