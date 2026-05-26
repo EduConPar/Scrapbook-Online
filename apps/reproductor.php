@@ -311,30 +311,8 @@ let ytPlayer = null;
 let progressInterval  = null;
 let autoplayRandom    = false;
 
-(function() {
-    var dlg       = document.getElementById('confirm-dialog');
-    var titleEl   = document.getElementById('confirm-dialog-title');
-    var msgEl     = document.getElementById('confirm-dialog-msg');
-    var okBtn     = document.getElementById('confirm-dialog-ok');
-    var cancelBtn = document.getElementById('confirm-dialog-cancel');
-
-    window.win98Confirm = function(message, title, onConfirm) {
-        titleEl.textContent = title || 'Confirmar';
-        msgEl.textContent   = message;
-        dlg.style.display   = 'block';
-
-        function cleanup() {
-            dlg.style.display = 'none';
-            okBtn.removeEventListener('click', handleOk);
-            cancelBtn.removeEventListener('click', handleCancel);
-        }
-        function handleOk()     { cleanup(); onConfirm(); }
-        function handleCancel() { cleanup(); }
-
-        okBtn.addEventListener('click', handleOk);
-        cancelBtn.addEventListener('click', handleCancel);
-    };
-})();
+/* win98Confirm vive ahora en assets/js/win98-dialogs.js (compartido).
+   La firma (message, title, onOk) se mantiene compatible con los callers. */
 let stopTitleMarquee  = null;
 let stopPlNameMarquee = null;
 var refreshPlaylists  = null;

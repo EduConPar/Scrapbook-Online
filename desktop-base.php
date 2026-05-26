@@ -43,7 +43,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
 }
 
-$_iconTheme = $desktopUserKey === 'user1' ? 'capi' : ($desktopUserKey === 'user2' ? 'angie' : 'default');
+/* Iconos del escritorio: set único 'default' para todos los usuarios.
+   Antes user1/user2 cargaban iconos custom (capi/, angie/). */
+$_iconTheme = 'default';
 function desktopIcon($name, $emoji) {
     global $_iconTheme;
     foreach ([$_iconTheme, 'default'] as $dir) {
@@ -71,12 +73,15 @@ function desktopIcon($name, $emoji) {
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
+    <script src="assets/js/win98-dialogs.js"></script>
 </head>
 
 <body class="<?php
+    /* Tema por defecto = Win98 (tokens.css) para TODOS los usuarios.
+       Sin clases 'capi'/'angie' ni 'userN' que disparen paletas especiales
+       en themes.css. Si el usuario tiene un tema custom activo, $activeThemeClass
+       lo aplica como antes. */
     $bodyClasses = [];
-    if ($desktopUserKey === 'user1') $bodyClasses[] = 'capi';
-    elseif ($desktopUserKey === 'user2') $bodyClasses[] = 'angie';
     if ($activeThemeClass) $bodyClasses[] = $activeThemeClass;
     if ($startIcon) $bodyClasses[] = 'has-start-icon';
     echo htmlspecialchars(implode(' ', $bodyClasses));
@@ -312,9 +317,9 @@ setInterval(updateClock, 1000);
 window.applyThemeToDocument = function(doc, className, cssHref) {
     if (!doc || !doc.body) return;
     var body = doc.body;
-    /* Conserva sólo capi/angie. Cualquier otra clase custom se elimina. */
+    /* Conserva solo clases estructurales; capi/angie ya no se usan. */
     var keep = (body.className || '').split(/\s+/).filter(function(c) {
-        return c === 'capi' || c === 'angie' || c === 'has-start-icon';
+        return c === 'has-start-icon';
     });
     if (className) keep.push(className);
     body.className = keep.join(' ');

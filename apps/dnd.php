@@ -394,8 +394,6 @@ body{
 </head>
 <body class="<?php
     $bc = [];
-    if ($userKey === 'user1') $bc[] = 'capi';
-    elseif ($userKey === 'user2') $bc[] = 'angie';
     if ($activeThemeClass) $bc[] = $activeThemeClass;
     echo htmlspecialchars(implode(' ', $bc));
 ?>">

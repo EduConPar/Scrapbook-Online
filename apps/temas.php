@@ -233,9 +233,8 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     </style>
 </head>
 <body class="<?php
+    /* Tema default = Win98 (tokens.css) para todos. Sin clase capi/angie. */
     $bc = [];
-    if ($userKey === 'user1') $bc[] = 'capi';
-    elseif ($userKey === 'user2') $bc[] = 'angie';
     if ($activeThemeClass) $bc[] = $activeThemeClass;
     echo htmlspecialchars(implode(' ', $bc));
 ?>">
@@ -294,6 +293,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <button class="button" id="theme-save">Guardar</button>
             <button class="button" id="theme-activate">Activar</button>
             <button class="button" id="theme-delete">Eliminar</button>
+            <button class="button" id="theme-export"  title="Descargar este tema como JSON">⬇ Exportar</button>
+            <button class="button" id="theme-import"  title="Cargar un tema desde un fichero JSON">⬆ Importar</button>
+            <input type="file" id="theme-import-file" accept="application/json,.json" style="display:none;">
         </div>
         <div id="temas-editor">
             <!-- color fields injected by JS -->
@@ -596,8 +598,10 @@ function applyLiveTheme(className, basePath) {
 function applyToDocLocal(doc, className, cssHref) {
     if (!doc || !doc.body) return;
     var body = doc.body;
+    /* capi/angie ya no se aplican como clases de body; sólo conservar
+       'has-start-icon' que es estructural. */
     var keep = (body.className || '').split(/\s+/).filter(function(c) {
-        return c === 'capi' || c === 'angie';
+        return c === 'has-start-icon';
     });
     if (className) keep.push(className);
     body.className = keep.join(' ');
@@ -634,6 +638,107 @@ document.getElementById('theme-delete').addEventListener('click', function() {
               loadThemes();
           });
     });
+});
+
+/* =========================================================
+   EXPORTAR / IMPORTAR temas (JSON)
+   - Export: descarga el tema actual del editor como JSON.
+   - Import: carga un JSON al editor; el usuario decide si guardar.
+   El formato es self-contained y portable entre usuarios/instalaciones. */
+function sanitizeFilename(s) {
+    return (s || 'theme').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 40);
+}
+
+document.getElementById('theme-export').addEventListener('click', function() {
+    var name = nameInput.value.trim() || 'tema';
+    var payload = {
+        format:     'melon-theme',
+        version:    1,
+        name:       name,
+        exportedAt: new Date().toISOString(),
+        colors:     getEditorColors()
+    };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url;
+    a.download = sanitizeFilename(name) + '.melon-theme.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
+    statusEl.textContent = '✔ "' + name + '" descargado.';
+});
+
+document.getElementById('theme-import').addEventListener('click', function() {
+    document.getElementById('theme-import-file').click();
+});
+document.getElementById('theme-import-file').addEventListener('change', function(e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';   // resetear para permitir reimportar el mismo fichero
+    if (!file) return;
+    if (file.size > 100 * 1024) {
+        statusEl.textContent = '✗ Fichero demasiado grande (>100KB).';
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function() {
+        var data;
+        try { data = JSON.parse(reader.result); }
+        catch (err) { statusEl.textContent = '✗ JSON inválido.'; return; }
+        if (!data || typeof data !== 'object' || !data.colors || typeof data.colors !== 'object') {
+            statusEl.textContent = '✗ Formato de tema desconocido.'; return;
+        }
+        var colors = migrateLegacyColors(data.colors);
+        /* Filtrar a las claves del editor + validar hex */
+        var clean = {};
+        var bad = 0;
+        COLOR_DEFS.forEach(function(def) {
+            var v = colors[def.key];
+            if (typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v)) clean[def.key] = v;
+            else if (v !== undefined) bad++;
+        });
+        /* Nombre: usa el del fichero o cae al filename sin extensión.
+           Si ya existe, añadimos sufijo " (importado)" para no pisar. */
+        var nameRaw = (data.name && typeof data.name === 'string')
+                      ? data.name
+                      : file.name.replace(/\.melon-theme\.json$|\.json$/i, '');
+        var name = String(nameRaw).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30) || 'Importado';
+        if (savedThemes[name]) {
+            var base = name, n = 2;
+            while (savedThemes[name] && name.length < 30) {
+                name = (base + '_' + n).slice(0, 30); n++;
+                if (n > 99) break;
+            }
+        }
+        nameInput.value = name;
+        setEditorColors(clean);
+        setActiveItem(null);
+
+        /* Auto-save + auto-activate */
+        statusEl.textContent = 'Importando "' + name + '"…';
+        fetch('../assets/themes/api.php?action=save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, colors: clean })
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
+              return fetch('../assets/themes/api.php?action=set-active', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name: name })
+              }).then(function(r) { return r.json(); }).then(function(d2) {
+                  if (!d2 || d2.error) throw new Error((d2 && d2.error) || 'Error al activar');
+                  activeName = name;
+                  loadThemes();
+                  applyLiveTheme(d.className, d.cssPath);
+                  statusEl.textContent = '✔ "' + name + '" importado y activado'
+                      + (bad ? ' (' + bad + ' valores inválidos descartados)' : '') + '.';
+              });
+          })
+          .catch(function(err) { statusEl.textContent = '✗ ' + err.message; });
+    };
+    reader.onerror = function() { statusEl.textContent = '✗ Error leyendo el fichero.'; };
+    reader.readAsText(file);
 });
 
 buildEditor();

@@ -86,7 +86,9 @@ if ($selectedUser && isset($users[$selectedUser])) {
     }
 }
 
-$bodyClass = $showLogin ? "user-selected {$selectedUser}" : '';
+/* Tema por defecto = Win98 (tokens.css). No añadimos la clase {$selectedUser}
+   para que body.user1/body.user2 (que disparan paletas Capi/Angie) no aplique. */
+$bodyClass = $showLogin ? 'user-selected' : '';
 if ($selectedTheme) $bodyClass .= ' ' . $selectedTheme['class'];
 $skipIntro = isset($_GET['nointro']);
 
@@ -109,6 +111,7 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
     <link rel="stylesheet" href="assets/css/login.css">
     <link rel="stylesheet" href="assets/css/themes.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <script src="assets/js/win98-dialogs.js"></script>
     <?php if ($baseWallpaper): ?>
     <style>body::before{ background-image:url('<?php echo htmlspecialchars($baseWallpaper); ?>'); opacity:1; }</style>
     <?php endif; ?>
@@ -355,8 +358,10 @@ function setUser(userKey, label, imgSrc, wallpaperSrc, themeClass, themeCss)
     selectedUserInput.value = userKey;
     selectedLabel.textContent = label;
     setWallpaper(wallpaperSrc);
+    /* No añadir la clase userKey: dispara la paleta capi/angie de themes.css.
+       Solo 'user-selected' que controla la transición del avatar/wallpaper. */
     body.classList.remove(...userKeys);
-    body.classList.add('user-selected', userKey);
+    body.classList.add('user-selected');
     applyUserTheme(themeClass, themeCss);
     if (imgSrc) {
         previewImage.src = imgSrc;
@@ -417,18 +422,22 @@ document.getElementById('deleteUser').addEventListener('click', function() {
     var pwdInput = document.querySelector('input[name="password"]');
     var pwd = pwdInput ? pwdInput.value : '';
     if (!pwd) { alert('Introduce la contraseña para eliminar la cuenta.'); if (pwdInput) pwdInput.focus(); return; }
-    if (!confirm('¿Eliminar la cuenta de "' + label + '"?\nTodos sus datos (perfil, listas, mensajes) se borrarán de forma permanente.')) return;
-
-    var fd = new FormData();
-    fd.append('user', userKey);
-    fd.append('password', pwd);
-    fetch('delete-user.php', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d || d.error) { alert((d && d.error) ? d.error : 'Error'); return; }
-            window.location.href = 'index.php?nointro=1';
-        })
-        .catch(function() { alert('Error de red'); });
+    win98Confirm(
+        '¿Eliminar la cuenta de "' + label + '"?\nTodos sus datos (perfil, listas, mensajes) se borrarán de forma permanente.',
+        'Eliminar cuenta',
+        function() {
+            var fd = new FormData();
+            fd.append('user', userKey);
+            fd.append('password', pwd);
+            fetch('delete-user.php', { method: 'POST', body: fd })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d || d.error) { alert((d && d.error) ? d.error : 'Error'); return; }
+                    window.location.href = 'index.php?nointro=1';
+                })
+                .catch(function() { alert('Error de red'); });
+        }
+    );
 });
 
 /* =========================
