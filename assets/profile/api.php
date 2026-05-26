@@ -827,17 +827,23 @@ case 'play-music-item': {
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_HTTPHEADER => $headers, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_FOLLOWLOCATION => true]);
         $html = curl_exec($ch); curl_close($ch);
         if (!$html) jsonError('No se pudo cargar la playlist de YouTube', 502);
+        $pairs = [];
         preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"[^}]{0,400}?"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([^"]+)"/', $html, $pairs);
+        $videoIds = $pairs[1] ?? [];
+        $titles   = $pairs[2] ?? [];
         $seen = []; $tracks = [];
-        for ($i = 0; $i < count($pairs[1] ?? []); $i++) {
-            $vid = $pairs[1][$i]; if (isset($seen[$vid])) continue; $seen[$vid] = true;
-            $tracks[] = ['videoId' => $vid, 'title' => $pairs[2][$i] ?: $title, 'artist' => $artist];
+        foreach ($videoIds as $i => $vid) {
+            if (isset($seen[$vid])) continue;
+            $seen[$vid] = true;
+            $tracks[] = ['videoId' => $vid, 'title' => ($titles[$i] ?? '') ?: $title, 'artist' => $artist];
             if (count($tracks) >= 50) break;
         }
         if (empty($tracks)) {
+            $m = [];
             preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m);
-            foreach ($m[1] as $vid) {
-                if (isset($seen[$vid])) continue; $seen[$vid] = true;
+            foreach (($m[1] ?? []) as $vid) {
+                if (isset($seen[$vid])) continue;
+                $seen[$vid] = true;
                 $tracks[] = ['videoId' => $vid, 'title' => $title, 'artist' => $artist];
                 if (count($tracks) >= 50) break;
             }
