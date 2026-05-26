@@ -77,7 +77,7 @@ if ($selectedUser && isset($users[$selectedUser])) {
     $showLogin = true;
 
     if (isset($_POST['password'])) {
-        if ($_POST['password'] === $users[$selectedUser]['password']) {
+        if (password_verify($_POST['password'], $users[$selectedUser]['password'])) {
             $_SESSION['user'] = $selectedUser;
             header('Location: ' . strtolower($selectedLabel) . '-desktop.php');
             exit;

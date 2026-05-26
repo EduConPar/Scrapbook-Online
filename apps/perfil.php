@@ -527,7 +527,14 @@ var PROFILE_USERS = <?php
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: cat, items: lists[cat] })
-        }).catch(function() {});
+        }).then(function(r) { return r.json(); })
+          .then(function(d) {
+              /* El backend asigna IDs definitivos a los items nuevos
+                 (los que llevaban id "item_...") y devuelve el snapshot
+                 canónico. Reemplazar la lista local para que el próximo
+                 save no duplique. */
+              if (d && Array.isArray(d.items)) lists[cat] = d.items;
+          }).catch(function() {});
     }
 
     function updateCounts() {

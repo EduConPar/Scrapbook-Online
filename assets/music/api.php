@@ -1,6 +1,6 @@
 <?php
 /* ──────────────────────────────────────────────────────────
-   MUSIC API — router único de la app Música
+   MUSIC API — router único de la app Música (SQL)
    ──────────────────────────────────────────────────────────
    Acciones (vía ?action= o $_POST['action']):
 
@@ -20,41 +20,164 @@
    POST  ?action=yt-search-batch      { tracks[] }
    POST  ?action=import-playlist      { url }
 
-   ALMACENAMIENTO:
-   - Playlists: assets/music/playlist/{userKey}.json
-   - Invites de colaboración / notifs: assets/music/{userKey}-invites.json
-   - Tracks extra: assets/music/{userKey}-extra.json
+   ALMACENAMIENTO: 100% SQL.
+     - playlists / playlist_tracks / playlist_collaborators
+     - playlist_invites (incluye notifs collab-accepted/rejected/left/removed
+       además de los invite de colaboración)
+     - music_extras (tracks añadidos por add-track al pool global del usuario)
 
-   El SSE notifications-stream.php se mantiene como archivo aparte porque
-   tiene un formato (text/event-stream) incompatible con un router JSON.
+   El SSE notifications-stream.php se mantiene aparte; lee directamente de
+   playlist_invites.
    ────────────────────────────────────────────────────────── */
 require_once dirname(__DIR__) . '/auth.php';
+require_once dirname(__DIR__, 2) . '/db.php';
 
-$u         = requireAuth();
-$userKey   = $u['key'];
-$userLabel = $u['label'];
-$action    = $_GET['action'] ?? $_POST['action'] ?? '';
+$u       = requireAuth();
+$userKey = $u['key'];
+$action  = $_GET['action'] ?? $_POST['action'] ?? '';
 
-/* ── Helpers de rutas y JSON ─────────────────────────────── */
-function playlistFile(string $uk): string {
-    return __DIR__ . '/playlist/' . $uk . '.json';
+/* user_key (string) → usuarios.id (int). Cachea por petición. */
+function uidByKey(PDO $pdo, string $userKey): ?int {
+    static $cache = [];
+    if (array_key_exists($userKey, $cache)) return $cache[$userKey];
+    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    $id = $stmt->fetchColumn();
+    return $cache[$userKey] = $id ? (int)$id : null;
 }
-function invitesFile(string $uk): string {
-    return __DIR__ . '/' . $uk . '-invites.json';
+
+/* ¿El playlist id parece BIGINT existente (en SQL) o es un id cliente
+   "pl_xxx" generado en el navegador para una playlist nueva? */
+function isNumericId($v): bool {
+    return is_int($v) || (is_string($v) && ctype_digit($v));
 }
-function extraFile(string $uk): string {
-    return __DIR__ . '/' . $uk . '-extra.json';
+
+/* Carga las playlists del usuario con sus tracks + colaboradores en una
+   estructura compatible con el formato JSON antiguo. */
+function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
+    /* Propias */
+    $stmt = $pdo->prepare("SELECT p.id, p.name, ? AS owner
+                           FROM playlists p
+                           WHERE p.owner_id = ?
+                           ORDER BY p.id ASC");
+    $stmt->execute([$userKey, $uid]);
+    $ownRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    /* Compartidas (collab) */
+    $stmt = $pdo->prepare("SELECT p.id, p.name, ou.user_key AS owner, ou.label AS sharedLabel
+                           FROM playlist_collaborators c
+                           JOIN playlists p ON c.playlist_id = p.id
+                           JOIN usuarios ou ON p.owner_id    = ou.id
+                           WHERE c.user_id = ?
+                           ORDER BY p.id ASC");
+    $stmt->execute([$uid]);
+    $sharedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($ownRows) && empty($sharedRows)) return [];
+
+    /* Cargar todos los tracks de las playlists implicadas en un único query */
+    $allIds = array_merge(
+        array_column($ownRows, 'id'),
+        array_column($sharedRows, 'id')
+    );
+    $tracksByPl = [];
+    if (!empty($allIds)) {
+        $place = implode(',', array_fill(0, count($allIds), '?'));
+        $stmt = $pdo->prepare("SELECT playlist_id, video_id AS videoId, title, artist, duration, added_by AS addedBy
+                               FROM playlist_tracks
+                               WHERE playlist_id IN ($place)
+                               ORDER BY playlist_id ASC, position ASC");
+        $stmt->execute($allIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $tr) {
+            $pid = (int)$tr['playlist_id'];
+            unset($tr['playlist_id']);
+            $tr['duration'] = (int)$tr['duration'];
+            $tracksByPl[$pid][] = $tr;
+        }
+    }
+
+    /* Colaboradores por playlist (solo para las propias; las shared el
+       cliente las trata como "no editables masivamente" por sharedFrom). */
+    $collabsByPl = [];
+    if (!empty($ownRows)) {
+        $place = implode(',', array_fill(0, count($ownRows), '?'));
+        $params = array_column($ownRows, 'id');
+        $stmt = $pdo->prepare("SELECT c.playlist_id, u.user_key
+                               FROM playlist_collaborators c
+                               JOIN usuarios u ON c.user_id = u.id
+                               WHERE c.playlist_id IN ($place)");
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $collabsByPl[(int)$r['playlist_id']][] = $r['user_key'];
+        }
+    }
+
+    $result = [];
+    foreach ($ownRows as $r) {
+        $pid = (int)$r['id'];
+        $result[] = [
+            'id'            => $pid,
+            'name'          => $r['name'],
+            'owner'         => $r['owner'],
+            'collaborators' => $collabsByPl[$pid] ?? [],
+            'tracks'        => $tracksByPl[$pid]  ?? [],
+        ];
+    }
+    foreach ($sharedRows as $r) {
+        $pid = (int)$r['id'];
+        $result[] = [
+            'id'           => $pid,
+            'name'         => $r['name'],
+            'owner'        => $r['owner'],
+            'sharedFrom'   => $r['owner'],
+            'sharedLabel'  => $r['sharedLabel'],
+            'tracks'       => $tracksByPl[$pid] ?? [],
+        ];
+    }
+    return $result;
 }
-function readJsonArray(string $path): array {
-    if (!file_exists($path)) return [];
-    $d = json_decode(file_get_contents($path), true);
-    return is_array($d) ? $d : [];
+
+/* Sustituye TODOS los tracks de una playlist. Asume autorización ya hecha. */
+function replacePlaylistTracks(PDO $pdo, int $playlistId, array $tracks): void {
+    $pdo->prepare("DELETE FROM playlist_tracks WHERE playlist_id = ?")->execute([$playlistId]);
+    if (empty($tracks)) return;
+    $stmt = $pdo->prepare("INSERT INTO playlist_tracks
+        (playlist_id, position, video_id, title, artist, duration, added_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)");
+    foreach ($tracks as $pos => $t) {
+        $stmt->execute([
+            $playlistId, $pos,
+            $t['videoId'], $t['title'], $t['artist'], $t['duration'], $t['addedBy'],
+        ]);
+    }
 }
-function writeJson(string $path, $data): void {
-    /* Asegurar que la carpeta exista (importante para playlist/) */
-    $dir = dirname($path);
-    if (!is_dir($dir)) @mkdir($dir, 0775, true);
-    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+/* Sanitiza el array de tracks que llega del cliente. */
+function sanitizeTracks($raw): array {
+    $tracks = [];
+    if (!is_array($raw)) return $tracks;
+    foreach ($raw as $t) {
+        $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $t['videoId'] ?? '');
+        if (strlen($vid) !== 11) continue;
+        $tracks[] = [
+            'videoId'  => $vid,
+            'title'    => substr(strip_tags($t['title']   ?? ''), 0, 200),
+            'artist'   => substr(strip_tags($t['artist']  ?? ''), 0, 200),
+            'duration' => max(0, intval($t['duration']    ?? 0)),
+            'addedBy'  => substr(strip_tags($t['addedBy'] ?? ''), 0, 100),
+        ];
+    }
+    return $tracks;
+}
+
+/* Inserta una notificación tipo collab-* (status). Si el playlist ya no
+   existe la inserción falla por FK; lo ignoramos sin romper la respuesta. */
+function pushCollabNotif(PDO $pdo, int $toUid, int $fromUid, int $playlistId, string $type): void {
+    try {
+        $pdo->prepare("INSERT INTO playlist_invites (to_user_id, from_user_id, playlist_id, type)
+                       VALUES (?, ?, ?, ?)")
+            ->execute([$toUid, $fromUid, $playlistId, $type]);
+    } catch (PDOException $e) { /* FK perdida → playlist borrada; sin notif */ }
 }
 
 switch ($action) {
@@ -62,291 +185,199 @@ switch ($action) {
 /* ─── Playlists ──────────────────────────────────────────── */
 
 case 'get-playlists': {
-    global $loginUsers;
-    $list = readJsonArray(playlistFile($userKey));
-    $result = [];
-    foreach ($list as $entry) {
-        if (isset($entry['sharedFrom'])) {
-            $ownerKey = $entry['sharedFrom'];
-            if (!isset($loginUsers[$ownerKey])) continue;
-            $ownerPls = readJsonArray(playlistFile($ownerKey));
-            foreach ($ownerPls as $pl) {
-                if (($pl['id'] ?? '') === ($entry['id'] ?? '')) {
-                    $pl['sharedFrom']  = $ownerKey;
-                    $pl['sharedLabel'] = $loginUsers[$ownerKey]['label'];
-                    $result[] = $pl;
-                    break;
-                }
-            }
-        } else {
-            $result[] = $entry;
-        }
-    }
-    /* Migración legacy {userKey}-custom.json (si existía) — sólo la primera vez */
-    if (empty($list)) {
-        $customFile = __DIR__ . '/' . $userKey . '-custom.json';
-        if (file_exists($customFile)) {
-            $tracks = json_decode(file_get_contents($customFile), true);
-            if (is_array($tracks) && !empty($tracks)) {
-                $migrated = [['id' => 'pl_legacy', 'name' => 'Mi playlist', 'owner' => $userKey, 'tracks' => $tracks]];
-                writeJson(playlistFile($userKey), $migrated);
-                $result = $migrated;
-            }
-        }
-    }
-    jsonResponse($result);
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonResponse([]);
+    jsonResponse(loadPlaylistsForUser($pdo, $uid, $userKey));
 }
 
 case 'save-playlist-item': {
-    global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b = jsonBody();
     if (!isset($b['id'], $b['name'])) jsonError('Datos incompletos');
-    $id         = preg_replace('/[^A-Za-z0-9_-]/', '', $b['id']);
+
     $name       = substr(strip_tags($b['name']), 0, 100);
     $sharedFrom = isset($b['sharedFrom']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $b['sharedFrom']) : null;
-    if (!$id) jsonError('ID inválido');
+    $tracks     = sanitizeTracks($b['tracks'] ?? []);
 
-    /* Sanitizar tracks: videoId 11 chars obligatorio */
-    $tracks = [];
-    foreach (($b['tracks'] ?? []) as $t) {
-        $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $t['videoId'] ?? '');
-        if (strlen($vid) !== 11) continue;
-        $tracks[] = [
-            'videoId'  => $vid,
-            'title'    => substr(strip_tags($t['title']  ?? ''), 0, 200),
-            'artist'   => substr(strip_tags($t['artist'] ?? ''), 0, 200),
-            'duration' => max(0, intval($t['duration'] ?? 0)),
-            'addedBy'  => substr(strip_tags($t['addedBy'] ?? ''), 0, 100),
-        ];
-    }
-
+    /* Caso A: el cliente edita una playlist compartida (colaborador). */
     if ($sharedFrom) {
-        if (!isset($loginUsers[$sharedFrom])) jsonError('Propietario inválido');
-        $ownerPls = readJsonArray(playlistFile($sharedFrom));
-        $authorized = false;
-        foreach ($ownerPls as $pl) {
-            if (($pl['id'] ?? '') === $id) {
-                $authorized = isset($pl['collaborators']) && in_array($userKey, $pl['collaborators'], true);
-                break;
-            }
-        }
-        if (!$authorized) jsonError('Sin permiso para editar', 403);
-        foreach ($ownerPls as &$pl) {
-            if (($pl['id'] ?? '') === $id) { $pl['tracks'] = $tracks; break; }
-        }
-        unset($pl);
-        writeJson(playlistFile($sharedFrom), $ownerPls);
-        jsonResponse(['ok' => true]);
+        if (!isNumericId($b['id'])) jsonError('ID inválido para playlist compartida');
+        $playlistId = (int)$b['id'];
+        $ownerUid   = uidByKey($pdo, $sharedFrom);
+        if (!$ownerUid) jsonError('Propietario inválido');
+        /* Verificar que el playlist pertenece al owner y yo soy collab. */
+        $stmt = $pdo->prepare("SELECT 1 FROM playlists p
+                               JOIN playlist_collaborators c ON c.playlist_id = p.id
+                               WHERE p.id = ? AND p.owner_id = ? AND c.user_id = ?");
+        $stmt->execute([$playlistId, $ownerUid, $uid]);
+        if (!$stmt->fetch()) jsonError('Sin permiso para editar', 403);
+        $pdo->beginTransaction();
+        try { replacePlaylistTracks($pdo, $playlistId, $tracks); $pdo->commit(); }
+        catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+        jsonResponse(['ok' => true, 'id' => $playlistId]);
     }
 
-    $playlists = readJsonArray(playlistFile($userKey));
-    $found = false;
-    foreach ($playlists as &$pl) {
-        if (($pl['id'] ?? '') === $id) {
-            $pl['name']   = $name;
-            $pl['tracks'] = $tracks;
-            if (!isset($pl['owner'])) $pl['owner'] = $userKey;
-            $found = true;
-            break;
+    /* Caso B: playlist propia, ID numérico existente → UPDATE. */
+    if (isNumericId($b['id'])) {
+        $playlistId = (int)$b['id'];
+        $stmt = $pdo->prepare("SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?");
+        $stmt->execute([$playlistId, $uid]);
+        if ($stmt->fetch()) {
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("UPDATE playlists SET name = ? WHERE id = ?")
+                    ->execute([$name, $playlistId]);
+                replacePlaylistTracks($pdo, $playlistId, $tracks);
+                $pdo->commit();
+            } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            jsonResponse(['ok' => true, 'id' => $playlistId]);
         }
+        /* Si el cliente mandó un numérico pero no existe / no es suyo →
+           tratamos como creación nueva: caemos al caso C. */
     }
-    unset($pl);
-    if (!$found) {
-        $playlists[] = ['id' => $id, 'name' => $name, 'owner' => $userKey, 'collaborators' => [], 'tracks' => $tracks];
-    }
-    writeJson(playlistFile($userKey), $playlists);
-    jsonResponse(['ok' => true]);
+
+    /* Caso C: playlist nueva (id "pl_xxx" del cliente o no encontrada). */
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("INSERT INTO playlists (owner_id, name) VALUES (?, ?)")
+            ->execute([$uid, $name]);
+        $playlistId = (int)$pdo->lastInsertId();
+        replacePlaylistTracks($pdo, $playlistId, $tracks);
+        $pdo->commit();
+    } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    jsonResponse(['ok' => true, 'id' => $playlistId]);
 }
 
 case 'delete-playlist': {
-    global $loginUsers;
-    $b  = jsonBody();
-    $id = preg_replace('/[^A-Za-z0-9_-]/', '', $b['id'] ?? '');
-    if (!$id) jsonError('ID inválido');
-
-    $playlists = readJsonArray(playlistFile($userKey));
-    $deleted = null;
-    foreach ($playlists as $pl) if (($pl['id'] ?? '') === $id) { $deleted = $pl; break; }
-    $playlists = array_values(array_filter($playlists, fn($pl) => ($pl['id'] ?? '') !== $id));
-    writeJson(playlistFile($userKey), $playlists);
-
-    if ($deleted && !empty($deleted['collaborators'])) {
-        foreach ($deleted['collaborators'] as $ck) {
-            if (!isset($loginUsers[$ck])) continue;
-            $cps = readJsonArray(playlistFile($ck));
-            $cps = array_values(array_filter($cps, fn($p) => ($p['id'] ?? '') !== $id));
-            writeJson(playlistFile($ck), $cps);
-        }
-    }
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b   = jsonBody();
+    if (!isNumericId($b['id'] ?? null)) jsonError('ID inválido');
+    $playlistId = (int)$b['id'];
+    /* CASCADE borra tracks, collaborators e invites asociados. */
+    $stmt = $pdo->prepare("DELETE FROM playlists WHERE id = ? AND owner_id = ?");
+    $stmt->execute([$playlistId, $uid]);
+    if (!$stmt->rowCount()) jsonError('Playlist no encontrada o no autorizada', 404);
     jsonResponse(['ok' => true]);
 }
 
 case 'leave-playlist': {
-    global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b          = jsonBody();
-    $id         = preg_replace('/[^A-Za-z0-9_-]/', '', $b['id']         ?? '');
+    if (!isNumericId($b['id'] ?? null)) jsonError('Datos incompletos');
     $sharedFrom = preg_replace('/[^A-Za-z0-9_-]/', '', $b['sharedFrom'] ?? '');
-    if (!$id || !$sharedFrom) jsonError('Datos incompletos');
-    if (!isset($loginUsers[$sharedFrom])) jsonError('Propietario inválido');
+    if (!$sharedFrom) jsonError('Datos incompletos');
+    $ownerUid = uidByKey($pdo, $sharedFrom);
+    if (!$ownerUid) jsonError('Propietario inválido');
+    $playlistId = (int)$b['id'];
 
-    $myPls = readJsonArray(playlistFile($userKey));
-    $myPls = array_values(array_filter($myPls, fn($p) => ($p['id'] ?? '') !== $id));
-    writeJson(playlistFile($userKey), $myPls);
+    /* Verificar la relación de colaboración antes de borrar (para que el
+       owner sólo reciba notif si realmente había salido un colaborador). */
+    $stmt = $pdo->prepare("SELECT p.name FROM playlists p
+                           JOIN playlist_collaborators c ON c.playlist_id = p.id
+                           WHERE p.id = ? AND p.owner_id = ? AND c.user_id = ?");
+    $stmt->execute([$playlistId, $ownerUid, $uid]);
+    $playlistName = $stmt->fetchColumn();
+    if ($playlistName === false) jsonError('No eres colaborador', 404);
 
-    $ownerPls = readJsonArray(playlistFile($sharedFrom));
-    $playlistName = '';
-    foreach ($ownerPls as &$pl) {
-        if (($pl['id'] ?? '') === $id) {
-            $playlistName = $pl['name'] ?? '';
-            if (isset($pl['collaborators'])) {
-                $pl['collaborators'] = array_values(array_filter($pl['collaborators'], fn($c) => $c !== $userKey));
-            }
-            break;
-        }
-    }
-    unset($pl);
-    writeJson(playlistFile($sharedFrom), $ownerPls);
-
-    /* Notificar al dueño */
-    $ownerInvs = readJsonArray(invitesFile($sharedFrom));
-    $ownerInvs[] = [
-        'id'           => 'left_' . time() . '_' . rand(1000, 9999),
-        'type'         => 'collab-left',
-        'playlistId'   => $id,
-        'playlistName' => $playlistName,
-        'fromLabel'    => $loginUsers[$userKey]['label'],
-        'sentAt'       => time(),
-    ];
-    writeJson(invitesFile($sharedFrom), $ownerInvs);
+    $pdo->prepare("DELETE FROM playlist_collaborators WHERE playlist_id = ? AND user_id = ?")
+        ->execute([$playlistId, $uid]);
+    pushCollabNotif($pdo, $ownerUid, $uid, $playlistId, 'collab-left');
     jsonResponse(['ok' => true]);
 }
 
 /* ─── Colaboraciones ─────────────────────────────────────── */
 
 case 'invite-collaborator': {
-    global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b          = jsonBody();
-    $playlistId = preg_replace('/[^A-Za-z0-9_-]/', '', $b['playlistId'] ?? '');
-    $toUser     = preg_replace('/[^A-Za-z0-9_-]/', '', $b['toUser']     ?? '');
-    if (!$playlistId || !$toUser)             jsonError('Datos incompletos');
-    if (!isset($loginUsers[$toUser]))          jsonError('Usuario destino inválido');
-    if ($toUser === $userKey)                  jsonError('No puedes invitarte a ti mismo');
+    if (!isNumericId($b['playlistId'] ?? null)) jsonError('Datos incompletos');
+    $playlistId = (int)$b['playlistId'];
+    $toUser     = preg_replace('/[^A-Za-z0-9_-]/', '', $b['toUser'] ?? '');
+    if (!$toUser)             jsonError('Datos incompletos');
+    if ($toUser === $userKey) jsonError('No puedes invitarte a ti mismo');
+    $toUid = uidByKey($pdo, $toUser);
+    if (!$toUid) jsonError('Usuario destino inválido');
 
-    $myPls = readJsonArray(playlistFile($userKey));
-    $playlist = null;
-    foreach ($myPls as $pl) if (($pl['id'] ?? '') === $playlistId) { $playlist = $pl; break; }
-    if (!$playlist) jsonError('Playlist no encontrada', 404);
+    /* Validar que la playlist es del usuario actual */
+    $stmt = $pdo->prepare("SELECT name FROM playlists WHERE id = ? AND owner_id = ?");
+    $stmt->execute([$playlistId, $uid]);
+    $plName = $stmt->fetchColumn();
+    if ($plName === false) jsonError('Playlist no encontrada', 404);
 
-    if (in_array($toUser, $playlist['collaborators'] ?? [], true)) {
-        jsonError($loginUsers[$toUser]['label'] . ' ya es colaborador');
+    /* ¿Ya es colaborador? */
+    $stmt = $pdo->prepare("SELECT 1 FROM playlist_collaborators WHERE playlist_id = ? AND user_id = ?");
+    $stmt->execute([$playlistId, $toUid]);
+    if ($stmt->fetch()) {
+        global $loginUsers;
+        jsonError(($loginUsers[$toUser]['label'] ?? $toUser) . ' ya es colaborador');
     }
 
-    $invs = readJsonArray(invitesFile($toUser));
-    foreach ($invs as $inv) {
-        if (($inv['playlistId'] ?? '') === $playlistId) jsonError('Ya existe una invitación pendiente');
-    }
-    $invs[] = [
-        'id'           => 'inv_' . time() . '_' . rand(1000, 9999),
-        'playlistId'   => $playlistId,
-        'playlistName' => $playlist['name'] ?? '',
-        'fromUser'     => $userKey,
-        'fromLabel'    => $loginUsers[$userKey]['label'],
-        'sentAt'       => time(),
-    ];
-    writeJson(invitesFile($toUser), $invs);
+    /* ¿Ya hay invite pendiente del mismo from→to para esta playlist? */
+    $stmt = $pdo->prepare("SELECT 1 FROM playlist_invites
+                           WHERE to_user_id = ? AND from_user_id = ? AND playlist_id = ? AND type = 'invite'");
+    $stmt->execute([$toUid, $uid, $playlistId]);
+    if ($stmt->fetch()) jsonError('Ya existe una invitación pendiente');
+
+    $pdo->prepare("INSERT INTO playlist_invites (to_user_id, from_user_id, playlist_id, type)
+                   VALUES (?, ?, ?, 'invite')")
+        ->execute([$toUid, $uid, $playlistId]);
     jsonResponse(['ok' => true]);
 }
 
 case 'remove-collaborator': {
-    global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b            = jsonBody();
-    $playlistId   = preg_replace('/[^A-Za-z0-9_-]/', '', $b['playlistId']   ?? '');
+    if (!isNumericId($b['playlistId'] ?? null)) jsonError('Datos incompletos');
+    $playlistId   = (int)$b['playlistId'];
     $collaborator = preg_replace('/[^A-Za-z0-9_-]/', '', $b['collaborator'] ?? '');
-    if (!$playlistId || !$collaborator)         jsonError('Datos incompletos');
-    if (!isset($loginUsers[$collaborator]))      jsonError('Usuario inválido');
+    if (!$collaborator) jsonError('Datos incompletos');
+    $collabUid = uidByKey($pdo, $collaborator);
+    if (!$collabUid) jsonError('Usuario inválido');
 
-    $ownerPls = readJsonArray(playlistFile($userKey));
-    $playlistName = '';
-    foreach ($ownerPls as &$pl) {
-        if (($pl['id'] ?? '') === $playlistId) {
-            $playlistName = $pl['name'] ?? '';
-            if (isset($pl['collaborators'])) {
-                $pl['collaborators'] = array_values(array_filter($pl['collaborators'], fn($c) => $c !== $collaborator));
-            }
-            break;
-        }
-    }
-    unset($pl);
-    writeJson(playlistFile($userKey), $ownerPls);
+    /* La playlist tiene que ser mía */
+    $stmt = $pdo->prepare("SELECT name FROM playlists WHERE id = ? AND owner_id = ?");
+    $stmt->execute([$playlistId, $uid]);
+    if ($stmt->fetchColumn() === false) jsonError('Playlist no encontrada', 404);
 
-    /* Quitar la playlist compartida de la lista del colaborador */
-    $collabPls = readJsonArray(playlistFile($collaborator));
-    $collabPls = array_values(array_filter($collabPls, fn($p) => ($p['id'] ?? '') !== $playlistId));
-    writeJson(playlistFile($collaborator), $collabPls);
-
-    /* Notificar al colaborador */
-    $notifs = readJsonArray(invitesFile($collaborator));
-    $notifs[] = [
-        'id'           => 'rm_' . time() . '_' . rand(1000, 9999),
-        'type'         => 'removed',
-        'playlistId'   => $playlistId,
-        'playlistName' => $playlistName,
-        'fromLabel'    => $loginUsers[$userKey]['label'],
-        'sentAt'       => time(),
-    ];
-    writeJson(invitesFile($collaborator), $notifs);
+    $pdo->prepare("DELETE FROM playlist_collaborators WHERE playlist_id = ? AND user_id = ?")
+        ->execute([$playlistId, $collabUid]);
+    pushCollabNotif($pdo, $collabUid, $uid, $playlistId, 'removed');
     jsonResponse(['ok' => true]);
 }
 
 case 'respond-invite': {
-    global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b        = jsonBody();
-    $inviteId = $b['inviteId'] ?? '';
+    $inviteId = (int)($b['inviteId'] ?? 0);
     $act      = $b['action']   ?? '';
     if (!$inviteId || !in_array($act, ['accept','reject','dismiss'], true)) jsonError('Datos inválidos');
 
-    $invites = readJsonArray(invitesFile($userKey));
-    $invite = null;
-    foreach ($invites as $inv) if (($inv['id'] ?? '') === $inviteId) { $invite = $inv; break; }
-    if (!$invite) jsonError('Invitación no encontrada', 404);
-    $invites = array_values(array_filter($invites, fn($i) => ($i['id'] ?? '') !== $inviteId));
-    writeJson(invitesFile($userKey), $invites);
+    /* La invitación tiene que ser para mí */
+    $stmt = $pdo->prepare("SELECT from_user_id, playlist_id, type FROM playlist_invites
+                           WHERE id = ? AND to_user_id = ?");
+    $stmt->execute([$inviteId, $uid]);
+    $inv = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$inv) jsonError('Invitación no encontrada', 404);
 
-    if ($act === 'accept') {
-        $fromUser   = $invite['fromUser'];
-        $playlistId = $invite['playlistId'];
-        if (isset($loginUsers[$fromUser])) {
-            $myPls = readJsonArray(playlistFile($userKey));
-            $has = false; foreach ($myPls as $pl) if (($pl['id'] ?? '') === $playlistId) { $has = true; break; }
-            if (!$has) {
-                $myPls[] = ['id' => $playlistId, 'sharedFrom' => $fromUser];
-                writeJson(playlistFile($userKey), $myPls);
-            }
-            $ownerPls = readJsonArray(playlistFile($fromUser));
-            foreach ($ownerPls as &$pl) {
-                if (($pl['id'] ?? '') === $playlistId) {
-                    if (!isset($pl['collaborators'])) $pl['collaborators'] = [];
-                    if (!in_array($userKey, $pl['collaborators'], true)) $pl['collaborators'][] = $userKey;
-                    break;
-                }
-            }
-            unset($pl);
-            writeJson(playlistFile($fromUser), $ownerPls);
-        }
-    }
+    /* Consumir (borrar) la fila pase lo que pase */
+    $pdo->prepare("DELETE FROM playlist_invites WHERE id = ?")->execute([$inviteId]);
 
-    if (in_array($act, ['accept','reject'], true) && isset($invite['fromUser'], $loginUsers[$invite['fromUser']])) {
-        $ownerNotifs = readJsonArray(invitesFile($invite['fromUser']));
-        $ownerNotifs[] = [
-            'id'           => 'resp_' . time() . '_' . rand(1000, 9999),
-            'type'         => $act === 'accept' ? 'collab-accepted' : 'collab-rejected',
-            'playlistId'   => $invite['playlistId'],
-            'playlistName' => $invite['playlistName'] ?? '',
-            'fromLabel'    => $loginUsers[$userKey]['label'],
-            'sentAt'       => time(),
-        ];
-        writeJson(invitesFile($invite['fromUser']), $ownerNotifs);
+    /* Aceptar / rechazar sólo aplican al type 'invite' (colaboración). */
+    if ($inv['type'] === 'invite' && $act === 'accept') {
+        $pdo->prepare("INSERT IGNORE INTO playlist_collaborators (playlist_id, user_id) VALUES (?, ?)")
+            ->execute([(int)$inv['playlist_id'], $uid]);
+        pushCollabNotif($pdo, (int)$inv['from_user_id'], $uid, (int)$inv['playlist_id'], 'collab-accepted');
+    } elseif ($inv['type'] === 'invite' && $act === 'reject') {
+        pushCollabNotif($pdo, (int)$inv['from_user_id'], $uid, (int)$inv['playlist_id'], 'collab-rejected');
     }
+    /* dismiss = solo cerrar la notif. No se notifica al otro. */
+
     jsonResponse(['ok' => true]);
 }
 
@@ -362,20 +393,22 @@ case 'get-users': {
     jsonResponse($users);
 }
 
-/* ─── Tracks extra ───────────────────────────────────────── */
+/* ─── Tracks extra (music_extras) ────────────────────────── */
 
 case 'add-track': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
     $b = jsonBody();
     if (!isset($b['videoId'], $b['title'])) jsonError('Datos incompletos');
     $videoId = preg_replace('/[^A-Za-z0-9_-]/', '', $b['videoId']);
     if (strlen($videoId) !== 11) jsonError('ID de video inválido');
-    $title   = substr(strip_tags($b['title']),  0, 200);
-    $artist  = substr(strip_tags($b['artist'] ?? ''), 0, 200);
-    $tracks  = readJsonArray(extraFile($userKey));
-    $track   = ['title' => $title, 'artist' => $artist, 'videoId' => $videoId];
-    $tracks[] = $track;
-    writeJson(extraFile($userKey), $tracks);
-    jsonResponse(['ok' => true, 'track' => $track]);
+    $title  = substr(strip_tags($b['title']),  0, 200);
+    $artist = substr(strip_tags($b['artist'] ?? ''), 0, 200);
+    $pdo->prepare("INSERT INTO music_extras (user_id, video_id, title, artist) VALUES (?, ?, ?, ?)")
+        ->execute([$uid, $videoId, $title, $artist]);
+    jsonResponse(['ok' => true, 'track' => [
+        'title' => $title, 'artist' => $artist, 'videoId' => $videoId,
+    ]]);
 }
 
 /* ─── YouTube helpers ────────────────────────────────────── */

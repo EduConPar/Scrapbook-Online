@@ -1,14 +1,11 @@
 <?php
-$host = 'localhost';
-$dbname = 'scrapbook_melon';
-$user = 'root';
-$pass = '';
+require_once __DIR__ . '/assets/config.php';
 
 try {
     $pdo = new PDO(
-        "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
-        $user,
-        $pass
+        'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+        DB_USER,
+        DB_PASS
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 } catch (PDOException $e) {

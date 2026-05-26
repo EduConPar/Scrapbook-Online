@@ -1272,7 +1272,7 @@ document.addEventListener('keydown', function(e){
    - El AcroForm guarda el estado dentro del propio PDF → al recargar se lee
      con pdf-lib y se repuebla la UI
 ════════════════════════════════════════ */
-var GOOGLE_CLIENT_ID  = '579281248790-bhn33madtdvrfeeoi3f3lc9sh8lshu7m.apps.googleusercontent.com';
+var GOOGLE_CLIENT_ID  = <?php echo json_encode(GOOGLE_CLIENT_ID); ?>;
 var GDRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file';
 var GDRIVE_FOLDER     = 'D&D Fichas';
 var _tokenClient      = null;

@@ -2,24 +2,24 @@
 // reproductor.php - All player HTML + PHP setup
 // Included from desktop-base.php; expects $desktopUserKey and $hasPlayer already set.
 require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__) . '/db.php';
 
+/* Pool global de pistas que el reproductor muestra al inicio:
+   1) Listado estático por defecto para user1/user2 (semilla histórica).
+   2) Pistas añadidas vía add-track → tabla music_extras. */
 $youtubePlaylist = [];
-$customFile = dirname(__DIR__) . '/assets/music/' . $desktopUserKey . '-custom.json';
-if (file_exists($customFile)) {
-    $custom = json_decode(file_get_contents($customFile), true);
-    if (is_array($custom)) $youtubePlaylist = $custom;
-} else {
-    if ($desktopUserKey === 'user1') {
-        require_once dirname(__DIR__) . '/assets/music/playlist.php';
-    } elseif ($desktopUserKey === 'user2') {
-        require_once dirname(__DIR__) . '/assets/music/angie-playlist.php';
-    }
-    $extraFile = dirname(__DIR__) . '/assets/music/' . $desktopUserKey . '-extra.json';
-    if (file_exists($extraFile)) {
-        $extra = json_decode(file_get_contents($extraFile), true);
-        if (is_array($extra)) $youtubePlaylist = array_merge($youtubePlaylist, $extra);
-    }
+if ($desktopUserKey === 'user1') {
+    require_once dirname(__DIR__) . '/assets/music/playlist.php';
+} elseif ($desktopUserKey === 'user2') {
+    require_once dirname(__DIR__) . '/assets/music/angie-playlist.php';
 }
+$stmt = $pdo->prepare("SELECT me.video_id AS videoId, me.title, me.artist
+                       FROM music_extras me
+                       JOIN usuarios u ON me.user_id = u.id
+                       WHERE u.user_key = ?
+                       ORDER BY me.id ASC");
+$stmt->execute([$desktopUserKey]);
+$youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
 ?>
 
@@ -261,6 +261,49 @@ foreach ($loginUsers as $_k => $_u) {
 echo json_encode($_usersInfoArr);
 ?>;
 var spotifyClientId   = '<?php echo SPOTIFY_CLIENT_ID; ?>';
+
+/* Estado del reproductor persistido en SQL (user_settings.key='player').
+   Reemplaza la antigua copia en localStorage['melonOS_player']. La lectura
+   inicial usa window.DesktopState (precargado por desktop-base) y los
+   writes se hacen optimistas + POST debounced al servidor. */
+var MelonPlayerState = (function(){
+    var state = null;
+    function get(){
+        if (state) return state;
+        if (window.DesktopState && window.DesktopState.player) state = window.DesktopState.player;
+        return state;
+    }
+    var _t = null;
+    function push(){
+        clearTimeout(_t);
+        _t = setTimeout(function(){
+            fetch('assets/desktop/api.php?action=save-player', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state || {})
+            }).catch(function(){});
+        }, 200);
+    }
+    function setPlaylist(playlistId, trackIndex){
+        state = { playlistId: playlistId, trackIndex: trackIndex|0 };
+        if (window.DesktopState) window.DesktopState.player = state;
+        push();
+    }
+    function setTrack(trackIndex){
+        if (!state) state = { playlistId: null, trackIndex: 0 };
+        state.trackIndex = trackIndex|0;
+        if (window.DesktopState) window.DesktopState.player = state;
+        push();
+    }
+    function setVolume(v){
+        if (!state) state = { playlistId: null, trackIndex: 0 };
+        state.volume = Math.max(0, Math.min(100, v|0));
+        if (window.DesktopState) window.DesktopState.player = state;
+        push();
+    }
+    return { get: get, setPlaylist: setPlaylist, setTrack: setTrack, setVolume: setVolume };
+})();
+
 let currentTrack      = 0;
 let currentPlaylistId = null;
 var currentPlaylistHasCollabs = false;
@@ -487,11 +530,7 @@ function updateTrackUI(index)
         stopTitleMarquee = marqueeScroll(playerTitle, playerTitle.parentElement, 50, 1000);
     }, 50);
 
-    try {
-        var s = JSON.parse(localStorage.getItem('melonOS_player') || '{}');
-        s.trackIndex = index;
-        localStorage.setItem('melonOS_player', JSON.stringify(s));
-    } catch(e) {}
+    MelonPlayerState.setTrack(index);
 
     if (typeof window.updatePlaylistPlayingHighlight === 'function') {
         window.updatePlaylistPlayingHighlight(currentPlaylistId, index);
@@ -520,15 +559,24 @@ function onYouTubeIframeAPIReady()
         playerVars: { controls: 0, rel: 0, modestbranding: 1 },
         events: {
             onReady: function() {
-                ytPlayer.setVolume(parseInt(volSlider.value));
-
-                var saved = null;
-                try { saved = JSON.parse(localStorage.getItem('melonOS_player')); } catch(e) {}
+                /* onReady puede dispararse antes de que fetchState haya
+                   resuelto. whenReady aplica el volumen y la playlist
+                   guardada en cuanto ambos extremos estén listos. */
+                window.DesktopState.whenReady(function(){
+                    var saved = MelonPlayerState.get();
+                    if (saved && typeof saved.volume === 'number') {
+                        ytPlayer.setVolume(saved.volume);
+                    } else {
+                        ytPlayer.setVolume(parseInt(volSlider.value));
+                    }
+                    restorePlaylist(saved);
+                });
 
                 function restoreDefault() {
                     if (playlist.length) { updateTrackUI(0); ytPlayer.cueVideoById(playlist[0].videoId); }
                 }
 
+                function restorePlaylist(saved) {
                 if (saved && saved.playlistId) {
                     fetch('assets/music/api.php?action=get-playlists')
                     .then(function(r) { return r.json(); })
@@ -540,6 +588,7 @@ function onYouTubeIframeAPIReady()
                         }
                         if (!found || !found.tracks.length) { restoreDefault(); return; }
                         currentPlaylistId = found.id;
+                        currentPlaylistHasCollabs = !!(found.sharedFrom || (found.collaborators && found.collaborators.length > 0));
                         playlist.length = 0;
                         found.tracks.forEach(function(t) { playlist.push(t); });
                         var idx = (saved.trackIndex >= 0 && saved.trackIndex < playlist.length) ? saved.trackIndex : 0;
@@ -551,6 +600,7 @@ function onYouTubeIframeAPIReady()
                     .catch(restoreDefault);
                 } else {
                     restoreDefault();
+                }
                 }
             },
             onStateChange: (e) => {
@@ -636,26 +686,24 @@ volSlider.addEventListener('input', function() {
     if (parseInt(this.value) === 0) icon.textContent = '◄✕';
     else if (parseInt(this.value) < 50) icon.textContent = '◄)';
     else icon.textContent = '◄))';
-    try {
-        var s = JSON.parse(localStorage.getItem('melonOS_player') || '{}');
-        s.volume = parseInt(this.value);
-        localStorage.setItem('melonOS_player', JSON.stringify(s));
-    } catch(e) {}
+    MelonPlayerState.setVolume(parseInt(this.value));
 });
 
-/* Restore volume before player API loads */
-(function() {
-    try {
-        var s = JSON.parse(localStorage.getItem('melonOS_player') || '{}');
-        if (typeof s.volume === 'number') {
-            volSlider.value = s.volume;
-            var icon = document.getElementById('volume-icon');
-            if (s.volume === 0) icon.textContent = '◄✕';
-            else if (s.volume < 50) icon.textContent = '◄)';
-            else icon.textContent = '◄))';
-        }
-    } catch(e) {}
-})();
+/* Restore volume before player API loads.
+   El estado vive en window.DesktopState, que se rellena de forma async
+   por desktop-base.fetchState(). whenReady garantiza que aplicamos el
+   volumen guardado AUNQUE el fetch aún no haya resuelto al evaluar este
+   script — y también si el YT player ya está listo, le aplicamos el volumen. */
+window.DesktopState.whenReady(function(){
+    var s = MelonPlayerState.get() || {};
+    if (typeof s.volume !== 'number') return;
+    volSlider.value = s.volume;
+    var icon = document.getElementById('volume-icon');
+    if (s.volume === 0) icon.textContent = '◄✕';
+    else if (s.volume < 50) icon.textContent = '◄)';
+    else icon.textContent = '◄))';
+    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(s.volume);
+});
 
 
 document.getElementById('player-close').addEventListener('click', () => {
@@ -964,7 +1012,7 @@ var addTrackCallback = null;
                 if (!pl.tracks.length) return;
                 currentPlaylistId = pl.id;
                 currentPlaylistHasCollabs = !!(pl.sharedFrom || (pl.collaborators && pl.collaborators.length > 0));
-                try { localStorage.setItem('melonOS_player', JSON.stringify({ playlistId: pl.id, trackIndex: 0 })); } catch(e) {}
+                MelonPlayerState.setPlaylist(pl.id, 0);
                 playlist.length = 0;
                 pl.tracks.forEach(function(t) { playlist.push(t); });
                 currentTrack = 0;
@@ -1111,7 +1159,7 @@ var addTrackCallback = null;
                     if (!pl || !pl.tracks.length) return;
                     currentPlaylistId = pl.id;
                     currentPlaylistHasCollabs = !!(pl.sharedFrom || (pl.collaborators && pl.collaborators.length > 0));
-                    try { localStorage.setItem('melonOS_player', JSON.stringify({ playlistId: pl.id, trackIndex: trackIndex })); } catch(e) {}
+                    MelonPlayerState.setPlaylist(pl.id, trackIndex);
                     playlist.length = 0;
                     pl.tracks.forEach(function(t) { playlist.push(t); });
                     currentTrack = trackIndex;
@@ -1350,7 +1398,7 @@ var addTrackCallback = null;
             var name = createInput.value.trim();
             if (!name) return;
             closeCreateDlg();
-            var newPl = { id: 'pl_' + Date.now(), name: name, tracks: [] };
+            var newPl = { id: 'pl_' + Date.now(), name: name, tracks: [], collaborators: [] };
             fetch('assets/music/api.php?action=save-playlist-item', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1359,6 +1407,10 @@ var addTrackCallback = null;
             .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function(data) {
                 if (data.error) { alert(data.error); return; }
+                /* El backend asigna el ID definitivo (BIGINT) → reemplazar
+                   el placeholder pl_<timestamp> antes de meterlo en memoria
+                   para que los próximos save/delete usen el ID real. */
+                if (data.id) newPl.id = data.id;
                 allPlaylists.push(newPl);
                 showEditorView(allPlaylists.length - 1);
             })
