@@ -46,6 +46,11 @@ if (!function_exists('env')) {
 define('SPOTIFY_CLIENT_ID',     env('SPOTIFY_CLIENT_ID',     ''));
 define('SPOTIFY_CLIENT_SECRET', env('SPOTIFY_CLIENT_SECRET', ''));
 define('GOOGLE_CLIENT_ID',      env('GOOGLE_CLIENT_ID',      ''));
+/* Tidal (API oficial, credenciales de developer.tidal.com). Client
+   credentials → solo catálogo público y playlists públicas. */
+define('TIDAL_CLIENT_ID',     env('TIDAL_CLIENT_ID',     ''));
+define('TIDAL_CLIENT_SECRET', env('TIDAL_CLIENT_SECRET', ''));
+define('TIDAL_COUNTRY',       env('TIDAL_COUNTRY',       'US'));
 
 /* ─── Conexión a BD (la usa db.php) ─── */
 define('DB_HOST', env('DB_HOST', 'localhost'));

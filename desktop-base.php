@@ -1154,7 +1154,7 @@ window.notifSystem = (function() {
         'companion-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
-        'collab-dialog','spotify-import-dialog','confirm-dialog',
+        'collab-dialog','spotify-import-dialog','tidal-import-dialog','confirm-dialog',
         'profile-add-dialog','profile-review-prompt','profile-review-window',
         'profile-review-view','profile-invite-dialog','profile-info-edit-dialog',
         'music-add-dialog','profile-notifs-window','profile-melon-details-window',
