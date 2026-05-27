@@ -245,31 +245,31 @@ function defaultThemeForUser($userKey) {
 }
 
 /**
- * Siembra UNA VEZ el tema personal del usuario en su lista de temas:
+ * Siembra UNA VEZ el tema personal del usuario en su lista de temas (SQL):
  *  - user1 (Capi)  → tema "Capi"
  *  - user2 (Angie) → tema "Angie"
  *  - resto         → no se siembra nada (cae al Win98 por defecto de tokens.css)
  *
- * Solo se ejecuta si el usuario nunca ha tenido fichero de temas. Una vez
- * creado el fichero — incluso si el usuario borra ese tema — no se vuelve
- * a sembrar nada. El "tema por defecto" real es el Win98 (gris + azul) que
- * sale cuando no hay clase de tema en el body.
+ * Solo se siembra si el usuario NO tiene ya un tema con ese nombre. Si lo
+ * borró explícitamente desde la app, no vuelve.
  */
 function seedDefaultTheme($userKey, $label) {
     $def = defaultThemeForUser($userKey);
     if (!$def) return;
-    $file = userThemesFile($userKey);
-    if (file_exists($file)) return; /* respeta la decisión del usuario */
-    $data = [
-        'themes' => [
-            $def['name'] => [
-                'colors'    => $def['colors'],
-                'updatedAt' => time(),
-            ],
-        ],
-        'active' => '',
-    ];
-    saveUserThemes($userKey, $data);
+    $uid = userIdByKey($userKey);
+    if (!$uid) return;
+    $pdo = themesPdo();
+    /* ¿Ya tiene algún tema (cualquiera)? Si sí, respetamos su estado. */
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM themes WHERE user_id = ?");
+    $stmt->execute([$uid]);
+    if ((int)$stmt->fetchColumn() > 0) return;
+
+    $pdo->prepare("INSERT INTO themes (user_id, name, colors, is_active, updated_at)
+                   VALUES (?, ?, ?, 0, NOW())")
+        ->execute([
+            $uid, $def['name'],
+            json_encode($def['colors'], JSON_UNESCAPED_UNICODE),
+        ]);
     $cssPath = themeCssFile($def['name'], $label);
     $css     = generateThemeCss(themeCssClassName($def['name'], $label), $def['colors']);
     @file_put_contents($cssPath, $css);
@@ -279,24 +279,93 @@ function themesDir() {
     return __DIR__;
 }
 
-function userThemesFile($userKey) {
-    $safe = preg_replace('/[^a-z0-9_]/i', '', $userKey);
-    return themesDir() . '/' . $safe . '-themes.json';
+/* Asegura que la conexión PDO esté disponible y devuelve el handle.
+   db.php se incluye aquí (dentro de la función) — `require_once` deja
+   las variables del archivo en SCOPE LOCAL. Por eso el handle se mueve
+   manualmente a $GLOBALS para que el resto del código (y futuras
+   llamadas a esta función) lo recuperen vía `global $pdo`. */
+function themesPdo(): PDO {
+    if (isset($GLOBALS['pdo']) && $GLOBALS['pdo'] instanceof PDO) {
+        return $GLOBALS['pdo'];
+    }
+    require_once dirname(__DIR__, 2) . '/db.php';
+    $GLOBALS['pdo'] = $pdo;
+    return $pdo;
 }
 
+/* Resuelve user_key (string) → usuarios.id (int). Cachea por petición. */
+function userIdByKey(string $userKey): ?int {
+    static $cache = [];
+    if (array_key_exists($userKey, $cache)) return $cache[$userKey];
+    $stmt = themesPdo()->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    $id = $stmt->fetchColumn();
+    return $cache[$userKey] = $id ? (int)$id : null;
+}
 
+/**
+ * Carga TODOS los temas del usuario desde SQL en la misma forma que el
+ * antiguo JSON: ['themes' => {name: {colors, updatedAt}}, 'active' => string].
+ */
 function loadUserThemes($userKey) {
-    $file = userThemesFile($userKey);
-    if (!file_exists($file)) return ['themes' => new stdClass(), 'active' => ''];
-    $raw = json_decode(file_get_contents($file), true);
-    if (!is_array($raw)) return ['themes' => new stdClass(), 'active' => ''];
-    if (!isset($raw['themes'])) $raw['themes'] = new stdClass();
-    if (!isset($raw['active'])) $raw['active'] = '';
-    return $raw;
+    $uid = userIdByKey($userKey);
+    if (!$uid) return ['themes' => new stdClass(), 'active' => ''];
+    $rows = themesPdo()->prepare("SELECT name, colors, is_active, UNIX_TIMESTAMP(updated_at) AS updated_ts
+                                  FROM themes WHERE user_id = ?");
+    $rows->execute([$uid]);
+    $themes = [];
+    $active = '';
+    foreach ($rows->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $themes[$r['name']] = [
+            'colors'    => json_decode($r['colors'], true) ?: [],
+            'updatedAt' => (int)$r['updated_ts'],
+        ];
+        if ($r['is_active']) $active = $r['name'];
+    }
+    return ['themes' => $themes ?: new stdClass(), 'active' => $active];
 }
 
+/**
+ * Sustituye TODOS los temas del usuario por los del array $data.
+ * Mantiene compat con el contrato JSON antiguo. Usa transacción para que
+ * un fallo no deje el estado a medias.
+ */
 function saveUserThemes($userKey, $data) {
-    file_put_contents(userThemesFile($userKey), json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    $uid = userIdByKey($userKey);
+    if (!$uid) return;
+    $pdo = themesPdo();
+    $active  = isset($data['active']) ? (string)$data['active'] : '';
+    $themes  = (array)($data['themes'] ?? []);
+    $pdo->beginTransaction();
+    try {
+        /* Borra los que ya no están en $themes */
+        $names = array_keys($themes);
+        if (empty($names)) {
+            $pdo->prepare("DELETE FROM themes WHERE user_id = ?")->execute([$uid]);
+        } else {
+            $place = implode(',', array_fill(0, count($names), '?'));
+            $params = array_merge([$uid], $names);
+            $pdo->prepare("DELETE FROM themes WHERE user_id = ? AND name NOT IN ($place)")
+                ->execute($params);
+        }
+        /* Inserta o actualiza cada uno */
+        $upsert = $pdo->prepare("INSERT INTO themes (user_id, name, colors, is_active, updated_at)
+            VALUES (?, ?, ?, ?, FROM_UNIXTIME(?))
+            ON DUPLICATE KEY UPDATE colors=VALUES(colors), is_active=VALUES(is_active), updated_at=VALUES(updated_at)");
+        foreach ($themes as $name => $info) {
+            $ts = isset($info['updatedAt']) && is_numeric($info['updatedAt']) ? (int)$info['updatedAt'] : time();
+            $upsert->execute([
+                $uid, $name,
+                json_encode($info['colors'] ?? [], JSON_UNESCAPED_UNICODE),
+                ($name === $active) ? 1 : 0,
+                $ts,
+            ]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
 }
 
 function sanitizeThemeName($name) {

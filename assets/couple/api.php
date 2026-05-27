@@ -20,29 +20,26 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once __DIR__ . '/../../db.php';
 
-$u           = requireAuth();
-$userKey     = $u['key'];
-$userLabel   = $u['label'];
-$action      = $_GET['action'] ?? $_POST['action'] ?? '';
+$u        = requireAuth();
+$userKey  = $u['key'];
+$action   = $_GET['action'] ?? $_POST['action'] ?? '';
 
-/* Helper: obtiene el id (PK) en la tabla `usuarios` del usuario actual */
-function getCurrentUserId(PDO $pdo, string $userLabel): ?int {
-    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE username = ?");
-    $stmt->execute([strtolower($userLabel)]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $row ? (int)$row['id'] : null;
-}
-
-/* Helper: ruta al fichero de invitaciones de un usuario */
-function inviteFile(string $userKey): string {
-    return __DIR__ . '/' . $userKey . '-partner-invites.json';
+/* Helper: obtiene el id (PK) en la tabla `usuarios` del usuario actual.
+   Resuelve por user_key — más fiable que casar username con lower(label). */
+function getCurrentUserId(PDO $pdo, string $userKey): ?int {
+    static $cache = [];
+    if (array_key_exists($userKey, $cache)) return $cache[$userKey];
+    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    $id = $stmt->fetchColumn();
+    return $cache[$userKey] = $id ? (int)$id : null;
 }
 
 switch ($action) {
 
 /* ─── Momentos ─── */
 case 'get-momentos': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
     if ($parejaId) {
@@ -54,13 +51,13 @@ case 'get-momentos': {
         $stmt = $pdo->prepare("SELECT id, titulo, descripcion, emocion, fecha, foto, ? AS autor
                                FROM momentos WHERE usuario_id = ? AND pareja_id = 0
                                ORDER BY fecha ASC");
-        $stmt->execute([strtolower($userLabel), $userId]);
+        $stmt->execute([strtolower($GLOBALS['loginUsers'][$userKey]['label']), $userId]);
     }
     jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
 }
 
 case 'save-momento': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonError('Usuario no encontrado');
     $b      = jsonBody();
     $titulo = trim($b['titulo'] ?? '');
@@ -76,7 +73,7 @@ case 'save-momento': {
 }
 
 case 'delete-momento': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonError('Usuario no encontrado');
     $id = (int)(jsonBody()['id'] ?? 0);
     if (!$id) jsonError('ID inválido');
@@ -109,7 +106,7 @@ case 'upload-foto': {
 
 /* ─── Recordatorios ─── */
 case 'get-recordatorios': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
     if ($parejaId) {
@@ -127,7 +124,7 @@ case 'get-recordatorios': {
 }
 
 case 'save-recordatorio': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonError('Usuario no encontrado');
     $b      = jsonBody();
     $titulo = trim($b['titulo'] ?? '');
@@ -143,7 +140,7 @@ case 'save-recordatorio': {
 }
 
 case 'delete-recordatorio': {
-    $userId = getCurrentUserId($pdo, $userLabel);
+    $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonError('Usuario no encontrado');
     $id = (int)(jsonBody()['id'] ?? 0);
     if (!$id) jsonError('ID inválido');
@@ -164,12 +161,17 @@ case 'get-users': {
     jsonResponse($users);
 }
 
-/* ─── Invitaciones de pareja ─── */
+/* ─── Invitaciones de pareja (SQL: partner_invites) ─── */
 case 'get-partner-invites': {
-    $f = inviteFile($userKey);
-    if (!file_exists($f)) jsonResponse([]);
-    $list = json_decode(file_get_contents($f), true);
-    jsonResponse(is_array($list) ? $list : []);
+    $uid = getCurrentUserId($pdo, $userKey);
+    if (!$uid) jsonResponse([]);
+    $stmt = $pdo->prepare("SELECT pi.id, fu.user_key AS fromUser, fu.label AS fromLabel
+                           FROM partner_invites pi
+                           JOIN usuarios fu ON pi.from_user_id = fu.id
+                           WHERE pi.to_user_id = ?
+                           ORDER BY pi.created_at ASC");
+    $stmt->execute([$uid]);
+    jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
 }
 
 case 'invite-partner': {
@@ -179,62 +181,52 @@ case 'invite-partner': {
     if (!array_key_exists($toUser, $GLOBALS['loginUsers'])) jsonError('Usuario inválido');
     if ($toUser === $userKey) jsonError('No puedes invitarte a ti mismo');
 
-    $f = inviteFile($toUser);
-    $invites = file_exists($f) ? json_decode(file_get_contents($f), true) : [];
-    if (!is_array($invites)) $invites = [];
-    foreach ($invites as $inv) {
-        if (($inv['fromUser'] ?? '') === $userKey) jsonError('Ya tienes una invitación pendiente');
+    $fromId = getCurrentUserId($pdo, $userKey);
+    $toId   = getCurrentUserId($pdo, $toUser);
+    if (!$fromId || !$toId) jsonError('Usuario no encontrado en BD', 500);
+
+    /* UNIQUE(to_user_id, from_user_id) → si ya existe lanza 23000;
+       lo traducimos al mismo mensaje que daba la versión JSON. */
+    try {
+        $pdo->prepare("INSERT INTO partner_invites (to_user_id, from_user_id) VALUES (?, ?)")
+            ->execute([$toId, $fromId]);
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000') jsonError('Ya tienes una invitación pendiente');
+        throw $e;
     }
-    $invites[] = [
-        'id'        => 'pinv_' . time() . '_' . rand(1000, 9999),
-        'fromUser'  => $userKey,
-        'fromLabel' => $GLOBALS['loginUsers'][$userKey]['label'],
-    ];
-    file_put_contents($f, json_encode($invites, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     jsonResponse(['ok' => true]);
 }
 
 case 'respond-partner-invite': {
     $b        = jsonBody();
-    $inviteId = $b['inviteId'] ?? '';
+    $inviteId = (int)($b['inviteId'] ?? 0);
     $act      = $b['action']   ?? '';
     $fecha    = $b['fecha']    ?? '';
     if (!$inviteId || !in_array($act, ['accept','reject'])) jsonError('Datos incompletos');
 
-    $f = inviteFile($userKey);
-    if (!file_exists($f)) jsonError('No hay invitaciones', 404);
-    $invites = json_decode(file_get_contents($f), true);
-    if (!is_array($invites)) jsonError('Error leyendo invitaciones', 500);
+    $uid = getCurrentUserId($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
 
-    $invite = null; $remaining = [];
-    foreach ($invites as $inv) {
-        if (($inv['id'] ?? '') === $inviteId) $invite = $inv;
-        else $remaining[] = $inv;
-    }
-    if (!$invite) jsonError('Invitación no encontrada', 404);
-    file_put_contents($f, json_encode($remaining, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    /* Solo el destinatario puede responder a la invitación. */
+    $stmt = $pdo->prepare("SELECT from_user_id FROM partner_invites WHERE id = ? AND to_user_id = ?");
+    $stmt->execute([$inviteId, $uid]);
+    $fromId = $stmt->fetchColumn();
+    if (!$fromId) jsonError('Invitación no encontrada', 404);
+
+    $pdo->prepare("DELETE FROM partner_invites WHERE id = ?")->execute([$inviteId]);
 
     if ($act === 'reject') jsonResponse(['ok' => true]);
     if (!$fecha) jsonError('Falta la fecha de inicio');
 
-    $fromUser = $invite['fromUser'];
-    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE username = ? OR username = ?");
-    $stmt->execute([
-        strtolower($GLOBALS['loginUsers'][$fromUser]['label']),
-        strtolower($GLOBALS['loginUsers'][$userKey]['label']),
-    ]);
-    $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if (count($usuarios) < 2) jsonError('Usuarios no encontrados en la base de datos');
-
-    $ids = array_column($usuarios, 'id');
+    /* Aceptar → crear pareja (si no existe ya). */
     $stmt = $pdo->prepare("SELECT id FROM parejas
                            WHERE (usuario1_id = ? AND usuario2_id = ?)
                               OR (usuario1_id = ? AND usuario2_id = ?)");
-    $stmt->execute([$ids[0], $ids[1], $ids[1], $ids[0]]);
+    $stmt->execute([$fromId, $uid, $uid, $fromId]);
     if ($stmt->fetch()) jsonError('Ya sois pareja');
 
     $pdo->prepare("INSERT INTO parejas (usuario1_id, usuario2_id, fecha_inicio) VALUES (?, ?, ?)")
-        ->execute([$ids[0], $ids[1], $fecha]);
+        ->execute([(int)$fromId, $uid, $fecha]);
     jsonResponse(['ok' => true]);
 }
 

@@ -1,6 +1,8 @@
 <?php
+/* Registro de usuario: INSERT en `usuarios` con password bcrypt + crea
+   stub de escritorio + (opcional) sube foto de perfil. Sin tocar JSON. */
 header('Content-Type: application/json; charset=utf-8');
-require_once __DIR__ . '/assets/config.php';
+require_once __DIR__ . '/db.php';   /* trae también assets/config.php */
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(['error' => 'Método no permitido']); exit;
@@ -19,12 +21,12 @@ if (strlen($password) < 1) {
     echo json_encode(['error' => 'Contraseña vacía']); exit;
 }
 
-/* Comprobar nombre único (case-insensitive) */
+/* Comprobar nombre único (case-insensitive, contra `usuarios.label`) */
 $lowerNew = mb_strtolower($username);
-foreach ($loginUsers as $u) {
-    if (mb_strtolower($u['label']) === $lowerNew) {
-        echo json_encode(['error' => 'Ese nombre ya existe']); exit;
-    }
+$stmt = $pdo->prepare("SELECT 1 FROM usuarios WHERE LOWER(label) = ? OR username = ?");
+$stmt->execute([$lowerNew, $lowerNew]);
+if ($stmt->fetch()) {
+    echo json_encode(['error' => 'Ese nombre ya existe']); exit;
 }
 
 /* Foto opcional */
@@ -54,16 +56,10 @@ if ($hasPhoto) {
     }
 }
 
-/* Cargar lista de extras existentes y calcular el siguiente userN libre */
-$jsonFile = __DIR__ . '/assets/login-users.json';
-$extras = [];
-if (file_exists($jsonFile)) {
-    $raw = json_decode(file_get_contents($jsonFile), true);
-    if (is_array($raw)) $extras = $raw;
-}
-
+/* Siguiente user_key libre: maxN(user_key 'userN') + 1 */
+$stmt = $pdo->query("SELECT user_key FROM usuarios WHERE user_key REGEXP '^user[0-9]+$'");
 $maxNum = 0;
-foreach (array_keys($loginUsers) as $key) {
+foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $key) {
     if (preg_match('/^user(\d+)$/', $key, $m)) {
         $n = (int)$m[1];
         if ($n > $maxNum) $maxNum = $n;
@@ -71,22 +67,25 @@ foreach (array_keys($loginUsers) as $key) {
 }
 $newKey = 'user' . ($maxNum + 1);
 
-/* Stub de escritorio (<label-lowercase>-desktop.php) — se crea ANTES de añadir el usuario
-   para no dejar un usuario sin escritorio si la escritura falla. */
+/* Stub de escritorio (<label-lowercase>-desktop.php) — se crea ANTES del INSERT
+   para no dejar un usuario sin escritorio si falla la escritura del fichero. */
 $desktopStub = __DIR__ . '/' . strtolower($username) . '-desktop.php';
 if (!file_exists($desktopStub)) {
     $stubContent = "<?php \$desktopLabel = " . var_export($username, true) . "; require 'desktop-base.php';\n";
-    $written = @file_put_contents($desktopStub, $stubContent);
-    if ($written === false) {
+    if (@file_put_contents($desktopStub, $stubContent) === false) {
         echo json_encode(['error' => 'No se pudo crear el escritorio del usuario']); exit;
     }
 }
 
-$extras[$newKey] = ['label' => $username, 'password' => $password];
-if (@file_put_contents($jsonFile, json_encode($extras, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) === false) {
-    /* Revertir el stub si no podemos guardar el usuario */
+/* INSERT en usuarios con bcrypt */
+try {
+    $hash = password_hash($password, PASSWORD_BCRYPT);
+    $stmt = $pdo->prepare("INSERT INTO usuarios (user_key, username, label, password)
+                           VALUES (?, ?, ?, ?)");
+    $stmt->execute([$newKey, $lowerNew, $username, $hash]);
+} catch (Throwable $e) {
     @unlink($desktopStub);
-    echo json_encode(['error' => 'No se pudo guardar el usuario']); exit;
+    echo json_encode(['error' => 'No se pudo guardar el usuario en BD']); exit;
 }
 
 echo json_encode(['ok' => true, 'userKey' => $newKey, 'label' => $username]);

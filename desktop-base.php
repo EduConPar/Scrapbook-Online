@@ -84,6 +84,18 @@ function desktopIcon($name, $emoji) {
 
 <div id="page-enter"></div>
 
+<script>
+/* Hoist mínimo de DesktopState: las apps (reproductor.php se incluye más
+   abajo) lo usan inline antes de que se ejecute el módulo grande de
+   desktop-base.php. Aquí solo creamos el stub con whenReady; fetchState
+   lo rellena después y dispara la cola. */
+window.DesktopState = { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
+window.DesktopState.whenReady = function(cb){
+    if (this.loaded) cb();
+    else this._readyCbs.push(cb);
+};
+</script>
+
 <!-- DESKTOP CONTEXT MENU (right-click) -->
 <ul id="desktop-ctx-menu" class="desk-ctx">
     <li data-action="new-folder">📁 Nueva carpeta</li>
@@ -415,7 +427,11 @@ document.querySelectorAll('a[href="logout.php"]').forEach(link => {
 /* =========================
    TASKBAR TASK MANAGER
 ========================= */
-/* ──── Z-ORDER manager: ventana abierta siempre encima ──── */
+/* ──── Z-ORDER manager: ventana abierta siempre encima ────
+   Cualquier .window cuyo display pase de "none" a visible se eleva
+   automáticamente con bringToFront vía MutationObserver. Así las review
+   modales / dialogs nunca quedan tapadas, sin tener que parchear cada
+   sitio que abre una ventana. */
 window.windowZ = (function() {
     var topZ = 600;  // por encima de los z-index iniciales (500-560)
     function bringToFront(id) {
@@ -437,6 +453,46 @@ window.windowZ = (function() {
         });
         return myZ >= maxZ;
     }
+
+    /* Auto-elevar cuando una .window pasa de oculta a visible. Sirve para
+       cualquier dialog/modal/popup que cambie display o clase "hidden",
+       no solo para los que pasan por taskbarManager. */
+    function isVisible(el) {
+        if (!el || !el.classList || !el.classList.contains('window')) return false;
+        if (el.classList.contains('hidden')) return false;
+        var s = el.style.display;
+        if (s === 'none') return false;
+        if (!s && getComputedStyle(el).display === 'none') return false;
+        return true;
+    }
+    var lastSeen = new WeakMap();
+    function check(el) {
+        if (!el || !el.classList || !el.classList.contains('window')) return;
+        var nowVis = isVisible(el);
+        var prev   = lastSeen.get(el) === true;
+        if (nowVis && !prev) bringToFront(el);
+        lastSeen.set(el, nowVis);
+    }
+    new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+            if (m.type === 'attributes') {
+                check(m.target);
+            } else if (m.type === 'childList') {
+                m.addedNodes.forEach(function(n) {
+                    if (n.nodeType !== 1) return;
+                    /* el propio nodo o cualquier .window dentro de él */
+                    check(n);
+                    if (n.querySelectorAll) n.querySelectorAll('.window').forEach(check);
+                });
+            }
+        });
+    }).observe(document.body, {
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        childList: true,
+        subtree: true,
+    });
+
     return { bringToFront: bringToFront, isFrontmost: isFrontmost };
 })();
 
@@ -1025,27 +1081,66 @@ window.notifSystem = (function() {
 /* =========================================================
    ICONOS DEL ESCRITORIO: long-press para mover
    - Mantener pulsado ~400 ms inicia el modo arrastrar
-   - Las posiciones se guardan en localStorage por usuario
+   - Estado persistido en SQL vía assets/desktop/api.php
    - El doble click sigue abriendo la app (no entra en conflicto)
 ========================================================= */
 (function(){
-    var HOLD_MS = 100;
+    var HOLD_MS = 350;
     var MOVE_TOLERANCE = 6;        // px de margen antes de cancelar un click normal
-    var STORAGE_KEY = 'desktop_icon_positions_v1';
     var GRID_W = 96;               // cuadrícula horizontal (px)
     var GRID_H = 96;               // cuadrícula vertical (px)
+
+    /* Estado del escritorio cacheado: lo rellena la primera carga.
+       window.DesktopState también lo expone para que DesktopFolders lo lea.
+       `whenReady(cb)` resuelve en cuanto fetchState termina (o inmediatamente
+       si ya estaba cargado). Útil para código que evalúa antes del fetch
+       (reproductor.php carga volumen + playlist saved → necesita esperar). */
+    window.DesktopState = window.DesktopState || { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
+    if (!window.DesktopState.whenReady) {
+        window.DesktopState.whenReady = function(cb){
+            if (this.loaded) cb();
+            else this._readyCbs.push(cb);
+        };
+    }
 
     function snap(v, step){ return Math.round(v / step) * step; }
     function snapPos(x, y){ return { left: snap(x, GRID_W), top: snap(y, GRID_H) }; }
 
-    function loadPositions(){
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
-        catch(e){ return {}; }
-    }
+    function loadPositions(){ return window.DesktopState.icons || {}; }
+    /* Debounce por-icono para no martillear al servidor mientras se arrastra */
+    var _saveTimers = {};
     function savePosition(id, pos){
-        var all = loadPositions();
-        all[id] = pos;
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); } catch(e){}
+        window.DesktopState.icons[id] = pos;
+        clearTimeout(_saveTimers[id]);
+        _saveTimers[id] = setTimeout(function(){
+            fetch('assets/desktop/api.php?action=save-icon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, left: pos.left, top: pos.top })
+            }).catch(function(){});
+        }, 120);
+    }
+
+    function fetchState(cb){
+        function done(){
+            window.DesktopState.loaded = true;
+            /* Vaciar la cola de whenReady() (reproductor, etc.) */
+            var queue = window.DesktopState._readyCbs || [];
+            window.DesktopState._readyCbs = [];
+            queue.forEach(function(fn){ try { fn(); } catch(e){} });
+            cb();
+        }
+        fetch('assets/desktop/api.php?action=get-all')
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if(d && d.ok){
+                    window.DesktopState.icons   = d.icons   || {};
+                    window.DesktopState.folders = d.folders || [];
+                    window.DesktopState.player  = d.player  || null;
+                }
+                done();
+            })
+            .catch(done);
     }
 
     function init(){
@@ -1219,11 +1314,15 @@ window.notifSystem = (function() {
         icon.addEventListener('touchstart', onDown, { passive: true });
     }
 
+    function bootstrap(){
+        /* Cargar estado desde SQL antes de pintar nada. Si falla, init usará
+           posiciones por defecto. */
+        fetchState(function(){ requestAnimationFrame(init); });
+    }
     if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', bootstrap);
     } else {
-        // requestAnimationFrame para asegurar que el layout se asentó
-        requestAnimationFrame(init);
+        bootstrap();
     }
 })();
 
@@ -1236,13 +1335,55 @@ window.notifSystem = (function() {
    - Botón ✕ junto al icono hijo → lo saca de la carpeta
 ========================================================= */
 (function(){
-    var FKEY = 'desktop_folders_v1';
     var folders = {};            // {folderId: {id,name,pos:{l,t},children:[...]}}
     var openFolderWindows = {};  // {folderId: { el: HTMLElement, wid: 'folder-window-...' }}
     var hoverFolderEl = null;
 
-    function load(){ try { folders = JSON.parse(localStorage.getItem(FKEY) || '{}') || {}; } catch(e){ folders = {}; } }
-    function save(){ try { localStorage.setItem(FKEY, JSON.stringify(folders)); } catch(e){} }
+    /* Lee del estado precargado por el módulo de iconos. Espera al evento
+       readystate completo: cuando se llama a init, DesktopState ya está
+       resuelto (bootstrap del módulo anterior). */
+    function load(){
+        folders = {};
+        var arr = (window.DesktopState && window.DesktopState.folders) || [];
+        arr.forEach(function(f){
+            folders[f.id] = {
+                id: f.id,
+                name: f.name,
+                pos: { left: (f.pos && f.pos.left)|0, top: (f.pos && f.pos.top)|0 },
+                children: Array.isArray(f.children) ? f.children.slice() : [],
+            };
+        });
+    }
+    /* Debounce por-carpeta: durante un drag rápido evitamos hacer N POSTs */
+    var _saveTimers = {};
+    function saveFolder(id){
+        var f = folders[id];
+        if(!f){
+            /* Si el folder ya no existe en memoria, dispara delete */
+            clearTimeout(_saveTimers[id]);
+            fetch('assets/desktop/api.php?action=delete-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id })
+            }).catch(function(){});
+            return;
+        }
+        clearTimeout(_saveTimers[id]);
+        _saveTimers[id] = setTimeout(function(){
+            fetch('assets/desktop/api.php?action=save-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: f.id, name: f.name, pos: f.pos, children: f.children || [],
+                })
+            }).catch(function(){});
+        }, 150);
+    }
+    /* save() global: persiste todas las carpetas presentes (útil tras un
+       cambio que afecta varias en cascada, ej. mover icono entre carpetas). */
+    function save(){
+        Object.keys(folders).forEach(saveFolder);
+    }
     function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     function init(desk){
@@ -1270,7 +1411,13 @@ window.notifSystem = (function() {
             '<span>' + esc(folder.name) + '</span>';
         div.style.position = 'absolute';
         div.style.margin = '0';
-        var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(folder.pos.left, folder.pos.top) : folder.pos;
+        /* La posición autoritativa para todo lo que pinta en el escritorio
+           es desktop_icons (savePosition). desktop_folders.pos es solo la
+           posición inicial; cuando el usuario arrastra el icono de carpeta
+           solo se actualiza desktop_icons. */
+        var savedIconPos = window.DesktopIcons ? window.DesktopIcons.loadPositions()[folder.id] : null;
+        var basePos = savedIconPos || folder.pos;
+        var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(basePos.left, basePos.top) : basePos;
         div.style.left = pos.left + 'px';
         div.style.top  = pos.top  + 'px';
         div.addEventListener('dblclick', function(){ openFolderWindow(folder.id); });
@@ -1292,7 +1439,7 @@ window.notifSystem = (function() {
             var id = 'fld-' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
             var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(x, y) : { left: x, top: y };
             folders[id] = { id: id, name: name, pos: pos, children: [] };
-            save();
+            saveFolder(id);
             renderFolderIcon(folders[id]);
             if(window.DesktopIcons) window.DesktopIcons.savePosition(id, pos);
         });
@@ -1309,7 +1456,8 @@ window.notifSystem = (function() {
             var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(0, 0) : { left: 0, top: 0 };
             folders[id] = { id: id, name: name, pos: pos, children: [] };
             folders[parentId].children.push(id);
-            save();
+            saveFolder(id);
+            saveFolder(parentId);
             // Renderiza el icono en el escritorio pero queda oculto (vive dentro del padre)
             renderFolderIcon(folders[id]);
             var iconEl = document.getElementById(id);
@@ -1337,7 +1485,11 @@ window.notifSystem = (function() {
                     parentsToRefresh.push(fid);
                 }
             });
-            delete folders[id]; save();
+            delete folders[id];
+            /* Borrado real en SQL (CASCADE limpia desktop_folder_items) */
+            saveFolder(id);
+            /* Persistir los padres que la tenían dentro */
+            parentsToRefresh.forEach(saveFolder);
             var el = document.getElementById(id); if(el) el.remove();
             if(openFolderWindows[id]) closeFolderWindowById(id);
             // Refrescar ventanas padre abiertas para que ya no muestren la carpeta
@@ -1454,13 +1606,16 @@ window.notifSystem = (function() {
         return false;
     }
 
-    /* Elimina iconId de cualquier carpeta donde esté (sin tocar el DOM) */
-    function unlinkFromAnyFolder(iconId){
+    /* Quita iconId de toda carpeta donde esté y devuelve la lista de
+       carpetas afectadas, para que el caller las persista con saveFolder(id). */
+    function unlinkAndCollect(iconId){
+        var touched = [];
         Object.keys(folders).forEach(function(fid){
             var f = folders[fid];
             var idx = (f.children||[]).indexOf(iconId);
-            if(idx !== -1) f.children.splice(idx, 1);
+            if(idx !== -1){ f.children.splice(idx, 1); touched.push(fid); }
         });
+        return touched;
     }
 
     function tryDrop(iconId, x, y){
@@ -1471,9 +1626,10 @@ window.notifSystem = (function() {
             if(folderId === iconId) return false;                           // ella misma
             if(folders[iconId] && isDescendant(folderId, iconId)) return false; // ciclo
             if(folders[folderId] && folders[folderId].children.indexOf(iconId) === -1){
-                unlinkFromAnyFolder(iconId);
+                var touched = unlinkAndCollect(iconId);
                 folders[folderId].children.push(iconId);
-                save();
+                touched.push(folderId);
+                touched.forEach(saveFolder);
             }
             var icon = document.getElementById(iconId); if(icon) icon.style.display = 'none';
             if(openFolderWindows[folderId]) renderFolderContent(folderId);
@@ -1487,9 +1643,10 @@ window.notifSystem = (function() {
             if(folders[iconId] && isDescendant(overFid, iconId)) return false;
             var f = folders[overFid];
             if(f.children.indexOf(iconId) === -1){
-                unlinkFromAnyFolder(iconId);
+                var touched2 = unlinkAndCollect(iconId);
                 f.children.push(iconId);
-                save();
+                touched2.push(overFid);
+                touched2.forEach(saveFolder);
             }
             var ic = document.getElementById(iconId); if(ic) ic.style.display = 'none';
             renderFolderContent(overFid);
@@ -1592,7 +1749,8 @@ window.notifSystem = (function() {
         if(!from || !to || fromId === toId) return;
         from.children = (from.children||[]).filter(function(c){ return c !== iconId; });
         if((to.children = to.children || []).indexOf(iconId) === -1) to.children.push(iconId);
-        save();
+        saveFolder(fromId);
+        saveFolder(toId);
         if(openFolderWindows[fromId]) renderFolderContent(fromId);
         if(openFolderWindows[toId])   renderFolderContent(toId);
     }
@@ -1600,7 +1758,7 @@ window.notifSystem = (function() {
     function removeFromFolderAt(folderId, iconId, screenX, screenY){
         var f = folders[folderId]; if(!f) return;
         f.children = (f.children||[]).filter(function(c){ return c !== iconId; });
-        save();
+        saveFolder(folderId);
         var el = document.getElementById(iconId);
         if(el && window.DesktopIcons){
             el.style.display = '';
@@ -1625,7 +1783,7 @@ window.notifSystem = (function() {
     function removeFromFolder(folderId, iconId){
         var f = folders[folderId]; if(!f) return;
         f.children = (f.children||[]).filter(function(c){ return c !== iconId; });
-        save();
+        saveFolder(folderId);
         var el = document.getElementById(iconId);
         if(el){
             el.style.display = '';
