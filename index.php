@@ -1,4 +1,9 @@
 <?php
+/* No imprimir warnings/notices en la salida (Windows XAMPP los trae On por
+   defecto y romperían el HTML/JS). Se siguen registrando en el log. */
+@ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 header('Content-Type: text/html; charset=UTF-8');
 session_start();
 require_once __DIR__ . '/assets/config.php';

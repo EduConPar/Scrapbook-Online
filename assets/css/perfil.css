@@ -935,6 +935,9 @@
     gap: 6px;
     flex-shrink: 0;
 }
+/* En el header de "En curso" el pager se empuja a la derecha; el botón de
+   plegar (margin-left:auto) queda después sin pelear por el hueco. */
+#profile-encurso-pager { margin-left: auto; }
 .profile-catview-pager:empty {
     display: none;
 }

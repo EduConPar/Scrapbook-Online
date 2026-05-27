@@ -6,6 +6,14 @@
    - env(KEY, DEFAULT) lo expone al resto de la app
    - Las constantes y $loginUsers se definen aquí
    ───────────────────────────────────────────────────────── */
+
+/* NUNCA imprimir warnings/notices en la salida: en XAMPP de Windows
+   display_errors viene On por defecto y un aviso de PHP se colaría dentro
+   del HTML/JS/JSON (rompiendo el script o la respuesta de las APIs).
+   Como config.php lo incluye TODO punto de entrada, esto cubre la app entera.
+   Los errores se siguen registrando en el log del servidor. */
+@ini_set('display_errors', '0');
+error_reporting(E_ALL);
 if (!function_exists('env')) {
     function _envLoad(): void {
         if (isset($GLOBALS['_env'])) return;

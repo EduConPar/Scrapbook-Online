@@ -59,7 +59,7 @@ function pf_emptyProfile(): array {
     return ['quote'=>'','posts'=>[],'bio'=>'','pronouns'=>'','age'=>'','country'=>'',
             'steam'=>'','discord'=>'','twitter'=>'','instagram'=>'','following'=>[]];
 }
-function pf_emptyLists(): array { return ['movies'=>[],'books'=>[],'games'=>[],'music'=>[]]; }
+function pf_emptyLists(): array { return ['movies'=>[],'series'=>[],'books'=>[],'games'=>[],'music'=>[]]; }
 
 /* Lee la fila de profile o devuelve plantilla vacía. */
 function pf_loadProfileRow(PDO $pdo, int $uid): array {
@@ -347,7 +347,7 @@ case 'save-lists': {
     $b        = jsonBody();
     $category = $b['category'] ?? '';
     $items    = $b['items']    ?? null;
-    if (!in_array($category, ['movies','books','games','music'], true) || !is_array($items)) jsonError('Datos inválidos');
+    if (!in_array($category, ['movies','series','books','games','music'], true) || !is_array($items)) jsonError('Datos inválidos');
     $isMusic = ($category === 'music');
 
     /* Cargar el estado actual de la categoría: items propios + ids
@@ -555,7 +555,7 @@ case 'get-item-collabs': {
     if (!$uid) jsonError('Usuario no encontrado', 500);
     $category = $_GET['category'] ?? '';
     $itemId   = (int)($_GET['itemId'] ?? 0);
-    if (!in_array($category, ['movies','books','games','music'], true) || !$itemId) jsonError('Datos inválidos');
+    if (!in_array($category, ['movies','series','books','games','music'], true) || !$itemId) jsonError('Datos inválidos');
 
     $stmt = $pdo->prepare("SELECT i.owner_id, ou.user_key AS owner_key
                            FROM list_items i JOIN usuarios ou ON i.owner_id = ou.id
@@ -582,7 +582,7 @@ case 'send-item-invite': {
     $toUser   = preg_replace('/[^A-Za-z0-9_-]/', '', $b['toUser'] ?? '');
     $category = $b['category'] ?? '';
     $itemId   = (int)($b['itemId'] ?? 0);
-    if (!$toUser || !$itemId || !in_array($category, ['movies','books','games','music'], true)) jsonError('Datos inválidos');
+    if (!$toUser || !$itemId || !in_array($category, ['movies','series','books','games','music'], true)) jsonError('Datos inválidos');
     if (!isset($loginUsers[$toUser])) jsonError('Usuario destino inválido');
     if ($toUser === $userKey)          jsonError('No puedes invitarte a ti mismo');
     $toUid = pf_uid($pdo, $toUser);
@@ -673,7 +673,7 @@ case 'leave-collab': {
     $act      = $b['action']   ?? '';
     $category = $b['category'] ?? '';
     $itemId   = (int)($b['itemId'] ?? 0);
-    if (!in_array($act, ['leave','remove'], true) || !in_array($category, ['movies','books','games','music'], true) || !$itemId) {
+    if (!in_array($act, ['leave','remove'], true) || !in_array($category, ['movies','series','books','games','music'], true) || !$itemId) {
         jsonError('Datos inválidos');
     }
 
@@ -846,7 +846,7 @@ case 'notify-review': {
     $title    = mb_substr(trim($b['itemTitle'] ?? ''), 0, 120);
     $mtype    = preg_replace('/[^a-z]/i', '', $b['mtype']     ?? '');
     if (!$category || !$title) jsonError('Faltan datos');
-    if (!in_array($category, ['movies','books','games','music'], true)) jsonError('Categoría inválida');
+    if (!in_array($category, ['movies','series','books','games','music'], true)) jsonError('Categoría inválida');
     if ($mtype !== '' && !in_array($mtype, ['album','song'], true)) $mtype = '';
 
     /* Notificar a todos mis followers (los que me siguen) */
@@ -996,7 +996,7 @@ case 'melon-reviews': {
     $period = $_GET['period'] ?? 'alltime';
     $cat    = $_GET['cat']    ?? 'movies';
     $type   = $_GET['type']   ?? '';
-    if (!in_array($cat, ['movies','books','games','music'], true)) jsonError('Categoría inválida');
+    if (!in_array($cat, ['movies','series','books','games','music'], true)) jsonError('Categoría inválida');
     if (!in_array($period, ['year','recent','alltime'], true))     jsonError('Período inválido');
     if ($type !== '' && !in_array($type, ['album','song'], true))  jsonError('Tipo inválido');
     $yearAgo = time() - 365 * 24 * 60 * 60;

@@ -1,4 +1,11 @@
 <?php
+/* No imprimir warnings/notices en la salida: en algunos XAMPP (Windows)
+   display_errors viene On por defecto y un aviso de PHP se colaría dentro
+   del HTML/JS, rompiendo el script (p.ej. "taskbarManager is not defined").
+   Los errores se siguen registrando en el log del servidor. */
+@ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 if (!isset($desktopLabel)) { header('Location: index.php'); exit; }
 header('Content-Type: text/html; charset=UTF-8');
 

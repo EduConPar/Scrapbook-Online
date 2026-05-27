@@ -23,6 +23,11 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     <span class="profile-nav-label">Películas</span>
                     <span class="profile-nav-count" id="profile-count-movies">—</span>
                 </div>
+                <div class="profile-nav-item" data-cat="series">
+                    <span class="profile-nav-icon">📺</span>
+                    <span class="profile-nav-label">Series</span>
+                    <span class="profile-nav-count" id="profile-count-series">—</span>
+                </div>
                 <div class="profile-nav-item" data-cat="books">
                     <span class="profile-nav-icon">📚</span>
                     <span class="profile-nav-label">Libros</span>
@@ -128,7 +133,10 @@ require_once dirname(__DIR__) . '/assets/config.php';
                         <div class="profile-catview-username"><?php echo htmlspecialchars($desktopLabel); ?></div>
                     </div>
                     <div id="profile-catview-encurso">
-                        <div class="profile-encurso-heading">▶ En curso</div>
+                        <div class="profile-encurso-heading">
+                            <span>▶ En curso</span>
+                            <div class="profile-catview-pager" id="profile-encurso-pager"></div>
+                        </div>
                         <div id="profile-catview-encurso-slots"></div>
                     </div>
                 </div>
@@ -195,6 +203,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                 <div class="profile-social-head" id="profile-melon-title">⭐ Melon reviews</div>
                 <div id="profile-melon-cats">
                     <button class="button melon-cat-btn" data-mcat="movies">🎬 Películas</button>
+                    <button class="button melon-cat-btn" data-mcat="series">📺 Series</button>
                     <button class="button melon-cat-btn" data-mcat="books">📚 Libros</button>
                     <button class="button melon-cat-btn" data-mcat="games">🎮 Videojuegos</button>
                     <button class="button melon-cat-btn" data-mcat="music" data-mtype="album">💿 Álbumes</button>
@@ -327,6 +336,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
             <textarea id="profile-review-comment" rows="4" style="resize:vertical;width:100%;box-sizing:border-box;" placeholder="Escribe tu opinión..."></textarea>
         </div>
         <div class="field-row" style="justify-content:flex-end;gap:4px;">
+            <button class="button" id="profile-review-window-delete" style="margin-right:auto;display:none;">🗑 Eliminar</button>
             <button class="button" id="profile-review-window-cancel">Cancelar</button>
             <button class="button" id="profile-review-window-submit">Guardar</button>
         </div>
@@ -482,7 +492,7 @@ var PROFILE_USERS = <?php
     var profileWin = document.getElementById('profile-window');
     if (!profileWin) return;
 
-    var lists        = { movies: [], books: [], games: [], music: [] };
+    var lists        = { movies: [], series: [], books: [], games: [], music: [] };
     var loaded       = false;
     var addDialogCat = null;
     var currentCat   = null;
@@ -490,13 +500,14 @@ var PROFILE_USERS = <?php
 
     var CATS = {
         movies: { label: 'Películas',   icon: '🎬' },
+        series: { label: 'Series',      icon: '📺' },
         books:  { label: 'Libros',      icon: '📚' },
         games:  { label: 'Videojuegos', icon: '🎮' },
         music:  { label: 'Música',      icon: '🎵' }
     };
 
-    var DONE_LABELS = { movies: 'Vistas', books: 'Leídas', games: 'Jugadas' };
-    var CAT_VERBS   = { movies: 'ver', books: 'leer', games: 'jugar', music: 'escuchar' };
+    var DONE_LABELS = { movies: 'Vistas', series: 'Vistas', books: 'Leídas', games: 'Jugadas' };
+    var CAT_VERBS   = { movies: 'ver', series: 'ver', books: 'leer', games: 'jugar', music: 'escuchar' };
 
     var STATUS_CYCLE  = ['pending', 'in-progress', 'completed'];
     var STATUS_LABELS = {
@@ -513,7 +524,7 @@ var PROFILE_USERS = <?php
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data && !data.error) {
-                    ['movies', 'books', 'games', 'music'].forEach(function(k) {
+                    ['movies', 'series', 'books', 'games', 'music'].forEach(function(k) {
                         lists[k] = Array.isArray(data[k]) ? data[k] : [];
                     });
                 }
@@ -523,6 +534,7 @@ var PROFILE_USERS = <?php
     }
 
     function saveCategory(cat) {
+        var prevIds = (lists[cat] || []).map(function(x){ return x.id; }).join(',');
         fetch('assets/profile/api.php?action=save-lists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -533,12 +545,26 @@ var PROFILE_USERS = <?php
                  (los que llevaban id "item_...") y devuelve el snapshot
                  canónico. Reemplazar la lista local para que el próximo
                  save no duplique. */
-              if (d && Array.isArray(d.items)) lists[cat] = d.items;
+              if (d && Array.isArray(d.items)) {
+                  lists[cat] = d.items;
+                  /* Si los IDs cambiaron (item nuevo recibió su id real),
+                     re-renderizar la vista activa para que los closures del
+                     DOM apunten a los nuevos objetos. Sin esto, un ítem recién
+                     creado no respondería a clicks hasta recargar. */
+                  var newIds = lists[cat].map(function(x){ return x.id; }).join(',');
+                  if (newIds !== prevIds) {
+                      if (cat === 'music' && currentCat === 'music') {
+                          renderMusicView(currentMusicTab); renderMusicDestacados();
+                      } else if (currentCat === cat) {
+                          renderCatView(cat); renderCatEncurso(cat);
+                      }
+                  }
+              }
           }).catch(function() {});
     }
 
     function updateCounts() {
-        ['movies', 'books', 'games'].forEach(function(cat) {
+        ['movies', 'series', 'books', 'games'].forEach(function(cat) {
             var el = document.getElementById('profile-count-' + cat);
             if (el) el.textContent = lists[cat].length;
         });
@@ -581,14 +607,22 @@ var PROFILE_USERS = <?php
         if (_ctxMenu && !_ctxMenu.contains(e.target)) hideCtxMenu();
     });
 
-    /* ──── En curso: 3 slots ──── */
+    /* ──── En curso: 3 slots por página, paginación si hay más ──── */
+    var ENCURSO_PER_PAGE = 3;
+    var _encursoPage = {};   /* { cat: pageIndex } */
     function renderCatEncurso(cat) {
         var slotsEl = document.getElementById('profile-catview-encurso-slots');
         if (!slotsEl) return;
         slotsEl.innerHTML = '';
         var inProgress = (lists[cat] || []).filter(function(i) { return i.status === 'in-progress'; });
-        for (var s = 0; s < 3; s++) {
-            var item = inProgress[s] || null;
+        var totalPages = Math.max(1, Math.ceil(inProgress.length / ENCURSO_PER_PAGE));
+        if (_encursoPage[cat] === undefined) _encursoPage[cat] = 0;
+        if (_encursoPage[cat] >= totalPages) _encursoPage[cat] = totalPages - 1;
+        if (_encursoPage[cat] < 0) _encursoPage[cat] = 0;
+        var pageStart = _encursoPage[cat] * ENCURSO_PER_PAGE;
+        var pageItems = inProgress.slice(pageStart, pageStart + ENCURSO_PER_PAGE);
+        for (var s = 0; s < ENCURSO_PER_PAGE; s++) {
+            var item = pageItems[s] || null;
             var slot = document.createElement('div');
             slot.className = 'profile-encurso-slot' + (item ? ' filled' : '');
 
@@ -659,7 +693,7 @@ var PROFILE_USERS = <?php
                         }
                         showCtxMenu(e.clientX, e.clientY, [
                             { label: '✓ Completar', action: function() {
-                                var idx = lists[cat].indexOf(it);
+                                var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
                                     lists[cat][idx].status = 'completed';
                                     saveCategory(cat);
@@ -669,7 +703,7 @@ var PROFILE_USERS = <?php
                                 }
                             }},
                             { label: '✕ Quitar de en curso', action: function() {
-                                var idx = lists[cat].indexOf(it);
+                                var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
                                     lists[cat][idx].status = 'pending';
                                     saveCategory(cat);
@@ -686,6 +720,35 @@ var PROFILE_USERS = <?php
             }
 
             slotsEl.appendChild(slot);
+        }
+        /* Paginación en el header (mismo patrón que Pendientes/Vistas):
+           contenedor #profile-encurso-pager dentro de .profile-encurso-heading.
+           No ocupa espacio del área de slots → no los encoge. */
+        var pagerEl = document.getElementById('profile-encurso-pager');
+        if (pagerEl) {
+            pagerEl.innerHTML = '';
+            if (inProgress.length > ENCURSO_PER_PAGE) {
+                var prev = document.createElement('button');
+                prev.className = 'button'; prev.textContent = '◄';
+                prev.disabled = (_encursoPage[cat] <= 0);
+                prev.addEventListener('click', function(){
+                    _encursoPage[cat] = Math.max(0, _encursoPage[cat] - 1);
+                    renderCatEncurso(cat);
+                });
+                pagerEl.appendChild(prev);
+                var info = document.createElement('span');
+                info.className = 'profile-catview-pager-info';
+                info.textContent = (_encursoPage[cat] + 1) + ' / ' + totalPages;
+                pagerEl.appendChild(info);
+                var next = document.createElement('button');
+                next.className = 'button'; next.textContent = '►';
+                next.disabled = (_encursoPage[cat] >= totalPages - 1);
+                next.addEventListener('click', function(){
+                    _encursoPage[cat] = Math.min(totalPages - 1, _encursoPage[cat] + 1);
+                    renderCatEncurso(cat);
+                });
+                pagerEl.appendChild(next);
+            }
         }
     }
 
@@ -978,6 +1041,8 @@ var PROFILE_USERS = <?php
         var starsEl = document.getElementById('profile-review-stars');
         var commentEl = document.getElementById('profile-review-comment');
         var item = lists[cat][itemIdx];
+        if (!item) return;
+        var itemId = item.id;   /* re-resolver por id en submit/delete */
         document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
@@ -1028,19 +1093,31 @@ var PROFILE_USERS = <?php
         var closeBtn  = document.getElementById('profile-review-window-close');
         var cancelBtn = document.getElementById('profile-review-window-cancel');
         var submitBtn = document.getElementById('profile-review-window-submit');
+        var deleteBtn = document.getElementById('profile-review-window-delete');
         var newClose  = closeBtn.cloneNode(true);  closeBtn.parentNode.replaceChild(newClose,  closeBtn);
         var newCancel = cancelBtn.cloneNode(true); cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
+        var newDelete = deleteBtn.cloneNode(true); deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
+        /* Botón Eliminar solo si ya hay una reseña guardada */
+        newDelete.style.display = (item.review && item.review.stars) ? '' : 'none';
 
         function closeWin() { win.style.display = 'none'; }
         newClose.addEventListener('click', closeWin);
         newCancel.addEventListener('click', closeWin);
         newSubmit.addEventListener('click', function() {
             if (!sel) return;
-            var item = lists[cat][itemIdx];
-            item.review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            var i = lists[cat].findIndex(function(x){ return x.id === itemId; });
+            if (i === -1) { closeWin(); return; }
+            lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
             saveCategory(cat);
-            notifyReviewToFollowers(cat, item.title, item.type);
+            notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
+            renderCatView(cat);
+            closeWin();
+        });
+        newDelete.addEventListener('click', function() {
+            var i = lists[cat].findIndex(function(x){ return x.id === itemId; });
+            if (i !== -1) delete lists[cat][i].review;
+            saveCategory(cat);
             renderCatView(cat);
             closeWin();
         });
@@ -1157,7 +1234,9 @@ var PROFILE_USERS = <?php
             return;
         }
         items.forEach(function(item) {
-            var idx  = lists[cat].indexOf(item);
+            /* idx ya no se captura por posición: lists[cat] puede haber sido
+               reemplazado por la respuesta canónica de saveCategory, lo que
+               invalidaría el índice fijo. Resolvemos por id en cada click. */
             var card = document.createElement('div');
             card.className = 'profile-gallery-card';
 
@@ -1240,9 +1319,11 @@ var PROFILE_USERS = <?php
             footer.className = 'profile-gallery-footer';
             footer.dataset.status = item.status || 'pending';
             footer.textContent = STATUS_LABELS[item.status || 'pending'];
-            (function(i, el) {
+            (function(it, el) {
                 el.addEventListener('click', function() {
                     if (viewingUser) return;
+                    var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
+                    if (i === -1) return;
                     var cur  = el.dataset.status;
                     var next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(cur) + 1) % STATUS_CYCLE.length];
                     el.dataset.status    = next;
@@ -1252,7 +1333,7 @@ var PROFILE_USERS = <?php
                     renderCatView(cat);
                     renderCatEncurso(cat);
                 });
-            })(idx, footer);
+            })(item, footer);
 
             card.appendChild(tb);
             card.appendChild(imgWrap);
@@ -1274,13 +1355,12 @@ var PROFILE_USERS = <?php
                         if (it.status === 'completed') {
                             var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
                             menuItems.push({ label: reviewLabel, action: function() {
-                                var i = lists[cat].indexOf(it);
+                                var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) showReviewWindow(cat, i);
                             }});
                         } else {
-                            var slots = (lists[cat] || []).filter(function(i) { return i.status === 'in-progress'; }).length;
-                            menuItems.push({ label: '▶ Poner en curso', disabled: slots >= 3, action: function() {
-                                var i = lists[cat].indexOf(it);
+                            menuItems.push({ label: '▶ Poner en curso', action: function() {
+                                var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) {
                                     lists[cat][i].status = 'in-progress';
                                     saveCategory(cat);
@@ -1306,7 +1386,7 @@ var PROFILE_USERS = <?php
                         } else {
                             menuItems.push({ label: '✕ Eliminar', action: function() {
                                 confirmFn('¿Eliminar "' + it.title + '"?', 'Eliminar', function() {
-                                    var i = lists[cat].indexOf(it);
+                                    var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                     if (i !== -1) {
                                         lists[cat].splice(i, 1);
                                         saveCategory(cat);
@@ -1540,9 +1620,7 @@ var PROFILE_USERS = <?php
     }
 
     (function setupCollapsibles() {
-        document.querySelectorAll('.profile-catview-section-head').forEach(function(h) { makeCollapsible(h); });
-        document.querySelectorAll('#profile-catview-encurso .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
-        document.querySelectorAll('#music-catview-destacados .profile-encurso-heading').forEach(function(h) { makeCollapsible(h); });
+        /* Pendientes / Vistas / En curso / Destacados NO son plegables (sin flecha ▼). */
         /* Mis Listas pliega sólo su contenedor de nav (NO el resto del sidebar) */
         var listasHd  = document.getElementById('profile-listas-heading');
         var listasNav = document.getElementById('profile-listas-nav');
@@ -1639,6 +1717,7 @@ var PROFILE_USERS = <?php
             } else if (n.type === 'review') {
                 var noun;
                 if (n.category === 'movies')      noun = 'la película';
+                else if (n.category === 'series') noun = 'la serie';
                 else if (n.category === 'books')  noun = 'el libro';
                 else if (n.category === 'games')  noun = 'el videojuego';
                 else if (n.category === 'music')  noun = (n.mtype === 'album') ? 'el álbum' : 'la canción';
@@ -2005,8 +2084,8 @@ var PROFILE_USERS = <?php
 
     /* ──── Melon reviews ──── */
     var MELON_LABELS = { year: 'Mejor del año', recent: 'Reciente', alltime: 'Todo el tiempo' };
-    var MELON_ICONS  = { movies: '🎬', books: '📚', games: '🎮', music: '🎵' };
-    var MELON_MUST_VERBS = { movies: 'watch', books: 'read', games: 'play', music: 'listen' };
+    var MELON_ICONS  = { movies: '🎬', series: '📺', books: '📚', games: '🎮', music: '🎵' };
+    var MELON_MUST_VERBS = { movies: 'watch', series: 'watch', books: 'read', games: 'play', music: 'listen' };
     var melonPeriod = null;
     var melonCat    = null;
     var melonType   = null;
@@ -2831,7 +2910,7 @@ var PROFILE_USERS = <?php
                         showCtxMenu(e.clientX, e.clientY, [
                             { label: '▶ Reproducir', action: function() { playMusicItem(it); } },
                             { label: '★ Quitar de destacados', action: function() {
-                                var idx = lists.music.indexOf(it);
+                                var idx = lists.music.findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) { lists.music[idx].featured = false; saveCategory('music'); renderMusicDestacados(); renderMusicView(currentMusicTab); }
                             }},
                             { label: '👥 Colaboradores', action: function() { showCollabDialog('music', it); }}
@@ -2895,7 +2974,8 @@ var PROFILE_USERS = <?php
             return;
         }
         items.forEach(function(item) {
-            var idx = lists.music.indexOf(item);
+            /* idx no se captura: lists.music puede haber sido reemplazado
+               por la respuesta de saveCategory. Resolvemos por id en cada click. */
             var row = document.createElement('div');
             row.className = 'music-list-row' + (item.featured ? ' music-list-featured' : '');
 
@@ -2962,7 +3042,13 @@ var PROFILE_USERS = <?php
             }
             row.appendChild(right);
 
-            (function(it, i) {
+            (function(it) {
+                /* Resolver el índice por id en cada click — `lists.music`
+                   puede haber sido reemplazado por la respuesta canónica de
+                   saveCategory tras un save anterior. */
+                function curIdx(){
+                    return lists.music.findIndex(function(x){ return x.id === it.id; });
+                }
                 row.addEventListener('contextmenu', function(e) {
                     e.preventDefault();
                     if (viewingUser) {
@@ -2978,15 +3064,19 @@ var PROFILE_USERS = <?php
                     var featuredCount = lists.music.filter(function(x) { return x.featured; }).length;
                     if (it.featured) {
                         menuItems.push({ label: '★ Quitar de destacados', action: function() {
+                            var i = curIdx(); if (i === -1) return;
                             lists.music[i].featured = false; saveCategory('music'); renderMusicDestacados(); renderMusicView(currentMusicTab);
                         }});
                     } else {
                         menuItems.push({ label: '★ Destacar', disabled: featuredCount >= 3, action: function() {
+                            var i = curIdx(); if (i === -1) return;
                             lists.music[i].featured = true; saveCategory('music'); renderMusicDestacados(); renderMusicView(currentMusicTab);
                         }});
                     }
                     var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
-                    menuItems.push({ label: reviewLabel, action: function() { showMusicReviewWindow(i); }});
+                    menuItems.push({ label: reviewLabel, action: function() {
+                        var i = curIdx(); if (i !== -1) showMusicReviewWindow(i);
+                    }});
                     menuItems.push({ label: '👥 Colaboradores', action: function() { showCollabDialog('music', it); }});
                     if (isCollab) {
                         menuItems.push({ label: '🚪 Abandonar actividad', action: function() {
@@ -3002,13 +3092,14 @@ var PROFILE_USERS = <?php
                     } else {
                         menuItems.push({ label: '✕ Eliminar', action: function() {
                             confirmFn('¿Eliminar "' + it.title + '"?', 'Eliminar', function() {
+                                var i = curIdx(); if (i === -1) return;
                                 lists.music.splice(i, 1); saveCategory('music'); updateCounts(); renderMusicView(currentMusicTab); renderMusicDestacados();
                             });
                         }});
                     }
                     showCtxMenu(e.clientX, e.clientY, menuItems);
                 });
-            })(item, idx);
+            })(item);
 
             listEl.appendChild(row);
         });
@@ -3019,6 +3110,10 @@ var PROFILE_USERS = <?php
         var starsEl = document.getElementById('profile-review-stars');
         var commentEl = document.getElementById('profile-review-comment');
         var item = lists.music[itemIdx];
+        if (!item) return;
+        /* id estable para re-resolver el ítem en submit/delete, por si
+           lists.music fue reemplazado por un saveCategory intermedio. */
+        var itemId = item.id;
         document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
@@ -3065,10 +3160,20 @@ var PROFILE_USERS = <?php
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         newSubmit.addEventListener('click', function() {
             if (!sel) return;
-            var mItem = lists.music[itemIdx];
-            mItem.review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            var mi = lists.music.findIndex(function(x){ return x.id === itemId; });
+            if (mi === -1) { closeWin(); return; }
+            lists.music[mi].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
             saveCategory('music');
-            notifyReviewToFollowers('music', mItem.title, mItem.type);
+            notifyReviewToFollowers('music', lists.music[mi].title, lists.music[mi].type);
+            renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
+        });
+        var deleteBtn = document.getElementById('profile-review-window-delete');
+        var newDelete = deleteBtn.cloneNode(true); deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
+        newDelete.style.display = (item.review && item.review.stars) ? '' : 'none';
+        newDelete.addEventListener('click', function() {
+            var mi = lists.music.findIndex(function(x){ return x.id === itemId; });
+            if (mi !== -1) delete lists.music[mi].review;
+            saveCategory('music');
             renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
         });
     }
