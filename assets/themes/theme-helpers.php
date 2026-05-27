@@ -238,9 +238,10 @@ $ANGIE_THEME_COLORS = [
 ];
 
 function defaultThemeForUser($userKey) {
-    global $CAPI_THEME_COLORS, $ANGIE_THEME_COLORS;
-    if ($userKey === 'user1') return ['name' => 'Capi',  'colors' => $CAPI_THEME_COLORS];
-    if ($userKey === 'user2') return ['name' => 'Angie', 'colors' => $ANGIE_THEME_COLORS];
+    /* Sin tema por defecto: TODOS los perfiles usan los tokens Win98 de
+       tokens.css salvo que el usuario active uno custom. Las paletas
+       $CAPI_THEME_COLORS / $ANGIE_THEME_COLORS se conservan abajo como
+       referencia por si se quieren recrear desde la app de Temas. */
     return null;
 }
 

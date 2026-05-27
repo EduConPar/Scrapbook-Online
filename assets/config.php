@@ -29,6 +29,10 @@ if (!function_exists('env')) {
             if ($len >= 2 && (($val[0] === '"' && $val[$len-1] === '"') || ($val[0] === "'" && $val[$len-1] === "'"))) {
                 $val = substr($val, 1, -1);
             }
+            /* Tolerar comillas/espacios sueltos: hostnames y credenciales no
+               contienen comillas legítimas — si quedaron por copy-paste,
+               las saneamos para evitar errores de DNS y de conexión a BD. */
+            $val = trim($val, " \t\"'");
             $GLOBALS['_env'][$key] = $val;
         }
     }
@@ -56,6 +60,7 @@ define('DB_PASS', env('DB_PASS', ''));
    incluye antes que db.php en muchos sitios, así que no podemos depender
    de $GLOBALS['pdo'] aquí). */
 $loginUsers = [];
+$GLOBALS['_loginUsersError'] = null;
 function ensureLoginUsers(): void {
     global $loginUsers;
     if (!empty($loginUsers)) return;
@@ -64,15 +69,41 @@ function ensureLoginUsers(): void {
             ? $GLOBALS['pdo']
             : new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
                        DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-        $stmt = $pdo->query("SELECT user_key, label, password FROM usuarios ORDER BY id ASC");
-        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            if (!$r['user_key']) continue;
-            $loginUsers[$r['user_key']] = [
-                'label'    => $r['label'] ?: $r['user_key'],
+        $stmt = $pdo->query("SELECT id, user_key, label, password FROM usuarios ORDER BY id ASC");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        /* Auto-backfill: si hay filas sin user_key (legacy o import parcial),
+           generamos uno con 'user{id}' y lo persistimos. Una sola vez. */
+        $needsBackfill = false;
+        foreach ($rows as $r) {
+            if (empty($r['user_key'])) { $needsBackfill = true; break; }
+        }
+        if ($needsBackfill) {
+            try {
+                $upd = $pdo->prepare("UPDATE usuarios SET user_key = ? WHERE id = ?");
+                foreach ($rows as &$r) {
+                    if (empty($r['user_key'])) {
+                        $r['user_key'] = 'user' . (int)$r['id'];
+                        $upd->execute([$r['user_key'], (int)$r['id']]);
+                    }
+                }
+                unset($r);
+            } catch (Throwable $e) { /* sin permiso UPDATE → seguimos con fallback en memoria */ }
+        }
+
+        foreach ($rows as $r) {
+            $key = $r['user_key'] ?: ('user' . (int)$r['id']);
+            $loginUsers[$key] = [
+                'label'    => $r['label'] ?: $key,
                 'password' => $r['password'],
             ];
         }
-    } catch (Throwable $e) { /* DB caída → array vacío, el caller lo gestiona */ }
+        if (empty($loginUsers)) {
+            $GLOBALS['_loginUsersError'] = 'La tabla `usuarios` está vacía. Importa el SQL.';
+        }
+    } catch (Throwable $e) {
+        $GLOBALS['_loginUsersError'] = 'BD: ' . $e->getMessage();
+    }
 }
 ensureLoginUsers();
 
