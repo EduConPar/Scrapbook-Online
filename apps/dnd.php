@@ -390,6 +390,107 @@ body{
     box-shadow:1px 1px 4px rgba(0,0,0,.3);
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── DICE ROLLER ── */
+#dice-panel{
+    position:fixed;top:90px;right:30px;z-index:9995;
+    width:260px;
+    background:var(--win-bg);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+    box-shadow:3px 3px 10px rgba(0,0,0,.4);
+    user-select:none;
+}
+#dice-titlebar{
+    background:linear-gradient(to right, var(--titlebar-start), var(--titlebar-end));
+    color:var(--titlebar-text);
+    font-weight:bold;font-size:11px;
+    padding:3px 6px;display:flex;align-items:center;justify-content:space-between;
+    cursor:move;
+}
+#dice-close{
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:1px solid var(--bezel-light-1);border-left:1px solid var(--bezel-light-1);
+    border-right:1px solid var(--bezel-dark-2);border-bottom:1px solid var(--bezel-dark-2);
+    width:16px;height:14px;line-height:1;font-size:9px;cursor:pointer;padding:0;
+}
+#dice-close:active{filter:brightness(0.9);}
+#dice-body{padding:10px;}
+#dice-buttons{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-bottom:10px;}
+.dice-btn{
+    font-family:'ms_sans_serif',sans-serif;font-size:11px;font-weight:bold;
+    padding:3px 8px;cursor:pointer;min-width:38px;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+}
+.dice-btn:hover{filter:brightness(1.08);}
+.dice-btn:active{
+    border-top:2px solid var(--bezel-dark-2);border-left:2px solid var(--bezel-dark-2);
+    border-right:2px solid var(--bezel-light-1);border-bottom:2px solid var(--bezel-light-1);
+}
+#dice-stage{
+    height:150px;background:var(--inset-bg);
+    border:2px solid var(--bezel-dark-2);
+    box-shadow:inset 1px 1px 3px rgba(0,0,0,.4);
+    margin-bottom:8px;overflow:hidden;position:relative;
+}
+#dice-canvas{ width:100%;height:100%;display:block;cursor:pointer; }
+/* Capa de números: un badge por dado, posicionado proyectando su 3D → 2D */
+#dice-overlays{ position:absolute;inset:0;pointer-events:none;z-index:2; }
+.dice-val{
+    position:absolute;transform:translate(-50%,-50%);
+    font-family:'ms_sans_serif','Microsoft Sans Serif',sans-serif;
+    font-weight:bold;font-size:18px;color:var(--accent-text);
+    text-shadow:0 1px 2px rgba(0,0,0,.6), 0 0 3px rgba(0,0,0,.5);
+    line-height:1;white-space:nowrap;
+}
+#dice-hint{
+    position:absolute;bottom:3px;left:0;right:0;text-align:center;
+    font-size:8px;color:var(--text-muted);pointer-events:none;z-index:2;
+    opacity:.8;
+}
+#dice-actions{ display:flex;gap:6px;justify-content:center;align-items:stretch;margin-bottom:8px; }
+#dice-actions .tb-btn{ padding:3px 10px;font-weight:bold; }
+/* Botón modificador: + arriba, − abajo */
+#dice-mod-btn{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    width:26px;line-height:1;cursor:pointer;padding:0;
+    background:var(--btn-bg);color:var(--btn-text);
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+}
+#dice-mod-btn:hover{ filter:brightness(1.08); }
+#dice-mod-btn:active{
+    border-top:2px solid var(--bezel-dark-2);border-left:2px solid var(--bezel-dark-2);
+    border-right:2px solid var(--bezel-light-1);border-bottom:2px solid var(--bezel-light-1);
+}
+.dmod-plus{ font-size:11px;font-weight:bold; }
+.dmod-minus{ font-size:13px;font-weight:bold;margin-top:-2px; }
+#dice-result{
+    text-align:center;font-size:12px;color:var(--text);min-height:16px;
+}
+/* Modal "Añadir modificador" (dentro del panel de dados) */
+#dice-mod-modal{
+    position:absolute;inset:0;z-index:10;
+    background:rgba(0,0,0,.35);
+    display:flex;align-items:center;justify-content:center;
+}
+#dice-mod-box{
+    background:var(--win-bg);width:180px;
+    border-top:2px solid var(--bezel-light-1);border-left:2px solid var(--bezel-light-1);
+    border-right:2px solid var(--bezel-dark-2);border-bottom:2px solid var(--bezel-dark-2);
+    box-shadow:2px 2px 8px rgba(0,0,0,.4);
+}
+.dice-mod-title{
+    background:linear-gradient(to right, var(--titlebar-start), var(--titlebar-end));
+    color:var(--titlebar-text);font-weight:bold;font-size:11px;padding:3px 6px;
+}
+.dice-mod-body{ padding:12px;text-align:center; }
+#dice-mod-input{ width:100%;text-align:center;font-size:16px;padding:3px;box-sizing:border-box; }
+.dice-mod-btns{ display:flex;justify-content:flex-end;gap:4px;padding:0 8px 10px; }
+#dice-result .dice-crit{ color:var(--link-text);font-weight:bold; }
+#dice-result .dice-fail{ color:var(--error-text);font-weight:bold; }
 </style>
 </head>
 <body class="<?php
@@ -403,6 +504,8 @@ body{
     <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (PDF editable, 5 páginas)">📜 Oficial</button>
     <button class="tb-btn has-tip"        id="tab-melon" onclick="switchSheet('melon')" data-tip="Ficha melon alternativa">🎨 Melon</button>
     <button class="tb-btn has-tip"        id="tab-misfichas" onclick="switchToMisFichas()"      data-tip="Ver todas tus fichas guardadas">📁 Mis Fichas</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn has-tip" id="btn-dados" onclick="toggleDicePanel()" data-tip="Tirar dados (d4–d100)">🎲 Dados</button>
     <div class="tb-sep"></div>
     <div id="zoom-controls">
         <label>Zoom:</label>
@@ -448,6 +551,51 @@ body{
     <span id="drive-status" style="font-size:10px;color:var(--text-muted);margin-left:4px;"></span>
     <div class="info">
         <span id="autosave-dot"></span>Autosave local
+    </div>
+</div>
+
+<!-- DICE ROLLER (ventana flotante draggable) -->
+<div id="dice-panel" style="display:none;">
+    <div id="dice-titlebar">
+        <span>🎲 Lanzar dados</span>
+        <button id="dice-close" onclick="toggleDicePanel(false)" title="Cerrar">✕</button>
+    </div>
+    <div id="dice-body">
+        <div id="dice-buttons">
+            <button class="dice-btn" data-sides="4"   onclick="addDie(4)">d4</button>
+            <button class="dice-btn" data-sides="6"   onclick="addDie(6)">d6</button>
+            <button class="dice-btn" data-sides="8"   onclick="addDie(8)">d8</button>
+            <button class="dice-btn" data-sides="10"  onclick="addDie(10)">d10</button>
+            <button class="dice-btn" data-sides="12"  onclick="addDie(12)">d12</button>
+            <button class="dice-btn" data-sides="20"  onclick="addDie(20)">d20</button>
+            <button class="dice-btn" data-sides="100" onclick="addDie(100)">d100</button>
+        </div>
+        <div id="dice-stage">
+            <canvas id="dice-canvas"></canvas>
+            <div id="dice-overlays"></div>
+            <div id="dice-hint">Pulsa un dado para añadirlo · clic en un dado para quitarlo</div>
+        </div>
+        <div id="dice-actions">
+            <button class="tb-btn" id="dice-reroll" onclick="rerollAll()">🎲 Tirar dados</button>
+            <button class="tb-btn" id="dice-clear" onclick="clearDice()">🗑 Limpiar</button>
+            <button id="dice-mod-btn" onclick="openModifierDialog()" title="Añadir modificador">
+                <span class="dmod-plus">＋</span><span class="dmod-minus">−</span>
+            </button>
+        </div>
+        <div id="dice-result">Elige un dado</div>
+    </div>
+    <!-- Sub-ventana: añadir modificador -->
+    <div id="dice-mod-modal" style="display:none;">
+        <div id="dice-mod-box">
+            <div class="dice-mod-title">Añadir modificador</div>
+            <div class="dice-mod-body">
+                <input type="number" id="dice-mod-input" value="0" step="1">
+            </div>
+            <div class="dice-mod-btns">
+                <button class="tb-btn" onclick="closeModifierDialog()">Cancelar</button>
+                <button class="tb-btn" onclick="applyModifier()">Aceptar</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1819,6 +1967,357 @@ async function loadDriveFile(file){
 /* Status inicial + intento de reconexión silenciosa */
 updateDriveStatus();
 tryAutoConnectDrive();
+
+/* ════════════════════════════════════════
+   LANZADOR DE DADOS — modelos 3D reales (Three.js)
+   Cada dado usa su poliedro: d4 tetraedro, d6 cubo, d8 octaedro,
+   d10/d100 trapezoedro pentagonal, d12 dodecaedro, d20 icosaedro.
+   Gira con velocidad angular aleatoria y desacelera hasta parar.
+════════════════════════════════════════ */
+var _diceRolling = false;
+var _diceScene = null;   // { renderer, scene, camera, mesh, raf, ... }
+
+/* Color del tema → THREE.Color (hex de las CSS vars) */
+function _themeHex(varName, fallback){
+    var v = getComputedStyle(document.body).getPropertyValue(varName).trim();
+    return v || fallback;
+}
+
+/* Geometría del trapezoedro pentagonal (d10) — no viene en Three.js */
+function _makeD10Geometry(THREE){
+    var n = 5, top = 1.0, bot = -1.0, ry = 0.30, lo = Math.PI / n;
+    var v = [];
+    v.push(0, top, 0);            // 0 ápice superior
+    v.push(0, bot, 0);            // 1 ápice inferior
+    for(var i = 0; i < n; i++){   // 2..6 anillo superior
+        var a = (i / n) * Math.PI * 2;
+        v.push(Math.cos(a), ry, Math.sin(a));
+    }
+    for(var j = 0; j < n; j++){   // 7..11 anillo inferior (desfasado)
+        var b = (j / n) * Math.PI * 2 + lo;
+        v.push(Math.cos(b), -ry, Math.sin(b));
+    }
+    var U = function(i){ return 2 + (i % n); };
+    var L = function(i){ return 7 + (i % n); };
+    var idx = [];
+    for(var k = 0; k < n; k++){
+        // cometa superior: ápice, U[k], L[k], U[k+1]
+        idx.push(0, U(k), L(k));   idx.push(0, L(k), U(k+1));
+        // cometa inferior: ápice inf, L[k], U[k+1], L[k+1]
+        idx.push(1, L(k), U(k+1)); idx.push(1, U(k+1), L(k+1));
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    g.scale(0.95, 1.15, 0.95);
+    return g;
+}
+
+function _makeGeometry(THREE, sides){
+    switch(sides){
+        case 4:   return new THREE.TetrahedronGeometry(1.25);
+        case 6:   return new THREE.BoxGeometry(1.5, 1.5, 1.5);
+        case 8:   return new THREE.OctahedronGeometry(1.3);
+        case 10:  return _makeD10Geometry(THREE);
+        case 12:  return new THREE.DodecahedronGeometry(1.2);
+        case 20:  return new THREE.IcosahedronGeometry(1.25);
+        case 100: return _makeD10Geometry(THREE);
+        default:  return new THREE.BoxGeometry(1.5, 1.5, 1.5);
+    }
+}
+
+/* Pool de dados en pantalla: cada entrada {sides, value, mesh, el, rolling, vx,vy,vz, t0} */
+var dicePool = [];
+var diceModifier = 0;   /* modificador fijo que se suma al total */
+
+function _initDiceScene(){
+    if(_diceScene) return _diceScene;
+    var canvas = document.getElementById('dice-canvas');
+    var w = canvas.clientWidth || 236, h = canvas.clientHeight || 146;
+
+    var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setSize(w, h, false);
+
+    var scene  = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+    camera.position.set(0, 0, 6);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    var key = new THREE.DirectionalLight(0xffffff, 0.9);
+    key.position.set(3, 5, 4); scene.add(key);
+    var rim = new THREE.DirectionalLight(0xffffff, 0.35);
+    rim.position.set(-4, -2, -3); scene.add(rim);
+
+    _diceScene = { renderer: renderer, scene: scene, camera: camera, raf: 0, w: w, h: h,
+                   raycaster: new THREE.Raycaster(), running: false };
+
+    /* Clic en un dado → quitarlo */
+    canvas.addEventListener('click', function(e){
+        if(typeof THREE === 'undefined' || !_diceScene) return;
+        var rect = canvas.getBoundingClientRect();
+        var mx = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+        var my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        _diceScene.raycaster.setFromCamera({ x: mx, y: my }, camera);
+        var meshes = dicePool.map(function(d){ return d.mesh; });
+        var hits = _diceScene.raycaster.intersectObjects(meshes, true);
+        if(!hits.length) return;
+        /* subir al mesh raíz del pool */
+        var obj = hits[0].object;
+        while(obj && meshes.indexOf(obj) === -1) obj = obj.parent;
+        if(!obj) return;
+        var i = meshes.indexOf(obj);
+        if(i !== -1) removeDieAt(i);
+    });
+    return _diceScene;
+}
+
+function _makeDieMesh(sides){
+    var accent = _themeHex('--accent', '#EDC001');
+    var deep   = _themeHex('--accent-deep', '#c8a000');
+    var geo = _makeGeometry(THREE, sides);
+    var mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(accent), metalness: 0.25, roughness: 0.45, flatShading: true
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.add(new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo, 1),
+        new THREE.LineBasicMaterial({ color: new THREE.Color(deep) })
+    ));
+    return mesh;
+}
+
+/* Recolorea todos los dados del pool con el tema activo actual (para que
+   reflejen el tema del usuario incluso si cambió tras crearlos). */
+function _recolorDice(){
+    if(!_diceScene || typeof THREE === 'undefined') return;
+    var accent = _themeHex('--accent', '#EDC001');
+    var deep   = _themeHex('--accent-deep', '#c8a000');
+    dicePool.forEach(function(d){
+        if(d.mesh && d.mesh.material) d.mesh.material.color.set(accent);
+        if(d.mesh) d.mesh.children.forEach(function(ch){
+            if(ch.material && ch.material.color) ch.material.color.set(deep);
+        });
+    });
+    _renderDice();
+}
+
+/* Coloca los dados en una rejilla centrada y ajusta la cámara para que
+   TODOS quepan siempre en pantalla (filas/columnas según cantidad). */
+function layoutDice(){
+    var S = _diceScene, n = dicePool.length;
+    if(!S || !n) return;
+    var aspect = S.w / S.h;
+    /* nº de columnas proporcional al aspecto (más anchas que altas) */
+    var cols = Math.max(1, Math.min(n, Math.round(Math.sqrt(n * aspect))));
+    var rows = Math.ceil(n / cols);
+    var sp = 2.6;                                   /* separación entre centros */
+    var spanW = (cols - 1) * sp, spanH = (rows - 1) * sp;
+
+    /* escala de cada dado: más pequeña cuanto más grande la rejilla */
+    var scale = Math.max(0.42, Math.min(0.9, 2.6 / Math.max(cols, rows)));
+
+    dicePool.forEach(function(d, i){
+        var r = Math.floor(i / cols), c = i % cols;
+        var inRow = (r === rows - 1) ? (n - cols * (rows - 1)) : cols;  /* dados en ESTA fila */
+        var rowSpanW = (inRow - 1) * sp;
+        d.mesh.position.x = -rowSpanW / 2 + c * sp;
+        d.mesh.position.y =  spanH / 2 - r * sp;
+        d.mesh.scale.setScalar(scale);
+    });
+
+    /* cámara: alejar hasta que entren ancho y alto (con margen) */
+    var fov = 40 * Math.PI / 180, half = Math.tan(fov / 2);
+    var needW = spanW * 1 + 2.4, needH = spanH * 1 + 2.4;
+    var zW = needW / (2 * half * aspect);
+    var zH = needH / (2 * half);
+    S.camera.position.z = Math.max(6, zW, zH);
+}
+
+/* Proyecta la posición 3D de cada dado a px y coloca su número */
+function _positionOverlays(){
+    var S = _diceScene; if(!S) return;
+    var cw = S.renderer.domElement.clientWidth, ch = S.renderer.domElement.clientHeight;
+    dicePool.forEach(function(d){
+        var v = d.mesh.position.clone().project(S.camera);
+        d.el.style.left = ((v.x * 0.5 + 0.5) * cw) + 'px';
+        d.el.style.top  = ((-v.y * 0.5 + 0.5) * ch) + 'px';
+    });
+}
+
+function _renderDice(){ if(_diceScene) _diceScene.renderer.render(_diceScene.scene, _diceScene.camera); }
+
+/* Bucle único: anima los dados marcados como rolling y va parando */
+function _animateLoop(){
+    var S = _diceScene; if(!S) return;
+    var now = performance.now(), anyRolling = false;
+    dicePool.forEach(function(d){
+        if(!d.rolling) return;
+        var t = Math.min(1, (now - d.t0) / d.dur);
+        var decay = 1 - t * t;
+        d.mesh.rotation.x += d.vx * decay;
+        d.mesh.rotation.y += d.vy * decay;
+        d.mesh.rotation.z += d.vz * decay;
+        d._scr = (d._scr || 0) + 16;
+        if(t < 0.75 && d._scr > 60){ d._scr = 0; d.el.textContent = Math.floor(Math.random() * d.sides) + 1; }
+        if(t >= 1){
+            d.rolling = false;
+            d.el.textContent = d.value;
+            d.el.animate(
+                [{ transform:'translate(-50%,-50%) scale(1.6)', opacity:.4 },
+                 { transform:'translate(-50%,-50%) scale(1)',   opacity:1 }],
+                { duration: 240, easing:'cubic-bezier(.2,1.4,.4,1)' });
+            updateDiceTotal();
+        } else { anyRolling = true; }
+    });
+    _renderDice();
+    _positionOverlays();
+    if(anyRolling){ S.raf = requestAnimationFrame(_animateLoop); }
+    else { S.running = false; }
+}
+function _ensureLoop(){
+    if(_diceScene && !_diceScene.running){ _diceScene.running = true; _diceScene.raf = requestAnimationFrame(_animateLoop); }
+}
+
+/* Lanza (o relanza) un dado del pool */
+function _spinDie(d){
+    d.value = Math.floor(Math.random() * d.sides) + 1;
+    d.vx = (0.22 + Math.random() * 0.22) * (Math.random() < .5 ? -1 : 1);
+    d.vy =  0.28 + Math.random() * 0.26;
+    d.vz = (0.10 + Math.random() * 0.14) * (Math.random() < .5 ? -1 : 1);
+    d.dur = 1300 + Math.random() * 400;
+    d.t0 = performance.now();
+    d._scr = 0;
+    d.rolling = true;
+}
+
+function updateDiceTotal(){
+    var resEl = document.getElementById('dice-result');
+    if(!dicePool.length && !diceModifier){ resEl.textContent = 'Elige un dado'; return; }
+    var anyRolling = dicePool.some(function(d){ return d.rolling; });
+    if(anyRolling){ resEl.textContent = 'Tirando…'; return; }
+    var total = diceModifier;
+    dicePool.forEach(function(d){ total += d.value; });
+    var extra = '';
+    if(dicePool.length === 1 && !diceModifier && dicePool[0].sides === 20){
+        if(dicePool[0].value === 20) extra = ' <span class="dice-crit">¡CRÍTICO!</span>';
+        else if(dicePool[0].value === 1) extra = ' <span class="dice-fail">PIFIA</span>';
+    }
+    var modTxt = diceModifier ? ' <span style="color:var(--text-muted)">(' + (diceModifier > 0 ? '+' : '') + diceModifier + ')</span>' : '';
+    resEl.innerHTML = 'Total <strong>' + total + '</strong>' + modTxt + extra;
+}
+
+/* ── Modificador fijo ── */
+function openModifierDialog(){
+    var inp = document.getElementById('dice-mod-input');
+    inp.value = diceModifier;
+    document.getElementById('dice-mod-modal').style.display = 'flex';
+    setTimeout(function(){ inp.focus(); inp.select(); }, 30);
+}
+function closeModifierDialog(){
+    document.getElementById('dice-mod-modal').style.display = 'none';
+}
+function applyModifier(){
+    var v = parseInt(document.getElementById('dice-mod-input').value, 10);
+    diceModifier = isNaN(v) ? 0 : v;
+    closeModifierDialog();
+    updateDiceTotal();
+}
+
+/* Añadir un dado al pool y tirarlo */
+function addDie(sides){
+    if(typeof THREE === 'undefined' || !_diceScene) return;
+    var mesh = _makeDieMesh(sides);
+    _diceScene.scene.add(mesh);
+    var el = document.createElement('div');
+    el.className = 'dice-val';
+    document.getElementById('dice-overlays').appendChild(el);
+    var d = { sides: sides, value: 1, mesh: mesh, el: el };
+    dicePool.push(d);
+    layoutDice();
+    _spinDie(d);
+    updateDiceTotal();
+    _ensureLoop();
+}
+
+/* Relanzar TODOS los dados en pantalla */
+function rerollAll(){
+    if(typeof THREE === 'undefined' || !_diceScene || !dicePool.length) return;
+    _recolorDice();           /* por si el tema cambió desde la última tirada */
+    dicePool.forEach(_spinDie);
+    updateDiceTotal();
+    _ensureLoop();
+}
+
+/* Recolorear los dados en vivo cuando el tema del usuario cambia (el padre
+   actualiza la clase de tema en el <body> de esta iframe). */
+(function(){
+    var deb = null;
+    new MutationObserver(function(){
+        clearTimeout(deb);
+        deb = setTimeout(function(){ _recolorDice(); }, 120);
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+})();
+
+/* Quitar un dado (clic sobre él) */
+function removeDieAt(i){
+    var d = dicePool[i]; if(!d) return;
+    _diceScene.scene.remove(d.mesh);
+    if(d.mesh.geometry) d.mesh.geometry.dispose();
+    if(d.el && d.el.parentNode) d.el.parentNode.removeChild(d.el);
+    dicePool.splice(i, 1);
+    layoutDice();
+    _renderDice();
+    _positionOverlays();
+    updateDiceTotal();
+}
+
+function clearDice(){
+    while(dicePool.length) removeDieAt(0);
+}
+
+function toggleDicePanel(force){
+    var p = document.getElementById('dice-panel');
+    var show = (typeof force === 'boolean') ? force : (p.style.display === 'none' || !p.style.display);
+    p.style.display = show ? 'block' : 'none';
+    document.getElementById('btn-dados').classList.toggle('active', show);
+    if(show && !p.dataset.init){
+        p.dataset.init = '1';
+        loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js').then(function(){
+            _initDiceScene();
+            _renderDice();
+        }).catch(function(){
+            document.getElementById('dice-result').textContent = '✗ No se pudo cargar el motor 3D';
+        });
+    }
+}
+
+/* Arrastrar la ventana de dados por su barra de título */
+(function(){
+    var panel = document.getElementById('dice-panel');
+    var bar   = document.getElementById('dice-titlebar');
+    if(!panel || !bar) return;
+    var dragging = false, ox = 0, oy = 0;
+    bar.addEventListener('mousedown', function(e){
+        if(e.target.id === 'dice-close') return;
+        dragging = true;
+        var r = panel.getBoundingClientRect();
+        ox = e.clientX - r.left; oy = e.clientY - r.top;
+        panel.style.right = 'auto';
+        panel.style.left = r.left + 'px';
+        panel.style.top  = r.top + 'px';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e){
+        if(!dragging) return;
+        var nx = Math.max(0, Math.min(window.innerWidth  - 60, e.clientX - ox));
+        var ny = Math.max(0, Math.min(window.innerHeight - 30, e.clientY - oy));
+        panel.style.left = nx + 'px';
+        panel.style.top  = ny + 'px';
+    });
+    document.addEventListener('mouseup', function(){ dragging = false; });
+})();
 
 /* ── INIT ── */
 window.addEventListener('load', function(){ buildSheet('oficial'); });

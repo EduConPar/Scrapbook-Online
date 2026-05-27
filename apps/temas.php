@@ -89,6 +89,20 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         }
         .temas-item.active .temas-item-badge,
         .temas-item:hover .temas-item-badge { color: var(--accent-text); }
+        .temas-item-pub { font-size: 10px; flex-shrink: 0; }
+        .temas-item-dl  { font-size: 10px; flex-shrink: 0; }
+        /* Menú contextual de tema (publicar/quitar) */
+        .temas-ctx-menu {
+            position: fixed; z-index: 99999;
+            background: var(--btn-bg); color: var(--text);
+            border-top: 2px solid var(--bezel-light-1); border-left: 2px solid var(--bezel-light-1);
+            border-right: 2px solid var(--bezel-dark-2); border-bottom: 2px solid var(--bezel-dark-2);
+            box-shadow: 2px 2px 5px rgba(0,0,0,.35); font-size: 11px; padding: 2px; min-width: 170px;
+        }
+        .temas-ctx-opt { padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+        .temas-ctx-opt:hover { background: var(--accent); color: var(--accent-text); }
+        .temas-ctx-opt.danger { color: var(--error-text); }
+        .temas-ctx-opt.danger:hover { background: var(--error-text); color: var(--win-bg); }
         #temas-sidebar-footer {
             padding: 6px 8px;
             border-top: 1px solid var(--border);
@@ -131,10 +145,15 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             flex-shrink: 0;
         }
         .temas-tab-btn {
-            flex: 1;
+            flex: 1 1 0;
+            min-width: 0;                 /* permite encoger por debajo del contenido */
             font-size: 10px;
-            padding: 3px 6px;
+            padding: 3px 4px;
             min-height: 22px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
         }
         .temas-tab-btn.active {
             background: var(--accent);
@@ -148,6 +167,60 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             min-height: 0;
         }
         .temas-tab-pane[hidden] { display: none; }
+
+        /* ── Biblioteca de temas ── */
+        #temas-library { flex:1; overflow-y:auto; padding:12px; }
+        #temas-library-grid {
+            display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));
+            gap:14px;
+        }
+        .lib-card {
+            border-top:2px solid var(--bezel-light-1); border-left:2px solid var(--bezel-light-1);
+            border-right:2px solid var(--bezel-dark-2); border-bottom:2px solid var(--bezel-dark-2);
+            background:var(--win-bg); display:flex; flex-direction:column;
+        }
+        .lib-preview { cursor:pointer; padding:8px; }
+        .lib-preview:hover { filter:brightness(1.04); }
+        /* mini maqueta de ventana win98 con los colores del tema */
+        .lib-win { border:1px solid #000; border-radius:2px; overflow:hidden; box-shadow:2px 2px 0 rgba(0,0,0,.25); }
+        .lib-win-tb { display:flex; align-items:center; gap:4px; padding:3px 5px; font-size:9px; font-weight:bold; }
+        .lib-win-tb-dots { margin-left:auto; display:flex; gap:2px; }
+        .lib-win-tb-dots i { width:7px; height:7px; display:block; border:1px solid rgba(0,0,0,.4); }
+        .lib-win-body { padding:8px; min-height:54px; }
+        .lib-win-row { height:9px; border-radius:1px; margin-bottom:5px; }
+        .lib-win-btns { display:flex; gap:4px; margin-top:6px; }
+        .lib-win-btn { font-size:8px; padding:2px 6px; border-radius:1px; }
+        .lib-name { font-size:11px; font-weight:bold; text-align:center; padding:2px 4px; color:var(--text);
+                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .lib-author {
+            display:flex; align-items:center; gap:6px; padding:6px 8px; cursor:pointer;
+            border-top:1px solid var(--border);
+        }
+        .lib-author:hover { background:var(--accent); color:var(--accent-text); }
+        /* Marco cuadrado tipo Win98 (igual que el avatar de la pantalla de login) */
+        .lib-author-img {
+            width:24px; height:24px; object-fit:cover; flex-shrink:0; display:block;
+            image-rendering:pixelated;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1),
+                 1px  1px 0 var(--bezel-light-1),
+                -2px -2px 0 var(--bezel-dark-2),
+                 2px  2px 0 var(--bezel-light-2);
+            margin:2px;
+        }
+        .lib-author-ph {
+            width:24px; height:24px; flex-shrink:0; display:flex;
+            align-items:center; justify-content:center; font-size:14px;
+            background:var(--inset-bg); color:var(--text-inset);
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1),
+                 1px  1px 0 var(--bezel-light-1),
+                -2px -2px 0 var(--bezel-dark-2),
+                 2px  2px 0 var(--bezel-light-2);
+            margin:2px;
+        }
+        .lib-author-name { font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        #temas-library-empty { text-align:center; color:var(--text-faint); font-size:11px; padding:30px 10px; }
         #temas-starticon-area {
             padding: 6px 8px;
             display: flex;
@@ -244,6 +317,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="temas-tabs">
             <button class="button temas-tab-btn active" data-tab="themes">🎨 Mis temas</button>
             <button class="button temas-tab-btn" data-tab="personalize">🖌 Personalización</button>
+            <button class="button temas-tab-btn" data-tab="library">🌐 Biblioteca</button>
         </div>
 
         <!-- Tab: Mis temas -->
@@ -282,6 +356,16 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             </div>
 
         </div>
+
+        <!-- Tab: Biblioteca -->
+        <div class="temas-tab-pane" id="temas-pane-library" hidden>
+            <div class="temas-side-head">🌐 Biblioteca de temas</div>
+            <p style="font-size:10px;color:var(--text-faint);padding:6px 4px;line-height:1.4;">
+                Temas publicados por la comunidad. Pulsa un tema para probarlo;
+                pulsa el autor para visitar su perfil.
+            </p>
+            <button class="button" id="temas-lib-refresh" style="width:100%;">↻ Recargar</button>
+        </div>
     </div>
 
     <div id="temas-main">
@@ -292,7 +376,6 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             </div>
             <button class="button" id="theme-save">Guardar</button>
             <button class="button" id="theme-activate">Activar</button>
-            <button class="button" id="theme-delete">Eliminar</button>
             <button class="button" id="theme-export"  title="Descargar este tema como JSON">⬇ Exportar</button>
             <button class="button" id="theme-import"  title="Cargar un tema desde un fichero JSON">⬆ Importar</button>
             <input type="file" id="theme-import-file" accept="application/json,.json" style="display:none;">
@@ -301,6 +384,10 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <!-- color fields injected by JS -->
         </div>
         <div id="temas-status">Crea un tema nuevo o selecciona uno existente para editarlo.</div>
+        <!-- Biblioteca (grid de temas publicados) -->
+        <div id="temas-library" hidden>
+            <div id="temas-library-grid"></div>
+        </div>
     </div>
 </div>
 
@@ -388,6 +475,25 @@ var listEl = document.getElementById('temas-list');
 var statusEl = document.getElementById('temas-status');
 var savedThemes = {};
 var activeName = '';
+/* Nombre del tema que se está editando (su nombre ORIGINAL). Si al guardar
+   el usuario cambió el nombre, se renombra el original en vez de duplicar. */
+var editingOriginalName = null;
+
+/* DEFAULT de la app: se usan cuando el TEMA ACTIVO no define fondo/icono.
+   - Fondo  → base-wallpaper (default de la app).
+   - Icono  → '' (sin imagen → logo Win98 por defecto). */
+var THEME_DEFAULT_WP = <?php echo json_encode(defaultWallpaper()); ?>;
+var THEME_DEFAULT_SI = '';
+/* Fondo / icono GLOBAL del usuario (su baseline cuando NO hay tema activo). */
+var USER_GLOBAL_WP = <?php echo json_encode(getUserWallpaper($userLabel)); ?>;
+var USER_GLOBAL_SI = <?php echo json_encode(getUserStartIcon($userLabel)); ?>;
+
+/* Pide al escritorio (padre) aplicar el fondo y el icono del tema. */
+function applyThemeAssets(wallpaper, startIcon){
+    if (!window.parent || window.parent === window) return;
+    window.parent.postMessage({ type: 'wallpaper-changed', wallpaper: wallpaper || '' }, '*');
+    window.parent.postMessage({ type: 'start-icon-changed', icon: startIcon || '' }, '*');
+}
 
 function buildEditor() {
     editorEl.innerHTML = '';
@@ -458,6 +564,7 @@ function resetEditor() {
     COLOR_DEFS.forEach(function(d) { defaults[d.key] = d.def; });
     setEditorColors(defaults);
     setActiveItem(null);
+    editingOriginalName = null;   /* tema nuevo: no hay original que renombrar */
     statusEl.textContent = 'Nuevo tema. Pon un nombre y guarda.';
 }
 
@@ -485,6 +592,22 @@ function renderList() {
         n.className = 'temas-item-name';
         n.textContent = name;
         item.appendChild(n);
+        /* Indicador de tema descargado de la biblioteca */
+        if (savedThemes[name] && savedThemes[name].downloaded) {
+            var dl = document.createElement('span');
+            dl.className = 'temas-item-dl';
+            dl.textContent = '📥';
+            dl.title = 'Descargado de la biblioteca';
+            item.appendChild(dl);
+        }
+        /* Indicador de publicado en biblioteca */
+        if (savedThemes[name] && savedThemes[name].public) {
+            var pub = document.createElement('span');
+            pub.className = 'temas-item-pub';
+            pub.textContent = '🌐';
+            pub.title = 'Publicado en la biblioteca';
+            item.appendChild(pub);
+        }
         if (name === activeName) {
             var badge = document.createElement('span');
             badge.className = 'temas-item-badge';
@@ -495,13 +618,119 @@ function renderList() {
             nameInput.value = name;
             setEditorColors(migrateLegacyColors(savedThemes[name].colors || {}));
             setActiveItem(name);
+            editingOriginalName = name;   /* editando un tema existente */
             statusEl.textContent = 'Editando "' + name + '"';
+        });
+        /* Clic derecho → menú publicar/quitar de la biblioteca */
+        item.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showThemeCtxMenu(e.clientX, e.clientY, name);
         });
         listEl.appendChild(item);
     });
 }
 
-function loadThemes() {
+/* Menú contextual de un tema (publicar/quitar + eliminar) */
+var _themeCtxMenu = null;
+function hideThemeCtxMenu(){ if(_themeCtxMenu){ _themeCtxMenu.remove(); _themeCtxMenu = null; } }
+function showThemeCtxMenu(x, y, name){
+    hideThemeCtxMenu();
+    var t = savedThemes[name] || {};
+    var isPub = !!t.public;
+    var isDownloaded = !!t.downloaded;
+    var menu = document.createElement('div');
+    menu.className = 'temas-ctx-menu';
+
+    var opts = [];
+    /* Los temas descargados de la biblioteca NO se pueden publicar */
+    if (!isDownloaded) {
+        opts.push({ label: isPub ? '🌐 Quitar de la biblioteca' : '🌐 Publicar en la biblioteca',
+                    action: function(){ setThemePublic(name, !isPub); } });
+    }
+    opts.push({ label: '📋 Crear copia', action: function(){ duplicateTheme(name); } });
+    opts.push({ label: '🗑 Eliminar', danger: true, action: function(){ deleteTheme(name); } });
+    opts.forEach(function(o){
+        var el = document.createElement('div');
+        el.className = 'temas-ctx-opt' + (o.danger ? ' danger' : '');
+        el.textContent = o.label;
+        el.addEventListener('click', function(){ hideThemeCtxMenu(); o.action(); });
+        menu.appendChild(el);
+    });
+
+    document.body.appendChild(menu);
+    var mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = Math.min(x, window.innerWidth  - mw - 4) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - mh - 4) + 'px';
+    _themeCtxMenu = menu;
+}
+document.addEventListener('click', hideThemeCtxMenu);
+document.addEventListener('contextmenu', function(e){
+    if(!e.target.closest('.temas-item, .lib-card')) hideThemeCtxMenu();
+});
+
+/* Crear una copia del tema (nuevo tema ORIGINAL → se puede publicar) */
+function duplicateTheme(name){
+    var src = savedThemes[name];
+    if(!src) return;
+    var colors = migrateLegacyColors(src.colors || {});
+    var copyName = (name + ' copia').slice(0, 30);
+    if (savedThemes[copyName]) {
+        var base = (name + ' copia').slice(0, 27), n = 2;
+        while (savedThemes[copyName] && n < 99) { copyName = base + ' ' + n; n++; }
+    }
+    fetch('../assets/themes/api.php?action=save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: copyName, colors: colors })   /* sin downloaded → original */
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+          if(!d || d.error){ statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
+          statusEl.textContent = 'Copia "' + copyName + '" creada.';
+          editingOriginalName = copyName;
+          loadThemes(function(){
+              nameInput.value = copyName;
+              setEditorColors(colors);
+              setActiveItem(copyName);
+          });
+      });
+}
+
+/* Eliminar un tema (confirmación Win98 + borrado en servidor) */
+function deleteTheme(name){
+    if(!savedThemes[name]) return;
+    window._w98ConfirmDeleteTheme(name, function(){
+        fetch('../assets/themes/api.php?action=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function(r){ return r.json(); })
+          .then(function(d){
+              if(!d || d.error){ statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
+              statusEl.textContent = 'Tema "' + name + '" eliminado.';
+              if(nameInput.value.trim() === name) resetEditor();
+              loadThemes();
+          });
+    });
+}
+
+function setThemePublic(name, makePublic){
+    if(!savedThemes[name]) return;
+    fetch('../assets/themes/api.php?action=set-public', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, public: makePublic })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+          if(!d || d.error){ statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
+          savedThemes[name].public = d.public;
+          renderList();
+          statusEl.textContent = d.public
+              ? 'Tema "' + name + '" publicado en la biblioteca.'
+              : 'Tema "' + name + '" quitado de la biblioteca.';
+      });
+}
+
+function loadThemes(cb) {
     fetch('../assets/themes/api.php?action=get')
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -509,11 +738,21 @@ function loadThemes() {
             savedThemes = d.themes || {};
             activeName  = d.active || '';
             renderList();
-            /* Mostrar siempre el tema activo del usuario al entrar */
+            /* Reflejar en Personalización el fondo/icono EFECTIVO:
+               con tema → su asset o el default; sin tema → el global. */
+            var act = activeName && savedThemes[activeName] ? savedThemes[activeName] : null;
+            var prevWp = act ? (act.wallpaper || THEME_DEFAULT_WP) : USER_GLOBAL_WP;
+            var prevSi = act ? (act.startIcon || THEME_DEFAULT_SI) : USER_GLOBAL_SI;
+            if (window._setWpPreview) window._setWpPreview(prevWp);
+            if (window._setSiPreview) window._setSiPreview(prevSi);
+            /* Si el caller pasa callback, él decide qué mostrar en el editor.
+               Si no, mostramos el tema activo del usuario (comportamiento normal). */
+            if (typeof cb === 'function') { cb(); return; }
             if (activeName && savedThemes[activeName]) {
                 nameInput.value = activeName;
                 setEditorColors(migrateLegacyColors(savedThemes[activeName].colors || {}));
                 setActiveItem(activeName);
+                editingOriginalName = activeName;
                 statusEl.textContent = 'Editando "' + activeName + '" (activo)';
             }
         });
@@ -531,6 +770,10 @@ document.getElementById('temas-deactivate').addEventListener('click', function()
               activeName = '';
               renderList();
               applyLiveTheme('', '');
+              /* Sin tema → fondo/icono GLOBAL del usuario (su baseline) */
+              applyThemeAssets(USER_GLOBAL_WP, USER_GLOBAL_SI);
+              if (window._setWpPreview) window._setWpPreview(USER_GLOBAL_WP);
+              if (window._setSiPreview) window._setSiPreview(USER_GLOBAL_SI);
               statusEl.textContent = 'Tema desactivado.';
           }
       });
@@ -540,15 +783,29 @@ document.getElementById('theme-save').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Falta el nombre.'; return; }
     var colors = getEditorColors();
+    /* oldName: si estamos editando un tema existente y cambió el nombre,
+       el backend renombra el original en vez de crear un duplicado. */
+    var payload = { name: name, colors: colors };
+    if (editingOriginalName) payload.oldName = editingOriginalName;
+    var renamed = !!(editingOriginalName && editingOriginalName !== name);
     fetch('../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, colors: colors })
+        body: JSON.stringify(payload)
     }).then(function(r) { return r.json(); })
       .then(function(d) {
           if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
-          statusEl.textContent = 'Tema "' + name + '" guardado.';
-          loadThemes();
+          /* Si renombramos el tema activo, refrescar el activeName */
+          if (renamed && activeName === editingOriginalName) activeName = name;
+          editingOriginalName = name;
+          statusEl.textContent = renamed
+              ? 'Tema renombrado a "' + name + '".'
+              : 'Tema "' + name + '" guardado.';
+          loadThemes(function(){
+              nameInput.value = name;
+              if (savedThemes[name]) setEditorColors(migrateLegacyColors(savedThemes[name].colors || {}));
+              setActiveItem(name === activeName ? activeName : name);
+          });
       });
 });
 
@@ -568,6 +825,12 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           var className = name + '-' + <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
           var basePath  = 'assets/themes/' + className + '.css';
           applyLiveTheme(className, basePath);
+          /* Aplicar el fondo y el icono vinculados al tema (o el DEFAULT si no tiene) */
+          applyThemeAssets(d.wallpaper || THEME_DEFAULT_WP, d.startIcon || THEME_DEFAULT_SI);
+          /* Reflejar en Personalización los assets efectivos del tema activo */
+          if (savedThemes[name]) { savedThemes[name].wallpaper = d.wallpaper || ''; savedThemes[name].startIcon = d.startIcon || ''; }
+          if (window._setWpPreview) window._setWpPreview(d.wallpaper || THEME_DEFAULT_WP);
+          if (window._setSiPreview) window._setSiPreview(d.startIcon || THEME_DEFAULT_SI);
           statusEl.textContent = 'Tema "' + name + '" activado.';
       });
 });
@@ -622,23 +885,7 @@ function applyToDocLocal(doc, className, cssHref) {
     }
 }
 
-document.getElementById('theme-delete').addEventListener('click', function() {
-    var name = nameInput.value.trim();
-    if (!name || !savedThemes[name]) { statusEl.textContent = 'Selecciona un tema guardado.'; return; }
-    window._w98ConfirmDeleteTheme(name, function() {
-        fetch('../assets/themes/api.php?action=delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name })
-        }).then(function(r) { return r.json(); })
-          .then(function(d) {
-              if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
-              statusEl.textContent = 'Tema "' + name + '" eliminado.';
-              resetEditor();
-              loadThemes();
-          });
-    });
-});
+/* (Eliminar tema → ahora vía clic derecho en la lista: deleteTheme) */
 
 /* =========================================================
    EXPORTAR / IMPORTAR temas (JSON)
@@ -752,8 +999,11 @@ loadThemes();
     var tabs  = document.querySelectorAll('.temas-tab-btn');
     var panes = {
         themes:      document.getElementById('temas-pane-themes'),
-        personalize: document.getElementById('temas-pane-personalize')
+        personalize: document.getElementById('temas-pane-personalize'),
+        library:     document.getElementById('temas-pane-library')
     };
+    var editorEls = ['temas-toolbar', 'temas-editor', 'temas-status'];
+    var libEl     = document.getElementById('temas-library');
     tabs.forEach(function(t) {
         t.addEventListener('click', function() {
             tabs.forEach(function(b) { b.classList.remove('active'); });
@@ -763,9 +1013,228 @@ loadThemes();
                 if (k === which) panes[k].removeAttribute('hidden');
                 else             panes[k].setAttribute('hidden', '');
             });
+            /* En "Biblioteca" el área principal muestra la grid en vez del editor */
+            var lib = (which === 'library');
+            editorEls.forEach(function(id){
+                var el = document.getElementById(id);
+                if (el) el.style.display = lib ? 'none' : '';
+            });
+            libEl.hidden = !lib;
+            if (lib) loadLibrary();
         });
     });
 })();
+
+/* =========================================================
+   BIBLIOTECA DE TEMAS (públicos de todos los usuarios)
+========================================================= */
+var OWN_USER_KEY = <?php echo json_encode($userKey); ?>;
+
+function _libColor(colors, key, def){
+    var v = colors && colors[key];
+    return (typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v)) ? v : def;
+}
+
+/* Mini-maqueta de una ventana Win98 con los colores del tema */
+function buildThemePreview(colors){
+    var c = migrateLegacyColors(colors || {});
+    var winBg   = _libColor(c, 'winBg', '#c0c0c0');
+    var bodyBg  = _libColor(c, 'winBodyBg', winBg);
+    var tbStart = _libColor(c, 'titlebarStart', '#000080');
+    var tbEnd   = _libColor(c, 'titlebarEnd', '#1084d0');
+    var tbText  = _libColor(c, 'titlebarText', '#ffffff');
+    var accent  = _libColor(c, 'accent', '#000080');
+    var accentT = _libColor(c, 'accentText', '#ffffff');
+    var btnBg   = _libColor(c, 'btnBg', '#c0c0c0');
+    var btnText = _libColor(c, 'btnText', '#000000');
+    var text    = _libColor(c, 'text', '#000000');
+    var inset   = _libColor(c, 'insetBg', '#808080');
+    var border  = _libColor(c, 'border', '#808080');
+    return '' +
+    '<div class="lib-win" style="background:' + winBg + ';border-color:' + border + ';">' +
+        '<div class="lib-win-tb" style="background:linear-gradient(to right,' + tbStart + ',' + tbEnd + ');color:' + tbText + ';">' +
+            '<span>Aa</span>' +
+            '<span class="lib-win-tb-dots">' +
+                '<i style="background:' + btnBg + ';"></i>' +
+                '<i style="background:' + btnBg + ';"></i>' +
+            '</span>' +
+        '</div>' +
+        '<div class="lib-win-body" style="background:' + bodyBg + ';">' +
+            '<div class="lib-win-row" style="background:' + inset + ';width:90%;"></div>' +
+            '<div class="lib-win-row" style="background:' + inset + ';width:65%;"></div>' +
+            '<div class="lib-win-btns">' +
+                '<span class="lib-win-btn" style="background:' + btnBg + ';color:' + btnText + ';border:1px solid ' + border + ';">Ok</span>' +
+                '<span class="lib-win-btn" style="background:' + accent + ';color:' + accentT + ';">★</span>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
+}
+
+function loadLibrary(){
+    var grid = document.getElementById('temas-library-grid');
+    grid.innerHTML = '<div id="temas-library-empty">Cargando…</div>';
+    fetch('../assets/themes/api.php?action=library')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if(!d || !d.ok || !Array.isArray(d.items) || !d.items.length){
+                grid.innerHTML = '<div id="temas-library-empty">Aún no hay temas publicados.<br>Publica uno desde «Mis temas».</div>';
+                return;
+            }
+            grid.innerHTML = '';
+            d.items.forEach(function(it){
+                var card = document.createElement('div');
+                card.className = 'lib-card';
+
+                var prev = document.createElement('div');
+                prev.className = 'lib-preview';
+                prev.title = 'Probar este tema';
+                /* El fondo del preview representa el escritorio del tema:
+                   color desktopBg + wallpaper encima si el tema trae uno. */
+                var prevColors = migrateLegacyColors(it.colors || {});
+                prev.style.backgroundColor = _libColor(prevColors, 'desktopBg', '#008080');
+                if (it.wallpaper) {
+                    prev.style.backgroundImage    = 'url("../' + it.wallpaper + '")';
+                    prev.style.backgroundSize     = 'cover';
+                    prev.style.backgroundPosition = 'center';
+                }
+                prev.innerHTML = buildThemePreview(it.colors);
+                prev.addEventListener('click', function(){ tryLibraryTheme(it); });
+                card.appendChild(prev);
+
+                var nm = document.createElement('div');
+                nm.className = 'lib-name';
+                nm.textContent = it.name;
+                card.appendChild(nm);
+
+                var author = document.createElement('div');
+                author.className = 'lib-author';
+                author.title = 'Ver el perfil de ' + it.label;
+                var imgHtml = it.image
+                    ? '<img class="lib-author-img" src="../' + it.image + '" alt="">'
+                    : '<span class="lib-author-ph">👤</span>';
+                author.innerHTML = imgHtml + '<span class="lib-author-name">' + escapeHtml(it.label) + '</span>';
+                author.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    window.parent.postMessage({ type: 'open-profile', userKey: it.userKey }, '*');
+                });
+                card.appendChild(author);
+
+                /* Clic derecho → si el tema es MÍO, opción de quitarlo de la biblioteca */
+                if(it.userKey === OWN_USER_KEY){
+                    card.addEventListener('contextmenu', function(e){
+                        e.preventDefault();
+                        showLibraryCtxMenu(e.clientX, e.clientY, it);
+                    });
+                }
+
+                grid.appendChild(card);
+            });
+        })
+        .catch(function(){
+            grid.innerHTML = '<div id="temas-library-empty">✗ No se pudo cargar la biblioteca.</div>';
+        });
+}
+
+/* Clic derecho sobre una tarjeta de la biblioteca que es MÍA → quitarla */
+function showLibraryCtxMenu(x, y, it){
+    hideThemeCtxMenu();
+    var menu = document.createElement('div');
+    menu.className = 'temas-ctx-menu';
+    var el = document.createElement('div');
+    el.className = 'temas-ctx-opt danger';
+    el.textContent = '🗑 Quitar de la biblioteca';
+    el.addEventListener('click', function(){
+        hideThemeCtxMenu();
+        fetch('../assets/themes/api.php?action=set-public', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: it.name, public: false })
+        }).then(function(r){ return r.json(); })
+          .then(function(d){
+              if(!d || d.error){ statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
+              if(savedThemes[it.name]) savedThemes[it.name].public = false;
+              statusEl.textContent = 'Tema "' + it.name + '" quitado de la biblioteca.';
+              loadLibrary();
+          });
+    });
+    menu.appendChild(el);
+    document.body.appendChild(menu);
+    var mw = menu.offsetWidth, mh = menu.offsetHeight;
+    menu.style.left = Math.min(x, window.innerWidth  - mw - 4) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - mh - 4) + 'px';
+    _themeCtxMenu = menu;
+}
+
+/* Probar un tema de la biblioteca: pide confirmación y, al aceptar,
+   lo guarda en "Mis temas" del usuario. */
+function tryLibraryTheme(it){
+    var extras = [];
+    if (it.wallpaper) extras.push('fondo');
+    if (it.startIcon) extras.push('icono');
+    var extraNote = extras.length
+        ? '<br><small>Incluye ' + extras.join(' e ') + '.</small>'
+        : '';
+    window._w98Confirm({
+        title: 'Descargar tema',
+        html: '¿Descargar el tema <strong>' + escapeHtml(it.name) + '</strong> de '
+              + escapeHtml(it.label) + '?<br><small>Se guardará en «Mis temas».</small>' + extraNote,
+        okText: 'Descargar',
+        onOk: function(){ downloadLibraryTheme(it); }
+    });
+}
+
+/* Guarda el tema de la biblioteca en los temas del usuario (action=save).
+   Si ya existe uno con ese nombre, añade un sufijo para no pisarlo. */
+function downloadLibraryTheme(it){
+    var colors = migrateLegacyColors(it.colors || {});
+    var name = it.name;
+    if (savedThemes[name]) {
+        var base = name.slice(0, 26), n = 2;
+        while (savedThemes[name] && n < 99) { name = base + '_' + n; n++; }
+    }
+    var labelSafe = <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
+    fetch('../assets/themes/api.php?action=save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, colors: colors, downloaded: true,
+                               wallpaper: it.wallpaper || '', startIcon: it.startIcon || '' })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+          if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error al guardar'; return; }
+          editingOriginalName = name;
+          /* Activar el tema descargado para aplicar de golpe colores + fondo + icono.
+             set-active devuelve los assets ya copiados al espacio del usuario. */
+          return fetch('../assets/themes/api.php?action=set-active', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: name })
+          }).then(function(r){ return r.json(); })
+            .then(function(d2){
+                activeName = name;
+                var className = name + '-' + labelSafe;
+                applyLiveTheme(className, 'assets/themes/' + className + '.css');
+                applyThemeAssets((d2 && d2.wallpaper) || THEME_DEFAULT_WP,
+                                 (d2 && d2.startIcon) || THEME_DEFAULT_SI);
+                /* Ir a "Mis temas", refrescar lista/previews y dejarlo seleccionado */
+                document.querySelector('.temas-tab-btn[data-tab="themes"]').click();
+                loadThemes(function(){
+                    nameInput.value = name;
+                    setEditorColors(colors);
+                    setActiveItem(name);
+                });
+                statusEl.textContent = '✔ "' + name + '" descargado y activado.';
+            });
+      })
+      .catch(function(){ statusEl.textContent = '✗ Error de red al guardar.'; });
+}
+
+function escapeHtml(s){
+    return String(s).replace(/[&<>"]/g, function(ch){
+        return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[ch];
+    });
+}
+
+document.getElementById('temas-lib-refresh').addEventListener('click', loadLibrary);
 
 /* =========================================================
    FONDO DE PANTALLA
@@ -790,6 +1259,9 @@ loadThemes();
         }
     }
     setPreview(currentWp);
+    /* Refresca el preview con el valor EFECTIVO que pasa el llamador
+       (vacío = limpia el preview, mostrando el hueco hundido). */
+    window._setWpPreview = function(rel){ currentWp = rel || ''; setPreview(currentWp); };
 
     wpBrowse.addEventListener('click', function() { wpFile.click(); });
     wpFile.addEventListener('change', function() {
@@ -801,6 +1273,8 @@ loadThemes();
         if (!wpFile.files.length) { wpStatus.textContent = 'Elige una imagen primero.'; return; }
         var fd = new FormData();
         fd.append('wallpaper', wpFile.files[0]);
+        /* Vincular el fondo al tema activo (si lo hay) */
+        if (activeName) fd.append('theme', activeName);
         wpStatus.textContent = 'Subiendo…';
         wpSave.classList.add('btn-busy');
         fetch('../assets/img/wallpapers/save-wallpaper.php', { method: 'POST', body: fd })
@@ -808,8 +1282,9 @@ loadThemes();
             .then(function(d) {
                 wpSave.classList.remove('btn-busy');
                 if (!d || d.error) { wpStatus.textContent = (d && d.error) ? d.error : 'Error'; return; }
-                wpStatus.textContent = 'Fondo actualizado.';
+                wpStatus.textContent = activeName ? 'Fondo vinculado al tema "' + activeName + '".' : 'Fondo actualizado.';
                 currentWp = d.wallpaper;
+                if (activeName && savedThemes[activeName]) savedThemes[activeName].wallpaper = d.wallpaper;
                 setPreview(currentWp);
                 /* Pide al escritorio padre que aplique el wallpaper nuevo */
                 if (window.parent && window.parent !== window) {
@@ -843,6 +1318,7 @@ loadThemes();
         }
     }
     setPreview(currentSi);
+    window._setSiPreview = function(rel){ currentSi = rel || ''; setPreview(currentSi); };
 
     siBrowse.addEventListener('click', function() { siFile.click(); });
     siFile.addEventListener('change', function() {
@@ -854,6 +1330,7 @@ loadThemes();
         if (!siFile.files.length) { siStatus.textContent = 'Elige una imagen primero.'; return; }
         var fd = new FormData();
         fd.append('icon', siFile.files[0]);
+        if (activeName) fd.append('theme', activeName);
         siStatus.textContent = 'Subiendo…';
         siSave.classList.add('btn-busy');
         fetch('../assets/img/start-icons/save-start-icon.php', { method: 'POST', body: fd })
@@ -861,8 +1338,9 @@ loadThemes();
             .then(function(d) {
                 siSave.classList.remove('btn-busy');
                 if (!d || d.error) { siStatus.textContent = (d && d.error) ? d.error : 'Error'; return; }
-                siStatus.textContent = 'Icono actualizado.';
+                siStatus.textContent = activeName ? 'Icono vinculado al tema "' + activeName + '".' : 'Icono actualizado.';
                 currentSi = d.icon;
+                if (activeName && savedThemes[activeName]) savedThemes[activeName].startIcon = d.icon;
                 setPreview(currentSi);
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({ type: 'start-icon-changed', icon: currentSi }, '*');
@@ -897,14 +1375,15 @@ loadThemes();
 </div>
 
 <script>
-/* Modal Win98 para confirmar borrado (sustituye al confirm() nativo). */
+/* Modal Win98 de confirmación genérico (sustituye al confirm() nativo). */
 (function(){
     var modal = document.getElementById('theme-delete-modal');
-    function openConfirm(name, onOk){
-        document.getElementById('theme-delete-text').innerHTML =
-            '¿Eliminar el tema <strong>' + name.replace(/[&<>]/g, function(c){
-                return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];
-            }) + '</strong>?';
+    var titleEl = modal.querySelector('.title-bar-text');
+    function openConfirm(opts){
+        /* opts: { title, html, okText, onOk } */
+        if(titleEl) titleEl.textContent = opts.title || 'Confirmar';
+        document.getElementById('theme-delete-text').innerHTML = opts.html || '¿Continuar?';
+        document.getElementById('theme-delete-ok').textContent = opts.okText || 'Sí';
         modal.style.display = 'flex';
         function cleanup(){
             modal.style.display = 'none';
@@ -913,7 +1392,7 @@ loadThemes();
             document.getElementById('theme-delete-x').onclick = null;
             document.removeEventListener('keydown', keyHandler);
         }
-        function ok(){ cleanup(); onOk(); }
+        function ok(){ cleanup(); if(opts.onOk) opts.onOk(); }
         function cancel(){ cleanup(); }
         function keyHandler(ev){
             if(ev.key === 'Enter'){ ev.preventDefault(); ok(); }
@@ -924,7 +1403,17 @@ loadThemes();
         document.getElementById('theme-delete-x').onclick = cancel;
         document.addEventListener('keydown', keyHandler);
     }
-    window._w98ConfirmDeleteTheme = openConfirm;
+    window._w98Confirm = openConfirm;
+    /* Compat: confirmación de borrado de tema */
+    window._w98ConfirmDeleteTheme = function(name, onOk){
+        openConfirm({
+            title: 'Confirmar eliminación de tema',
+            html: '¿Eliminar el tema <strong>' + name.replace(/[&<>]/g, function(c){
+                      return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];
+                  }) + '</strong>?',
+            okText: 'Sí', onOk: onOk
+        });
+    };
 })();
 </script>
 

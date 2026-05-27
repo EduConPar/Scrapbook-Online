@@ -1190,11 +1190,13 @@ var addTrackCallback = null;
     /* ──── Context menu: añadir a otra playlist ──── */
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
+    ctxMenu.setAttribute('data-no-auto-z', '');   // popup: z fijo, siempre encima
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;padding:2px 0;min-width:160px;';
     document.body.appendChild(ctxMenu);
 
     var addToPicker = document.createElement('div');
     addToPicker.className = 'window';
+    addToPicker.setAttribute('data-no-auto-z', '');
     addToPicker.style.cssText = 'display:none;position:fixed;z-index:10000;min-width:190px;';
     addToPicker.innerHTML =
         '<div class="title-bar"><div class="title-bar-text">Añadir a playlist</div>' +

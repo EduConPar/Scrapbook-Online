@@ -3817,7 +3817,7 @@ var PROFILE_USERS = <?php
     });
 
     /* ──── Profile icon ──── */
-    document.getElementById('profile-icon').addEventListener('dblclick', function() {
+    function openProfileWindow() {
         if (taskbarManager.isRegistered('profile-window')) {
             taskbarManager.restore('profile-window');
         } else {
@@ -3831,7 +3831,18 @@ var PROFILE_USERS = <?php
             }
             startItemNotifStream();
         }
-    });
+    }
+    document.getElementById('profile-icon').addEventListener('dblclick', openProfileWindow);
+
+    /* Abrir el perfil de otro usuario desde otra app (ej. biblioteca de temas).
+       Abre la ventana de perfil y navega al perfil indicado. */
+    window.openProfileAtUser = function(userKey) {
+        if (!userKey) return;
+        openProfileWindow();
+        if (window.windowZ) windowZ.bringToFront('profile-window');
+        /* pequeño retraso para asegurar que el perfil propio cargó primero */
+        setTimeout(function() { viewOtherUser(userKey); }, loaded ? 60 : 300);
+    };
 
     /* Cargar notificaciones de perfil + polling cada 30s */
     loadProfileNotifs();

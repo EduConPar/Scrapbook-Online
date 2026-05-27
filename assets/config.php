@@ -136,6 +136,18 @@ function getUserWallpaper($label)
     return '';
 }
 
+/* Fondo por defecto de la app (base-wallpaper). Se usa cuando un tema activo
+   no define un fondo propio. Devuelve ruta relativa o ''. */
+function defaultWallpaper()
+{
+    foreach (['jpg', 'jpeg', 'png', 'webp', 'gif'] as $ext) {
+        if (file_exists(__DIR__ . "/img/wallpapers/base-wallpaper.{$ext}")) {
+            return "assets/img/wallpapers/base-wallpaper.{$ext}";
+        }
+    }
+    return '';
+}
+
 function getUserStartIcon($label)
 {
     $safe = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));

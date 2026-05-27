@@ -2,15 +2,15 @@
    Establece los tokens CSS para que cualquier app que use
    var(--token) reciba la paleta del tema activo. */
 
-body.Test1-Unroudmell {
+body.Forthebrainrot-Unroudmell {
     --win-bg: #f9f06b;
     --win-body-bg: #241f31;
     --surface-deep: #26203c;
     --inset-bg: #808080;
     --input-bg: #241f31;
-    --input-text: #000000;
+    --input-text: #ffffff;
     --btn-bg: #cb3a3a;
-    --btn-text: #000000;
+    --btn-text: #ffffff;
     --start-btn-bg: #1a5fb4;
     --start-btn-text: #000000;
     --text: #2ec27e;

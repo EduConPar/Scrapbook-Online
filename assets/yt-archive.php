@@ -5,6 +5,7 @@ ini_set('display_errors', 0);
 header('Content-Type: application/json; charset=utf-8');
 session_start();
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/cache-helpers.php';
 
 if (!isset($_SESSION['user'])) {
     ob_end_clean(); echo json_encode(array('error' => 'No autorizado')); exit;
@@ -16,19 +17,16 @@ if (!function_exists('curl_init')) {
 $action     = isset($_GET['action']) ? $_GET['action'] : 'playlists';
 $playlistId = isset($_GET['list']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $_GET['list']) : '';
 
-$cacheDir = __DIR__ . '/cache';
-if (!is_dir($cacheDir)) @mkdir($cacheDir, 0755, true);
-$cacheTtl = 3600;
+/* Caché de respuestas de Innertube en SQL (app_cache), ya no en disco.
+   TTL de 1h. Devuelve false cuando no hay entrada vigente (compat). */
+define('YT_CACHE_TTL', 3600);
 
 function ytCacheGet($key) {
-    global $cacheDir, $cacheTtl;
-    $f = $cacheDir . '/' . md5($key) . '.json';
-    if (file_exists($f) && time() - filemtime($f) < $cacheTtl) return file_get_contents($f);
-    return false;
+    $v = cacheGet('yt_' . $key);
+    return $v === null ? false : $v;
 }
 function ytCacheSet($key, $val) {
-    global $cacheDir;
-    file_put_contents($cacheDir . '/' . md5($key) . '.json', $val);
+    cacheSet('yt_' . $key, $val, YT_CACHE_TTL);
 }
 
 $itKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';

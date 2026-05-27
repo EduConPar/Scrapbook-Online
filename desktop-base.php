@@ -22,18 +22,10 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
     exit;
 }
 
-$wallpaper = getUserWallpaper($desktopLabel);
-$startIcon = getUserStartIcon($desktopLabel);
-
 /* URL base del proyecto — necesaria porque las url() dentro de custom
    properties pueden resolverse relativas al CSS que las consume (no al
    documento) en algunos navegadores. */
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
-
-$bodyStyles = [];
-if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
-if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
-$wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $hasPlayer = true; /* Todos los usuarios tienen reproductor */
 
@@ -49,6 +41,30 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     $activeThemeCss   = themeCssRelPath($activeTheme, $desktopLabel);
     if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
 }
+
+/* Fondo e icono de inicio.
+   - Sin tema activo  → fondo/icono GLOBAL del usuario (su baseline).
+   - Con tema activo  → el asset propio del tema; si el tema no define uno,
+     se usan los DEFAULT de la app (base-wallpaper / logo Win98), NO el global. */
+$wallpaper = getUserWallpaper($desktopLabel);
+$startIcon = getUserStartIcon($desktopLabel);
+if ($activeTheme !== '') {
+    $uid = userIdByKey($desktopUserKey);
+    $tWp = ''; $tSi = '';
+    if ($uid) {
+        $st = themesPdo()->prepare("SELECT wallpaper, start_icon FROM themes WHERE user_id = ? AND name = ?");
+        $st->execute([$uid, $activeTheme]);
+        $arow = $st->fetch(PDO::FETCH_ASSOC);
+        if ($arow) { $tWp = (string)$arow['wallpaper']; $tSi = (string)$arow['start_icon']; }
+    }
+    $wallpaper = ($tWp !== '' && file_exists(__DIR__ . '/' . $tWp)) ? $tWp : defaultWallpaper();
+    $startIcon = ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) ? $tSi : '';
+}
+
+$bodyStyles = [];
+if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
+if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
+$wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 /* Iconos del escritorio: set único 'default' para todos los usuarios.
    Antes user1/user2 cargaban iconos custom (capi/, angie/). */
@@ -473,6 +489,12 @@ window.addEventListener('message', function(e) {
             var fr = document.getElementById(id);
             if (fr && fr.contentDocument) refreshImgs(fr.contentDocument);
         });
+    } else if (e.data.type === 'open-profile') {
+        /* Una app (p.ej. la biblioteca de temas) pide abrir el perfil de un
+           usuario. La app de perfil está incluida inline en este documento. */
+        if (typeof window.openProfileAtUser === 'function') {
+            window.openProfileAtUser(e.data.userKey);
+        }
     }
 });
 
@@ -534,6 +556,7 @@ window.windowZ = (function() {
         var maxZ = 0;
         document.querySelectorAll('.window').forEach(function(w){
             if (w === win) return;
+            if (w.hasAttribute('data-no-auto-z')) return;   // popups no cuentan
             if (w.style.display === 'none' || getComputedStyle(w).display === 'none') return;
             var z = parseInt(w.style.zIndex || getComputedStyle(w).zIndex || '0', 10) || 0;
             if (z > maxZ) maxZ = z;
@@ -555,6 +578,9 @@ window.windowZ = (function() {
     var lastSeen = new WeakMap();
     function check(el) {
         if (!el || !el.classList || !el.classList.contains('window')) return;
+        /* Popups (menús contextuales, pickers) gestionan su propio z-index fijo
+           por encima del rango de ventanas; el observer no debe tocarlos. */
+        if (el.hasAttribute('data-no-auto-z')) return;
         var nowVis = isVisible(el);
         var prev   = lastSeen.get(el) === true;
         if (nowVis && !prev) bringToFront(el);
@@ -904,11 +930,13 @@ window.notifSystem = (function() {
 
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
+    ctxMenu.setAttribute('data-no-auto-z', '');   // siempre encima; z fijo
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;padding:2px 0;min-width:160px;';
     document.body.appendChild(ctxMenu);
 
     var picker = document.createElement('div');
     picker.className = 'window';
+    picker.setAttribute('data-no-auto-z', '');
     picker.style.cssText = 'display:none;position:fixed;z-index:10000;min-width:190px;';
     picker.innerHTML =
         '<div class="title-bar" style="cursor:default;">' +
