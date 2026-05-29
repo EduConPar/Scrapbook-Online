@@ -398,7 +398,12 @@ body.has-start-icon .win-logo span { display: none; }
 .w98-icon-question::before { content: '?'; margin-top: -4px; }
 
 .desktop-icon-img {
-    font-size: 30px;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 46px;
     line-height: 1;
     pointer-events: none;
 }

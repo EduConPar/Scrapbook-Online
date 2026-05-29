@@ -75,7 +75,7 @@ function desktopIcon($name, $emoji) {
         foreach (['png', 'jpg', 'gif'] as $ext) {
             $rel  = "assets/img/icons/{$dir}/{$name}.{$ext}";
             if (file_exists(__DIR__ . '/' . $rel)) {
-                return '<img src="' . $rel . '" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;">';
+                return '<img src="' . $rel . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">';
             }
         }
     }
@@ -256,7 +256,12 @@ window.DesktopState.whenReady = function(cb){
 
 <div id="desktop">
     <div class="desktop-icon" id="archive-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('archive', '📼'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_archiveIcon = 'assets/img/appIcons/melonArchiveIcon.png';
+            echo file_exists(__DIR__ . '/' . $_archiveIcon)
+                ? '<img src="' . $_archiveIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('archive', '📼');
+        ?></div>
         <span>MelonArchive</span>
     </div>
     <div class="desktop-icon" id="calendar-icon">
@@ -264,7 +269,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Calendario</span>
     </div>
     <div class="desktop-icon" id="profile-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('profile', '👤'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_profileIcon = 'assets/img/appIcons/profileIcon.png';
+            echo file_exists(__DIR__ . '/' . $_profileIcon)
+                ? '<img src="' . $_profileIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('profile', '👤');
+        ?></div>
         <span>Perfil</span>
     </div>
     <div class="desktop-icon" id="temas-icon">
@@ -278,6 +288,10 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="dnd-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('dnd', '⚔'); ?></div>
         <span>Fichas D&amp;D</span>
+    </div>
+    <div class="desktop-icon" id="galeria-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('galeria', '🖼'); ?></div>
+        <span>Galería</span>
     </div>
 </div>
 
@@ -344,6 +358,19 @@ window.DesktopState.whenReady = function(cb){
         </div>
     </div>
     <iframe id="dnd-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- GALERÍA WINDOW -->
+<div class="window" id="galeria-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="galeria-titlebar">
+        <div class="title-bar-text">🖼 Galería</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="galeria-close"></button>
+        </div>
+    </div>
+    <iframe id="galeria-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- NOTIFICATION STACK -->
@@ -444,7 +471,7 @@ window.addEventListener('message', function(e) {
         var className = e.data.className || '';
         var basePath  = e.data.cssBasePath || '';
         applyThemeToDocument(document, className, basePath);
-        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe'].forEach(function(id) {
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe', 'galeria-iframe'].forEach(function(id) {
             var fr = document.getElementById(id);
             if (!fr || !fr.contentDocument || !fr.contentDocument.body) return;
             var childHref = basePath ? '../' + basePath : '';
@@ -485,7 +512,7 @@ window.addEventListener('message', function(e) {
             }
         }
         refreshImgs(document);
-        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe'].forEach(function(id) {
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe', 'galeria-iframe'].forEach(function(id) {
             var fr = document.getElementById(id);
             if (fr && fr.contentDocument) refreshImgs(fr.contentDocument);
         });
@@ -923,6 +950,32 @@ window.notifSystem = (function() {
     });
 })();
 
+/* =========================
+   GALERÍA
+========================= */
+(function() {
+    var galIframe = document.getElementById('galeria-iframe');
+    var galLoaded = false;
+
+    document.getElementById('galeria-icon').addEventListener('dblclick', function() {
+        if (!galLoaded) { galIframe.src = 'apps/galeria.php'; galLoaded = true; }
+        if (taskbarManager.isRegistered('galeria-window')) {
+            taskbarManager.restore('galeria-window');
+        } else {
+            taskbarManager.register('galeria-window', 'Galería', '🖼', 'flex');
+        }
+    });
+
+    document.getElementById('galeria-close').addEventListener('click', function() {
+        taskbarManager.unregister('galeria-window');
+        /* Forzar recarga del iframe en la próxima apertura: así los cambios
+           del lado de la app (JS/CSS) se reflejan sin tener que recargar
+           el escritorio entero. Drive token vive en localStorage, no se pierde. */
+        galIframe.src = '';
+        galLoaded = false;
+    });
+})();
+
 /* ──── Player right-click context menu ──── */
 (function() {
     var playerMain = document.getElementById('player-main');
@@ -1151,6 +1204,7 @@ window.notifSystem = (function() {
     /* Todas las ventanas: drageables Y resizables (handles en bordes y esquinas) */
     [
         'calendar-window','archive-window','temas-window','dnd-window',
+        'galeria-window',
         'companion-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
@@ -1168,6 +1222,7 @@ window.notifSystem = (function() {
 (function() {
     var ids = [
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
+        'galeria-window',
         'create-playlist-dialog', 'profile-window', 'companion-window'
     ];
     ids.forEach(function(id) {
