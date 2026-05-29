@@ -671,7 +671,8 @@
 }
 
 #import-playlist-dialog,
-#spotify-import-dialog {
+#spotify-import-dialog,
+#tidal-import-dialog {
     display: none;
     position: fixed;
     top: 50%;
@@ -691,7 +692,8 @@
 }
 
 #spotify-import-hint   { color: var(--text-muted); }
-#spotify-import-dialog { isolation: isolate; }
+#spotify-import-dialog,
+#tidal-import-dialog   { isolation: isolate; }
 
 /* Warning visual del importador de Spotify */
 .spotify-warn {

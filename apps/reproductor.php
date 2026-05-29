@@ -99,6 +99,7 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
                     <div id="pl-more-menu" class="window">
                         <div class="pl-menu-item" id="pl-more-import">Importar de YouTube</div>
                         <div class="pl-menu-item" id="pl-more-spotify">Importar de Spotify</div>
+                        <div class="pl-menu-item" id="pl-more-tidal">Importar de Tidal</div>
                         <div class="pl-menu-item" id="pl-more-collab">Colaboradores</div>
                     </div>
                 </div>
@@ -120,8 +121,8 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
     <div class="window-body" id="add-track-body">
         <div class="field-row-stacked">
-            <label for="add-yt-url">Enlace de YouTube o Spotify</label>
-            <input type="text" id="add-yt-url" placeholder="https://youtube.com/watch?v=... o https://open.spotify.com/track/...">
+            <label for="add-yt-url">Enlace de YouTube, Spotify o Tidal</label>
+            <input type="text" id="add-yt-url" placeholder="youtube.com/watch?v=… · open.spotify.com/track/… · tidal.com/track/…">
             <div id="add-title-preview-wrap"><span id="add-title-preview"></span></div>
         </div>
         <div class="field-row-stacked">
@@ -230,6 +231,39 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
         <div class="field-row" style="justify-content: flex-end; gap: 4px; margin-top: 10px;">
             <button class="button" id="spotify-import-cancel">Cancelar</button>
             <button class="button" id="spotify-import-submit">Importar</button>
+        </div>
+    </div>
+</div>
+
+<!-- TIDAL IMPORT DIALOG -->
+<div class="window" id="tidal-import-dialog">
+    <div class="title-bar">
+        <div class="title-bar-text">Importar de Tidal</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="tidal-import-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <p style="margin:0 0 6px;">
+            Pega el enlace de una <strong>canción</strong> o <strong>playlist</strong> de Tidal.
+        </p>
+        <div class="spotify-warn">
+            ⚠️ La búsqueda en YouTube puede no coincidir exactamente con algunas canciones. Si alguna falla o es incorrecta, añádela tú mismo con el botón <strong>+ Añadir</strong> del editor de playlist.
+        </div>
+        <div class="field-row-stacked">
+            <label for="tidal-import-url">Enlace de Tidal</label>
+            <input type="text" id="tidal-import-url" placeholder="https://tidal.com/browse/playlist/... o .../track/...">
+        </div>
+        <div id="tidal-progress-wrap" style="display:none;margin:6px 0 0;">
+            <div class="progress-indicator segmented" style="height:18px;padding:2px;">
+                <span id="tidal-progress-fill" class="progress-indicator-bar" style="width:0%;"></span>
+            </div>
+            <p id="tidal-progress-text" style="font-size:10px;margin:3px 0 0;text-align:center;"></p>
+        </div>
+        <p id="tidal-import-status"></p>
+        <div class="field-row" style="justify-content: flex-end; gap: 4px; margin-top: 10px;">
+            <button class="button" id="tidal-import-cancel">Cancelar</button>
+            <button class="button" id="tidal-import-submit">Importar</button>
         </div>
     </div>
 </div>
@@ -738,6 +772,19 @@ var addTrackCallback = null;
     var errEl    = document.getElementById('add-track-error');
     var fetchedTitle = '';
 
+    /* El artista se autocompleta desde los metadatos (Spotify/Tidal/YouTube)
+       mientras el usuario no lo haya escrito a mano. */
+    var artistTouched = false;
+    artInput.addEventListener('input', function() { artistTouched = true; });
+    function setArtist(name) {
+        if (artistTouched) return;          // respeta lo que escribió el usuario
+        artInput.value = name || '';
+    }
+    function cleanYtAuthor(name) {
+        if (!name) return '';
+        return name.replace(/\s*-\s*topic$/i, '').replace(/\s*VEVO$/i, '').trim();
+    }
+
     function parseYouTubeId(raw) {
         var s = raw.trim();
         var m;
@@ -753,6 +800,7 @@ var addTrackCallback = null;
 
     function openDialog() {
         urlInput.value = ''; artInput.value = '';
+        artistTouched = false;
         errEl.textContent = '';
         resetTitlePreview();
         dialog.style.display = 'block';
@@ -806,8 +854,35 @@ var addTrackCallback = null;
                     fetchedTitle    = data.title;
                     fetchedVideoId  = data.videoId;
                     fetchedDuration = data.duration;
-                    if (!artInput.value.trim()) artInput.value = data.artist;
+                    setArtist(data.artist);
                     titlePreview.textContent = '♪ ' + data.title + ' [Spotify]';
+                    titlePreview.style.color = '';
+                    applyScrollIfNeeded();
+                })
+                .catch(function() {
+                    titlePreview.textContent = 'Error de conexión';
+                    titlePreview.style.color = '#c00';
+                });
+            }, 400);
+            return;
+        }
+
+        if (/tidal\.com\/(?:browse\/)?track\/\d+/i.test(raw)) {
+            titlePreview.textContent = 'Buscando en Tidal...';
+            fetchTimer = setTimeout(function() {
+                fetch('assets/music/api.php?action=tidal-track&url=' + encodeURIComponent(raw))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.error) {
+                        titlePreview.textContent = data.error;
+                        titlePreview.style.color = '#c00';
+                        return;
+                    }
+                    fetchedTitle    = data.title;
+                    fetchedVideoId  = data.videoId;
+                    fetchedDuration = data.duration;
+                    setArtist(data.artist);
+                    titlePreview.textContent = '♪ ' + data.title + ' [Tidal]';
                     titlePreview.style.color = '';
                     applyScrollIfNeeded();
                 })
@@ -828,6 +903,7 @@ var addTrackCallback = null;
             .then(function(data) {
                 if (data.title) {
                     fetchedTitle = data.title;
+                    setArtist(cleanYtAuthor(data.author));
                     titlePreview.textContent = '♪ ' + data.title;
                     titlePreview.style.color = '';
                     applyScrollIfNeeded();
@@ -1190,11 +1266,13 @@ var addTrackCallback = null;
     /* ──── Context menu: añadir a otra playlist ──── */
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
+    ctxMenu.setAttribute('data-no-auto-z', '');   // popup: z fijo, siempre encima
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;padding:2px 0;min-width:160px;';
     document.body.appendChild(ctxMenu);
 
     var addToPicker = document.createElement('div');
     addToPicker.className = 'window';
+    addToPicker.setAttribute('data-no-auto-z', '');
     addToPicker.style.cssText = 'display:none;position:fixed;z-index:10000;min-width:190px;';
     addToPicker.innerHTML =
         '<div class="title-bar"><div class="title-bar-text">Añadir a playlist</div>' +
@@ -1590,6 +1668,135 @@ var addTrackCallback = null;
                 });
             };
             reader.readAsText(file);
+        });
+
+        /* ─── Importar de Tidal (API oficial → resolver a YouTube) ─── */
+        var tidalDlg  = document.getElementById('tidal-import-dialog');
+        var tidalUrl  = document.getElementById('tidal-import-url');
+        var tidalStat = document.getElementById('tidal-import-status');
+        var tidalBtn  = document.getElementById('tidal-import-submit');
+        var tidalWrap = document.getElementById('tidal-progress-wrap');
+        var tidalFill = document.getElementById('tidal-progress-fill');
+        var tidalText = document.getElementById('tidal-progress-text');
+        var tidalAbort = null;
+
+        function tidalBusy(on) {
+            tidalBtn.style.pointerEvents = on ? 'none' : '';
+            tidalBtn.classList.toggle('btn-busy', on);
+        }
+        function openTidalDialog() {
+            moreMenu.style.display = 'none';
+            tidalUrl.value = '';
+            tidalStat.textContent = ''; tidalStat.style.color = '';
+            tidalWrap.style.display = 'none';
+            tidalFill.style.width = '0%';
+            tidalBusy(false);
+            tidalDlg.style.display = 'block';
+        }
+        document.getElementById('pl-more-tidal').addEventListener('click', openTidalDialog);
+
+        function closeTidalImport() {
+            if (tidalAbort) { tidalAbort.abort(); tidalAbort = null; }
+            tidalBusy(false);
+            tidalWrap.style.display = 'none';
+            tidalDlg.style.display = 'none';
+        }
+        document.getElementById('tidal-import-close').addEventListener('click', closeTidalImport);
+        document.getElementById('tidal-import-cancel').addEventListener('click', closeTidalImport);
+
+        /* Resuelve [{title,artist,duration}] a YouTube por lotes con progreso. */
+        function tidalResolveBatches(tracks, signal) {
+            var BATCH = 10, total = tracks.length, found = 0, results = [];
+            tidalWrap.style.display = 'block';
+            tidalFill.style.width = '0%';
+            tidalText.textContent = '0 encontradas · ' + total + ' restantes';
+            function nextBatch(offset) {
+                if (signal.aborted || offset >= total) return Promise.resolve();
+                var chunk = tracks.slice(offset, offset + BATCH);
+                return fetch('assets/music/api.php?action=yt-search-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tracks: chunk }),
+                    signal: signal
+                })
+                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function(data) {
+                    if (data.tracks) { results = results.concat(data.tracks); found += data.tracks.length; }
+                    var done = Math.min(offset + BATCH, total);
+                    tidalFill.style.width = Math.round(done / total * 100) + '%';
+                    tidalText.textContent = found + ' encontradas · ' + (total - done) + ' restantes';
+                    return nextBatch(offset + BATCH);
+                });
+            }
+            return nextBatch(0).then(function() { return results; });
+        }
+
+        document.getElementById('tidal-import-submit').addEventListener('click', function() {
+            var url = tidalUrl.value.trim();
+            if (!url) { tidalStat.textContent = 'Pega un enlace de Tidal.'; return; }
+            tidalStat.style.color = '';
+            var importer   = usersInfo[currentUserKey] ? usersInfo[currentUserKey].label : '';
+            var isTrack    = /tidal\.com\/(?:browse\/)?track\/\d+/i.test(url);
+            var isPlaylist = /tidal\.com\/(?:browse\/)?playlist\/[0-9a-f-]{8,}/i.test(url);
+
+            /* Canción suelta */
+            if (isTrack && !isPlaylist) {
+                tidalBusy(true);
+                tidalStat.textContent = 'Buscando en Tidal…';
+                fetch('assets/music/api.php?action=tidal-track&url=' + encodeURIComponent(url))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    tidalBusy(false);
+                    if (data.error) { tidalStat.textContent = data.error; tidalStat.style.color = '#c00'; return; }
+                    editList.push({ videoId: data.videoId, title: data.title, artist: data.artist, duration: data.duration, addedBy: importer });
+                    renderList();
+                    closeTidalImport();
+                })
+                .catch(function() { tidalBusy(false); tidalStat.textContent = 'Error de conexión'; tidalStat.style.color = '#c00'; });
+                return;
+            }
+
+            if (!isPlaylist) { tidalStat.textContent = 'Enlace no reconocido (canción o playlist de Tidal).'; tidalStat.style.color = '#c00'; return; }
+
+            /* Playlist: leer de Tidal y resolver a YouTube por lotes */
+            tidalBusy(true);
+            tidalStat.textContent = 'Leyendo playlist de Tidal…';
+            tidalAbort = new AbortController();
+            var signal = tidalAbort.signal;
+            fetch('assets/music/api.php?action=tidal-playlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url }),
+                signal: signal
+            })
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(data) {
+                if (data.error) throw new Error(data.error);
+                var plName = data.name || '';
+                var tracks = data.tracks || [];
+                if (!tracks.length) throw new Error('La playlist no tiene canciones.');
+                tidalStat.textContent = '';
+                return tidalResolveBatches(tracks, signal).then(function(results) {
+                    if (signal.aborted) return;
+                    tidalAbort = null;
+                    tidalBusy(false);
+                    tidalWrap.style.display = 'none';
+                    if (!results.length) { tidalStat.textContent = 'No se encontraron vídeos en YouTube.'; tidalStat.style.color = '#c00'; return; }
+                    var nameInput = document.getElementById('pl-name-input');
+                    if (nameInput && !nameInput.value.trim() && plName) nameInput.value = plName;
+                    results.forEach(function(t) { editList.push(Object.assign({}, t, { addedBy: importer })); });
+                    renderList();
+                    closeTidalImport();
+                });
+            })
+            .catch(function(e) {
+                if (e.name === 'AbortError') return;
+                tidalAbort = null;
+                tidalBusy(false);
+                tidalWrap.style.display = 'none';
+                tidalStat.textContent = 'Error: ' + e.message;
+                tidalStat.style.color = '#c00';
+            });
         });
 
         /* Colaborador */

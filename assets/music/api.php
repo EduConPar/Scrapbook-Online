@@ -9,7 +9,9 @@
    GET   ?action=yt-title&id=VIDEOID
    GET   ?action=yt-duration&id=VIDEOID
    GET   ?action=spotify-track&url=...
+   GET   ?action=tidal-track&url=...
 
+   POST  ?action=tidal-playlist        { url }
    POST  ?action=save-playlist-item   { id, name, tracks[], sharedFrom? }
    POST  ?action=delete-playlist      { id }
    POST  ?action=leave-playlist       { id, sharedFrom }
@@ -421,7 +423,7 @@ case 'yt-title': {
     if (!$raw) jsonError('No se pudo obtener el título', 502);
     $data = json_decode($raw, true);
     if (!isset($data['title'])) jsonError('Respuesta inválida', 502);
-    jsonResponse(['title' => $data['title']]);
+    jsonResponse(['title' => $data['title'], 'author' => $data['author_name'] ?? '']);
 }
 
 case 'yt-duration': {
@@ -487,6 +489,45 @@ case 'spotify-track': {
     $videoId  = searchYouTubeVideoId($title . ' ' . $artist . ' audio');
     if (!$videoId) jsonError('No se encontró el vídeo en YouTube', 502);
     jsonResponse(['title' => $title, 'artist' => $artist, 'duration' => $duration, 'videoId' => $videoId]);
+}
+
+/* ─── Tidal ───────────────────────────────────────────────── */
+
+case 'tidal-track': {
+    require_once __DIR__ . '/spotify-helpers.php';   /* searchYouTubeVideo */
+    require_once __DIR__ . '/tidal-helpers.php';
+    $url = trim($_GET['url'] ?? ($_POST['url'] ?? ''));
+    if (!$url) jsonError('URL requerida');
+    $trackId = parseTidalTrackId($url);
+    if (!$trackId) jsonError('URL de track de Tidal inválida');
+    if (!TIDAL_CLIENT_ID || !TIDAL_CLIENT_SECRET) jsonError('Falta configurar las credenciales de Tidal (.env)', 503);
+    $meta = tidalGetTrack($trackId);
+    if (!$meta) jsonError('No se pudo obtener el track de Tidal', 502);
+    $video = searchYouTubeVideo($meta['title'] . ' ' . $meta['artist'] . ' audio');
+    if (!$video) jsonError('No se encontró el vídeo en YouTube', 502);
+    jsonResponse([
+        'title'    => $meta['title'],
+        'artist'   => $meta['artist'],
+        'duration' => $video['duration'] ?: $meta['duration'],
+        'videoId'  => $video['videoId'],
+    ]);
+}
+
+case 'tidal-playlist': {
+    require_once __DIR__ . '/tidal-helpers.php';
+    set_time_limit(120);
+    $b   = jsonBody();
+    $url = trim($b['url'] ?? ($_GET['url'] ?? ''));
+    if (!$url) jsonError('URL requerida');
+    $plId = parseTidalPlaylistId($url);
+    if (!$plId) jsonError('URL de playlist de Tidal inválida');
+    if (!TIDAL_CLIENT_ID || !TIDAL_CLIENT_SECRET) jsonError('Falta configurar las credenciales de Tidal (.env)', 503);
+    $pl = tidalGetPlaylist($plId);
+    if ($pl === null) jsonError('No se pudo obtener la playlist de Tidal (¿es pública?)', 502);
+    if (empty($pl['tracks'])) jsonError('La playlist no tiene canciones o no es accesible', 404);
+    /* Devuelve nombre + tracks SIN resolver (title/artist/duration).
+       El cliente los resuelve a YouTube vía yt-search-batch (como el CSV). */
+    jsonResponse(['name' => $pl['name'], 'tracks' => $pl['tracks']]);
 }
 
 /* ─── Import de playlist de YouTube ──────────────────────── */

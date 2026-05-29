@@ -391,6 +391,55 @@ function themeCssClassName($themeName, $label) {
     return $safeTheme . '-' . $safeLabel;
 }
 
+/* Wallpaper PROPIO del usuario por nombre ({label}-wallpaper.ext), SIN el
+   fallback genérico a base-wallpaper. Devuelve ruta relativa o ''. Sirve
+   para resolver el fondo «efectivo» de un tema sin asset propio. */
+function userNamedWallpaper($label) {
+    $safe = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
+    $dir  = dirname(__DIR__, 2) . '/assets/img/wallpapers';
+    foreach (['png', 'jpg', 'jpeg', 'webp', 'gif'] as $ext) {
+        if (is_file("$dir/$safe-wallpaper.$ext")) {
+            return "assets/img/wallpapers/$safe-wallpaper.$ext";
+        }
+    }
+    return '';
+}
+
+/**
+ * Copia el asset (wallpaper / start-icon) de un tema publicado al espacio
+ * del usuario que lo descarga y devuelve la nueva ruta relativa. Así el
+ * tema descargado es autónomo: no depende del fichero del autor.
+ *
+ * @param string $srcRel    ruta de origen (assets/img/{wallpapers|start-icons}/...)
+ * @param string $kind      'wallpaper' | 'start-icon'
+ * @param string $themeName nombre del tema en el espacio del descargador
+ * @param string $label     label del usuario descargador
+ * @return string nueva ruta relativa, o '' si no se pudo copiar.
+ */
+function copyThemeAsset($srcRel, $kind, $themeName, $label) {
+    if (!is_string($srcRel) || $srcRel === '') return '';
+    $sub    = ($kind === 'start-icon') ? 'start-icons' : 'wallpapers';
+    $suffix = ($kind === 'start-icon') ? 'start-icon'  : 'wallpaper';
+    /* Validar estrictamente el formato de la ruta de origen */
+    if (!preg_match('#^assets/img/' . $sub . '/[A-Za-z0-9._-]+\.(jpe?g|png|gif|webp|svg)$#i', $srcRel)) return '';
+    $root   = dirname(__DIR__, 2);
+    $srcAbs = $root . '/' . $srcRel;
+    if (!is_file($srcAbs)) return '';
+    $ext       = strtolower(pathinfo($srcAbs, PATHINFO_EXTENSION));
+    $safeTheme = sanitizeThemeName($themeName);
+    $safeLabel = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
+    $baseName  = 'theme-' . $safeTheme . '-' . $safeLabel . '-' . $suffix;
+    $dir       = $root . '/assets/img/' . $sub;
+    /* Borrar versiones previas del mismo asset (cualquier extensión) */
+    foreach (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'] as $e) {
+        $old = $dir . '/' . $baseName . '.' . $e;
+        if (is_file($old)) @unlink($old);
+    }
+    $destAbs = $dir . '/' . $baseName . '.' . $ext;
+    if (!@copy($srcAbs, $destAbs)) return '';
+    return 'assets/img/' . $sub . '/' . $baseName . '.' . $ext;
+}
+
 /* Normaliza un array de colores: aplica el mapa legacy y rellena defaults. */
 function normalizeThemeColors($colors) {
     global $THEME_COLOR_KEYS, $THEME_DEFAULTS, $THEME_LEGACY_MAP;

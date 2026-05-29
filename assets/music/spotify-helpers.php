@@ -1,14 +1,12 @@
 <?php
 require_once dirname(__DIR__) . '/config.php';
+require_once dirname(__DIR__) . '/cache-helpers.php';
 
 function getSpotifyToken() {
-    $cacheFile = __DIR__ . '/spotify-token-cache.json';
-    if (file_exists($cacheFile)) {
-        $cache = json_decode(file_get_contents($cacheFile), true);
-        if (is_array($cache) && isset($cache['token'], $cache['expires']) && $cache['expires'] > time() + 60) {
-            return $cache['token'];
-        }
-    }
+    /* Token cacheado en SQL (app_cache), ya no en disco. */
+    $tok = cacheGet('spotify_app_token');
+    if ($tok !== null) return $tok;
+
     $creds = base64_encode(SPOTIFY_CLIENT_ID . ':' . SPOTIFY_CLIENT_SECRET);
     $ctx = stream_context_create(['http' => [
         'method'        => 'POST',
@@ -21,21 +19,15 @@ function getSpotifyToken() {
     if (!$raw) return null;
     $data = json_decode($raw, true);
     if (!isset($data['access_token'])) return null;
-    file_put_contents($cacheFile, json_encode([
-        'token'   => $data['access_token'],
-        'expires' => time() + (int)$data['expires_in'],
-    ]));
+    /* TTL = vida del token menos 60s de margen (se refresca un poco antes). */
+    cacheSet('spotify_app_token', $data['access_token'], (int)$data['expires_in'] - 60);
     return $data['access_token'];
 }
 
 function getSpotifyWebToken() {
-    $cacheFile = __DIR__ . '/spotify-web-token-cache.json';
-    if (file_exists($cacheFile)) {
-        $cache = json_decode(file_get_contents($cacheFile), true);
-        if (is_array($cache) && isset($cache['token'], $cache['expires']) && $cache['expires'] > time() + 60) {
-            return $cache['token'];
-        }
-    }
+    $tok = cacheGet('spotify_web_token');
+    if ($tok !== null) return $tok;
+
     $ctx = stream_context_create(['http' => [
         'timeout'       => 10,
         'ignore_errors' => true,
@@ -52,7 +44,7 @@ function getSpotifyWebToken() {
     $expires = isset($data['accessTokenExpirationTimestampMs'])
         ? (int)($data['accessTokenExpirationTimestampMs'] / 1000)
         : time() + 3600;
-    file_put_contents($cacheFile, json_encode(['token' => $data['accessToken'], 'expires' => $expires]));
+    cacheSet('spotify_web_token', $data['accessToken'], $expires - time() - 60);
     return $data['accessToken'];
 }
 

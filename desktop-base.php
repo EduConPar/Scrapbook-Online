@@ -22,18 +22,10 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
     exit;
 }
 
-$wallpaper = getUserWallpaper($desktopLabel);
-$startIcon = getUserStartIcon($desktopLabel);
-
 /* URL base del proyecto — necesaria porque las url() dentro de custom
    properties pueden resolverse relativas al CSS que las consume (no al
    documento) en algunos navegadores. */
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
-
-$bodyStyles = [];
-if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
-if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
-$wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $hasPlayer = true; /* Todos los usuarios tienen reproductor */
 
@@ -50,6 +42,30 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
 }
 
+/* Fondo e icono de inicio.
+   - Sin tema activo  → fondo/icono GLOBAL del usuario (su baseline).
+   - Con tema activo  → el asset propio del tema; si el tema no define uno,
+     se usan los DEFAULT de la app (base-wallpaper / logo Win98), NO el global. */
+$wallpaper = getUserWallpaper($desktopLabel);
+$startIcon = getUserStartIcon($desktopLabel);
+if ($activeTheme !== '') {
+    $uid = userIdByKey($desktopUserKey);
+    $tWp = ''; $tSi = '';
+    if ($uid) {
+        $st = themesPdo()->prepare("SELECT wallpaper, start_icon FROM themes WHERE user_id = ? AND name = ?");
+        $st->execute([$uid, $activeTheme]);
+        $arow = $st->fetch(PDO::FETCH_ASSOC);
+        if ($arow) { $tWp = (string)$arow['wallpaper']; $tSi = (string)$arow['start_icon']; }
+    }
+    $wallpaper = ($tWp !== '' && file_exists(__DIR__ . '/' . $tWp)) ? $tWp : defaultWallpaper();
+    $startIcon = ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) ? $tSi : '';
+}
+
+$bodyStyles = [];
+if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
+if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
+$wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
+
 /* Iconos del escritorio: set único 'default' para todos los usuarios.
    Antes user1/user2 cargaban iconos custom (capi/, angie/). */
 $_iconTheme = 'default';
@@ -59,7 +75,7 @@ function desktopIcon($name, $emoji) {
         foreach (['png', 'jpg', 'gif'] as $ext) {
             $rel  = "assets/img/icons/{$dir}/{$name}.{$ext}";
             if (file_exists(__DIR__ . '/' . $rel)) {
-                return '<img src="' . $rel . '" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;">';
+                return '<img src="' . $rel . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">';
             }
         }
     }
@@ -240,7 +256,12 @@ window.DesktopState.whenReady = function(cb){
 
 <div id="desktop">
     <div class="desktop-icon" id="archive-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('archive', '📼'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_archiveIcon = 'assets/img/appIcons/melonArchiveIcon.png';
+            echo file_exists(__DIR__ . '/' . $_archiveIcon)
+                ? '<img src="' . $_archiveIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('archive', '📼');
+        ?></div>
         <span>MelonArchive</span>
     </div>
     <div class="desktop-icon" id="calendar-icon">
@@ -248,7 +269,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Calendario</span>
     </div>
     <div class="desktop-icon" id="profile-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('profile', '👤'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_profileIcon = 'assets/img/appIcons/profileIcon.png';
+            echo file_exists(__DIR__ . '/' . $_profileIcon)
+                ? '<img src="' . $_profileIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('profile', '👤');
+        ?></div>
         <span>Perfil</span>
     </div>
     <div class="desktop-icon" id="temas-icon">
@@ -262,6 +288,10 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="dnd-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('dnd', '⚔'); ?></div>
         <span>Fichas D&amp;D</span>
+    </div>
+    <div class="desktop-icon" id="galeria-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('galeria', '🖼'); ?></div>
+        <span>Galería</span>
     </div>
 </div>
 
@@ -328,6 +358,19 @@ window.DesktopState.whenReady = function(cb){
         </div>
     </div>
     <iframe id="dnd-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- GALERÍA WINDOW -->
+<div class="window" id="galeria-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="galeria-titlebar">
+        <div class="title-bar-text">🖼 Galería</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="galeria-close"></button>
+        </div>
+    </div>
+    <iframe id="galeria-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- NOTIFICATION STACK -->
@@ -431,7 +474,7 @@ window.addEventListener('message', function(e) {
         var className = e.data.className || '';
         var basePath  = e.data.cssBasePath || '';
         applyThemeToDocument(document, className, basePath);
-        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe'].forEach(function(id) {
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe', 'galeria-iframe'].forEach(function(id) {
             var fr = document.getElementById(id);
             if (!fr || !fr.contentDocument || !fr.contentDocument.body) return;
             var childHref = basePath ? '../' + basePath : '';
@@ -472,10 +515,16 @@ window.addEventListener('message', function(e) {
             }
         }
         refreshImgs(document);
-        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe'].forEach(function(id) {
+        ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe', 'galeria-iframe'].forEach(function(id) {
             var fr = document.getElementById(id);
             if (fr && fr.contentDocument) refreshImgs(fr.contentDocument);
         });
+    } else if (e.data.type === 'open-profile') {
+        /* Una app (p.ej. la biblioteca de temas) pide abrir el perfil de un
+           usuario. La app de perfil está incluida inline en este documento. */
+        if (typeof window.openProfileAtUser === 'function') {
+            window.openProfileAtUser(e.data.userKey);
+        }
     }
 });
 
@@ -537,6 +586,7 @@ window.windowZ = (function() {
         var maxZ = 0;
         document.querySelectorAll('.window').forEach(function(w){
             if (w === win) return;
+            if (w.hasAttribute('data-no-auto-z')) return;   // popups no cuentan
             if (w.style.display === 'none' || getComputedStyle(w).display === 'none') return;
             var z = parseInt(w.style.zIndex || getComputedStyle(w).zIndex || '0', 10) || 0;
             if (z > maxZ) maxZ = z;
@@ -558,6 +608,9 @@ window.windowZ = (function() {
     var lastSeen = new WeakMap();
     function check(el) {
         if (!el || !el.classList || !el.classList.contains('window')) return;
+        /* Popups (menús contextuales, pickers) gestionan su propio z-index fijo
+           por encima del rango de ventanas; el observer no debe tocarlos. */
+        if (el.hasAttribute('data-no-auto-z')) return;
         var nowVis = isVisible(el);
         var prev   = lastSeen.get(el) === true;
         if (nowVis && !prev) bringToFront(el);
@@ -900,6 +953,32 @@ window.notifSystem = (function() {
     });
 })();
 
+/* =========================
+   GALERÍA
+========================= */
+(function() {
+    var galIframe = document.getElementById('galeria-iframe');
+    var galLoaded = false;
+
+    document.getElementById('galeria-icon').addEventListener('dblclick', function() {
+        if (!galLoaded) { galIframe.src = 'apps/galeria.php'; galLoaded = true; }
+        if (taskbarManager.isRegistered('galeria-window')) {
+            taskbarManager.restore('galeria-window');
+        } else {
+            taskbarManager.register('galeria-window', 'Galería', '🖼', 'flex');
+        }
+    });
+
+    document.getElementById('galeria-close').addEventListener('click', function() {
+        taskbarManager.unregister('galeria-window');
+        /* Forzar recarga del iframe en la próxima apertura: así los cambios
+           del lado de la app (JS/CSS) se reflejan sin tener que recargar
+           el escritorio entero. Drive token vive en localStorage, no se pierde. */
+        galIframe.src = '';
+        galLoaded = false;
+    });
+})();
+
 /* ──── Player right-click context menu ──── */
 (function() {
     var playerMain = document.getElementById('player-main');
@@ -907,11 +986,13 @@ window.notifSystem = (function() {
 
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
+    ctxMenu.setAttribute('data-no-auto-z', '');   // siempre encima; z fijo
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;padding:2px 0;min-width:160px;';
     document.body.appendChild(ctxMenu);
 
     var picker = document.createElement('div');
     picker.className = 'window';
+    picker.setAttribute('data-no-auto-z', '');
     picker.style.cssText = 'display:none;position:fixed;z-index:10000;min-width:190px;';
     picker.innerHTML =
         '<div class="title-bar" style="cursor:default;">' +
@@ -1123,10 +1204,11 @@ window.notifSystem = (function() {
     /* Todas las ventanas: drageables Y resizables (handles en bordes y esquinas) */
     [
         'calendar-window','archive-window','temas-window','dnd-window',
+        'galeria-window',
         'companion-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
-        'collab-dialog','spotify-import-dialog','confirm-dialog',
+        'collab-dialog','spotify-import-dialog','tidal-import-dialog','confirm-dialog',
         'profile-add-dialog','profile-review-prompt','profile-review-window',
         'profile-review-view','profile-invite-dialog','profile-info-edit-dialog',
         'music-add-dialog','profile-notifs-window','profile-melon-details-window',
@@ -1140,6 +1222,7 @@ window.notifSystem = (function() {
 (function() {
     var ids = [
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
+        'galeria-window',
         'create-playlist-dialog', 'profile-window', 'companion-window'
     ];
     ids.forEach(function(id) {

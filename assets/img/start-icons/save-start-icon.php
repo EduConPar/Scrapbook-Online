@@ -26,8 +26,12 @@ if ($ext !== 'svg') {
     if (!$info) { echo json_encode(['error' => 'Archivo no válido como imagen']); exit; }
 }
 
-$baseName = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label)) . '-start-icon';
-$dir      = __DIR__;
+$safeLabel = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
+$theme     = isset($_POST['theme']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $_POST['theme']) : '';
+$baseName  = $theme !== ''
+    ? 'theme-' . $theme . '-' . $safeLabel . '-start-icon'
+    : $safeLabel . '-start-icon';
+$dir = __DIR__;
 
 foreach ($allowed as $e) {
     $old = $dir . '/' . $baseName . '.' . $e;
@@ -39,7 +43,15 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
     echo json_encode(['error' => 'No se pudo guardar el archivo (revisa permisos)']); exit;
 }
 
-echo json_encode([
-    'ok'   => true,
-    'icon' => 'assets/img/start-icons/' . $baseName . '.' . $ext,
-]);
+$relPath = 'assets/img/start-icons/' . $baseName . '.' . $ext;
+
+if ($theme !== '') {
+    require_once dirname(dirname(dirname(__DIR__))) . '/db.php';
+    try {
+        $stmt = $pdo->prepare("UPDATE themes t JOIN usuarios u ON t.user_id = u.id
+                               SET t.start_icon = ? WHERE u.user_key = ? AND t.name = ?");
+        $stmt->execute([$relPath, $userKey, $theme]);
+    } catch (Throwable $e) { /* no bloquea la subida */ }
+}
+
+echo json_encode(['ok' => true, 'icon' => $relPath, 'theme' => $theme]);
