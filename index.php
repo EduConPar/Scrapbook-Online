@@ -72,7 +72,7 @@ $selectedTheme = null;  /* ['class'=>..., 'css'=>...] del usuario seleccionado *
 if ($selectedUser && isset($users[$selectedUser])) {
     $selectedLabel = $users[$selectedUser]['label'];
     $selectedImage = getUserImage($selectedLabel);
-    $selectedWallpaper = getUserWallpaper($selectedLabel);
+    $selectedWallpaper = getUserEffectiveWallpaper($selectedUser, $selectedLabel);
     $selectedTheme = getUserActiveTheme($selectedUser, $selectedLabel);
     $showLogin = true;
 
@@ -250,7 +250,7 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                         data-user="<?php echo $key; ?>"
                         data-label="<?php echo htmlspecialchars($user['label']); ?>"
                         data-img="<?php echo htmlspecialchars(getUserImage($user['label'])); ?>"
-                        data-wallpaper="<?php echo htmlspecialchars(getUserWallpaper($user['label'])); ?>"
+                        data-wallpaper="<?php echo htmlspecialchars(getUserEffectiveWallpaper($key, $user['label'])); ?>"
                         data-theme-class="<?php echo htmlspecialchars($_theme['class'] ?? ''); ?>"
                         data-theme-css="<?php echo htmlspecialchars($_theme['css'] ?? ''); ?>"
                         type="button"

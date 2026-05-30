@@ -1983,34 +1983,39 @@ function _themeHex(varName, fallback){
     return v || fallback;
 }
 
-/* Geometría del trapezoedro pentagonal (d10) — no viene en Three.js */
+/* Geometría del trapezoedro pentagonal (d10) — no viene en Three.js.
+   La proporción ringY = ((1-c)/(1+c)) * apexY (con c = cos(π/5)) garantiza
+   que las 10 caras kite sean PLANAS (sin pliegue diagonal). */
 function _makeD10Geometry(THREE){
-    var n = 5, top = 1.0, bot = -1.0, ry = 0.30, lo = Math.PI / n;
+    var n = 5;
+    var apexY = 1.2;
+    var c = Math.cos(Math.PI / n);
+    var ringY = ((1 - c) / (1 + c)) * apexY;
+    var ringR = 1.2;
     var v = [];
-    v.push(0, top, 0);            // 0 ápice superior
-    v.push(0, bot, 0);            // 1 ápice inferior
+    v.push(0,  apexY, 0);         // 0 ápice superior
+    v.push(0, -apexY, 0);         // 1 ápice inferior
     for(var i = 0; i < n; i++){   // 2..6 anillo superior
         var a = (i / n) * Math.PI * 2;
-        v.push(Math.cos(a), ry, Math.sin(a));
+        v.push(ringR * Math.cos(a),  ringY, ringR * Math.sin(a));
     }
-    for(var j = 0; j < n; j++){   // 7..11 anillo inferior (desfasado)
-        var b = (j / n) * Math.PI * 2 + lo;
-        v.push(Math.cos(b), -ry, Math.sin(b));
+    for(var j = 0; j < n; j++){   // 7..11 anillo inferior (desfasado π/n)
+        var b = (j / n) * Math.PI * 2 + Math.PI / n;
+        v.push(ringR * Math.cos(b), -ringY, ringR * Math.sin(b));
     }
     var U = function(i){ return 2 + (i % n); };
     var L = function(i){ return 7 + (i % n); };
     var idx = [];
     for(var k = 0; k < n; k++){
-        // cometa superior: ápice, U[k], L[k], U[k+1]
-        idx.push(0, U(k), L(k));   idx.push(0, L(k), U(k+1));
-        // cometa inferior: ápice inf, L[k], U[k+1], L[k+1]
-        idx.push(1, L(k), U(k+1)); idx.push(1, U(k+1), L(k+1));
+        // Cometa superior (ápice sup, U[k], L[k], U[k+1]) — CCW desde fuera
+        idx.push(0, U(k+1), L(k));   idx.push(0, L(k), U(k));
+        // Cometa inferior (ápice inf, L[k], U[k+1], L[k+1]) — CCW desde fuera
+        idx.push(1, L(k), U(k+1));   idx.push(1, U(k+1), L(k+1));
     }
     var g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
-    g.scale(0.95, 1.15, 0.95);
     return g;
 }
 
@@ -2022,7 +2027,6 @@ function _makeGeometry(THREE, sides){
         case 10:  return _makeD10Geometry(THREE);
         case 12:  return new THREE.DodecahedronGeometry(1.2);
         case 20:  return new THREE.IcosahedronGeometry(1.25);
-        case 100: return _makeD10Geometry(THREE);
         default:  return new THREE.BoxGeometry(1.5, 1.5, 1.5);
     }
 }
@@ -2160,10 +2164,10 @@ function _animateLoop(){
         d.mesh.rotation.y += d.vy * decay;
         d.mesh.rotation.z += d.vz * decay;
         d._scr = (d._scr || 0) + 16;
-        if(t < 0.75 && d._scr > 60){ d._scr = 0; d.el.textContent = Math.floor(Math.random() * d.sides) + 1; }
+        if(t < 0.75 && d._scr > 60){ d._scr = 0; d.el.textContent = _dieLabel(d, _randomFaceValue(d)); }
         if(t >= 1){
             d.rolling = false;
-            d.el.textContent = d.value;
+            d.el.textContent = _dieLabel(d, d.value);
             d.el.animate(
                 [{ transform:'translate(-50%,-50%) scale(1.6)', opacity:.4 },
                  { transform:'translate(-50%,-50%) scale(1)',   opacity:1 }],
@@ -2180,9 +2184,22 @@ function _ensureLoop(){
     if(_diceScene && !_diceScene.running){ _diceScene.running = true; _diceScene.raf = requestAnimationFrame(_animateLoop); }
 }
 
+/* Valor aleatorio de una cara, respetando el tipo de dado.
+   d10tens → {0,10,20,…,90}, resto → 1..sides (el d10 normal incluye el 10, no el 0) */
+function _randomFaceValue(d){
+    if(d.kind === 'd10tens') return Math.floor(Math.random() * 10) * 10;
+    return Math.floor(Math.random() * d.sides) + 1;
+}
+
+/* Etiqueta visible para un valor: la decena se muestra con dos dígitos. */
+function _dieLabel(d, value){
+    if(d.kind === 'd10tens') return ('00' + value).slice(-2);
+    return value;
+}
+
 /* Lanza (o relanza) un dado del pool */
 function _spinDie(d){
-    d.value = Math.floor(Math.random() * d.sides) + 1;
+    d.value = _randomFaceValue(d);
     d.vx = (0.22 + Math.random() * 0.22) * (Math.random() < .5 ? -1 : 1);
     d.vy =  0.28 + Math.random() * 0.26;
     d.vz = (0.10 + Math.random() * 0.14) * (Math.random() < .5 ? -1 : 1);
@@ -2225,18 +2242,28 @@ function applyModifier(){
     updateDiceTotal();
 }
 
-/* Añadir un dado al pool y tirarlo */
-function addDie(sides){
-    if(typeof THREE === 'undefined' || !_diceScene) return;
+/* Inserta un dado del tipo indicado en el pool y lo lanza. */
+function _pushDie(sides, kind){
     var mesh = _makeDieMesh(sides);
     _diceScene.scene.add(mesh);
     var el = document.createElement('div');
     el.className = 'dice-val';
     document.getElementById('dice-overlays').appendChild(el);
-    var d = { sides: sides, value: 1, mesh: mesh, el: el };
+    var d = { sides: sides, kind: kind, value: 1, mesh: mesh, el: el };
     dicePool.push(d);
-    layoutDice();
     _spinDie(d);
+}
+
+/* Añadir un dado (o pareja de d10 para el d100) al pool y tirarlo. */
+function addDie(sides){
+    if(typeof THREE === 'undefined' || !_diceScene) return;
+    if(sides === 100){
+        _pushDie(10, 'd10tens');   // 00-10-20-…-90
+        _pushDie(10, 'normal');    // 1-10
+    } else {
+        _pushDie(sides, 'normal');
+    }
+    layoutDice();
     updateDiceTotal();
     _ensureLoop();
 }
