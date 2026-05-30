@@ -207,7 +207,7 @@ window.DesktopState.whenReady = function(cb){
 </ul>
 
 <!-- FOLDER WINDOW TEMPLATE -->
-<div class="window" id="folder-window-template" style="display:none; position:fixed; width:460px; height:340px; flex-direction:column;">
+<div class="window" id="folder-window-template" data-no-auto-z style="display:none; position:fixed; width:460px; height:340px; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text">📁 Carpeta</div>
         <div class="title-bar-controls">
@@ -220,7 +220,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL "Nueva carpeta" -->
-<div class="window" id="folder-create-modal" style="display:none; position:fixed; left:50%; top:35%; transform:translate(-50%,-50%); width:340px; z-index:8500; flex-direction:column;">
+<div class="window" id="folder-create-modal" data-no-auto-z style="display:none; position:fixed; ...">
     <div class="title-bar">
         <div class="title-bar-text">📁 Nueva carpeta</div>
         <div class="title-bar-controls">
@@ -238,7 +238,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL confirmar borrar carpeta -->
-<div class="window" id="folder-delete-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:8500; flex-direction:column;">
+<div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; position:fixed; ...">
     <div class="title-bar">
         <div class="title-bar-text">Confirmar eliminación de carpeta</div>
         <div class="title-bar-controls">
