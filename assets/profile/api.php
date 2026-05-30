@@ -76,7 +76,7 @@ function pf_loadProfileRow(PDO $pdo, int $uid): array {
 
 /* Carga los posts del usuario con sus likes (lista de user_keys). */
 function pf_loadPostsWithLikes(PDO $pdo, int $uid): array {
-    $stmt = $pdo->prepare("SELECT id, text, UNIX_TIMESTAMP(created_at) AS createdAt
+    $stmt = $pdo->prepare("SELECT id, text, image_url AS imageUrl, UNIX_TIMESTAMP(created_at) AS createdAt
                            FROM posts WHERE user_id = ? ORDER BY created_at DESC, id DESC");
     $stmt->execute([$uid]);
     $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -91,10 +91,33 @@ function pf_loadPostsWithLikes(PDO $pdo, int $uid): array {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $likesByPost[(int)$r['post_id']][] = $r['user_key'];
     }
+    /* Comentarios por post: autor (key + label) + texto + timestamp */
+    $stmt = $pdo->prepare(
+        "SELECT c.id, c.post_id, c.text,
+                UNIX_TIMESTAMP(c.created_at) AS createdAt,
+                u.user_key AS authorKey, u.label AS authorLabel
+         FROM post_comments c
+         JOIN usuarios u ON c.user_id = u.id
+         WHERE c.post_id IN ($place)
+         ORDER BY c.created_at ASC, c.id ASC"
+    );
+    $stmt->execute($ids);
+    $commentsByPost = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $commentsByPost[(int)$r['post_id']][] = [
+            'id'          => (int)$r['id'],
+            'text'        => $r['text'],
+            'createdAt'   => (int)$r['createdAt'],
+            'authorKey'   => $r['authorKey'],
+            'authorLabel' => $r['authorLabel'],
+        ];
+    }
+
     foreach ($posts as &$p) {
         $p['id']        = (int)$p['id'];
         $p['createdAt'] = (int)$p['createdAt'];
         $p['likes']     = $likesByPost[(int)$p['id']] ?? [];
+        $p['comments']  = $commentsByPost[(int)$p['id']] ?? [];
     }
     return $posts;
 }
@@ -275,16 +298,72 @@ case 'get-profile': {
 case 'add-post': {
     $uid = pf_uid($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
-    $text = mb_substr(trim(jsonBody()['text'] ?? ''), 0, 1000);
-    if (!$text) jsonError('Texto vacío');
-    $pdo->prepare("INSERT INTO posts (user_id, text) VALUES (?, ?)")->execute([$uid, $text]);
+    $body = jsonBody();
+    $text = mb_substr(trim($body['text'] ?? ''), 0, 1000);
+    $img  = trim($body['image_url'] ?? '');
+    /* image_url opcional, debe ser http(s) y ≤ 2000 chars si está presente */
+    if ($img !== '') {
+        if (mb_strlen($img) > 2000 || !preg_match('#^https?://[^\s<>"\']+$#i', $img)) {
+            jsonError('URL de imagen inválida');
+        }
+    }
+    if ($text === '' && $img === '') jsonError('El post no puede estar vacío');
+    $pdo->prepare("INSERT INTO posts (user_id, text, image_url) VALUES (?, ?, ?)")
+        ->execute([$uid, $text, $img !== '' ? $img : null]);
     $id = (int)$pdo->lastInsertId();
     jsonResponse(['ok' => true, 'post' => [
         'id'        => $id,
         'text'      => $text,
+        'imageUrl'  => $img !== '' ? $img : null,
         'createdAt' => time(),
         'likes'     => [],
+        'comments'  => [],
     ]]);
+}
+
+case 'add-comment': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $body = jsonBody();
+    $postId = (int)($body['postId'] ?? 0);
+    $text = mb_substr(trim($body['text'] ?? ''), 0, 500);
+    if (!$postId || $text === '') jsonError('Datos incompletos');
+    /* El post tiene que existir */
+    $stmt = $pdo->prepare("SELECT 1 FROM posts WHERE id = ?");
+    $stmt->execute([$postId]);
+    if (!$stmt->fetchColumn()) jsonError('Post no encontrado', 404);
+    $pdo->prepare("INSERT INTO post_comments (post_id, user_id, text) VALUES (?, ?, ?)")
+        ->execute([$postId, $uid, $text]);
+    $id = (int)$pdo->lastInsertId();
+    global $loginUsers;
+    jsonResponse(['ok' => true, 'comment' => [
+        'id'          => $id,
+        'text'        => $text,
+        'createdAt'   => time(),
+        'authorKey'   => $userKey,
+        'authorLabel' => $loginUsers[$userKey]['label'] ?? $userKey,
+    ]]);
+}
+
+case 'delete-comment': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $cid = (int)(jsonBody()['id'] ?? 0);
+    if (!$cid) jsonError('ID inválido');
+    /* Permitir borrar si soy el autor del comentario O el dueño del post */
+    $stmt = $pdo->prepare(
+        "SELECT c.user_id AS commentUser, p.user_id AS postUser
+         FROM post_comments c JOIN posts p ON c.post_id = p.id
+         WHERE c.id = ?"
+    );
+    $stmt->execute([$cid]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) jsonError('Comentario no encontrado', 404);
+    if ((int)$row['commentUser'] !== $uid && (int)$row['postUser'] !== $uid) {
+        jsonError('Sin permiso', 403);
+    }
+    $pdo->prepare("DELETE FROM post_comments WHERE id = ?")->execute([$cid]);
+    jsonResponse(['ok' => true]);
 }
 
 case 'delete-post': {
@@ -294,6 +373,132 @@ case 'delete-post': {
     if (!$id) jsonError('ID inválido');
     $pdo->prepare("DELETE FROM posts WHERE id = ? AND user_id = ?")->execute([$id, $uid]);
     jsonResponse(['ok' => true]);
+}
+
+case 'get-discord-webhook': {
+    $stmt = $pdo->prepare("SELECT discord_webhook FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    jsonResponse(['ok' => true, 'webhook' => (string)$stmt->fetchColumn() ?: '']);
+}
+
+case 'save-discord-webhook': {
+    $url = trim(jsonBody()['webhook'] ?? '');
+    /* Vacío = borrar; si no, validar pattern de Discord */
+    if ($url !== '') {
+        $re = '#^https://(?:(?:ptb|canary)\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+$#';
+        if (!preg_match($re, $url) || mb_strlen($url) > 500) {
+            jsonError('URL de webhook no válida');
+        }
+    }
+    $pdo->prepare("UPDATE usuarios SET discord_webhook = ? WHERE user_key = ?")
+        ->execute([$url !== '' ? $url : null, $userKey]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'discord-publish': {
+    global $loginUsers;
+    $body  = jsonBody();
+    $img   = trim($body['image_url'] ?? '');
+    $cap   = mb_substr(trim($body['caption'] ?? ''), 0, 1900);
+    if (!preg_match('#^https?://[^\s<>"\']+$#i', $img) || mb_strlen($img) > 2000) {
+        jsonError('URL de imagen no válida');
+    }
+    /* Cargar webhook + label del usuario */
+    $stmt = $pdo->prepare("SELECT discord_webhook, label FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row || empty($row['discord_webhook'])) {
+        jsonError('No tienes un webhook de Discord configurado', 400);
+    }
+    $webhook = $row['discord_webhook'];
+    $label   = $row['label'] ?: $userKey;
+
+    /* Avatar del usuario: lo enviamos ADJUNTO en el propio request multipart
+       (no como URL pública). En el embed lo referenciamos con
+       `attachment://avatar.<ext>`. Esto permite que Discord muestre el
+       avatar SIN necesidad de que sea alcanzable desde Internet — lee los
+       bytes directamente del payload. */
+    $avatarFsPath = null;
+    $avatarMime   = '';
+    $avatarExt    = '';
+    if (function_exists('getUserImage')) {
+        $rel = getUserImage($label);
+        if ($rel) {
+            /* __DIR__ aquí = .../assets/profile. Subir 2 niveles → raíz del proyecto. */
+            $candidate = dirname(__DIR__, 2) . '/' . $rel;
+            if (is_file($candidate)) {
+                $avatarFsPath = $candidate;
+                $avatarExt    = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+                $mimeMap      = [
+                    'jpg'  => 'image/jpeg', 'jpeg' => 'image/jpeg',
+                    'png'  => 'image/png',  'gif'  => 'image/gif',
+                    'webp' => 'image/webp',
+                ];
+                $avatarMime = $mimeMap[$avatarExt] ?? 'image/png';
+            }
+        }
+    }
+
+    /* Embed: author = icono + nombre. description = caption (opcional).
+       image = la imagen pública en Drive. */
+    $author = ['name' => mb_substr($label, 0, 256)];
+    if ($avatarFsPath) $author['icon_url'] = 'attachment://avatar.' . $avatarExt;
+    $embed = [
+        'author'    => $author,
+        'image'     => ['url' => $img],
+        /* `timestamp` ISO-8601 en UTC. Discord lo renderea en el footer
+           autoformateado y localizado para cada viewer (ej. "Today at
+           19:30" en castellano, "5/30/26 7:30 PM" en otros idiomas). */
+        'timestamp' => gmdate('c'),
+    ];
+    /* description = caption + enlace bold/azul a la Melon Hub debajo. */
+    $hubUrl = 'https://youtu.be/rG2OjbcbzAo?si=6Fyd7qszYj964dIM';
+    $desc = ($cap !== '') ? ($cap . "\n\n") : '';
+    $desc .= '[**Click para entrar a la Melon Hub**](' . $hubUrl . ')';
+    $embed['description'] = $desc;
+
+    $payload = [
+        'embeds' => [$embed],
+        /* Evita pings accidentales con @everyone/@here desde el caption */
+        'allowed_mentions' => ['parse' => []],
+    ];
+
+    $ch = curl_init($webhook);
+    if ($avatarFsPath) {
+        /* multipart/form-data: payload_json + files[0] (el avatar) */
+        $postFields = [
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'files[0]'     => new CURLFile($avatarFsPath, $avatarMime, 'avatar.' . $avatarExt),
+        ];
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $postFields,   // array → cURL hace multipart
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+    } else {
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 12,
+            CURLOPT_FOLLOWLOCATION => true,
+        ]);
+    }
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code >= 200 && $code < 300) {
+        jsonResponse(['ok' => true]);
+    }
+    /* Discord responde JSON con detalle del error */
+    $detail = '';
+    $j = json_decode((string)$resp, true);
+    if (is_array($j) && isset($j['message'])) $detail = ' — ' . $j['message'];
+    jsonError('Discord rechazó la publicación (HTTP ' . $code . ')' . $detail, 502);
 }
 
 case 'save-quote': {

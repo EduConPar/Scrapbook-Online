@@ -278,7 +278,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Perfil</span>
     </div>
     <div class="desktop-icon" id="temas-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('temas', '🎨'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_temasIcon = 'assets/img/appIcons/temasIcon.png';
+            echo file_exists(__DIR__ . '/' . $_temasIcon)
+                ? '<img src="' . $_temasIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('temas', '🎨');
+        ?></div>
         <span>Temas</span>
     </div>
     <div class="desktop-icon" id="companion-icon">
