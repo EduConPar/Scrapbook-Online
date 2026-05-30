@@ -78,6 +78,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
         <div id="gal-sidebar-footer">
             <button class="button" id="gal-clear-filters">Limpiar filtros</button>
+            <button class="button" id="gal-discord-settings" title="Webhook de Discord">⚙ Discord</button>
             <button class="button" id="gal-disconnect" title="Cerrar sesión de Drive">🔌 Desconectar</button>
         </div>
     </aside>
@@ -177,10 +178,81 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     </div>
 </div>
 
+<!-- Diálogo: PUBLICAR en perfil -->
+<div class="window gal-dialog" id="gal-publish-dialog" style="display:none;">
+    <div class="title-bar">
+        <div class="title-bar-text">📤 Publicar en perfil</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="gal-pub-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div id="gal-pub-preview"></div>
+        <div class="field-row-stacked" style="margin-top:6px;">
+            <label for="gal-pub-text">Texto adjunto <small style="color:var(--text-muted);">(opcional, máx 1000)</small></label>
+            <textarea id="gal-pub-text" maxlength="1000" rows="3" placeholder="Escribe algo sobre la imagen…" style="resize:vertical;min-height:60px;"></textarea>
+        </div>
+        <p id="gal-pub-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
+            <button class="button" id="gal-pub-cancel">Cancelar</button>
+            <button class="button default" id="gal-pub-submit">Publicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Diálogo: PUBLICAR en Discord -->
+<div class="window gal-dialog" id="gal-discord-dialog" style="display:none;">
+    <div class="title-bar">
+        <div class="title-bar-text">🟣 Publicar en Discord</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="gal-disc-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div id="gal-disc-preview"></div>
+        <div class="field-row-stacked" style="margin-top:6px;">
+            <label for="gal-disc-text">Mensaje <small style="color:var(--text-muted);">(opcional, máx 1900)</small></label>
+            <textarea id="gal-disc-text" maxlength="1900" rows="3" placeholder="Escribe algo (opcional)…" style="resize:vertical;min-height:60px;"></textarea>
+        </div>
+        <p id="gal-disc-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
+            <button class="button" id="gal-disc-cancel">Cancelar</button>
+            <button class="button default" id="gal-disc-submit">Publicar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Diálogo: AJUSTES de Discord (webhook URL) -->
+<div class="window gal-dialog" id="gal-discord-settings-dialog" style="display:none;">
+    <div class="title-bar">
+        <div class="title-bar-text">⚙ Webhook de Discord</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="gal-ds-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <p style="font-size:11px;margin:0 0 8px;line-height:1.4;color:var(--text-muted);">
+            En tu servidor de Discord: <strong>Configuración del canal → Integraciones → Webhooks → Crear</strong>.<br>
+            Copia la URL completa y pégala aquí. Déjalo vacío para desconectar.
+        </p>
+        <div class="field-row-stacked">
+            <label for="gal-ds-url">URL del webhook</label>
+            <input type="text" id="gal-ds-url" maxlength="500" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <p id="gal-ds-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
+            <button class="button" id="gal-ds-cancel">Cancelar</button>
+            <button class="button default" id="gal-ds-submit">Guardar</button>
+        </div>
+    </div>
+</div>
+
 <!-- Menú contextual -->
 <div id="gal-ctx-menu" data-no-auto-z="" style="display:none;">
     <div class="gal-ctx-opt" data-act="preview">🖼 Ver</div>
     <div class="gal-ctx-opt" data-act="download">📥 Descargar</div>
+    <div class="gal-ctx-opt" data-act="publish">📤 Publicar en perfil</div>
+    <div class="gal-ctx-opt" data-act="discord">🟣 Publicar en Discord</div>
     <div class="gal-ctx-opt" data-act="edit">✏ Renombrar / etiquetas</div>
     <div class="gal-ctx-opt gal-ctx-danger" data-act="delete">🗑 Eliminar</div>
 </div>
@@ -837,6 +909,7 @@ async function _pollDriveThumbnail(fileId) {
                 var card = document.querySelector('.gal-card[data-id="' + fileId + '"]');
                 if (card) {
                     delete card.dataset.loaded;
+                    card._loading = false;        // permitir re-ejecución
                     loadThumb(card);
                 }
             }
@@ -1064,6 +1137,19 @@ function _setWipExtLabel(thumb, txt) {
 }
 
 async function loadThumb(card) {
+    /* Evita doble ejecución concurrente. El observer y _pollDriveThumbnail
+       pueden llamar a loadThumb sobre la misma card en paralelo; sin este
+       guard, ambas crean Image() probes que la red deduplica → Firefox
+       reporta NS_BINDING_ABORTED en uno de los dos. */
+    if (card._loading) return;
+    card._loading = true;
+    try {
+        await _loadThumbInner(card);
+    } finally {
+        card._loading = false;
+    }
+}
+async function _loadThumbInner(card) {
     var fileId = card.dataset.id;
     var f = _files.find(function(x) { return x.id === fileId; });
     if (!f) return;
@@ -1072,18 +1158,26 @@ async function loadThumb(card) {
 
     if (isWip(f)) {
         /* Vía A — Drive ya generó thumbnailLink (típico de PSD): la usamos
-           directamente. Si falla la carga, CAEMOS a extracción. */
+           directamente. Si falla la carga, CAEMOS a extracción.
+           Insertamos el MISMO Image que usamos para probar — así hay un
+           solo fetch al URL de Drive (evita "NS_BINDING_ABORTED" por
+           petición duplicada en Firefox).
+           referrerpolicy=no-referrer evita que la Enhanced Tracking
+           Protection de Firefox marque la petición como tracking de Google
+           y la cancele antes de tiempo. */
         if (f.thumbnailLink) {
+            var imgEl = new Image();
+            imgEl.alt = f.name;
+            imgEl.referrerPolicy = 'no-referrer';
             var loadedFromLink = await new Promise(function(resolve) {
-                var probe = new Image();
-                probe.onload  = function() { resolve(true); };
-                probe.onerror = function() { resolve(false); };
-                probe.src = f.thumbnailLink;
+                imgEl.onload  = function() { resolve(true); };
+                imgEl.onerror = function() { resolve(false); };
+                imgEl.src = f.thumbnailLink;
             });
             if (loadedFromLink) {
-                thumb.innerHTML =
-                    '<img src="' + escapeAttr(f.thumbnailLink) + '" alt="' + escapeAttr(f.name) + '">' +
-                    _wipOverlayHtml(f, ext);
+                thumb.innerHTML = '';
+                thumb.appendChild(imgEl);
+                thumb.insertAdjacentHTML('beforeend', _wipOverlayHtml(f, ext));
                 card.dataset.loaded = '1';
                 return;
             }
@@ -1221,6 +1315,12 @@ function openCtxMenu(x, y, file) {
        silenciosamente, la opción se oculta en WIPs. */
     var prevOpt = menu.querySelector('[data-act="preview"]');
     if (prevOpt) prevOpt.style.display = isWip(file) ? 'none' : '';
+    /* "Publicar" solo para imágenes: para los WIP no podemos garantizar
+       que la URL pública de Drive renderice (es un .psd/.kra). */
+    var pubOpt = menu.querySelector('[data-act="publish"]');
+    if (pubOpt) pubOpt.style.display = isWip(file) ? 'none' : '';
+    var discOpt = menu.querySelector('[data-act="discord"]');
+    if (discOpt) discOpt.style.display = isWip(file) ? 'none' : '';
     /* Forzar visibilidad Y estética inline: blindado contra cache del CSS. */
     menu.style.display    = 'block';
     menu.style.position   = 'fixed';
@@ -1403,6 +1503,179 @@ async function submitEdit() {
     }
 }
 
+/* ─── Publicar en perfil ────────────────────────────────────
+   El fichero NO se sube a nuestro servidor: se hace público en Drive
+   (permiso "anyone reader") y se guarda solo la URL pública en posts. */
+var _publishingFile = null;
+function openPublishDialog(f) {
+    if (isWip(f)) return;                                // por seguridad
+    _publishingFile = f;
+    var dlg = document.getElementById('gal-publish-dialog');
+    var prev = document.getElementById('gal-pub-preview');
+    var src = _thumbCache.get(f.id) || f.thumbnailLink || '';
+    prev.innerHTML = src
+        ? '<img src="' + escapeAttr(src) + '" alt="" style="max-width:100%;max-height:200px;object-fit:contain;display:block;margin:0 auto;">'
+        : '<div style="text-align:center;padding:20px;color:var(--text-muted);">Cargando preview…</div>';
+    document.getElementById('gal-pub-text').value = '';
+    var st = document.getElementById('gal-pub-status');
+    st.textContent = ''; st.style.color = '';
+    dlg.style.display = 'block';
+    centerDialog(dlg);
+}
+function closePublishDialog() {
+    document.getElementById('gal-publish-dialog').style.display = 'none';
+    _publishingFile = null;
+}
+
+/* Hace el fichero "anyone reader" si no lo es ya. Tolera errores tipo
+   "duplicate" / "already exists" porque significa que ya está público. */
+async function _ensureDrivePublic(fileId) {
+    try {
+        await driveFetch('https://www.googleapis.com/drive/v3/files/' + fileId + '/permissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'reader', type: 'anyone' })
+        });
+    } catch (e) {
+        if (!/duplicate|alreadyExists|exists|already.+public/i.test(e.message)) throw e;
+    }
+}
+
+async function submitPublish() {
+    if (!_publishingFile) return;
+    var f = _publishingFile;
+    var btn = document.getElementById('gal-pub-submit');
+    var st  = document.getElementById('gal-pub-status');
+    var text = document.getElementById('gal-pub-text').value.trim();
+    btn.classList.add('btn-busy'); btn.disabled = true;
+    st.style.color = ''; st.textContent = 'Configurando permisos…';
+    try {
+        await _ensureDrivePublic(f.id);
+        /* URL pública de Drive: el endpoint /thumbnail funciona sin
+           autenticación para ficheros con permiso "anyone". `sz=w1920`
+           limita el ancho. Es más estable que el formato lh3/d/{id}=. */
+        var publicUrl = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w1920';
+        st.textContent = 'Publicando…';
+        var r = await fetch('../assets/profile/api.php?action=add-post', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, image_url: publicUrl })
+        });
+        var data = await r.json();
+        if (data.error) throw new Error(data.error);
+        st.style.color = '';
+        st.textContent = '✔ Publicado en tu perfil.';
+        /* Avisar al desktop (donde vive perfil.php) para que recargue los
+           posts sin esperar a un refresh manual. */
+        try { window.parent.postMessage({ type: 'profile-post-added' }, '*'); } catch (e) {}
+        setTimeout(closePublishDialog, 900);
+    } catch (e) {
+        st.textContent = 'Error: ' + e.message;
+        st.style.color = 'var(--error-text)';
+    } finally {
+        btn.classList.remove('btn-busy'); btn.disabled = false;
+    }
+}
+
+/* ─── Publicar en Discord ───────────────────────────────────
+   Igual que el flujo de publicar en perfil:
+   1) `_ensureDrivePublic(file.id)` → permiso "anyone reader" en Drive.
+   2) URL pública de Drive (drive.google.com/thumbnail).
+   3) POST a nuestro endpoint que reenvía al webhook del usuario.
+   El webhook URL no sale del servidor (lo lee el backend de la BD). */
+var _discordFile = null;
+function openDiscordDialog(f) {
+    if (isWip(f)) return;
+    _discordFile = f;
+    var dlg = document.getElementById('gal-discord-dialog');
+    var prev = document.getElementById('gal-disc-preview');
+    var src = _thumbCache.get(f.id) || f.thumbnailLink || '';
+    prev.innerHTML = src
+        ? '<img src="' + escapeAttr(src) + '" referrerpolicy="no-referrer" alt="" style="max-width:100%;max-height:200px;object-fit:contain;display:block;margin:0 auto;">'
+        : '<div style="text-align:center;padding:20px;color:var(--text-muted);">Cargando preview…</div>';
+    document.getElementById('gal-disc-text').value = '';
+    var st = document.getElementById('gal-disc-status');
+    st.textContent = ''; st.style.color = '';
+    dlg.style.display = 'block';
+    centerDialog(dlg);
+}
+function closeDiscordDialog() {
+    document.getElementById('gal-discord-dialog').style.display = 'none';
+    _discordFile = null;
+}
+async function submitDiscord() {
+    if (!_discordFile) return;
+    var f = _discordFile;
+    var btn = document.getElementById('gal-disc-submit');
+    var st  = document.getElementById('gal-disc-status');
+    var cap = document.getElementById('gal-disc-text').value.trim();
+    btn.classList.add('btn-busy'); btn.disabled = true;
+    st.style.color = ''; st.textContent = 'Configurando permisos…';
+    try {
+        await _ensureDrivePublic(f.id);
+        var publicUrl = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w1920';
+        st.textContent = 'Enviando a Discord…';
+        var r = await fetch('../assets/profile/api.php?action=discord-publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: publicUrl, caption: cap })
+        });
+        var data = await r.json();
+        if (data.error) throw new Error(data.error);
+        st.style.color = ''; st.textContent = '✔ Publicado en Discord.';
+        setTimeout(closeDiscordDialog, 900);
+    } catch (e) {
+        st.textContent = 'Error: ' + e.message;
+        st.style.color = 'var(--error-text)';
+    } finally {
+        btn.classList.remove('btn-busy'); btn.disabled = false;
+    }
+}
+
+/* ─── Ajustes de webhook de Discord ─────────────────────────── */
+function openDiscordSettings() {
+    var dlg = document.getElementById('gal-discord-settings-dialog');
+    var input = document.getElementById('gal-ds-url');
+    var st = document.getElementById('gal-ds-status');
+    st.textContent = 'Cargando…'; st.style.color = '';
+    input.value = '';
+    dlg.style.display = 'block';
+    centerDialog(dlg);
+    fetch('../assets/profile/api.php?action=get-discord-webhook')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+          if (d && d.webhook) input.value = d.webhook;
+          st.textContent = '';
+      })
+      .catch(function() { st.textContent = 'No se pudo cargar.'; st.style.color = 'var(--error-text)'; });
+}
+function closeDiscordSettings() {
+    document.getElementById('gal-discord-settings-dialog').style.display = 'none';
+}
+async function submitDiscordSettings() {
+    var btn = document.getElementById('gal-ds-submit');
+    var st = document.getElementById('gal-ds-status');
+    var url = document.getElementById('gal-ds-url').value.trim();
+    btn.classList.add('btn-busy'); btn.disabled = true;
+    st.style.color = ''; st.textContent = 'Guardando…';
+    try {
+        var r = await fetch('../assets/profile/api.php?action=save-discord-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ webhook: url })
+        });
+        var d = await r.json();
+        if (d.error) throw new Error(d.error);
+        st.textContent = '✔ Guardado.';
+        setTimeout(closeDiscordSettings, 700);
+    } catch (e) {
+        st.textContent = 'Error: ' + e.message;
+        st.style.color = 'var(--error-text)';
+    } finally {
+        btn.classList.remove('btn-busy'); btn.disabled = false;
+    }
+}
+
 /* ─── Confirmar borrado ─────────────────────────────────── */
 function confirmDelete(f) {
     var dlg = document.getElementById('gal-confirm-dialog');
@@ -1503,6 +1776,22 @@ document.getElementById('gal-up-submit').addEventListener('click', submitUpload)
 document.getElementById('gal-ed-close').addEventListener('click', closeEditDialog);
 document.getElementById('gal-ed-cancel').addEventListener('click', closeEditDialog);
 document.getElementById('gal-ed-submit').addEventListener('click', submitEdit);
+
+/* Diálogo de publicación */
+document.getElementById('gal-pub-close').addEventListener('click', closePublishDialog);
+document.getElementById('gal-pub-cancel').addEventListener('click', closePublishDialog);
+document.getElementById('gal-pub-submit').addEventListener('click', submitPublish);
+
+/* Diálogo de Discord */
+document.getElementById('gal-disc-close').addEventListener('click', closeDiscordDialog);
+document.getElementById('gal-disc-cancel').addEventListener('click', closeDiscordDialog);
+document.getElementById('gal-disc-submit').addEventListener('click', submitDiscord);
+
+/* Ajustes de Discord (webhook) */
+document.getElementById('gal-discord-settings').addEventListener('click', openDiscordSettings);
+document.getElementById('gal-ds-close').addEventListener('click', closeDiscordSettings);
+document.getElementById('gal-ds-cancel').addEventListener('click', closeDiscordSettings);
+document.getElementById('gal-ds-submit').addEventListener('click', submitDiscordSettings);
 document.getElementById('gal-ed-tags').addEventListener('input', updateEditTagChips);
 
 /* Menú contextual: acciones por opción */
@@ -1514,6 +1803,8 @@ document.getElementById('gal-ctx-menu').addEventListener('click', function(e) {
     closeCtxMenu();
     if      (act === 'preview')  openPreview(f);
     else if (act === 'download') downloadToUser(f);
+    else if (act === 'publish')  openPublishDialog(f);
+    else if (act === 'discord')  openDiscordDialog(f);
     else if (act === 'edit')     openEditDialog(f);
     else if (act === 'delete')   confirmDelete(f);
 });
@@ -1531,9 +1822,12 @@ document.getElementById('gal-preview').addEventListener('click', function(e) {
 });
 document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
-    if (document.getElementById('gal-ctx-menu').style.display !== 'none')   { closeCtxMenu(); return; }
-    if (document.getElementById('gal-edit-dialog').style.display !== 'none') { closeEditDialog(); return; }
-    if (document.getElementById('gal-preview').style.display !== 'none')     { closePreview(); return; }
+    if (document.getElementById('gal-ctx-menu').style.display !== 'none')     { closeCtxMenu(); return; }
+    if (document.getElementById('gal-publish-dialog').style.display !== 'none') { closePublishDialog(); return; }
+    if (document.getElementById('gal-discord-dialog').style.display !== 'none') { closeDiscordDialog(); return; }
+    if (document.getElementById('gal-discord-settings-dialog').style.display !== 'none') { closeDiscordSettings(); return; }
+    if (document.getElementById('gal-edit-dialog').style.display !== 'none')  { closeEditDialog(); return; }
+    if (document.getElementById('gal-preview').style.display !== 'none')      { closePreview(); return; }
 });
 
 /* Cuando GIS termina de cargar intenta auto-conectar (si ya hubo consentimiento) */

@@ -476,6 +476,12 @@ require_once dirname(__DIR__) . '/assets/config.php';
     </div>
 </div>
 
+<!-- Lightbox de imágenes de posts (click en preview → pantalla completa) -->
+<div id="profile-post-lightbox" role="dialog" aria-hidden="true">
+    <button type="button" id="profile-post-lightbox-close" title="Cerrar (Esc)">×</button>
+    <img id="profile-post-lightbox-img" src="" alt="" referrerpolicy="no-referrer">
+</div>
+
 <script>
 /* =========================
    PROFILE
@@ -1992,14 +1998,219 @@ var PROFILE_USERS = <?php
                 hdr.appendChild(rightCol);
             }
 
-            var txt = document.createElement('div');
-            txt.className = 'profile-post-text';
-            txt.textContent = post.text;
             box.appendChild(hdr);
-            box.appendChild(txt);
+            /* Texto primero (como un caption arriba), luego la imagen */
+            if (post.text) {
+                var txt = document.createElement('div');
+                txt.className = 'profile-post-text';
+                txt.textContent = post.text;
+                box.appendChild(txt);
+            }
+            if (post.imageUrl) {
+                var imgWrap = document.createElement('div');
+                imgWrap.className = 'profile-post-img';
+                var imgEl = document.createElement('img');
+                /* no-referrer evita que la Enhanced Tracking Protection de
+                   Firefox bloquee la petición a drive.google.com como si
+                   fuese un tracker de Google. */
+                imgEl.referrerPolicy = 'no-referrer';
+                imgEl.loading = 'lazy';
+                imgEl.alt = '';
+                imgEl.onerror = function() {
+                    imgWrap.innerHTML = '<div class="profile-post-img-err">' +
+                        '⚠ No se pudo cargar la imagen ' +
+                        '<small>(el fichero ha sido borrado de Drive o ya no es público)</small>' +
+                        '</div>';
+                };
+                imgEl.src = post.imageUrl;
+                imgWrap.appendChild(imgEl);
+                box.appendChild(imgWrap);
+            }
+            /* Comentarios */
+            var commentsWrap = document.createElement('div');
+            commentsWrap.className = 'profile-post-comments';
+            renderCommentsInto(commentsWrap, post);
+            box.appendChild(commentsWrap);
             list.appendChild(box);
         });
     }
+
+    /* Pinta la lista de comentarios + input para añadir uno nuevo dentro de
+       `wrap`. Por defecto colapsado: solo el toggle "💬 N comentarios". Al
+       expandir aparecen lista y form. El estado expandido se preserva entre
+       re-renders (al añadir/borrar) porque vive en wrap.classList. */
+    var COMMENTS_PER_PAGE = 10;
+    function renderCommentsInto(wrap, post) {
+        var wasExpanded = wrap.classList.contains('is-expanded');
+        wrap.innerHTML = '';
+        var comments  = Array.isArray(post.comments) ? post.comments : [];
+        var ownProfile = !viewingUser;
+
+        /* Paginación: estado en wrap.dataset.page (1-indexed) para
+           preservar la página entre re-renders (al añadir/borrar). */
+        var totalPages  = Math.max(1, Math.ceil(comments.length / COMMENTS_PER_PAGE));
+        var currentPage = parseInt(wrap.dataset.page || '1', 10) || 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        wrap.dataset.page = String(currentPage);
+        var pageStart = (currentPage - 1) * COMMENTS_PER_PAGE;
+        var pageSlice = comments.slice(pageStart, pageStart + COMMENTS_PER_PAGE);
+
+        /* Toggle visible siempre */
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'profile-post-comments-toggle';
+        var label = comments.length === 0
+            ? '💬 Comentar'
+            : '💬 ' + comments.length + ' ' + (comments.length === 1 ? 'comentario' : 'comentarios');
+        toggle.innerHTML = '<span>' + label + '</span><span class="profile-post-comments-chev">▾</span>';
+        wrap.appendChild(toggle);
+
+        var inner = document.createElement('div');
+        inner.className = 'profile-post-comments-inner';
+        inner.style.display = wasExpanded ? '' : 'none';
+        wrap.appendChild(inner);
+
+        toggle.addEventListener('click', function() {
+            wrap.classList.toggle('is-expanded');
+            var nowExp = wrap.classList.contains('is-expanded');
+            inner.style.display = nowExp ? '' : 'none';
+            toggle.querySelector('.profile-post-comments-chev').textContent = nowExp ? '▴' : '▾';
+        });
+        /* Restaurar chevron tras re-render si estaba abierto */
+        if (wasExpanded) toggle.querySelector('.profile-post-comments-chev').textContent = '▴';
+
+        var listEl = document.createElement('div');
+        listEl.className = 'profile-post-comments-list';
+        pageSlice.forEach(function(c) {
+            var row = document.createElement('div');
+            row.className = 'profile-post-comment';
+            var avSrc = (PROFILE_USERS[c.authorKey] && PROFILE_USERS[c.authorKey].image) || '';
+            var avHtml = avSrc
+                ? '<img class="profile-post-comment-av" src="' + escAttr(avSrc) + '" alt="">'
+                : '<span class="profile-post-comment-av-ph">👤</span>';
+            row.innerHTML = avHtml +
+                '<div class="profile-post-comment-body">' +
+                    '<div class="profile-post-comment-head">' +
+                        '<span class="profile-post-comment-author">' + escHtml(c.authorLabel || c.authorKey) + '</span>' +
+                        '<span class="profile-post-comment-time">' + relTime(c.createdAt || 0) + '</span>' +
+                    '</div>' +
+                    '<div class="profile-post-comment-text"></div>' +
+                '</div>';
+            row.querySelector('.profile-post-comment-text').textContent = c.text;
+
+            /* Borrar: si soy el autor del comentario O dueño del post */
+            var canDelete = (c.authorKey === currentSessionUser) || ownProfile;
+            if (canDelete) {
+                var x = document.createElement('button');
+                x.type = 'button';
+                x.className = 'profile-post-comment-del';
+                x.textContent = '×';
+                x.title = 'Borrar comentario';
+                (function(cid) {
+                    x.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        confirmFn('¿Eliminar este comentario?', 'Eliminar', function() {
+                            fetch('assets/profile/api.php?action=delete-comment', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: cid })
+                            }).then(function(r) { return r.json(); })
+                              .then(function(d) {
+                                  if (!d || d.error) return;
+                                  post.comments = post.comments.filter(function(x) { return x.id !== cid; });
+                                  renderCommentsInto(wrap, post);
+                              });
+                        });
+                    });
+                })(c.id);
+                row.appendChild(x);
+            }
+            listEl.appendChild(row);
+        });
+        inner.appendChild(listEl);
+
+        /* Controles de paginación (solo si hay más de una página) */
+        if (totalPages > 1) {
+            var pag = document.createElement('div');
+            pag.className = 'profile-post-comments-pag';
+            var prev = document.createElement('button');
+            prev.type = 'button';
+            prev.className = 'button profile-post-comments-pag-btn';
+            prev.textContent = '«';
+            prev.title = 'Página anterior';
+            prev.disabled = currentPage <= 1;
+            prev.addEventListener('click', function() {
+                wrap.dataset.page = String(currentPage - 1);
+                renderCommentsInto(wrap, post);
+            });
+            var info = document.createElement('span');
+            info.className = 'profile-post-comments-pag-info';
+            info.textContent = currentPage + ' / ' + totalPages;
+            var next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'button profile-post-comments-pag-btn';
+            next.textContent = '»';
+            next.title = 'Página siguiente';
+            next.disabled = currentPage >= totalPages;
+            next.addEventListener('click', function() {
+                wrap.dataset.page = String(currentPage + 1);
+                renderCommentsInto(wrap, post);
+            });
+            pag.appendChild(prev);
+            pag.appendChild(info);
+            pag.appendChild(next);
+            inner.appendChild(pag);
+        }
+
+        /* Caja de input para nuevo comentario */
+        var form = document.createElement('div');
+        form.className = 'profile-post-comment-form';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 500;
+        input.placeholder = 'Comentar…';
+        input.className = 'profile-post-comment-input';
+        var sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.className = 'button profile-post-comment-send';
+        sendBtn.textContent = 'Enviar';
+        function send() {
+            var t = input.value.trim();
+            if (!t) return;
+            sendBtn.disabled = true;
+            fetch('assets/profile/api.php?action=add-comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId: post.id, text: t })
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                  sendBtn.disabled = false;
+                  if (!d || d.error) return;
+                  if (!Array.isArray(post.comments)) post.comments = [];
+                  post.comments.push(d.comment);
+                  input.value = '';
+                  /* Saltar a la última página para que el comentario recién
+                     enviado sea visible (los comments van ASC por fecha). */
+                  wrap.dataset.page = String(Math.ceil(post.comments.length / COMMENTS_PER_PAGE));
+                  renderCommentsInto(wrap, post);
+              })
+              .catch(function() { sendBtn.disabled = false; });
+        }
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); send(); }
+        });
+        sendBtn.addEventListener('click', send);
+        form.appendChild(input);
+        form.appendChild(sendBtn);
+        inner.appendChild(form);
+    }
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) {
+            return ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c];
+        });
+    }
+    function escAttr(s) { return escHtml(s); }
 
     var postInput = document.getElementById('profile-post-input');
     var postBtn   = document.getElementById('profile-post-btn');
@@ -3861,6 +4072,51 @@ var PROFILE_USERS = <?php
 
     // Arrancar stream aunque el perfil no se abra (para recibir notificaciones en segundo plano)
     startItemNotifStream();
+
+    /* Escuchar postMessage de iframes (galería) cuando publican un post.
+       Solo refrescamos si estoy viendo MI propio perfil (no interrumpe la
+       vista si estaba ojeando el de otro usuario). */
+    window.addEventListener('message', function(e) {
+        if (!e.data || e.data.type !== 'profile-post-added') return;
+        if (viewingUser) return;
+        loadProfile();
+    });
+})();
+
+/* ─── Lightbox de imágenes de posts ───────────────────────
+   Delegación de click sobre cualquier <img> dentro de un
+   .profile-post-img → abrir overlay con la imagen a tamaño
+   completo. Cerrar con click fuera, × o Esc. */
+(function() {
+    var lb    = document.getElementById('profile-post-lightbox');
+    var lbImg = document.getElementById('profile-post-lightbox-img');
+    var lbX   = document.getElementById('profile-post-lightbox-close');
+    if (!lb) return;
+    function open(src) {
+        lbImg.src = src;
+        lb.classList.add('is-open');
+        lb.setAttribute('aria-hidden', 'false');
+    }
+    function close() {
+        lb.classList.remove('is-open');
+        lb.setAttribute('aria-hidden', 'true');
+        lbImg.src = '';
+    }
+    /* Click delegado sobre cualquier preview de post */
+    document.addEventListener('click', function(e) {
+        var t = e.target;
+        if (t && t.tagName === 'IMG' && t.closest && t.closest('.profile-post-img')) {
+            open(t.src);
+        }
+    });
+    /* Click en el overlay (no en la imagen) → cerrar */
+    lb.addEventListener('click', function(e) {
+        if (e.target === lb) close();
+    });
+    lbX.addEventListener('click', close);
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && lb.classList.contains('is-open')) close();
+    });
 
     /* ──── Auto-momento al completar ──── */
     window.crearMomentoDesdeItem = function(cat, item) {
