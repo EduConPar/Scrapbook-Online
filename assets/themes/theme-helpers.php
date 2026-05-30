@@ -405,6 +405,29 @@ function userNamedWallpaper($label) {
     return '';
 }
 
+/* Wallpaper EFECTIVO del usuario — el mismo que ve en su escritorio.
+   Prioridad:
+     1) Tema activo con themes.wallpaper propio → esa ruta.
+     2) Tema activo sin wallpaper propio → defaultWallpaper() (base).
+     3) Sin tema activo → getUserWallpaper($label) (global).
+   Devuelve ruta relativa al proyecto, o '' si no hay ninguna. */
+function getUserEffectiveWallpaper($userKey, $label) {
+    $data   = loadUserThemes($userKey);
+    $active = !empty($data['active']) ? sanitizeThemeName($data['active']) : '';
+    if ($active === '') {
+        return function_exists('getUserWallpaper') ? getUserWallpaper($label) : '';
+    }
+    $uid = userIdByKey($userKey);
+    if ($uid) {
+        $st = themesPdo()->prepare("SELECT wallpaper FROM themes WHERE user_id = ? AND name = ?");
+        $st->execute([$uid, $active]);
+        $tWp = (string)$st->fetchColumn();
+        if ($tWp !== '' && is_file(dirname(__DIR__, 2) . '/' . $tWp)) return $tWp;
+    }
+    /* Tema activo sin wallpaper propio → default de la app */
+    return function_exists('defaultWallpaper') ? defaultWallpaper() : '';
+}
+
 /**
  * Copia el asset (wallpaper / start-icon) de un tema publicado al espacio
  * del usuario que lo descarga y devuelve la nueva ruta relativa. Así el
