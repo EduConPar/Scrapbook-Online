@@ -17,6 +17,17 @@ if (!$userKey || !isset($loginUsers[$userKey])) {
 }
 $userLabel = $loginUsers[$userKey]['label'];
 
+/* Obtener user_id numérico para el fragmento de OCs */
+$pdo_gal = new PDO(
+    'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+    DB_USER, DB_PASS,
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+);
+$stmt_gal = $pdo_gal->prepare('SELECT id FROM usuarios WHERE user_key = ?');
+$stmt_gal->execute([$userKey]);
+$userRow_gal = $stmt_gal->fetch(PDO::FETCH_ASSOC);
+$userId = $userRow_gal ? (int)$userRow_gal['id'] : 0;
+
 /* Tema activo del usuario (igual que en temas.php) */
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes      = loadUserThemes($userKey);
@@ -85,6 +96,10 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
     <!-- Área principal -->
     <main id="gal-main-area">
+        <div id="gal-tabs">
+  <button class="button gal-tab active" data-tab="galeria">🖼 Galería</button>
+  <button class="button gal-tab" data-tab="ocs">🎭 Personajes</button>
+</div>
         <div id="gal-toolbar">
             <button class="button" id="gal-upload">⬆ Subir imagen</button>
             <span id="gal-status"></span>
@@ -1833,6 +1848,886 @@ document.addEventListener('keydown', function(e) {
 /* Cuando GIS termina de cargar intenta auto-conectar (si ya hubo consentimiento) */
 window.addEventListener('load', tryAutoConnectDrive);
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OCS FRAGMENT — pegar justo antes de </body> en galeria.php
+
+     ESTRUCTURA ESPERADA en galeria.php (dentro de #gal-main-area):
+       <div id="gal-tabs">  ← ya lo tienes
+       <div id="gal-toolbar">
+       <div id="gal-grid">
+       <div id="gal-grid-empty">
+
+     No hay que tocar nada más. Este fragmento añade:
+       · #ocs-panel  dentro de #gal-main-area (oculto por defecto)
+       · Los modales de ficha, form y categoría (fuera del flujo)
+       · CSS y JS al final del body
+═══════════════════════════════════════════════════════════ -->
+
+<!-- ══════════ PANEL OCs ══════════ -->
+<div id="ocs-panel" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+  <div id="ocs-toolbar">
+    <button class="button default" id="ocs-new-btn">＋ Nuevo personaje</button>
+    <span id="ocs-status"></span>
+    <span id="ocs-count"></span>
+    <button class="button" id="ocs-refresh-btn" title="Recargar">↻</button>
+  </div>
+  <div id="ocs-body" style="display:flex;flex:1;overflow:hidden;">
+    <!-- Sidebar -->
+    <aside id="ocs-sidebar">
+      <div class="gal-side-head">🔍 Buscar</div>
+      <div class="gal-side-pad">
+        <input type="text" id="ocs-search" placeholder="Nombre del personaje...">
+      </div>
+      <div class="gal-side-head">🏷 Categorías</div>
+      <div id="ocs-cat-list" style="flex:1;overflow-y:auto;padding:4px;">
+        <div class="gal-empty">Sin categorías.</div>
+      </div>
+      <div id="ocs-sidebar-footer">
+        <button class="button" id="ocs-clear-filters">Limpiar filtros</button>
+        <button class="button" id="ocs-new-cat-btn">＋ Categoría</button>
+      </div>
+    </aside>
+    <!-- Grid centrado -->
+    <div id="ocs-grid-wrap">
+      <div id="ocs-grid"></div>
+      <div id="ocs-grid-empty" style="display:none;">
+        <p>No hay personajes todavía.</p>
+        <p><small>Pulsa <strong>＋ Nuevo personaje</strong> para empezar.</small></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ FICHA ══════════ -->
+<div id="ocs-ficha" style="display:none;">
+  <div id="ocs-ficha-inner" class="window">
+    <div class="title-bar">
+      <div class="title-bar-text" id="ocs-ficha-title">Personaje</div>
+      <div class="title-bar-controls">
+        <button aria-label="Close" id="ocs-ficha-close"></button>
+      </div>
+    </div>
+    <div class="window-body" id="ocs-ficha-body"></div>
+  </div>
+</div>
+
+<!-- ══════════ FORM CREAR/EDITAR ══════════ -->
+<div class="window gal-dialog" id="ocs-form-dialog" style="display:none;width:560px;max-height:90vh;overflow-y:auto;">
+  <div class="title-bar">
+    <div class="title-bar-text" id="ocs-form-title">Nuevo personaje</div>
+    <div class="title-bar-controls">
+      <button aria-label="Close" id="ocs-form-close"></button>
+    </div>
+  </div>
+  <div class="window-body">
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;">
+      <div style="flex-shrink:0;text-align:center;">
+        <div id="ocs-form-foto-preview" class="ocs-foto-preview">🎭</div>
+        <button class="button" id="ocs-form-foto-btn" style="margin-top:4px;font-size:10px;">📂 Galería</button>
+        <input type="hidden" id="ocs-form-foto-id">
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="field-row-stacked" style="margin-bottom:6px;">
+          <label>Nombre *</label>
+          <input type="text" id="ocs-form-nombre" maxlength="100" placeholder="Nombre del personaje">
+        </div>
+        <div class="field-row-stacked">
+          <label>Descripción / About</label>
+          <textarea id="ocs-form-desc" rows="4" maxlength="5000"
+            style="resize:vertical;min-height:70px;font-size:11px;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <fieldset style="margin:8px 0;padding:6px 10px;">
+      <legend style="font-size:11px;font-weight:bold;">📋 Identidad</legend>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;">
+        <div class="field-row-stacked"><label>Alias</label><input type="text" id="ocs-form-alias" maxlength="100"></div>
+        <div class="field-row-stacked"><label>Fecha de nacimiento</label><input type="text" id="ocs-form-fecha_nacimiento" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Edad</label><input type="text" id="ocs-form-edad" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Especie</label><input type="text" id="ocs-form-especie" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Género</label><input type="text" id="ocs-form-genero" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Orientación</label><input type="text" id="ocs-form-orientacion" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Pronombres</label><input type="text" id="ocs-form-pronombres" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Etnia</label><input type="text" id="ocs-form-etnia" maxlength="100"></div>
+      </div>
+    </fieldset>
+
+    <fieldset style="margin:8px 0;padding:6px 10px;">
+      <legend style="font-size:11px;font-weight:bold;">📊 Stats</legend>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;">
+        <div class="field-row-stacked"><label>Altura</label><input type="text" id="ocs-form-altura" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Peso</label><input type="text" id="ocs-form-peso" maxlength="20"></div>
+        <div class="field-row-stacked"><label>Ojos</label><input type="text" id="ocs-form-ojos" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Cabello</label><input type="text" id="ocs-form-cabello" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Zodiaco</label><input type="text" id="ocs-form-zodiaco" maxlength="20"></div>
+        <div class="field-row-stacked"><label>MBTI</label><input type="text" id="ocs-form-mbti" maxlength="10"></div>
+        <div class="field-row-stacked"><label>Enneagrama</label><input type="text" id="ocs-form-enneagrama" maxlength="20"></div>
+        <div class="field-row-stacked"><label>Carácter</label><input type="text" id="ocs-form-caracter" maxlength="50"></div>
+      </div>
+    </fieldset>
+
+    <fieldset style="margin:8px 0;padding:6px 10px;">
+      <legend style="font-size:11px;font-weight:bold;">🌍 Lore</legend>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;">
+        <div class="field-row-stacked"><label>Relación</label><input type="text" id="ocs-form-relacion" maxlength="100"></div>
+        <div class="field-row-stacked"><label>Estatus</label><input type="text" id="ocs-form-estatus" maxlength="50"></div>
+        <div class="field-row-stacked"><label>Residencia</label><input type="text" id="ocs-form-residencia" maxlength="100"></div>
+        <div class="field-row-stacked"><label>Ocupación</label><input type="text" id="ocs-form-ocupacion" maxlength="100"></div>
+        <div class="field-row-stacked"><label>Alineamiento</label><input type="text" id="ocs-form-alineamiento" maxlength="50"></div>
+      </div>
+    </fieldset>
+
+    <div class="field-row-stacked" style="margin-bottom:6px;">
+      <label>Categorías</label>
+      <div id="ocs-form-cats" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;
+        background:var(--inset-bg);box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);min-height:26px;">
+      </div>
+    </div>
+
+    <p id="ocs-form-status" style="font-size:11px;margin:4px 0;min-height:14px;"></p>
+    <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:6px;">
+      <button class="button" id="ocs-form-delete" style="margin-right:auto;color:var(--error-text);display:none;">🗑 Eliminar</button>
+      <button class="button" id="ocs-form-cancel">Cancelar</button>
+      <button class="button default" id="ocs-form-submit">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DIALOG: NUEVA CATEGORÍA ══════════ -->
+<div class="window gal-dialog" id="ocs-cat-dialog" style="display:none;width:300px;">
+  <div class="title-bar">
+    <div class="title-bar-text">＋ Nueva categoría</div>
+    <div class="title-bar-controls"><button aria-label="Close" id="ocs-cat-close"></button></div>
+  </div>
+  <div class="window-body">
+    <div class="field-row-stacked" style="margin-bottom:6px;">
+      <label>Nombre</label>
+      <input type="text" id="ocs-cat-nombre" maxlength="60" placeholder="ej: Protagonistas">
+    </div>
+    <div class="field-row-stacked" style="margin-bottom:6px;">
+      <label>Color del badge</label>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <input type="color" id="ocs-cat-color" value="#4a9eff" style="width:40px;height:26px;cursor:pointer;">
+        <span id="ocs-cat-preview" class="ocs-cat-badge" style="background:#4a9eff;color:#fff;padding:1px 6px;">Preview</span>
+      </div>
+    </div>
+    <p id="ocs-cat-status" style="font-size:11px;min-height:14px;margin:4px 0;"></p>
+    <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:6px;">
+      <button class="button" id="ocs-cat-cancel">Cancelar</button>
+      <button class="button default" id="ocs-cat-submit">Crear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PICKER DE FOTO ══════════ -->
+<div class="window gal-dialog" id="ocs-picker-dialog" style="display:none;width:460px;">
+  <div class="title-bar">
+    <div class="title-bar-text">📂 Elegir foto</div>
+    <div class="title-bar-controls"><button aria-label="Close" id="ocs-picker-close"></button></div>
+  </div>
+  <div class="window-body" style="padding:6px;">
+    <input type="text" id="ocs-picker-search" placeholder="Buscar imagen..." style="width:100%;box-sizing:border-box;margin-bottom:6px;">
+    <div id="ocs-picker-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;
+      max-height:300px;overflow-y:auto;background:var(--inset-bg);
+      box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);padding:6px;"></div>
+    <div class="field-row" style="justify-content:flex-end;margin-top:6px;">
+      <button class="button" id="ocs-picker-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ ESTILOS ══════════ -->
+<style>
+#gal-tabs {
+  display: flex; gap: 2px; padding: 4px 8px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--win-bg); flex-shrink: 0;
+}
+.gal-tab {
+  padding: 3px 14px; font-size: 11px;
+  position: relative; bottom: -1px;
+  border-bottom-color: transparent !important;
+}
+.gal-tab.active {
+  background: var(--win-bg) !important;
+  box-shadow: inset -1px 0 0 var(--bezel-dark-2), inset 1px 0 0 var(--bezel-light-1), inset 0 2px 0 var(--bezel-light-1);
+  z-index: 1;
+}
+
+#ocs-panel { display:none; flex:1; flex-direction:column; overflow:hidden; }
+
+#ocs-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 var(--bezel-light-1); flex-shrink: 0;
+}
+#ocs-status { font-size:11px; color:var(--text-muted); }
+#ocs-count  { font-size:11px; color:var(--text-muted); margin-left:auto; }
+
+#ocs-body { display:flex; flex:1; overflow:hidden; }
+
+/* Sidebar */
+#ocs-sidebar {
+  width: 180px; flex-shrink: 0;
+  background: var(--win-bg);
+  border-right: 1px solid var(--border);
+  box-shadow: 1px 0 0 var(--bezel-light-1);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#ocs-sidebar-footer {
+  padding: 6px 8px; display: flex; flex-direction: column;
+  gap: 4px; border-top: 1px solid var(--border);
+}
+
+/* Grid centrado */
+#ocs-grid-wrap {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden; align-items: center;
+}
+#ocs-grid {
+  width: 100%; max-width: 900px;
+  overflow-y: auto; padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px; align-content: start;
+  box-sizing: border-box;
+}
+#ocs-grid-empty {
+  flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  color:var(--text-faint); font-size:12px; text-align:center; padding:20px;
+}
+
+/* Cards */
+.ocs-card {
+  background: var(--win-bg);
+  border-top: 2px solid var(--bezel-light-1);
+  border-left: 2px solid var(--bezel-light-1);
+  border-right: 2px solid var(--bezel-dark-2);
+  border-bottom: 2px solid var(--bezel-dark-2);
+  padding: 4px; cursor: pointer;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.ocs-card:hover { background: var(--accent); color: var(--accent-text); }
+.ocs-card:hover .ocs-card-name { color: var(--accent-text); }
+.ocs-card:hover .ocs-chip { background: var(--accent-deep); }
+.ocs-card-thumb {
+  width: 100%; aspect-ratio: 3/4;
+  background: var(--inset-bg);
+  box-shadow: inset 1px 1px var(--bezel-dark-1), inset -1px -1px var(--bezel-light-1);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; font-size: 36px;
+}
+.ocs-card-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+.ocs-card-name {
+  font-size: 11px; font-weight: bold; margin-top: 4px;
+  text-align: center; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; color: var(--text);
+}
+.ocs-card-cats {
+  display: flex; flex-wrap: wrap; gap: 2px;
+  justify-content: center; margin-top: 3px;
+}
+.ocs-chip {
+  font-size: 9px; padding: 1px 5px; color: #fff;
+  white-space: nowrap; display: inline-block;
+}
+
+/* Sidebar cats */
+.ocs-cat-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 4px 6px; font-size: 11px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.ocs-cat-item:hover  { background:var(--accent); color:var(--accent-text); }
+.ocs-cat-item.active { background:var(--accent); color:var(--accent-text); font-weight:bold; }
+.ocs-cat-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.ocs-cat-count {
+  font-size:10px; background:var(--inset-bg); color:var(--text-inset);
+  padding:1px 5px;
+  box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  min-width:16px; text-align:center; margin-left:auto;
+}
+.ocs-cat-badge {
+  font-size:9px; padding:1px 5px; color:#fff;
+  display:inline-block; white-space:nowrap;
+}
+
+/* Foto preview en form */
+.ocs-foto-preview {
+  width:90px; height:120px; background:var(--inset-bg);
+  box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden; font-size:28px;
+}
+.ocs-foto-preview img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* Picker */
+.ocs-picker-thumb {
+  aspect-ratio:1; background:var(--inset-bg);
+  box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  overflow:hidden; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.ocs-picker-thumb:hover { box-shadow:0 0 0 2px var(--accent); }
+.ocs-picker-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* ── FICHA OVERLAY ── */
+#ocs-ficha {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.8);
+  z-index:5000; display:flex;
+  align-items:center; justify-content:center;
+  padding:20px; box-sizing:border-box;
+}
+#ocs-ficha-inner {
+  max-width:760px; width:100%; max-height:92vh;
+  display:flex; flex-direction:column;
+}
+#ocs-ficha-body { overflow-y:auto; flex:1; padding:0; }
+
+/* Header de la ficha — nombre grande centrado */
+.ocs-ficha-header {
+  text-align: center;
+  padding: 18px 20px 10px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.ocs-ficha-header-name {
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+.ocs-ficha-header-cats {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  justify-content: center;
+}
+
+/* Layout principal ficha: foto derecha + info izquierda */
+.ocs-ficha-main {
+  display: flex; gap: 0;
+}
+.ocs-ficha-info-col {
+  flex: 1; padding: 14px 16px;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.ocs-ficha-foto-col {
+  width: 200px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  align-items: center; padding: 14px 12px; gap: 8px;
+}
+.ocs-ficha-foto-img {
+  width: 170px; height: 227px;
+  background: var(--inset-bg);
+  box-shadow: inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; font-size: 48px;
+}
+.ocs-ficha-foto-img img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* Tabla de stats en la ficha */
+.ocs-ficha-section-title {
+  font-size: 9px; font-weight: bold; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px; margin: 10px 0 6px;
+}
+.ocs-ficha-stats {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 3px 16px;
+}
+.ocs-stat-row {
+  display: flex; gap: 4px; font-size: 11px;
+  align-items: baseline;
+}
+.ocs-stat-label {
+  color: var(--text-muted); font-weight: bold;
+  font-size: 10px; flex-shrink: 0; min-width: 70px;
+}
+
+/* About / descripción */
+.ocs-ficha-about {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.ocs-ficha-desc {
+  font-size: 11px; line-height: 1.7;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--text);
+}
+
+/* Acciones en ficha */
+.ocs-ficha-actions {
+  display: flex; gap: 4px; padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+  background: var(--win-bg);
+}
+</style>
+
+<!-- ══════════ JS ══════════ -->
+<script>
+(function() {
+'use strict';
+var _userId = <?php echo json_encode($userId); ?>;
+
+var _panel = document.getElementById('ocs-panel');
+var _mainArea = document.getElementById('gal-main');
+if (_panel && _mainArea) _mainArea.appendChild(_panel);
+
+var OCS_API = '/scrapbook-melon/assets/ocs/api.php';
+var _ocs = [], _categorias = [], _selectedCat = null, _searchTerm = '', _editingId = null;
+var _allUsers = [], _viewingUserId = null;
+
+function esc(s) {
+  return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});
+}
+function setStatus(msg, err) {
+  var el = document.getElementById('ocs-status');
+  if (!el) return;
+  el.textContent = msg||''; el.style.color = err ? 'var(--error-text)' : '';
+}
+function centerDialog(el) {
+  el.style.position='fixed'; el.style.left='50%'; el.style.top='50%';
+  el.style.transform='translate(-50%,-50%)'; el.style.zIndex='4000';
+}
+async function api(action, body) {
+  var opts = { headers:{'Content-Type':'application/json'} };
+  if (body) { opts.method='POST'; opts.body=JSON.stringify(body); }
+  var r = await fetch(OCS_API+'?action='+action, opts);
+  return r.json();
+}
+function thumbUrl(driveId) {
+  if (!driveId) return null;
+  if (window._thumbCache && window._thumbCache.has(driveId)) return window._thumbCache.get(driveId);
+  return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(driveId)+'&sz=w400';
+}
+
+/* ═══ TABS ═══ */
+document.addEventListener('click', function(e) {
+  var tab = e.target.closest('.gal-tab');
+  if (!tab) return;
+  document.querySelectorAll('.gal-tab').forEach(function(t){ t.classList.remove('active'); });
+  tab.classList.add('active');
+  var isOcs = tab.dataset.tab === 'ocs';
+  ['gal-toolbar','gal-grid','gal-grid-empty'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.style.display=isOcs?'none':'';
+  });
+  var panel=document.getElementById('ocs-panel');
+  if (panel) panel.style.display=isOcs?'flex':'none';
+  if (isOcs && !_ocs.length && !_categorias.length) loadAll();
+});
+
+/* ═══ CARGA ═══ */
+async function loadAll() {
+  setStatus('Cargando…');
+  try {
+    var res = await Promise.all([api('list_all'), api('categorias_list')]);
+    _allUsers   = res[0].users      || [];
+    _categorias = res[1].categorias || [];
+    if (_viewingUserId === null) _viewingUserId = _userId;
+    _ocs = _ocsForUser(_viewingUserId);
+    setStatus('');
+    renderUserDropdown();
+    renderSidebar();
+    renderGrid();
+  } catch(e) { setStatus('Error: '+e.message, true); }
+}
+function _ocsForUser(uid) {
+  var u = _allUsers.find(function(u){ return u.id===uid; });
+  return u ? u.ocs : [];
+}
+function renderUserDropdown() {
+  var toolbar = document.getElementById('ocs-toolbar');
+  var existing = document.getElementById('ocs-user-select');
+  if (existing) existing.remove();
+  if (_allUsers.length <= 1) return;
+  var sel = document.createElement('select');
+  sel.id = 'ocs-user-select';
+  sel.style.cssText='font-size:11px;padding:2px 6px;background:var(--inset-bg);color:var(--text);border:1px solid var(--border);';
+  _allUsers.forEach(function(u){
+    var opt=document.createElement('option');
+    opt.value=u.id; opt.textContent=u.label||u.username;
+    if(u.id===_viewingUserId) opt.selected=true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', function(){
+    _viewingUserId=parseInt(this.value);
+    _ocs=_ocsForUser(_viewingUserId);
+    _selectedCat=null; _searchTerm='';
+    var si=document.getElementById('ocs-search'); if(si) si.value='';
+    var isOwn=_viewingUserId===_userId;
+    document.getElementById('ocs-new-btn').style.display=isOwn?'':'none';
+    document.getElementById('ocs-new-cat-btn').style.display=isOwn?'':'none';
+    renderSidebar(); renderGrid();
+  });
+  toolbar.insertBefore(sel, toolbar.firstChild);
+}
+
+/* ═══ SIDEBAR ═══ */
+function renderSidebar() {
+  var list=document.getElementById('ocs-cat-list'); if(!list) return;
+  var counts={};
+  _ocs.forEach(function(oc){ (oc.categorias||[]).forEach(function(c){ counts[c.id]=(counts[c.id]||0)+1; }); });
+  if (!_categorias.length) { list.innerHTML='<div class="gal-empty">Sin categorías todavía.</div>'; return; }
+  list.innerHTML=_categorias.map(function(c){
+    return '<div class="ocs-cat-item'+((_selectedCat===c.id)?' active':'')+'" data-id="'+c.id+'">'+
+      '<span class="ocs-cat-dot" style="background:'+esc(c.color)+'"></span>'+
+      '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(c.nombre)+'</span>'+
+      '<span class="ocs-cat-count">'+(counts[c.id]||0)+'</span>'+
+    '</div>';
+  }).join('');
+  list.querySelectorAll('.ocs-cat-item').forEach(function(el){
+    el.addEventListener('click',function(){
+      var id=parseInt(el.dataset.id);
+      _selectedCat=(_selectedCat===id)?null:id;
+      renderSidebar(); renderGrid();
+    });
+  });
+}
+
+/* ═══ GRID ═══ */
+function filtered() {
+  return _ocs.filter(function(oc){
+    if (_searchTerm && oc.nombre.toLowerCase().indexOf(_searchTerm.toLowerCase())===-1) return false;
+    if (_selectedCat) {
+      var ids=(oc.categorias||[]).map(function(c){ return c.id; });
+      if (ids.indexOf(_selectedCat)===-1) return false;
+    }
+    return true;
+  });
+}
+function renderGrid() {
+  var grid=document.getElementById('ocs-grid');
+  var emptyEl=document.getElementById('ocs-grid-empty');
+  var countEl=document.getElementById('ocs-count');
+  var list=filtered();
+  if (countEl) countEl.textContent=list.length+(list.length===1?' personaje':' personajes');
+  grid.innerHTML='';
+  if (!list.length) { emptyEl.style.display=''; return; }
+  emptyEl.style.display='none';
+  list.forEach(function(oc){
+    var card=document.createElement('div');
+    card.className='ocs-card';
+    var url=thumbUrl(oc.foto_id);
+    var imgH=url?'<img src="'+esc(url)+'" alt="" loading="lazy">':'🎭';
+    var cats=(oc.categorias||[]).map(function(c){
+      return '<span class="ocs-chip" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>';
+    }).join('');
+    card.innerHTML='<div class="ocs-card-thumb">'+imgH+'</div>'+
+      '<div class="ocs-card-name">'+esc(oc.nombre)+'</div>'+
+      (cats?'<div class="ocs-card-cats">'+cats+'</div>':'');
+    card.addEventListener('click',function(){ openFicha(oc.id); });
+    grid.appendChild(card);
+  });
+}
+
+/* ═══ FICHA ═══ */
+function _statRow(label, val) {
+  if (!val) return '';
+  return '<div class="ocs-stat-row"><span class="ocs-stat-label">'+esc(label)+'</span><span>'+esc(val)+'</span></div>';
+}
+
+async function openFicha(id) {
+  var ficha=document.getElementById('ocs-ficha');
+  var body=document.getElementById('ocs-ficha-body');
+  document.getElementById('ocs-ficha-title').textContent='…';
+  body.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-muted);">Cargando…</div>';
+  ficha.style.display='flex';
+  try {
+    var r=await api('get&id='+id);
+    var oc=r.oc;
+    document.getElementById('ocs-ficha-title').textContent=oc.nombre;
+
+    var url=thumbUrl(oc.foto_id);
+    var imgH=url?'<img src="'+esc(url)+'" alt="">':'🎭';
+    var cats=(oc.categorias||[]).map(function(c){
+      return '<span class="ocs-cat-badge" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>';
+    }).join('');
+
+    /* Columna izquierda: stats agrupados */
+    var identidad = [
+      _statRow('Alias', oc.alias),
+      _statRow('F. Nacimiento', oc.fecha_nacimiento),
+      _statRow('Edad', oc.edad),
+      _statRow('Especie', oc.especie),
+      _statRow('Género', oc.genero),
+      _statRow('Orientación', oc.orientacion),
+      _statRow('Pronombres', oc.pronombres),
+      _statRow('Etnia', oc.etnia),
+    ].filter(Boolean).join('');
+
+    var stats = [
+      _statRow('Altura', oc.altura),
+      _statRow('Peso', oc.peso),
+      _statRow('Ojos', oc.ojos),
+      _statRow('Cabello', oc.cabello),
+      _statRow('Zodiaco', oc.zodiaco),
+      _statRow('MBTI', oc.mbti),
+      _statRow('Enneagrama', oc.enneagrama),
+      _statRow('Carácter', oc.caracter),
+    ].filter(Boolean).join('');
+
+    var lore = [
+      _statRow('Relación', oc.relacion),
+      _statRow('Estatus', oc.estatus),
+      _statRow('Residencia', oc.residencia),
+      _statRow('Ocupación', oc.ocupacion),
+      _statRow('Alineamiento', oc.alineamiento),
+    ].filter(Boolean).join('');
+
+    var isOwn = (oc.user_id !== undefined ? parseInt(oc.user_id) : _viewingUserId) === _userId;
+
+    body.innerHTML =
+      /* Header */
+      '<div class="ocs-ficha-header">'+
+        '<div class="ocs-ficha-header-name">'+esc(oc.nombre)+'</div>'+
+        (cats?'<div class="ocs-ficha-header-cats">'+cats+'</div>':'')+
+      '</div>'+
+      /* Main: info + foto */
+      '<div class="ocs-ficha-main">'+
+        '<div class="ocs-ficha-info-col">'+
+          (identidad?'<div class="ocs-ficha-section-title">Identidad</div><div class="ocs-ficha-stats">'+identidad+'</div>':'')+
+          (stats?'<div class="ocs-ficha-section-title">Stats</div><div class="ocs-ficha-stats">'+stats+'</div>':'')+
+          (lore?'<div class="ocs-ficha-section-title">Lore</div><div class="ocs-ficha-stats">'+lore+'</div>':'')+
+        '</div>'+
+        '<div class="ocs-ficha-foto-col">'+
+          '<div class="ocs-ficha-foto-img">'+imgH+'</div>'+
+        '</div>'+
+      '</div>'+
+      /* About */
+      (oc.descripcion?
+        '<div class="ocs-ficha-about">'+
+          '<div class="ocs-ficha-section-title">About</div>'+
+          '<div class="ocs-ficha-desc">'+esc(oc.descripcion)+'</div>'+
+        '</div>':'')+
+      /* Acciones */
+      '<div class="ocs-ficha-actions">'+
+        (isOwn?'<button class="button" id="ocs-ficha-edit-btn">✏ Editar</button>':'')+
+      '</div>';
+
+    if (isOwn) {
+      var editBtn=document.getElementById('ocs-ficha-edit-btn');
+      if (editBtn) editBtn.addEventListener('click',function(){ closeFicha(); openForm(id); });
+    }
+  } catch(e) {
+    body.innerHTML='<p style="color:var(--error-text);padding:10px;">Error: '+esc(e.message)+'</p>';
+  }
+}
+function closeFicha(){ document.getElementById('ocs-ficha').style.display='none'; }
+document.getElementById('ocs-ficha-close').addEventListener('click', closeFicha);
+document.getElementById('ocs-ficha').addEventListener('click',function(e){ if(e.target===this) closeFicha(); });
+
+/* ═══ FORM ═══ */
+var _FIELDS = ['nombre','alias','fecha_nacimiento','edad','especie','genero','orientacion',
+               'pronombres','etnia','altura','peso','ojos','cabello','zodiaco','mbti',
+               'enneagrama','caracter','relacion','estatus','residencia','ocupacion','alineamiento','desc'];
+
+function openForm(id) {
+  _editingId=id||null;
+  var dlg=document.getElementById('ocs-form-dialog');
+  document.getElementById('ocs-form-title').textContent=id?'Editar personaje':'Nuevo personaje';
+  document.getElementById('ocs-form-delete').style.display=id?'':'none';
+  document.getElementById('ocs-form-status').textContent='';
+  _FIELDS.forEach(function(f){ var el=document.getElementById('ocs-form-'+f); if(el) el.value=''; });
+  document.getElementById('ocs-form-foto-id').value='';
+  document.getElementById('ocs-form-foto-preview').innerHTML='🎭';
+  renderFormCats([]);
+
+  if (id) {
+    var oc=_ocs.find(function(o){ return o.id===id; });
+    if (oc) {
+      var map={nombre:'nombre',alias:'alias',fecha_nacimiento:'fecha_nacimiento',
+               edad:'edad',especie:'especie',genero:'genero',orientacion:'orientacion',
+               pronombres:'pronombres',etnia:'etnia',altura:'altura',peso:'peso',
+               ojos:'ojos',cabello:'cabello',zodiaco:'zodiaco',mbti:'mbti',
+               enneagrama:'enneagrama',caracter:'caracter',relacion:'relacion',
+               estatus:'estatus',residencia:'residencia',ocupacion:'ocupacion',
+               alineamiento:'alineamiento',desc:'descripcion'};
+      Object.keys(map).forEach(function(field){
+        var el=document.getElementById('ocs-form-'+field);
+        if(el) el.value=oc[map[field]]||'';
+      });
+      document.getElementById('ocs-form-foto-id').value=oc.foto_id||'';
+      if(oc.foto_id) setFotoPreview(oc.foto_id);
+      renderFormCats((oc.categorias||[]).map(function(c){ return c.id; }));
+    }
+  }
+  dlg.style.display='block'; centerDialog(dlg);
+}
+function closeForm(){ document.getElementById('ocs-form-dialog').style.display='none'; }
+
+function renderFormCats(sel) {
+  var cont=document.getElementById('ocs-form-cats');
+  if (!_categorias.length) { cont.innerHTML='<span style="font-size:10px;color:var(--text-muted);">Sin categorías todavía.</span>'; return; }
+  cont.innerHTML=_categorias.map(function(c){
+    return '<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;">'+
+      '<input type="checkbox" data-catid="'+c.id+'"'+(sel.indexOf(c.id)!==-1?' checked':'')+'>'+
+      '<span class="ocs-cat-badge" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>'+
+    '</label>';
+  }).join('');
+}
+function getSelectedCats(){
+  return Array.from(document.querySelectorAll('#ocs-form-cats input:checked'))
+    .map(function(b){ return parseInt(b.dataset.catid); });
+}
+
+function _getField(id){ var el=document.getElementById('ocs-form-'+id); return el?el.value.trim():''; }
+
+async function submitForm() {
+  var btn=document.getElementById('ocs-form-submit');
+  var st=document.getElementById('ocs-form-status');
+  var nombre=_getField('nombre');
+  if(!nombre){ st.textContent='El nombre es obligatorio.'; st.style.color='var(--error-text)'; return; }
+  var body={
+    nombre, foto_id:_getField('foto-id'),
+    descripcion:_getField('desc'),
+    stats:{
+      edad:_getField('edad'), altura:_getField('altura'), genero:_getField('genero'),
+      ojos:_getField('ojos'), cabello:_getField('cabello'), zodiaco:_getField('zodiaco'),
+      especie:_getField('especie'), alias:_getField('alias'),
+      orientacion:_getField('orientacion'), pronombres:_getField('pronombres'),
+      relacion:_getField('relacion'), etnia:_getField('etnia'),
+      enneagrama:_getField('enneagrama'), mbti:_getField('mbti'),
+      estatus:_getField('estatus'), residencia:_getField('residencia'),
+      alineamiento:_getField('alineamiento'), caracter:_getField('caracter'),
+      fecha_nacimiento:_getField('fecha_nacimiento'), ocupacion:_getField('ocupacion'),
+      peso:_getField('peso')
+    },
+    categorias:getSelectedCats()
+  };
+  if (_editingId) body.id=_editingId;
+  btn.disabled=true; st.style.color=''; st.textContent='Guardando…';
+  try {
+    var r=await api(_editingId?'update':'create', body);
+    if(r.error) throw new Error(r.error);
+    closeForm(); await loadAll();
+  } catch(e){ st.textContent='Error: '+e.message; st.style.color='var(--error-text)'; }
+  finally { btn.disabled=false; }
+}
+async function deleteOc() {
+  if(!_editingId) return;
+  var oc=_ocs.find(function(o){ return o.id===_editingId; });
+  if(!confirm('¿Eliminar "'+(oc&&oc.nombre||'este personaje')+'"? No se puede deshacer.')) return;
+  try {
+    var r=await api('delete',{id:_editingId});
+    if(r.error) throw new Error(r.error);
+    closeForm(); await loadAll();
+  } catch(e){
+    document.getElementById('ocs-form-status').textContent='Error: '+e.message;
+    document.getElementById('ocs-form-status').style.color='var(--error-text)';
+  }
+}
+
+document.getElementById('ocs-new-btn').addEventListener('click',function(){ openForm(null); });
+document.getElementById('ocs-form-close').addEventListener('click',closeForm);
+document.getElementById('ocs-form-cancel').addEventListener('click',closeForm);
+document.getElementById('ocs-form-submit').addEventListener('click',submitForm);
+document.getElementById('ocs-form-delete').addEventListener('click',deleteOc);
+
+/* ═══ PICKER ═══ */
+function setFotoPreview(did) {
+  var url=thumbUrl(did);
+  var prev=document.getElementById('ocs-form-foto-preview');
+  if(url) prev.innerHTML='<img src="'+esc(url)+'" alt="">';
+}
+function openPicker() {
+  var dlg=document.getElementById('ocs-picker-dialog');
+  dlg.style.display='block'; centerDialog(dlg);
+  document.getElementById('ocs-picker-search').value='';
+  renderPicker('');
+}
+function closePicker(){ document.getElementById('ocs-picker-dialog').style.display='none'; }
+function renderPicker(q) {
+  var grid=document.getElementById('ocs-picker-grid');
+  var files=(window._files||[]).filter(function(f){
+    if(!f.mimeType||f.mimeType.indexOf('image/')===-1) return false;
+    if(q&&f.name.toLowerCase().indexOf(q.toLowerCase())===-1) return false;
+    return true;
+  });
+  if(!files.length){
+    grid.innerHTML='<div class="gal-empty" style="grid-column:1/-1;">'+(window._files&&window._files.length?'Sin resultados.':'Conecta la galería primero.')+'</div>';
+    return;
+  }
+  grid.innerHTML=files.map(function(f){
+    var url=thumbUrl(f.id);
+    return '<div class="ocs-picker-thumb" data-id="'+esc(f.id)+'" title="'+esc(f.name)+'">'+
+      '<img src="'+esc(url)+'" loading="lazy" alt=""></div>';
+  }).join('');
+  grid.querySelectorAll('.ocs-picker-thumb').forEach(function(th){
+    th.addEventListener('click',function(){
+      var did=th.dataset.id;
+      document.getElementById('ocs-form-foto-id').value=did;
+      setFotoPreview(did); closePicker();
+    });
+  });
+}
+document.getElementById('ocs-form-foto-btn').addEventListener('click',openPicker);
+document.getElementById('ocs-picker-close').addEventListener('click',closePicker);
+document.getElementById('ocs-picker-cancel').addEventListener('click',closePicker);
+document.getElementById('ocs-picker-search').addEventListener('input',function(){ renderPicker(this.value); });
+
+/* ═══ CATEGORÍAS ═══ */
+function openCatDlg() {
+  var dlg=document.getElementById('ocs-cat-dialog');
+  document.getElementById('ocs-cat-nombre').value='';
+  document.getElementById('ocs-cat-color').value='#4a9eff';
+  document.getElementById('ocs-cat-preview').style.background='#4a9eff';
+  document.getElementById('ocs-cat-status').textContent='';
+  dlg.style.display='block'; centerDialog(dlg);
+}
+function closeCatDlg(){ document.getElementById('ocs-cat-dialog').style.display='none'; }
+async function submitCat() {
+  var btn=document.getElementById('ocs-cat-submit');
+  var st=document.getElementById('ocs-cat-status');
+  var nombre=document.getElementById('ocs-cat-nombre').value.trim();
+  var color=document.getElementById('ocs-cat-color').value;
+  if(!nombre){ st.textContent='Pon un nombre.'; st.style.color='var(--error-text)'; return; }
+  btn.disabled=true; st.style.color=''; st.textContent='Creando…';
+  try {
+    var r=await api('categoria_create',{nombre,color});
+    if(r.error) throw new Error(r.error);
+    closeCatDlg();
+    var rc=await api('categorias_list');
+    _categorias=rc.categorias||[];
+    renderSidebar(); renderFormCats([]);
+  } catch(e){ st.textContent='Error: '+e.message; st.style.color='var(--error-text)'; }
+  finally { btn.disabled=false; }
+}
+document.getElementById('ocs-new-cat-btn').addEventListener('click',openCatDlg);
+document.getElementById('ocs-cat-close').addEventListener('click',closeCatDlg);
+document.getElementById('ocs-cat-cancel').addEventListener('click',closeCatDlg);
+document.getElementById('ocs-cat-submit').addEventListener('click',submitCat);
+document.getElementById('ocs-cat-color').addEventListener('input',function(){
+  document.getElementById('ocs-cat-preview').style.background=this.value;
+});
+
+/* ═══ FILTROS ═══ */
+document.getElementById('ocs-search').addEventListener('input',function(){ _searchTerm=this.value; renderGrid(); });
+document.getElementById('ocs-clear-filters').addEventListener('click',function(){
+  _selectedCat=null; _searchTerm='';
+  document.getElementById('ocs-search').value='';
+  renderSidebar(); renderGrid();
+});
+document.getElementById('ocs-refresh-btn').addEventListener('click',loadAll);
+
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape') return;
+  if(document.getElementById('ocs-ficha').style.display!=='none'){ closeFicha(); return; }
+  if(document.getElementById('ocs-form-dialog').style.display!=='none'){ closeForm(); return; }
+  if(document.getElementById('ocs-cat-dialog').style.display!=='none'){ closeCatDlg(); return; }
+  if(document.getElementById('ocs-picker-dialog').style.display!=='none'){ closePicker(); return; }
+});
+
+})();
+</script>
+
 
 </body>
 </html>
