@@ -40,6 +40,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     $activeThemeCss   = '../' . themeCssRelPath($activeTheme, $userLabel);
     if (!file_exists(dirname(__DIR__) . '/' . themeCssRelPath($activeTheme, $userLabel))) $activeThemeCss = '';
 }
+
+/* Base URL dinámica para JS — sube de /apps a la raíz del proyecto */
+$projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME']))), '/');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -247,6 +250,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 </div>
 
 <script>
+// Base URL dinámica — funciona en localhost y en producción sin cambios
+const API_BASE = '<?php echo htmlspecialchars($projectBaseUrl); ?>/assets/couple/api.php';
+
 const parejaId = <?php echo $parejaId; ?>;
 const fechaInicio = '<?php echo $fechaInicio; ?>';
 const hoy = new Date();
@@ -267,8 +273,8 @@ const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
 
 function cargarTodo() {
     Promise.all([
-        fetch('../assets/couple/api.php?action=get-momentos&pareja_id=' + parejaId).then(r => r.json()),
-        fetch('../assets/couple/api.php?action=get-recordatorios&pareja_id=' + parejaId).then(r => r.json())
+        fetch(API_BASE + '?action=get-momentos&pareja_id=' + parejaId).then(r => r.json()),
+        fetch(API_BASE + '?action=get-recordatorios&pareja_id=' + parejaId).then(r => r.json())
     ]).then(([momentos, recordatorios]) => {
         todosMomentos = momentos;
         momentosPorFecha = {};
@@ -381,7 +387,7 @@ function renderCalendario() {
         cell.className = 'cal-cell';
 
         if (momentoConFoto) {
-            cell.style.backgroundImage = 'url(uploads/momentos/' + momentoConFoto.foto + ')';
+            cell.style.backgroundImage = 'url(' + (momentoConFoto.foto.startsWith('http') ? momentoConFoto.foto : '../uploads/momentos/' + momentoConFoto.foto) + ')';
             cell.classList.add('cal-cell-foto');
             const num = document.createElement('div');
             num.className = 'cal-cell-num';
@@ -417,7 +423,6 @@ function renderCalendario() {
         }
 
         cell.addEventListener('click', () => abrirPopupDia(fechaStr));
-
         grid.appendChild(cell);
     }
 }
@@ -444,7 +449,7 @@ function abrirPopupDia(fecha) {
             div.style.cssText = 'border: 1px solid #ff69b4; padding: 8px; margin-bottom: 8px; font-size: 11px; border-radius: 2px;';
             let html = '';
             if (m.foto) {
-                html += '<img src="uploads/momentos/' + m.foto + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
+               html += '<img src="' + (m.foto.startsWith('http') ? m.foto : '../uploads/momentos/' + m.foto) + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
             }
             html += '<div style="display:flex; justify-content:space-between; align-items:flex-start;">';
             html += '<div><strong>' + m.emocion + ' ' + m.titulo + '</strong>';
@@ -518,7 +523,7 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
     status.style.color = '#808080';
     status.textContent = 'Guardando...';
 
-    fetch('../assets/couple/api.php?action=save-momento', {
+    fetch(API_BASE + '?action=save-momento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, emocion })
@@ -534,7 +539,7 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
             formData.append('foto', fotoInput.files[0]);
             formData.append('momento_id', momentoId);
 
-            return fetch('../assets/couple/api.php?action=upload-foto', {
+            return fetch(API_BASE + '?action=upload-foto', {
                 method: 'POST',
                 body: formData
             })
@@ -566,7 +571,7 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
 
     if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
 
-    fetch('../assets/couple/api.php?action=save-recordatorio', {
+    fetch(API_BASE + '?action=save-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, tipo, descripcion: desc })
@@ -583,7 +588,7 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
 
 function eliminarMomento(id) {
     window._calConfirm('¿Eliminar este <strong>momento</strong>?', function(){
-        fetch('../assets/couple/api.php?action=delete-momento', {
+        fetch(API_BASE + '?action=delete-momento', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
@@ -603,7 +608,7 @@ function eliminarRecordatorio(id) {
     });
 }
 function _doEliminarRecordatorio(id) {
-    fetch('../assets/couple/api.php?action=delete-recordatorio', {
+    fetch(API_BASE + '?action=delete-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: id })
@@ -619,7 +624,7 @@ function _doEliminarRecordatorio(id) {
 <?php if (!$pareja): ?>
 document.getElementById('btn-invitar').addEventListener('click', function() {
     document.getElementById('invite-window').style.display = 'block';
-    fetch('../assets/couple/api.php?action=get-users')
+    fetch(API_BASE + '?action=get-users')
     .then(r => r.json())
     .then(users => {
         const list = document.getElementById('user-list');
@@ -632,7 +637,7 @@ document.getElementById('btn-invitar').addEventListener('click', function() {
             btn.style.cssText = 'width:100%;margin-bottom:4px;';
             btn.addEventListener('click', function() {
                 btn.disabled = true;
-                fetch('../assets/couple/api.php?action=invite-partner', {
+                fetch(API_BASE + '?action=invite-partner', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ toUser: u.key })
@@ -657,7 +662,7 @@ document.getElementById('invite-close').addEventListener('click', function() {
 let currentPartnerInvite = null;
 
 function checkPartnerInvites() {
-    fetch('../assets/couple/api.php?action=get-partner-invites')
+    fetch(API_BASE + '?action=get-partner-invites')
     .then(r => r.json())
     .then(data => {
         if (!Array.isArray(data) || !data.length) return;
@@ -674,7 +679,7 @@ function respondInvite(action) {
     if (!currentPartnerInvite) return;
     const fecha = document.getElementById('partner-fecha').value;
     if (action === 'accept' && !fecha) { alert('Por favor introduce la fecha en que empezasteis.'); return; }
-    fetch('../assets/couple/api.php?action=respond-partner-invite', {
+    fetch(API_BASE + '?action=respond-partner-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inviteId: currentPartnerInvite.id, action: action, fecha: fecha })
@@ -703,7 +708,7 @@ document.getElementById('momento-foto').addEventListener('change', function() {
 
 cargarTodo();
 
-/* ─── Modal Win98 de confirmación (reemplaza al confirm() nativo) ─── */
+/* ─── Modal Win98 de confirmación ─── */
 (function(){
     function open(text, onOk){
         var modal = document.getElementById('cal-confirm-modal');

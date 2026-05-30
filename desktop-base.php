@@ -13,6 +13,7 @@ session_start();
 require_once __DIR__ . '/assets/config.php';
 
 $desktopUserKey = null;
+$desktopUserKey = null;
 foreach ($loginUsers as $key => $user) {
     if ($user['label'] === $desktopLabel) { $desktopUserKey = $key; break; }
 }
@@ -22,14 +23,31 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
     exit;
 }
 
-/* URL base del proyecto — necesaria porque las url() dentro de custom
-   properties pueden resolverse relativas al CSS que las consume (no al
-   documento) en algunos navegadores. */
+// ← AQUÍ sí, después de validar sesión y tener $desktopLabel confirmado
+$parejaId = 0;
+require_once __DIR__ . '/db.php'; // solo si no está ya incluido antes
+$stmtP = $pdo->prepare("
+    SELECT p.id FROM parejas p
+    JOIN usuarios u1 ON p.usuario1_id = u1.id
+    JOIN usuarios u2 ON p.usuario2_id = u2.id
+    WHERE u1.username = ? OR u2.username = ?
+");
+$stmtP->execute([strtolower($desktopLabel), strtolower($desktopLabel)]);
+$rowP = $stmtP->fetch(PDO::FETCH_ASSOC);
+$parejaId = $rowP ? (int)$rowP['id'] : 0;
+foreach ($loginUsers as $key => $user) {
+    if ($user['label'] === $desktopLabel) { $desktopUserKey = $key; break; }
+}
+
+if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
+    header('Location: index.php');
+    exit;
+}
+
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
 
-$hasPlayer = true; /* Todos los usuarios tienen reproductor */
+$hasPlayer = true;
 
-/* Tema activo del usuario (si lo tiene) */
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($desktopUserKey, $desktopLabel);
 $_userThemes = loadUserThemes($desktopUserKey);
@@ -42,10 +60,6 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
 }
 
-/* Fondo e icono de inicio.
-   - Sin tema activo  → fondo/icono GLOBAL del usuario (su baseline).
-   - Con tema activo  → el asset propio del tema; si el tema no define uno,
-     se usan los DEFAULT de la app (base-wallpaper / logo Win98), NO el global. */
 $wallpaper = getUserWallpaper($desktopLabel);
 $startIcon = getUserStartIcon($desktopLabel);
 if ($activeTheme !== '') {
@@ -66,8 +80,6 @@ if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
 if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
 $wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
-/* Iconos del escritorio: set único 'default' para todos los usuarios.
-   Antes user1/user2 cargaban iconos custom (capi/, angie/). */
 $_iconTheme = 'default';
 function desktopIcon($name, $emoji) {
     global $_iconTheme;
@@ -98,8 +110,6 @@ function desktopIcon($name, $emoji) {
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
     <script>
-    /* Win98 dialogs — inline (idem a la versión en index.php) para
-       evitar cualquier 404 sobre un fichero JS recién creado. */
     (function(){
         if (window.__win98DialogsLoaded) return;
         window.__win98DialogsLoaded = true;
@@ -174,10 +184,6 @@ function desktopIcon($name, $emoji) {
 </head>
 
 <body class="<?php
-    /* Tema por defecto = Win98 (tokens.css) para TODOS los usuarios.
-       Sin clases 'capi'/'angie' ni 'userN' que disparen paletas especiales
-       en themes.css. Si el usuario tiene un tema custom activo, $activeThemeClass
-       lo aplica como antes. */
     $bodyClasses = [];
     if ($activeThemeClass) $bodyClasses[] = $activeThemeClass;
     if ($startIcon) $bodyClasses[] = 'has-start-icon';
@@ -187,10 +193,7 @@ function desktopIcon($name, $emoji) {
 <div id="page-enter"></div>
 
 <script>
-/* Hoist mínimo de DesktopState: las apps (reproductor.php se incluye más
-   abajo) lo usan inline antes de que se ejecute el módulo grande de
-   desktop-base.php. Aquí solo creamos el stub con whenReady; fetchState
-   lo rellena después y dispara la cola. */
+    window.DesktopParejaId = <?php echo $parejaId ?? 0; ?>;
 window.DesktopState = { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
 window.DesktopState.whenReady = function(cb){
     if (this.loaded) cb();
@@ -203,7 +206,7 @@ window.DesktopState.whenReady = function(cb){
     <li data-action="new-folder">📁 Nueva carpeta</li>
 </ul>
 
-<!-- FOLDER WINDOW TEMPLATE — clonado para cada carpeta abierta (varias en paralelo) -->
+<!-- FOLDER WINDOW TEMPLATE -->
 <div class="window" id="folder-window-template" style="display:none; position:fixed; width:460px; height:340px; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text">📁 Carpeta</div>
@@ -216,7 +219,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="window-body folder-content"></div>
 </div>
 
-<!-- MODAL "Nueva carpeta" (estilo Win98/XP) -->
+<!-- MODAL "Nueva carpeta" -->
 <div class="window" id="folder-create-modal" style="display:none; position:fixed; left:50%; top:35%; transform:translate(-50%,-50%); width:340px; z-index:8500; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text">📁 Nueva carpeta</div>
@@ -234,7 +237,7 @@ window.DesktopState.whenReady = function(cb){
     </div>
 </div>
 
-<!-- MODAL confirmar borrar carpeta (Windows 98 clásico) -->
+<!-- MODAL confirmar borrar carpeta -->
 <div class="window" id="folder-delete-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:8500; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text">Confirmar eliminación de carpeta</div>
@@ -292,6 +295,11 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="galeria-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('galeria', '🖼'); ?></div>
         <span>Galería</span>
+    </div>
+    <!-- ★ NUEVO: icono Dibujo -->
+    <div class="desktop-icon" id="dibujo-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('dibujo', '✏️'); ?></div>
+        <span>Dibujo</span>
     </div>
 </div>
 
@@ -373,9 +381,21 @@ window.DesktopState.whenReady = function(cb){
     <iframe id="galeria-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
+<!-- ★ NUEVO: DIBUJO WINDOW -->
+<div class="window" id="dibujo-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="dibujo-titlebar">
+        <div class="title-bar-text">✏️ Dibujo</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="dibujo-close"></button>
+        </div>
+    </div>
+    <iframe id="dibujo-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
 <!-- NOTIFICATION STACK -->
 <div id="notif-container"></div>
-
 
 <!-- START MENU -->
 <div id="start-menu">
@@ -385,6 +405,21 @@ window.DesktopState.whenReady = function(cb){
             <div class="menu-sep"></div>
             <a class="menu-item" href="logout.php">Cerrar sesión...</a>
             <div class="menu-sep"></div>
+        </div>
+    </div>
+</div>
+
+<!-- COUNTDOWN PANEL -->
+<div id="countdown-panel" style="display:none; position:fixed; bottom:42px; right:48px; width:240px; z-index:8000; flex-direction:column;">
+    <div class="window" style="width:100%;">
+        <div class="title-bar">
+            <div class="title-bar-text">⏳ Próximos eventos</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="countdown-close"></button>
+            </div>
+        </div>
+        <div class="window-body" id="countdown-body" style="padding:8px; max-height:320px; overflow-y:auto;">
+            <p style="font-size:11px;color:#808080;">Cargando...</p>
         </div>
     </div>
 </div>
@@ -403,35 +438,31 @@ window.DesktopState.whenReady = function(cb){
     <div class="taskbar-sep"></div>
     <div id="taskbar-tasks"></div>
     <button class="button" id="tray-player-btn" title="Reproductor">♪▶</button>
+    <button class="button" id="tray-countdown-btn" title="Próximos eventos">⏳</button>
     <div id="system-tray">
         <span id="tray-clock">00:00</span>
     </div>
 </div>
 
 <?php include __DIR__ . '/apps/reproductor.php'; ?>
-
 <?php include __DIR__ . '/apps/perfil.php'; ?>
 
 <script>
 /* =========================
    ANIMACION ENTRADA
 ========================= */
-
 const pageEnter = document.getElementById('page-enter');
 pageEnter.addEventListener('animationend', () => pageEnter.remove());
 
 /* =========================
    RELOJ
 ========================= */
-
-function updateClock()
-{
+function updateClock() {
     const now = new Date();
     const h = String(now.getHours()).padStart(2, '0');
     const m = String(now.getMinutes()).padStart(2, '0');
     document.getElementById('tray-clock').textContent = h + ':' + m;
 }
-
 updateClock();
 setInterval(updateClock, 1000);
 
@@ -441,10 +472,7 @@ setInterval(updateClock, 1000);
 window.applyThemeToDocument = function(doc, className, cssHref) {
     if (!doc || !doc.body) return;
     var body = doc.body;
-<<<<<<< HEAD
-=======
     /* Conserva solo clases estructurales; capi/angie ya no se usan. */
->>>>>>> f90d0df325639ab0f1fd958b8cb649527d24e11e
     var keep = (body.className || '').split(/\s+/).filter(function(c) {
         return c === 'has-start-icon';
     });
@@ -520,8 +548,6 @@ window.addEventListener('message', function(e) {
             if (fr && fr.contentDocument) refreshImgs(fr.contentDocument);
         });
     } else if (e.data.type === 'open-profile') {
-        /* Una app (p.ej. la biblioteca de temas) pide abrir el perfil de un
-           usuario. La app de perfil está incluida inline en este documento. */
         if (typeof window.openProfileAtUser === 'function') {
             window.openProfileAtUser(e.data.userKey);
         }
@@ -531,7 +557,6 @@ window.addEventListener('message', function(e) {
 /* =========================
    START MENU
 ========================= */
-
 const startBtn = document.getElementById('start-btn');
 const startMenu = document.getElementById('start-menu');
 
@@ -550,7 +575,6 @@ document.addEventListener('click', function() {
 /* =========================
    ANIMACION SALIDA
 ========================= */
-
 document.querySelectorAll('a[href="logout.php"]').forEach(link => {
     link.addEventListener('click', function(e) {
         e.preventDefault();
@@ -566,13 +590,8 @@ document.querySelectorAll('a[href="logout.php"]').forEach(link => {
 /* =========================
    TASKBAR TASK MANAGER
 ========================= */
-/* ──── Z-ORDER manager: ventana abierta siempre encima ────
-   Cualquier .window cuyo display pase de "none" a visible se eleva
-   automáticamente con bringToFront vía MutationObserver. Así las review
-   modales / dialogs nunca quedan tapadas, sin tener que parchear cada
-   sitio que abre una ventana. */
 window.windowZ = (function() {
-    var topZ = 600;  // por encima de los z-index iniciales (500-560)
+    var topZ = 600;
     function bringToFront(id) {
         var win = (typeof id === 'string') ? document.getElementById(id) : id;
         if (!win) return;
@@ -586,7 +605,7 @@ window.windowZ = (function() {
         var maxZ = 0;
         document.querySelectorAll('.window').forEach(function(w){
             if (w === win) return;
-            if (w.hasAttribute('data-no-auto-z')) return;   // popups no cuentan
+            if (w.hasAttribute('data-no-auto-z')) return;
             if (w.style.display === 'none' || getComputedStyle(w).display === 'none') return;
             var z = parseInt(w.style.zIndex || getComputedStyle(w).zIndex || '0', 10) || 0;
             if (z > maxZ) maxZ = z;
@@ -594,9 +613,6 @@ window.windowZ = (function() {
         return myZ >= maxZ;
     }
 
-    /* Auto-elevar cuando una .window pasa de oculta a visible. Sirve para
-       cualquier dialog/modal/popup que cambie display o clase "hidden",
-       no solo para los que pasan por taskbarManager. */
     function isVisible(el) {
         if (!el || !el.classList || !el.classList.contains('window')) return false;
         if (el.classList.contains('hidden')) return false;
@@ -608,8 +624,6 @@ window.windowZ = (function() {
     var lastSeen = new WeakMap();
     function check(el) {
         if (!el || !el.classList || !el.classList.contains('window')) return;
-        /* Popups (menús contextuales, pickers) gestionan su propio z-index fijo
-           por encima del rango de ventanas; el observer no debe tocarlos. */
         if (el.hasAttribute('data-no-auto-z')) return;
         var nowVis = isVisible(el);
         var prev   = lastSeen.get(el) === true;
@@ -623,7 +637,6 @@ window.windowZ = (function() {
             } else if (m.type === 'childList') {
                 m.addedNodes.forEach(function(n) {
                     if (n.nodeType !== 1) return;
-                    /* el propio nodo o cualquier .window dentro de él */
                     check(n);
                     if (n.querySelectorAll) n.querySelectorAll('.window').forEach(check);
                 });
@@ -655,7 +668,7 @@ window.taskbarManager = (function() {
         tasksEl.appendChild(btn);
         registry[id] = { btn: btn, displayMode: displayMode || 'block' };
         win.style.display = displayMode || 'block';
-        windowZ.bringToFront(id);   // ventana recién abierta → al frente
+        windowZ.bringToFront(id);
     }
 
     function unregister(id) {
@@ -684,13 +697,9 @@ window.taskbarManager = (function() {
         if (!win) return;
         win.style.display = entry.displayMode || 'block';
         entry.btn.classList.remove('taskbar-task-minimized');
-        windowZ.bringToFront(id);   // al restaurar/abrir, al frente
+        windowZ.bringToFront(id);
     }
 
-    /* Click en barra de tareas:
-       - Minimizada  → restaurar + al frente
-       - Visible y NO frontmost → traer al frente (sin minimizar)
-       - Visible y frontmost → minimizar */
     function toggle(id) {
         var entry = registry[id];
         if (!entry) return;
@@ -760,70 +769,47 @@ window.notifSystem = (function() {
         }
 
         var isAction = opts.type === 'action';
-
         var card = document.createElement('div');
         card.className = 'window notif-card ' + (isAction ? 'notif-card-action' : 'notif-card-info');
         card.dataset.id = opts.id;
 
-        var tb = document.createElement('div');
-        tb.className = 'title-bar';
-        var tbText = document.createElement('div');
-        tbText.className = 'title-bar-text';
+        var tb = document.createElement('div'); tb.className = 'title-bar';
+        var tbText = document.createElement('div'); tbText.className = 'title-bar-text';
         tbText.textContent = opts.title || 'Notificación';
         tb.appendChild(tbText);
         card.appendChild(tb);
 
-        var body = document.createElement('div');
-        body.className = 'window-body';
+        var body = document.createElement('div'); body.className = 'window-body';
         body.style.padding = '5px 8px 6px';
 
         if (isAction && opts.senderImage) {
             var topRow = document.createElement('div');
             topRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px;';
-            var avWrap = document.createElement('div');
-            avWrap.className = 'collab-avatar-wrap';
-            var avImg = document.createElement('img');
-            avImg.className = 'collab-avatar-img';
+            var avWrap = document.createElement('div'); avWrap.className = 'collab-avatar-wrap';
+            var avImg = document.createElement('img'); avImg.className = 'collab-avatar-img';
             avImg.src = opts.senderImage;
-            avWrap.appendChild(avImg);
-            topRow.appendChild(avWrap);
-            var msgSpan = document.createElement('span');
-            msgSpan.style.cssText = 'font-size:11px;';
+            avWrap.appendChild(avImg); topRow.appendChild(avWrap);
+            var msgSpan = document.createElement('span'); msgSpan.style.cssText = 'font-size:11px;';
             msgSpan.textContent = opts.message || '';
-            topRow.appendChild(msgSpan);
-            body.appendChild(topRow);
+            topRow.appendChild(msgSpan); body.appendChild(topRow);
         } else {
-            var msgEl = document.createElement('p');
-            msgEl.style.cssText = 'margin:0 0 3px;font-size:11px;';
-            msgEl.textContent = opts.message || '';
-            body.appendChild(msgEl);
+            var msgEl = document.createElement('p'); msgEl.style.cssText = 'margin:0 0 3px;font-size:11px;';
+            msgEl.textContent = opts.message || ''; body.appendChild(msgEl);
         }
 
-        var timeEl = document.createElement('span');
-        timeEl.className = 'notif-time';
+        var timeEl = document.createElement('span'); timeEl.className = 'notif-time';
         if (opts.sentAt) timeEl.dataset.sent = opts.sentAt;
         timeEl.textContent = relTime(opts.sentAt || 0);
         body.appendChild(timeEl);
 
         if (isAction) {
-            var row = document.createElement('div');
-            row.className = 'field-row';
+            var row = document.createElement('div'); row.className = 'field-row';
             row.style.cssText = 'justify-content:flex-end;gap:4px;margin-top:5px;';
-            var rejectBtn = document.createElement('button');
-            rejectBtn.className = 'button'; rejectBtn.textContent = 'Rechazar';
-            rejectBtn.addEventListener('click', function() {
-                if (typeof opts.onReject === 'function') opts.onReject();
-                removeCard(card);
-            });
-            var acceptBtn = document.createElement('button');
-            acceptBtn.className = 'button'; acceptBtn.textContent = 'Aceptar';
-            acceptBtn.addEventListener('click', function() {
-                if (typeof opts.onAccept === 'function') opts.onAccept();
-                removeCard(card);
-            });
-            row.appendChild(rejectBtn);
-            row.appendChild(acceptBtn);
-            body.appendChild(row);
+            var rejectBtn = document.createElement('button'); rejectBtn.className = 'button'; rejectBtn.textContent = 'Rechazar';
+            rejectBtn.addEventListener('click', function() { if (typeof opts.onReject === 'function') opts.onReject(); removeCard(card); });
+            var acceptBtn = document.createElement('button'); acceptBtn.className = 'button'; acceptBtn.textContent = 'Aceptar';
+            acceptBtn.addEventListener('click', function() { if (typeof opts.onAccept === 'function') opts.onAccept(); removeCard(card); });
+            row.appendChild(rejectBtn); row.appendChild(acceptBtn); body.appendChild(row);
         }
 
         card.appendChild(body);
@@ -833,10 +819,7 @@ window.notifSystem = (function() {
         if (!isAction) {
             var delay = (typeof opts.autoDismissAfter === 'number') ? opts.autoDismissAfter : 5000;
             setTimeout(function() {
-                if (card.parentNode) {
-                    if (typeof opts.onAutoDismiss === 'function') opts.onAutoDismiss();
-                    removeCard(card);
-                }
+                if (card.parentNode) { if (typeof opts.onAutoDismiss === 'function') opts.onAutoDismiss(); removeCard(card); }
             }, delay);
         }
     }
@@ -971,11 +954,32 @@ window.notifSystem = (function() {
 
     document.getElementById('galeria-close').addEventListener('click', function() {
         taskbarManager.unregister('galeria-window');
-        /* Forzar recarga del iframe en la próxima apertura: así los cambios
-           del lado de la app (JS/CSS) se reflejan sin tener que recargar
-           el escritorio entero. Drive token vive en localStorage, no se pierde. */
         galIframe.src = '';
         galLoaded = false;
+    });
+})();
+
+/* =========================
+   DIBUJO (Excalidraw colaborativo)
+========================= */
+(function() {
+    var dibujoIframe = document.getElementById('dibujo-iframe');
+    var dibujoLoaded = false;
+
+    document.getElementById('dibujo-icon').addEventListener('dblclick', function() {
+        if (!dibujoLoaded) {
+            dibujoIframe.src = 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fija';
+            dibujoLoaded = true;
+        }
+        if (taskbarManager.isRegistered('dibujo-window')) {
+            taskbarManager.restore('dibujo-window');
+        } else {
+            taskbarManager.register('dibujo-window', 'Dibujo', '✏️', 'flex');
+        }
+    });
+
+    document.getElementById('dibujo-close').addEventListener('click', function() {
+        taskbarManager.unregister('dibujo-window');
     });
 })();
 
@@ -986,7 +990,7 @@ window.notifSystem = (function() {
 
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
-    ctxMenu.setAttribute('data-no-auto-z', '');   // siempre encima; z fijo
+    ctxMenu.setAttribute('data-no-auto-z', '');
     ctxMenu.style.cssText = 'display:none;position:fixed;z-index:9999;padding:2px 0;min-width:160px;';
     document.body.appendChild(ctxMenu);
 
@@ -1018,9 +1022,7 @@ window.notifSystem = (function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var playlists = Array.isArray(data) ? data : [];
-                var targets = playlists.filter(function(pl) {
-                    return pl.id !== currentPlaylistId;
-                });
+                var targets = playlists.filter(function(pl) { return pl.id !== currentPlaylistId; });
                 if (!targets.length) {
                     listEl.innerHTML = '<div style="padding:4px 8px;font-size:11px;">Sin otras playlists</div>';
                 } else {
@@ -1031,9 +1033,7 @@ window.notifSystem = (function() {
                         item.addEventListener('click', function() {
                             picker.style.display = 'none';
                             if (!track) return;
-                            var already = (pl.tracks || []).some(function(t) {
-                                return t.videoId && t.videoId === track.videoId;
-                            });
+                            var already = (pl.tracks || []).some(function(t) { return t.videoId && t.videoId === track.videoId; });
                             if (already) { alert('Esta canción ya está en "' + pl.name + '"'); return; }
                             var newTrack = { title: track.title, artist: track.artist, videoId: track.videoId, duration: track.duration };
                             pl.tracks = (pl.tracks || []).concat([newTrack]);
@@ -1071,11 +1071,7 @@ window.notifSystem = (function() {
         item.textContent = '➕ Añadir a otra playlist';
         item.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
-            showPicker(
-                parseInt(ctxMenu.style.left) + ctxMenu.offsetWidth,
-                parseInt(ctxMenu.style.top),
-                track
-            );
+            showPicker(parseInt(ctxMenu.style.left) + ctxMenu.offsetWidth, parseInt(ctxMenu.style.top), track);
         });
         ctxMenu.appendChild(item);
 
@@ -1162,7 +1158,6 @@ window.notifSystem = (function() {
         el.classList.add('win-draggable');
         if (!dragOnly) el.classList.add('win-managed');
 
-
         var titleBar = el.querySelector('.title-bar');
         if (titleBar) {
             titleBar.addEventListener('mousedown', function(e) {
@@ -1196,16 +1191,12 @@ window.notifSystem = (function() {
         });
     }
 
-
-    /* Expone setup() para que módulos externos (ej. carpetas dinámicas) puedan
-       enrolar nuevas ventanas en el sistema de drag+resize. */
     window.WindowManager = { setup: setup };
 
-    /* Todas las ventanas: drageables Y resizables (handles en bordes y esquinas) */
+    /* ★ dibujo-window añadido aquí */
     [
         'calendar-window','archive-window','temas-window','dnd-window',
-        'galeria-window',
-        'companion-window',
+        'galeria-window','companion-window','dibujo-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
         'collab-dialog','spotify-import-dialog','tidal-import-dialog','confirm-dialog',
@@ -1214,16 +1205,16 @@ window.notifSystem = (function() {
         'music-add-dialog','profile-notifs-window','profile-melon-details-window',
         'profile-chat-window'
     ].forEach(function(id) { setup(id, false); });
-    /* music-player: solo drag, NUNCA resize (tamaño fijo) */
     setup('music-player', true);
 })();
 
 /* ──── Window minimize / maximize ──── */
 (function() {
+    /* ★ dibujo-window añadido aquí */
     var ids = [
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
-        'galeria-window',
-        'create-playlist-dialog', 'profile-window', 'companion-window'
+        'galeria-window', 'create-playlist-dialog', 'profile-window',
+        'companion-window', 'dibujo-window'
     ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
@@ -1232,11 +1223,8 @@ window.notifSystem = (function() {
         var maxBtn = win.querySelector('[aria-label="Maximize"]');
 
         if (minBtn) {
-            minBtn.addEventListener('click', function() {
-                taskbarManager.minimize(id);
-            });
+            minBtn.addEventListener('click', function() { taskbarManager.minimize(id); });
         }
-
         if (maxBtn) {
             maxBtn.addEventListener('click', function() {
                 if (win.classList.contains('win-maximized')) {
@@ -1253,21 +1241,13 @@ window.notifSystem = (function() {
 
 /* =========================================================
    ICONOS DEL ESCRITORIO: long-press para mover
-   - Mantener pulsado ~400 ms inicia el modo arrastrar
-   - Estado persistido en SQL vía assets/desktop/api.php
-   - El doble click sigue abriendo la app (no entra en conflicto)
 ========================================================= */
 (function(){
     var HOLD_MS = 350;
-    var MOVE_TOLERANCE = 6;        // px de margen antes de cancelar un click normal
-    var GRID_W = 96;               // cuadrícula horizontal (px)
-    var GRID_H = 96;               // cuadrícula vertical (px)
+    var MOVE_TOLERANCE = 6;
+    var GRID_W = 96;
+    var GRID_H = 96;
 
-    /* Estado del escritorio cacheado: lo rellena la primera carga.
-       window.DesktopState también lo expone para que DesktopFolders lo lea.
-       `whenReady(cb)` resuelve en cuanto fetchState termina (o inmediatamente
-       si ya estaba cargado). Útil para código que evalúa antes del fetch
-       (reproductor.php carga volumen + playlist saved → necesita esperar). */
     window.DesktopState = window.DesktopState || { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
     if (!window.DesktopState.whenReady) {
         window.DesktopState.whenReady = function(cb){
@@ -1280,7 +1260,6 @@ window.notifSystem = (function() {
     function snapPos(x, y){ return { left: snap(x, GRID_W), top: snap(y, GRID_H) }; }
 
     function loadPositions(){ return window.DesktopState.icons || {}; }
-    /* Debounce por-icono para no martillear al servidor mientras se arrastra */
     var _saveTimers = {};
     function savePosition(id, pos){
         window.DesktopState.icons[id] = pos;
@@ -1297,7 +1276,6 @@ window.notifSystem = (function() {
     function fetchState(cb){
         function done(){
             window.DesktopState.loaded = true;
-            /* Vaciar la cola de whenReady() (reproductor, etc.) */
             var queue = window.DesktopState._readyCbs || [];
             window.DesktopState._readyCbs = [];
             queue.forEach(function(fn){ try { fn(); } catch(e){} });
@@ -1322,7 +1300,6 @@ window.notifSystem = (function() {
         var desk  = document.getElementById('desktop');
         var saved = loadPositions();
 
-        // Capturar la posición natural (flow) antes de pasarlos a absolute
         var natural = {};
         icons.forEach(function(icon){
             var r = icon.getBoundingClientRect();
@@ -1332,7 +1309,7 @@ window.notifSystem = (function() {
 
         icons.forEach(function(icon){
             var raw = saved[icon.id] || natural[icon.id];
-            var pos = snapPos(raw.left, raw.top);   // siempre alineado a cuadrícula
+            var pos = snapPos(raw.left, raw.top);
             icon.style.position = 'absolute';
             icon.style.margin   = '0';
             icon.style.left = pos.left + 'px';
@@ -1342,12 +1319,8 @@ window.notifSystem = (function() {
         if(window.DesktopFolders) DesktopFolders.init(desk);
     }
 
-    // Exponer helpers para que DesktopFolders pueda usarlos en iconos creados al vuelo
     window.DesktopIcons = {
-        attachDrag: function(icon){
-            var desk = document.getElementById('desktop');
-            attachDrag(icon, desk);
-        },
+        attachDrag: function(icon){ var desk = document.getElementById('desktop'); attachDrag(icon, desk); },
         snapPos: snapPos,
         savePosition: savePosition,
         loadPositions: loadPositions,
@@ -1358,11 +1331,11 @@ window.notifSystem = (function() {
     function attachDrag(icon, desk){
         var holdTimer = null;
         var dragging  = false;
-        var armed     = false;        // pasó el long-press, listo para arrastrar
+        var armed     = false;
         var startX = 0, startY = 0;
         var originX = 0, originY = 0;
         var moved   = false;
-        var wasInBody = false;        // si se reubicó al body para escapar stacking context
+        var wasInBody = false;
 
         function pointer(e){
             if(e.touches && e.touches[0]) return e.touches[0];
@@ -1405,7 +1378,6 @@ window.notifSystem = (function() {
             var dx = p.clientX - startX;
             var dy = p.clientY - startY;
             if(!armed){
-                // Cancelar el hold si el usuario se mueve antes del umbral
                 if(Math.abs(dx) > MOVE_TOLERANCE || Math.abs(dy) > MOVE_TOLERANCE){
                     clearTimeout(holdTimer);
                     icon.classList.remove('long-pressing');
@@ -1413,11 +1385,7 @@ window.notifSystem = (function() {
                 }
                 return;
             }
-            // En drag: bloquear scroll en touch
             if(e.cancelable) e.preventDefault();
-            // En la primera frame de movimiento: reubicar al body para escapar
-            // del stacking context de #desktop (si no, el icono queda por debajo
-            // de las ventanas/carpetas abiertas que son hermanas de #desktop).
             if(!dragging && !wasInBody){
                 var br = icon.getBoundingClientRect();
                 document.body.appendChild(icon);
@@ -1427,15 +1395,12 @@ window.notifSystem = (function() {
                 wasInBody = true;
             }
             dragging = true; moved = true;
-            // Movimiento libre 1:1 con el cursor, clamp a los bordes del escritorio.
-            // Coords ya son viewport (position:fixed). El snap a cuadrícula ocurre al soltar.
             var w = icon.offsetWidth, h = icon.offsetHeight;
             var dw = desk.clientWidth, dh = desk.clientHeight;
             var nx = Math.max(0, Math.min(dw - w, originX + dx));
             var ny = Math.max(0, Math.min(dh - h, originY + dy));
             icon.style.left = nx + 'px';
             icon.style.top  = ny + 'px';
-            // Resaltar la carpeta sobre la que el icono se encuentra
             if(window.DesktopFolders){
                 var rect = icon.getBoundingClientRect();
                 DesktopFolders.updateHover(icon.id, rect.left + rect.width/2, rect.top + rect.height/2);
@@ -1445,20 +1410,14 @@ window.notifSystem = (function() {
         function onUp(){
             clearTimeout(holdTimer);
             icon.classList.remove('long-pressing');
-            // SIEMPRE limpiar la clase 'dragging': el long-press la añade aunque
-            // el usuario no llegue a mover, y si no se quita el CSS pointer-events:none
-            // deja el icono bloqueado para futuros clicks/dblclicks.
             icon.classList.remove('dragging');
             if(dragging){
-                // ¿Se soltó sobre una carpeta?
                 var droppedInFolder = false;
                 if(window.DesktopFolders){
                     var rect = icon.getBoundingClientRect();
                     droppedInFolder = DesktopFolders.tryDrop(icon.id, rect.left + rect.width/2, rect.top + rect.height/2);
                     DesktopFolders.clearHover();
                 }
-                // Devolver el icono a #desktop (las coords viewport siguen siendo válidas
-                // porque #desktop está en 0,0 del viewport)
                 if(wasInBody){
                     desk.appendChild(icon);
                     icon.style.position = 'absolute';
@@ -1472,7 +1431,6 @@ window.notifSystem = (function() {
                     setTimeout(function(){ icon.classList.remove('snapping'); }, 200);
                     savePosition(icon.id, finalPos);
                 }
-                // Bloquear el siguiente click para que no abra la app sin querer
                 if(moved){
                     var swallow = function(ev){ ev.stopPropagation(); ev.preventDefault();
                         document.removeEventListener('click', swallow, true); };
@@ -1488,8 +1446,6 @@ window.notifSystem = (function() {
     }
 
     function bootstrap(){
-        /* Cargar estado desde SQL antes de pintar nada. Si falla, init usará
-           posiciones por defecto. */
         fetchState(function(){ requestAnimationFrame(init); });
     }
     if(document.readyState === 'loading'){
@@ -1501,20 +1457,12 @@ window.notifSystem = (function() {
 
 /* =========================================================
    CARPETAS DEL ESCRITORIO
-   - Right-click sobre el fondo: "📁 Nueva carpeta"
-   - Arrastra un icono sobre una carpeta → se añade dentro
-   - Doble-click sobre la carpeta → ventana con los iconos hijos
-   - Click en un icono hijo → ejecuta dblclick sobre el original (abre la app)
-   - Botón ✕ junto al icono hijo → lo saca de la carpeta
 ========================================================= */
 (function(){
-    var folders = {};            // {folderId: {id,name,pos:{l,t},children:[...]}}
-    var openFolderWindows = {};  // {folderId: { el: HTMLElement, wid: 'folder-window-...' }}
+    var folders = {};
+    var openFolderWindows = {};
     var hoverFolderEl = null;
 
-    /* Lee del estado precargado por el módulo de iconos. Espera al evento
-       readystate completo: cuando se llama a init, DesktopState ya está
-       resuelto (bootstrap del módulo anterior). */
     function load(){
         folders = {};
         var arr = (window.DesktopState && window.DesktopState.folders) || [];
@@ -1527,12 +1475,10 @@ window.notifSystem = (function() {
             };
         });
     }
-    /* Debounce por-carpeta: durante un drag rápido evitamos hacer N POSTs */
     var _saveTimers = {};
     function saveFolder(id){
         var f = folders[id];
         if(!f){
-            /* Si el folder ya no existe en memoria, dispara delete */
             clearTimeout(_saveTimers[id]);
             fetch('assets/desktop/api.php?action=delete-folder', {
                 method: 'POST',
@@ -1546,31 +1492,18 @@ window.notifSystem = (function() {
             fetch('assets/desktop/api.php?action=save-folder', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: f.id, name: f.name, pos: f.pos, children: f.children || [],
-                })
+                body: JSON.stringify({ id: f.id, name: f.name, pos: f.pos, children: f.children || [] })
             }).catch(function(){});
         }, 150);
-    }
-    /* save() global: persiste todas las carpetas presentes (útil tras un
-       cambio que afecta varias en cascada, ej. mover icono entre carpetas). */
-    function save(){
-        Object.keys(folders).forEach(saveFolder);
     }
     function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     function init(desk){
         load();
-        // Renderizar cada carpeta como icono
         Object.keys(folders).forEach(function(id){ renderFolderIcon(folders[id], desk); });
-        // Ocultar iconos que ya están dentro de alguna carpeta
         var hiddenChildren = new Set();
-        Object.values(folders).forEach(function(f){
-            (f.children||[]).forEach(function(cid){ hiddenChildren.add(cid); });
-        });
-        hiddenChildren.forEach(function(cid){
-            var el = document.getElementById(cid); if(el) el.style.display = 'none';
-        });
+        Object.values(folders).forEach(function(f){ (f.children||[]).forEach(function(cid){ hiddenChildren.add(cid); }); });
+        hiddenChildren.forEach(function(cid){ var el = document.getElementById(cid); if(el) el.style.display = 'none'; });
     }
 
     function renderFolderIcon(folder, desk){
@@ -1579,27 +1512,16 @@ window.notifSystem = (function() {
         div.className = 'desktop-icon';
         div.id = folder.id;
         div.dataset.folder = '1';
-        div.innerHTML =
-            '<div class="desktop-icon-img">📁</div>' +
-            '<span>' + esc(folder.name) + '</span>';
+        div.innerHTML = '<div class="desktop-icon-img">📁</div><span>' + esc(folder.name) + '</span>';
         div.style.position = 'absolute';
         div.style.margin = '0';
-        /* La posición autoritativa para todo lo que pinta en el escritorio
-           es desktop_icons (savePosition). desktop_folders.pos es solo la
-           posición inicial; cuando el usuario arrastra el icono de carpeta
-           solo se actualiza desktop_icons. */
         var savedIconPos = window.DesktopIcons ? window.DesktopIcons.loadPositions()[folder.id] : null;
         var basePos = savedIconPos || folder.pos;
         var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(basePos.left, basePos.top) : basePos;
         div.style.left = pos.left + 'px';
         div.style.top  = pos.top  + 'px';
         div.addEventListener('dblclick', function(){ openFolderWindow(folder.id); });
-        // contextmenu sobre el icono de la carpeta → dispara directamente el
-        // modal Win98 de confirmar borrado (sin diálogo nativo del navegador)
-        div.addEventListener('contextmenu', function(e){
-            e.preventDefault(); e.stopPropagation();
-            deleteFolder(folder.id);
-        });
+        div.addEventListener('contextmenu', function(e){ e.preventDefault(); e.stopPropagation(); deleteFolder(folder.id); });
         desk.appendChild(div);
         if(window.DesktopIcons) window.DesktopIcons.attachDrag(div);
     }
@@ -1618,7 +1540,6 @@ window.notifSystem = (function() {
         });
     }
 
-    /* Crear una nueva carpeta como hija de otra carpeta (vía right-click dentro) */
     function createFolderInside(parentId){
         if(!folders[parentId]) return;
         showCreateModal(function(name){
@@ -1629,13 +1550,10 @@ window.notifSystem = (function() {
             var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(0, 0) : { left: 0, top: 0 };
             folders[id] = { id: id, name: name, pos: pos, children: [] };
             folders[parentId].children.push(id);
-            saveFolder(id);
-            saveFolder(parentId);
-            // Renderiza el icono en el escritorio pero queda oculto (vive dentro del padre)
+            saveFolder(id); saveFolder(parentId);
             renderFolderIcon(folders[id]);
             var iconEl = document.getElementById(id);
             if(iconEl) iconEl.style.display = 'none';
-            // Refresca la ventana padre si está abierta
             if(openFolderWindows[parentId]) renderFolderContent(parentId);
         });
     }
@@ -1643,36 +1561,23 @@ window.notifSystem = (function() {
     function deleteFolder(id){
         var f = folders[id]; if(!f) return;
         showDeleteModal(f.name, function(){
-            // Restaurar iconos hijos al escritorio (mostrarlos de nuevo)
-            (f.children||[]).forEach(function(cid){
-                var el = document.getElementById(cid); if(el) el.style.display = '';
-            });
-            // Si esta carpeta vive dentro de otras, sacarla de sus padres
+            (f.children||[]).forEach(function(cid){ var el = document.getElementById(cid); if(el) el.style.display = ''; });
             var parentsToRefresh = [];
             Object.keys(folders).forEach(function(fid){
                 if(fid === id) return;
                 var pf = folders[fid];
                 var idx = (pf.children||[]).indexOf(id);
-                if(idx !== -1){
-                    pf.children.splice(idx, 1);
-                    parentsToRefresh.push(fid);
-                }
+                if(idx !== -1){ pf.children.splice(idx, 1); parentsToRefresh.push(fid); }
             });
             delete folders[id];
-            /* Borrado real en SQL (CASCADE limpia desktop_folder_items) */
             saveFolder(id);
-            /* Persistir los padres que la tenían dentro */
             parentsToRefresh.forEach(saveFolder);
             var el = document.getElementById(id); if(el) el.remove();
             if(openFolderWindows[id]) closeFolderWindowById(id);
-            // Refrescar ventanas padre abiertas para que ya no muestren la carpeta
-            parentsToRefresh.forEach(function(pid){
-                if(openFolderWindows[pid]) renderFolderContent(pid);
-            });
+            parentsToRefresh.forEach(function(pid){ if(openFolderWindows[pid]) renderFolderContent(pid); });
         });
     }
 
-    /* Modales en estilo Win98/XP ─ reemplazan a prompt() y confirm() */
     function showCreateModal(onAccept){
         var modal = document.getElementById('folder-create-modal');
         var input = document.getElementById('folder-create-input');
@@ -1682,10 +1587,7 @@ window.notifSystem = (function() {
         setTimeout(function(){ input.focus(); input.select(); }, 30);
         function ok(){ cleanup(); onAccept(input.value); }
         function cancel(){ cleanup(); }
-        function keyHandler(ev){
-            if(ev.key === 'Enter'){ ev.preventDefault(); ok(); }
-            else if(ev.key === 'Escape'){ ev.preventDefault(); cancel(); }
-        }
+        function keyHandler(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); ok(); } else if(ev.key === 'Escape'){ ev.preventDefault(); cancel(); } }
         function cleanup(){
             modal.style.display = 'none';
             document.getElementById('folder-create-ok').onclick = null;
@@ -1698,11 +1600,11 @@ window.notifSystem = (function() {
         document.getElementById('folder-create-x').onclick = cancel;
         input.addEventListener('keydown', keyHandler);
     }
+
     function showDeleteModal(folderName, onAccept){
         var modal = document.getElementById('folder-delete-modal');
         document.getElementById('folder-delete-text').innerHTML =
-            '¿Borrar la carpeta <strong>' + esc(folderName) + '</strong>?<br>' +
-            '<small>Los iconos volverán al escritorio.</small>';
+            '¿Borrar la carpeta <strong>' + esc(folderName) + '</strong>?<br><small>Los iconos volverán al escritorio.</small>';
         modal.style.display = 'flex';
         if(window.windowZ) windowZ.bringToFront('folder-delete-modal');
         function ok(){ cleanup(); onAccept(); }
@@ -1728,7 +1630,6 @@ window.notifSystem = (function() {
         return null;
     }
 
-    /* Devuelve folderId si (x,y) cae dentro de alguna ventana de carpeta abierta, sino null */
     function getOpenFolderWindowAt(x, y){
         for(var fid in openFolderWindows){
             var fw = openFolderWindows[fid].el;
@@ -1741,16 +1642,11 @@ window.notifSystem = (function() {
 
     function updateHover(iconId, x, y){
         var fEl = findFolderAt(iconId, x, y);
-        // Drop inválido (ciclo) → no iluminar
         if(fEl && folders[iconId] && isDescendant(fEl.id, iconId)) fEl = null;
         if(hoverFolderEl && hoverFolderEl !== fEl) hoverFolderEl.classList.remove('folder-receive');
         if(fEl) fEl.classList.add('folder-receive');
         hoverFolderEl = fEl;
-        // Quitar highlight de todas las ventanas, poner sólo en la que está bajo el cursor
-        Object.keys(openFolderWindows).forEach(function(fid){
-            var fw = openFolderWindows[fid].el;
-            fw.classList.remove('folder-window-receive');
-        });
+        Object.keys(openFolderWindows).forEach(function(fid){ openFolderWindows[fid].el.classList.remove('folder-window-receive'); });
         var overFid = getOpenFolderWindowAt(x, y);
         if(overFid && folders[overFid] && overFid !== iconId &&
            !(folders[iconId] && isDescendant(overFid, iconId)) &&
@@ -1758,29 +1654,21 @@ window.notifSystem = (function() {
             openFolderWindows[overFid].el.classList.add('folder-window-receive');
         }
     }
+
     function clearHover(){
         if(hoverFolderEl) hoverFolderEl.classList.remove('folder-receive');
         hoverFolderEl = null;
-        Object.keys(openFolderWindows).forEach(function(fid){
-            openFolderWindows[fid].el.classList.remove('folder-window-receive');
-        });
+        Object.keys(openFolderWindows).forEach(function(fid){ openFolderWindows[fid].el.classList.remove('folder-window-receive'); });
     }
 
-    /* Comprueba si `descId` está dentro del árbol de hijos de `ancestorId`
-       (incluye el propio ancestor). Útil para evitar ciclos al anidar. */
     function isDescendant(descId, ancestorId){
         if(descId === ancestorId) return true;
-        var f = folders[ancestorId];
-        if(!f) return false;
+        var f = folders[ancestorId]; if(!f) return false;
         var children = f.children || [];
-        for(var i=0; i<children.length; i++){
-            if(isDescendant(descId, children[i])) return true;
-        }
+        for(var i=0; i<children.length; i++){ if(isDescendant(descId, children[i])) return true; }
         return false;
     }
 
-    /* Quita iconId de toda carpeta donde esté y devuelve la lista de
-       carpetas afectadas, para que el caller las persista con saveFolder(id). */
     function unlinkAndCollect(iconId){
         var touched = [];
         Object.keys(folders).forEach(function(fid){
@@ -1792,12 +1680,11 @@ window.notifSystem = (function() {
     }
 
     function tryDrop(iconId, x, y){
-        // 1) ¿Soltado sobre un icono de carpeta en el escritorio?
         var fEl = findFolderAt(iconId, x, y);
         if(fEl){
             var folderId = fEl.id;
-            if(folderId === iconId) return false;                           // ella misma
-            if(folders[iconId] && isDescendant(folderId, iconId)) return false; // ciclo
+            if(folderId === iconId) return false;
+            if(folders[iconId] && isDescendant(folderId, iconId)) return false;
             if(folders[folderId] && folders[folderId].children.indexOf(iconId) === -1){
                 var touched = unlinkAndCollect(iconId);
                 folders[folderId].children.push(iconId);
@@ -1808,8 +1695,6 @@ window.notifSystem = (function() {
             if(openFolderWindows[folderId]) renderFolderContent(folderId);
             return true;
         }
-
-        // 2) ¿Soltado dentro de alguna ventana de carpeta abierta?
         var overFid = getOpenFolderWindowAt(x, y);
         if(overFid && folders[overFid]){
             if(overFid === iconId) return false;
@@ -1825,95 +1710,53 @@ window.notifSystem = (function() {
             renderFolderContent(overFid);
             return true;
         }
-
         return false;
     }
 
     function attachFolderItemDrag(item, folderId, iconId){
         item.addEventListener('mousedown', function(e){
             if(e.button !== 0) return;
-            // Sólo iniciar drag si el usuario se mueve >5px (para no romper el dblclick)
             var startX = e.clientX, startY = e.clientY;
             var ghost = null;
             function makeGhost(){
                 ghost = item.cloneNode(true);
-                ghost.style.position = 'fixed';
-                ghost.style.pointerEvents = 'none';
-                ghost.style.opacity = '0.78';
-                ghost.style.zIndex = '99999';
-                ghost.style.transform = 'scale(1.05)';
-                ghost.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
-                document.body.appendChild(ghost);
-                moveGhost(startX, startY);
+                ghost.style.position = 'fixed'; ghost.style.pointerEvents = 'none';
+                ghost.style.opacity = '0.78'; ghost.style.zIndex = '99999';
+                ghost.style.transform = 'scale(1.05)'; ghost.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
+                document.body.appendChild(ghost); moveGhost(startX, startY);
             }
-            function moveGhost(x, y){
-                if(!ghost) return;
-                ghost.style.left = (x - 40) + 'px';
-                ghost.style.top  = (y - 24) + 'px';
-            }
+            function moveGhost(x, y){ if(!ghost) return; ghost.style.left = (x - 40) + 'px'; ghost.style.top = (y - 24) + 'px'; }
             function highlightTargets(x, y){
-                // Resaltar carpeta destino: otra ventana o icono de carpeta del escritorio
-                Object.keys(openFolderWindows).forEach(function(fid){
-                    openFolderWindows[fid].el.classList.remove('folder-window-receive');
-                });
+                Object.keys(openFolderWindows).forEach(function(fid){ openFolderWindows[fid].el.classList.remove('folder-window-receive'); });
                 if(hoverFolderEl) hoverFolderEl.classList.remove('folder-receive');
                 hoverFolderEl = null;
-
                 var overFid = getOpenFolderWindowAt(x, y);
-                if(overFid && overFid !== folderId){
-                    openFolderWindows[overFid].el.classList.add('folder-window-receive');
-                    return;
-                }
+                if(overFid && overFid !== folderId){ openFolderWindows[overFid].el.classList.add('folder-window-receive'); return; }
                 var fEl = findFolderAt(iconId, x, y);
-                if(fEl && fEl.id !== folderId){
-                    fEl.classList.add('folder-receive');
-                    hoverFolderEl = fEl;
-                }
+                if(fEl && fEl.id !== folderId){ fEl.classList.add('folder-receive'); hoverFolderEl = fEl; }
             }
             function clearTargets(){
-                Object.keys(openFolderWindows).forEach(function(fid){
-                    openFolderWindows[fid].el.classList.remove('folder-window-receive');
-                });
+                Object.keys(openFolderWindows).forEach(function(fid){ openFolderWindows[fid].el.classList.remove('folder-window-receive'); });
                 if(hoverFolderEl) hoverFolderEl.classList.remove('folder-receive');
                 hoverFolderEl = null;
             }
             function onMove(ev){
                 var dx = ev.clientX - startX, dy = ev.clientY - startY;
                 if(!ghost && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) makeGhost();
-                if(ghost){
-                    ev.preventDefault();
-                    moveGhost(ev.clientX, ev.clientY);
-                    highlightTargets(ev.clientX, ev.clientY);
-                }
+                if(ghost){ ev.preventDefault(); moveGhost(ev.clientX, ev.clientY); highlightTargets(ev.clientX, ev.clientY); }
             }
             function onUp(ev){
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onUp);
-                if(!ghost) return;       // click normal, no drag
-                ghost.remove();
-                clearTargets();
-
-                // 1) ¿Soltó sobre OTRA ventana de carpeta? → mover entre carpetas
+                document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+                if(!ghost) return;
+                ghost.remove(); clearTargets();
                 var overFid = getOpenFolderWindowAt(ev.clientX, ev.clientY);
-                if(overFid && overFid !== folderId){
-                    moveIconBetweenFolders(folderId, overFid, iconId);
-                    return;
-                }
-                // Si soltó sobre la MISMA ventana, no hacemos nada (no-op)
+                if(overFid && overFid !== folderId){ moveIconBetweenFolders(folderId, overFid, iconId); return; }
                 if(overFid === folderId) return;
-
-                // 2) ¿Soltó sobre un icono de carpeta del escritorio? → mover allí
                 var fEl = findFolderAt(iconId, ev.clientX, ev.clientY);
-                if(fEl && fEl.id !== folderId && folders[fEl.id]){
-                    moveIconBetweenFolders(folderId, fEl.id, iconId);
-                    return;
-                }
-
-                // 3) Fuera de todo → vuelve al escritorio en la posición del puntero
+                if(fEl && fEl.id !== folderId && folders[fEl.id]){ moveIconBetweenFolders(folderId, fEl.id, iconId); return; }
                 removeFromFolderAt(folderId, iconId, ev.clientX, ev.clientY);
             }
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
+            document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
         });
     }
 
@@ -1922,8 +1765,7 @@ window.notifSystem = (function() {
         if(!from || !to || fromId === toId) return;
         from.children = (from.children||[]).filter(function(c){ return c !== iconId; });
         if((to.children = to.children || []).indexOf(iconId) === -1) to.children.push(iconId);
-        saveFolder(fromId);
-        saveFolder(toId);
+        saveFolder(fromId); saveFolder(toId);
         if(openFolderWindows[fromId]) renderFolderContent(fromId);
         if(openFolderWindows[toId])   renderFolderContent(toId);
     }
@@ -1937,121 +1779,63 @@ window.notifSystem = (function() {
             el.style.display = '';
             var desk = document.getElementById('desktop');
             var dr = desk.getBoundingClientRect();
-            var localX = screenX - dr.left;
-            var localY = screenY - dr.top;
-            var pos = window.DesktopIcons.snapPos(localX, localY);
-            // Clamp para no salirse del desktop
+            var pos = window.DesktopIcons.snapPos(screenX - dr.left, screenY - dr.top);
             var w = el.offsetWidth || 76, h = el.offsetHeight || 76;
             pos.left = Math.max(0, Math.min(desk.clientWidth - w, pos.left));
             pos.top  = Math.max(0, Math.min(desk.clientHeight - h, pos.top));
-            el.style.left = pos.left + 'px';
-            el.style.top  = pos.top  + 'px';
+            el.style.left = pos.left + 'px'; el.style.top = pos.top + 'px';
             window.DesktopIcons.savePosition(iconId, pos);
-        } else if(el) {
-            el.style.display = '';
-        }
-        if(openFolderWindows[folderId]) renderFolderContent(folderId);
-    }
-
-    function removeFromFolder(folderId, iconId){
-        var f = folders[folderId]; if(!f) return;
-        f.children = (f.children||[]).filter(function(c){ return c !== iconId; });
-        saveFolder(folderId);
-        var el = document.getElementById(iconId);
-        if(el){
-            el.style.display = '';
-            // Reposicionar al lado de la carpeta para que sea visible
-            var folderEl = document.getElementById(folderId);
-            if(folderEl && window.DesktopIcons){
-                var fp = { left: parseFloat(folderEl.style.left)||0, top: parseFloat(folderEl.style.top)||0 };
-                var newPos = window.DesktopIcons.snapPos(fp.left + window.DesktopIcons.GRID_W, fp.top);
-                el.style.left = newPos.left + 'px';
-                el.style.top  = newPos.top + 'px';
-                window.DesktopIcons.savePosition(iconId, newPos);
-            }
-        }
+        } else if(el) { el.style.display = ''; }
         if(openFolderWindows[folderId]) renderFolderContent(folderId);
     }
 
     function openFolderWindow(id){
         var f = folders[id]; if(!f) return;
-        // Si ya está abierta: sólo bring-to-front (sin duplicar)
         if(openFolderWindows[id]){
             var existing = openFolderWindows[id].el;
             if(window.taskbarManager && taskbarManager.isRegistered(openFolderWindows[id].wid)){
                 taskbarManager.restore(openFolderWindows[id].wid);
-            } else {
-                existing.style.display = 'flex';
-            }
+            } else { existing.style.display = 'flex'; }
             if(window.windowZ) windowZ.bringToFront(existing);
             return;
         }
-
-        // Clonar el template y darle IDs únicos
-        var tpl = document.getElementById('folder-window-template');
-        if(!tpl) return;
+        var tpl = document.getElementById('folder-window-template'); if(!tpl) return;
         var w = tpl.cloneNode(true);
         var wid = 'folder-window-' + id;
         w.id = wid;
-
-        // Posición en cascada: cada nueva ventana se desplaza 28 px de la anterior
         var count = Object.keys(openFolderWindows).length;
-        var baseL = window.innerWidth  * 0.18;
-        var baseT = window.innerHeight * 0.14;
-        w.style.left = (baseL + count * 28) + 'px';
-        w.style.top  = (baseT + count * 28) + 'px';
-        w.style.zIndex = '';   // lo asignará windowZ
-        w.style.display = 'flex';
-
-        var titleEl = w.querySelector('.title-bar-text');
-        if(titleEl) titleEl.textContent = '📁 ' + f.name;
-
+        var baseL = window.innerWidth  * 0.18, baseT = window.innerHeight * 0.14;
+        w.style.left = (baseL + count * 28) + 'px'; w.style.top = (baseT + count * 28) + 'px';
+        w.style.zIndex = ''; w.style.display = 'flex';
+        var titleEl = w.querySelector('.title-bar-text'); if(titleEl) titleEl.textContent = '📁 ' + f.name;
         var closeBtn = w.querySelector('[aria-label="Close"]');
         var minBtn   = w.querySelector('[aria-label="Minimize"]');
         var maxBtn   = w.querySelector('[aria-label="Maximize"]');
         if(closeBtn) closeBtn.onclick = function(){ closeFolderWindowById(id); };
-        if(minBtn)   minBtn.onclick   = function(){
-            if(window.taskbarManager) taskbarManager.minimize(wid);
-        };
+        if(minBtn)   minBtn.onclick   = function(){ if(window.taskbarManager) taskbarManager.minimize(wid); };
         if(maxBtn)   maxBtn.onclick   = function(){
-            if(w.classList.contains('win-maximized')){
-                w.classList.remove('win-maximized');
-                maxBtn.setAttribute('aria-label', 'Maximize');
-            } else {
-                w.classList.add('win-maximized');
-                maxBtn.setAttribute('aria-label', 'Restore');
-            }
+            if(w.classList.contains('win-maximized')){ w.classList.remove('win-maximized'); maxBtn.setAttribute('aria-label', 'Maximize'); }
+            else { w.classList.add('win-maximized'); maxBtn.setAttribute('aria-label', 'Restore'); }
         };
-
         document.body.appendChild(w);
         openFolderWindows[id] = { el: w, wid: wid };
-
-        // Right-click sobre el FONDO de la carpeta (no sobre un item) → "Nueva carpeta dentro"
         var bodyEl = w.querySelector('.folder-content');
         if(bodyEl){
             bodyEl.addEventListener('contextmenu', function(e){
                 if(e.target.closest('.folder-item')) return;
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 showCtxMenu(e.clientX, e.clientY, id);
             });
         }
-
-        // Drag + resize handles
         if(window.WindowManager) window.WindowManager.setup(wid, false);
-
-        // Taskbar + bring-to-front
         if(window.taskbarManager) taskbarManager.register(wid, f.name, '📁', 'flex');
         if(window.windowZ) windowZ.bringToFront(w);
-
         renderFolderContent(id);
     }
 
     function closeFolderWindowById(id){
         var entry = openFolderWindows[id]; if(!entry) return;
-        if(window.taskbarManager && taskbarManager.isRegistered(entry.wid)){
-            taskbarManager.unregister(entry.wid);
-        }
+        if(window.taskbarManager && taskbarManager.isRegistered(entry.wid)) taskbarManager.unregister(entry.wid);
         entry.el.remove();
         delete openFolderWindows[id];
     }
@@ -2059,8 +1843,7 @@ window.notifSystem = (function() {
     function renderFolderContent(id){
         var f = folders[id]; if(!f) return;
         var entry = openFolderWindows[id]; if(!entry) return;
-        var box = entry.el.querySelector('.folder-content');
-        if(!box) return;
+        var box = entry.el.querySelector('.folder-content'); if(!box) return;
         box.innerHTML = '';
         if(!f.children || !f.children.length){
             var e = document.createElement('div'); e.className = 'folder-empty';
@@ -2068,93 +1851,186 @@ window.notifSystem = (function() {
             box.appendChild(e); return;
         }
         f.children.forEach(function(cid){
-            var orig = document.getElementById(cid);
-            if(!orig) return;
+            var orig = document.getElementById(cid); if(!orig) return;
             var imgHtml = (orig.querySelector('.desktop-icon-img') || {}).innerHTML || '';
             var label   = (orig.querySelector('span') || {}).textContent || cid;
             var item = document.createElement('div');
-            item.className = 'folder-item';
-            item.dataset.iconId = cid;
-            item.innerHTML =
-                '<div class="fi-img">' + imgHtml + '</div>' +
-                '<div class="fi-label">' + esc(label) + '</div>';
-            item.addEventListener('dblclick', function(){
-                // Disparar el dblclick original que abre la app
-                var ev = new MouseEvent('dblclick', { bubbles: true, cancelable: true });
-                orig.dispatchEvent(ev);
-            });
-            // Si el hijo ES una carpeta, click derecho la borra (igual que en escritorio)
-            if(folders[cid]){
-                item.addEventListener('contextmenu', function(e){
-                    e.preventDefault(); e.stopPropagation();
-                    deleteFolder(cid);
-                });
-            }
-            // Drag-out: arrastra el icono fuera de la ventana → vuelve al escritorio
+            item.className = 'folder-item'; item.dataset.iconId = cid;
+            item.innerHTML = '<div class="fi-img">' + imgHtml + '</div><div class="fi-label">' + esc(label) + '</div>';
+            item.addEventListener('dblclick', function(){ var ev = new MouseEvent('dblclick', { bubbles: true, cancelable: true }); orig.dispatchEvent(ev); });
+            if(folders[cid]){ item.addEventListener('contextmenu', function(e){ e.preventDefault(); e.stopPropagation(); deleteFolder(cid); }); }
             attachFolderItemDrag(item, id, cid);
             box.appendChild(item);
         });
     }
 
-    /* ── Right-click sobre el escritorio O sobre el fondo de una carpeta ── */
     var lastCtxX = 0, lastCtxY = 0;
-    var ctxTargetFolderId = null;   // null = crear en el escritorio; id = crear dentro de esa carpeta
+    var ctxTargetFolderId = null;
     function showCtxMenu(x, y, targetFolderId){
         var menu = document.getElementById('desktop-ctx-menu');
-        lastCtxX = x; lastCtxY = y;
-        ctxTargetFolderId = targetFolderId || null;
-        menu.style.left = x + 'px';
-        menu.style.top  = y + 'px';
+        lastCtxX = x; lastCtxY = y; ctxTargetFolderId = targetFolderId || null;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
         menu.classList.add('show');
     }
     function hideCtxMenu(){ document.getElementById('desktop-ctx-menu').classList.remove('show'); }
 
     function bindMenu(){
-        var desk = document.getElementById('desktop');
-        if(!desk) return;
+        var desk = document.getElementById('desktop'); if(!desk) return;
         desk.addEventListener('contextmenu', function(e){
-            // sólo si se clica en el fondo (no en un icono)
             if(e.target.closest('.desktop-icon')) return;
-            e.preventDefault();
-            showCtxMenu(e.clientX, e.clientY);
+            e.preventDefault(); showCtxMenu(e.clientX, e.clientY);
         });
-        document.addEventListener('click',       function(){ hideCtxMenu(); });
-        document.addEventListener('contextmenu', function(e){
-            if(!e.target.closest('#desktop')) hideCtxMenu();
-        });
-        document.addEventListener('keydown', function(e){
-            if(e.key === 'Escape') hideCtxMenu();
-        });
+        document.addEventListener('click', function(){ hideCtxMenu(); });
+        document.addEventListener('contextmenu', function(e){ if(!e.target.closest('#desktop')) hideCtxMenu(); });
+        document.addEventListener('keydown', function(e){ if(e.key === 'Escape') hideCtxMenu(); });
         var menu = document.getElementById('desktop-ctx-menu');
         menu.addEventListener('click', function(e){
-            var li = e.target.closest('li[data-action]');
-            if(!li) return;
-            var target = ctxTargetFolderId;
-            hideCtxMenu();
+            var li = e.target.closest('li[data-action]'); if(!li) return;
+            var target = ctxTargetFolderId; hideCtxMenu();
             if(li.dataset.action === 'new-folder'){
                 if(target) createFolderInside(target);
                 else       createFolder(lastCtxX, lastCtxY);
             }
         });
-        // Ventana de carpeta
         var fc = document.getElementById('folder-close');
         if(fc) fc.addEventListener('click', closeFolderWindow);
     }
 
-    if(document.readyState === 'loading'){
-        document.addEventListener('DOMContentLoaded', bindMenu);
-    } else {
-        bindMenu();
-    }
+    if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', bindMenu); }
+    else { bindMenu(); }
 
     window.DesktopFolders = {
-        init: init,
-        updateHover: updateHover,
-        clearHover: clearHover,
-        tryDrop: tryDrop,
-        openFolder: openFolderWindow,
-        closeFolder: closeFolderWindowById
+        init: init, updateHover: updateHover, clearHover: clearHover,
+        tryDrop: tryDrop, openFolder: openFolderWindow, closeFolder: closeFolderWindowById
     };
+})();
+
+/* =========================
+   COUNTDOWN PANEL
+========================= */
+(function() {
+    var btn     = document.getElementById('tray-countdown-btn');
+    var panel   = document.getElementById('countdown-panel');
+    var closeBtn = document.getElementById('countdown-close');
+    var body    = document.getElementById('countdown-body');
+    var visible = false;
+    var loaded  = false;
+
+    var tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
+
+    function pluralDias(n) {
+        if (n === 0) return '¡Hoy!';
+        if (n === 1) return 'mañana';
+        return 'en ' + n + ' días';
+    }
+
+    function colorPorDias(n) {
+        if (n <= 0)  return '#c00000';  // pasado/hoy
+        if (n <= 3)  return '#c05000';  // urgente
+        if (n <= 7)  return '#808000';  // próximo
+        return 'var(--text)';
+    }
+
+    function render(recordatorios) {
+        var hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        // Filtrar pasados (más de 1 día) y ordenar
+        var lista = recordatorios
+            .map(function(r) {
+                var fecha = new Date(r.fecha + 'T00:00:00');
+                var diff  = Math.round((fecha - hoy) / (1000 * 60 * 60 * 24));
+                return Object.assign({}, r, { diff: diff });
+            })
+            .filter(function(r) { return r.diff >= 0; })
+            .sort(function(a, b) { return a.diff - b.diff });
+
+        if (!lista.length) {
+            body.innerHTML = '<p style="font-size:11px;color:#808080;text-align:center;padding:8px 0;">No hay eventos próximos.</p>';
+            return;
+        }
+
+        body.innerHTML = '';
+        lista.forEach(function(r) {
+            var row = document.createElement('div');
+            row.style.cssText = 'padding:6px 4px; border-bottom:1px solid var(--surface1); display:flex; gap:6px; align-items:flex-start;';
+
+            var icon = document.createElement('span');
+            icon.style.cssText = 'font-size:15px; flex-shrink:0; line-height:1.4;';
+            icon.textContent = tiposIcono[r.tipo] || '📌';
+
+            var info = document.createElement('div');
+            info.style.cssText = 'flex:1; min-width:0;';
+
+            var titulo = document.createElement('div');
+            titulo.style.cssText = 'font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+            titulo.textContent = r.titulo;
+
+           var sub = document.createElement('div');
+sub.style.cssText = 'font-size:10px; margin-top:1px;';
+
+var fecha = document.createElement('span');
+fecha.style.color = '#808080';
+fecha.textContent = r.fecha + (r.autor ? ' · ' + r.autor : '') + ' · ';
+
+var cuando = document.createElement('span');
+cuando.style.cssText = 'font-weight:bold; color:' + colorPorDias(r.diff) + ';';
+cuando.textContent = pluralDias(r.diff);
+
+sub.appendChild(fecha);
+sub.appendChild(cuando);
+            info.appendChild(titulo);
+            info.appendChild(sub);
+            row.appendChild(icon);
+            row.appendChild(info);
+            body.appendChild(row);
+        });
+    }
+
+    function load() {
+        // Necesitamos el parejaId — lo pedimos al calendario via API
+        // La API de recordatorios es relativa al iframe del calendario,
+        // así que hacemos la llamada desde desktop con la sesión activa
+        fetch('assets/couple/api.php?action=get-recordatorios&pareja_id=' + (window.DesktopParejaId || 0))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // pareja_id=0 puede no funcionar — usamos el endpoint sin filtro
+                // o pedimos todos los del usuario de sesión
+                render(Array.isArray(data) ? data : []);
+            })
+            .catch(function() {
+                body.innerHTML = '<p style="font-size:11px;color:#808080;">No se pudo cargar.</p>';
+            });
+    }
+
+    function show() {
+        panel.style.display = 'flex';
+        visible = true;
+        btn.classList.add('active');
+        if (!loaded) { load(); loaded = true; }
+    }
+
+    function hide() {
+        panel.style.display = 'none';
+        visible = false;
+        btn.classList.remove('active');
+    }
+
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        visible ? hide() : show();
+    });
+
+    closeBtn.addEventListener('click', hide);
+
+    document.addEventListener('click', function(e) {
+        if (visible && !panel.contains(e.target) && e.target !== btn) hide();
+    });
+
+    // Recargar cada 5 minutos
+    setInterval(function() {
+        if (visible) load();
+    }, 5 * 60 * 1000);
 })();
 </script>
 

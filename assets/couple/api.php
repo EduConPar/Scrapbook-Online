@@ -47,9 +47,9 @@ case 'get-momentos': {
                                FROM momentos m JOIN usuarios u ON m.usuario_id = u.id
                                WHERE m.pareja_id = ? ORDER BY m.fecha ASC");
         $stmt->execute([$parejaId]);
-    } else {
+   } else {
         $stmt = $pdo->prepare("SELECT id, titulo, descripcion, emocion, fecha, foto, ? AS autor
-                               FROM momentos WHERE usuario_id = ? AND pareja_id = 0
+                               FROM momentos WHERE usuario_id = ? AND pareja_id IS NULL
                                ORDER BY fecha ASC");
         $stmt->execute([strtolower($GLOBALS['loginUsers'][$userKey]['label']), $userId]);
     }
@@ -65,10 +65,11 @@ case 'save-momento': {
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
     $stmt = $pdo->prepare("INSERT INTO momentos (pareja_id, usuario_id, titulo, descripcion, emocion, fecha)
                            VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->execute([
-        (int)($b['pareja_id'] ?? 0), $userId, $titulo,
-        trim($b['descripcion'] ?? ''), $b['emocion'] ?? '', $fecha,
-    ]);
+    $pid = (int)($b['pareja_id'] ?? 0);
+$stmt->execute([
+    $pid > 0 ? $pid : null, $userId, $titulo,
+    trim($b['descripcion'] ?? ''), $b['emocion'] ?? '', $fecha,
+]);
     jsonResponse(['ok' => true, 'id' => $pdo->lastInsertId()]);
 }
 
@@ -227,6 +228,14 @@ case 'respond-partner-invite': {
 
     $pdo->prepare("INSERT INTO parejas (usuario1_id, usuario2_id, fecha_inicio) VALUES (?, ?, ?)")
         ->execute([(int)$fromId, $uid, $fecha]);
+    jsonResponse(['ok' => true]);
+}
+case 'save-momento-foto-url': {
+    $b         = jsonBody();
+    $momentoId = (int)($b['momento_id'] ?? 0);
+    $fotoUrl   = trim($b['foto_url']    ?? '');
+    if (!$momentoId || !$fotoUrl) jsonError('Datos incompletos');
+    $pdo->prepare("UPDATE momentos SET foto = ? WHERE id = ?")->execute([$fotoUrl, $momentoId]);
     jsonResponse(['ok' => true]);
 }
 

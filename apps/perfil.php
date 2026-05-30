@@ -692,7 +692,7 @@ var PROFILE_USERS = <?php
                             return;
                         }
                         showCtxMenu(e.clientX, e.clientY, [
-                            { label: '✓ Completar', action: function() {
+    { label: '✓ Completar', action: function() {
                                 var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
                                     lists[cat][idx].status = 'completed';
@@ -700,6 +700,7 @@ var PROFILE_USERS = <?php
                                     renderCatView(cat);
                                     renderCatEncurso(cat);
                                     showReviewPrompt(cat, idx);
+                                    crearMomentoDesdeItem(cat, lists[cat][idx]);
                                 }
                             }},
                             { label: '✕ Quitar de en curso', action: function() {
@@ -1332,6 +1333,7 @@ var PROFILE_USERS = <?php
                     saveCategory(cat);
                     renderCatView(cat);
                     renderCatEncurso(cat);
+                    if (next === 'completed') crearMomentoDesdeItem(cat, lists[cat][i]);
                 });
             })(item, footer);
 
@@ -3859,5 +3861,71 @@ var PROFILE_USERS = <?php
 
     // Arrancar stream aunque el perfil no se abra (para recibir notificaciones en segundo plano)
     startItemNotifStream();
+
+    /* ──── Auto-momento al completar ──── */
+    window.crearMomentoDesdeItem = function(cat, item) {
+    console.log('item.image:', item.image);
+    console.log('item completo:', JSON.stringify(item));
+    var parejaId = window.DesktopParejaId || 0;
+    var catEmojis = { movies: '🎬', series: '📺', books: '📚', games: '🎮', music: '🎵' };
+    var catVerbs  = { movies: 'Vista', series: 'Vista', books: 'Leída', games: 'Jugado', music: 'Escuchado' };
+    var emocion   = catEmojis[cat] || '😊';
+    var titulo    = (catVerbs[cat] || 'Completado') + ': ' + item.title;
+    var hoy       = new Date();
+    var fecha     = hoy.getFullYear() + '-'
+        + String(hoy.getMonth() + 1).padStart(2, '0') + '-'
+        + String(hoy.getDate()).padStart(2, '0');
+    var desc = '';
+    if (item.collaborators && item.collaborators.length) {
+        var collabLabels = item.collaborators.map(function(k) {
+            return PROFILE_USERS[k] ? PROFILE_USERS[k].label : k;
+        });
+        desc = 'Con ' + collabLabels.join(', ');
+    } else if (item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
+        desc = 'Con ' + PROFILE_USERS[item.sharedFrom].label;
+    }
+    console.log('enviando save-momento:', JSON.stringify({
+    pareja_id:   parejaId,
+    titulo:      titulo,
+    fecha:       fecha,
+    descripcion: desc,
+    emocion:     emocion
+}));
+
+    fetch('assets/couple/api.php?action=save-momento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            pareja_id:   parejaId,
+            titulo:      titulo,
+            fecha:       fecha,
+            descripcion: desc,
+            emocion:     emocion
+        })
+    }).then(function(r) { return r.json(); })
+      .then(function(data) {
+          console.log('save-momento respuesta:', JSON.stringify(data));
+          if (!data.ok || !data.id || !item.image) return;
+          fetch('assets/couple/api.php?action=save-momento-foto-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ momento_id: data.id, foto_url: item.image })
+          }).catch(function() {});
+      })
+      .catch(function(err) {
+          console.log('ERROR save-momento:', err);
+      });
+
+    if (window.notifSystem) {
+        window.notifSystem.show({
+            id:      'momento_' + Date.now(),
+            type:    'info',
+            title:   '📅 Añadido al calendario',
+            message: titulo + ' guardado como momento.',
+            autoDismissAfter: 4000
+        });
+    }
+}
+
 })();
 </script>
