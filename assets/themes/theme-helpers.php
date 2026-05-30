@@ -407,16 +407,15 @@ function userNamedWallpaper($label) {
 
 /* Wallpaper EFECTIVO del usuario — el mismo que ve en su escritorio.
    Prioridad:
-     1) Tema activo con themes.wallpaper propio → esa ruta.
-     2) Tema activo sin wallpaper propio → defaultWallpaper() (base).
-     3) Sin tema activo → getUserWallpaper($label) (global).
+     1) Tema activo con themes.wallpaper propio Y archivo existente → esa ruta.
+     2) Si la ruta del tema no resuelve (vacía o borrada) → getUserWallpaper($label).
+     3) Sin tema activo → getUserWallpaper($label) directamente.
    Devuelve ruta relativa al proyecto, o '' si no hay ninguna. */
 function getUserEffectiveWallpaper($userKey, $label) {
+    $fallback = function_exists('getUserWallpaper') ? getUserWallpaper($label) : '';
     $data   = loadUserThemes($userKey);
     $active = !empty($data['active']) ? sanitizeThemeName($data['active']) : '';
-    if ($active === '') {
-        return function_exists('getUserWallpaper') ? getUserWallpaper($label) : '';
-    }
+    if ($active === '') return $fallback;
     $uid = userIdByKey($userKey);
     if ($uid) {
         $st = themesPdo()->prepare("SELECT wallpaper FROM themes WHERE user_id = ? AND name = ?");
@@ -424,43 +423,28 @@ function getUserEffectiveWallpaper($userKey, $label) {
         $tWp = (string)$st->fetchColumn();
         if ($tWp !== '' && is_file(dirname(__DIR__, 2) . '/' . $tWp)) return $tWp;
     }
-    /* Tema activo sin wallpaper propio → default de la app */
-    return function_exists('defaultWallpaper') ? defaultWallpaper() : '';
+    /* Tema activo sin wallpaper propio (o el archivo ya no existe) →
+       fondo global del usuario (que a su vez cae al base-wallpaper). */
+    return $fallback;
 }
 
 /**
- * Copia el asset (wallpaper / start-icon) de un tema publicado al espacio
- * del usuario que lo descarga y devuelve la nueva ruta relativa. Así el
- * tema descargado es autónomo: no depende del fichero del autor.
+ * Valida una ruta de asset (wallpaper / start-icon) que viene de la
+ * biblioteca: debe estar dentro de assets/img/{wallpapers|start-icons}/
+ * y apuntar a un archivo existente. Si pasa, devuelve la propia ruta;
+ * si no, ''. Se usa al descargar un tema para guardar una REFERENCIA
+ * (no una copia) al asset del autor.
  *
- * @param string $srcRel    ruta de origen (assets/img/{wallpapers|start-icons}/...)
- * @param string $kind      'wallpaper' | 'start-icon'
- * @param string $themeName nombre del tema en el espacio del descargador
- * @param string $label     label del usuario descargador
- * @return string nueva ruta relativa, o '' si no se pudo copiar.
+ * @param string $srcRel ruta candidata
+ * @param string $kind   'wallpaper' | 'start-icon'
+ * @return string ruta validada, o '' si no es válida o no existe.
  */
-function copyThemeAsset($srcRel, $kind, $themeName, $label) {
+function validateThemeAssetPath($srcRel, $kind) {
     if (!is_string($srcRel) || $srcRel === '') return '';
-    $sub    = ($kind === 'start-icon') ? 'start-icons' : 'wallpapers';
-    $suffix = ($kind === 'start-icon') ? 'start-icon'  : 'wallpaper';
-    /* Validar estrictamente el formato de la ruta de origen */
+    $sub = ($kind === 'start-icon') ? 'start-icons' : 'wallpapers';
     if (!preg_match('#^assets/img/' . $sub . '/[A-Za-z0-9._-]+\.(jpe?g|png|gif|webp|svg)$#i', $srcRel)) return '';
-    $root   = dirname(__DIR__, 2);
-    $srcAbs = $root . '/' . $srcRel;
-    if (!is_file($srcAbs)) return '';
-    $ext       = strtolower(pathinfo($srcAbs, PATHINFO_EXTENSION));
-    $safeTheme = sanitizeThemeName($themeName);
-    $safeLabel = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
-    $baseName  = 'theme-' . $safeTheme . '-' . $safeLabel . '-' . $suffix;
-    $dir       = $root . '/assets/img/' . $sub;
-    /* Borrar versiones previas del mismo asset (cualquier extensión) */
-    foreach (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'] as $e) {
-        $old = $dir . '/' . $baseName . '.' . $e;
-        if (is_file($old)) @unlink($old);
-    }
-    $destAbs = $dir . '/' . $baseName . '.' . $ext;
-    if (!@copy($srcAbs, $destAbs)) return '';
-    return 'assets/img/' . $sub . '/' . $baseName . '.' . $ext;
+    if (!is_file(dirname(__DIR__, 2) . '/' . $srcRel)) return '';
+    return $srcRel;
 }
 
 /* Normaliza un array de colores: aplica el mapa legacy y rellena defaults. */

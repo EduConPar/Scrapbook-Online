@@ -59,14 +59,15 @@ case 'save': {
     if ($name === '' || mb_strlen($name) > 30) jsonError('Nombre inválido (1-30, letras/números/_/-)');
     if (!validateThemeColors($colors))         jsonError('Colores inválidos');
 
-    /* Al descargar un tema de la biblioteca se copian también su fondo e
-       icono al espacio del usuario, dejando el tema autónomo. */
+    /* Al descargar un tema de la biblioteca NO se duplican archivos: se guarda
+       una referencia validada al asset original del autor. Si el autor lo
+       borra, el render cae al wallpaper/icono global del descargador. */
     $newWp = ''; $newSi = '';
     if ($downloaded) {
         $srcWp = isset($body['wallpaper']) ? (string)$body['wallpaper'] : '';
         $srcSi = isset($body['startIcon']) ? (string)$body['startIcon'] : '';
-        if ($srcWp !== '') $newWp = copyThemeAsset($srcWp, 'wallpaper',  $name, $label);
-        if ($srcSi !== '') $newSi = copyThemeAsset($srcSi, 'start-icon', $name, $label);
+        if ($srcWp !== '') $newWp = validateThemeAssetPath($srcWp, 'wallpaper');
+        if ($srcSi !== '') $newSi = validateThemeAssetPath($srcSi, 'start-icon');
     }
 
     if ($oldName !== '' && $oldName !== $name) {

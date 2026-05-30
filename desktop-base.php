@@ -13,7 +13,6 @@ session_start();
 require_once __DIR__ . '/assets/config.php';
 
 $desktopUserKey = null;
-$desktopUserKey = null;
 foreach ($loginUsers as $key => $user) {
     if ($user['label'] === $desktopLabel) { $desktopUserKey = $key; break; }
 }
@@ -23,9 +22,8 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
     exit;
 }
 
-// ← AQUÍ sí, después de validar sesión y tener $desktopLabel confirmado
-$parejaId = 0;
-require_once __DIR__ . '/db.php'; // solo si no está ya incluido antes
+// Tras validar sesión: averiguar la pareja del usuario (0 si no tiene).
+require_once __DIR__ . '/db.php';
 $stmtP = $pdo->prepare("
     SELECT p.id FROM parejas p
     JOIN usuarios u1 ON p.usuario1_id = u1.id
@@ -35,14 +33,6 @@ $stmtP = $pdo->prepare("
 $stmtP->execute([strtolower($desktopLabel), strtolower($desktopLabel)]);
 $rowP = $stmtP->fetch(PDO::FETCH_ASSOC);
 $parejaId = $rowP ? (int)$rowP['id'] : 0;
-foreach ($loginUsers as $key => $user) {
-    if ($user['label'] === $desktopLabel) { $desktopUserKey = $key; break; }
-}
-
-if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
-    header('Location: index.php');
-    exit;
-}
 
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
 
@@ -71,8 +61,11 @@ if ($activeTheme !== '') {
         $arow = $st->fetch(PDO::FETCH_ASSOC);
         if ($arow) { $tWp = (string)$arow['wallpaper']; $tSi = (string)$arow['start_icon']; }
     }
-    $wallpaper = ($tWp !== '' && file_exists(__DIR__ . '/' . $tWp)) ? $tWp : defaultWallpaper();
-    $startIcon = ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) ? $tSi : '';
+    /* Si el tema tiene asset propio y existe → úsalo; si no, mantén el
+       wallpaper/icono global del usuario calculado arriba (no se cae al
+       default salvo que el propio global tampoco exista). */
+    if ($tWp !== '' && file_exists(__DIR__ . '/' . $tWp)) $wallpaper = $tWp;
+    if ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) $startIcon = $tSi;
 }
 
 $bodyStyles = [];
@@ -81,7 +74,7 @@ if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startI
 $wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $_iconTheme = 'default';
-function desktopIcon($name, $emoji) {
+function desktopIcon(string $name, string $emoji) {
     global $_iconTheme;
     foreach ([$_iconTheme, 'default'] as $dir) {
         foreach (['png', 'jpg', 'gif'] as $ext) {
@@ -193,7 +186,7 @@ function desktopIcon($name, $emoji) {
 <div id="page-enter"></div>
 
 <script>
-    window.DesktopParejaId = <?php echo $parejaId ?? 0; ?>;
+    window.DesktopParejaId = <?php echo (int)$parejaId; ?>;
 window.DesktopState = { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
 window.DesktopState.whenReady = function(cb){
     if (this.loaded) cb();
@@ -220,7 +213,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL "Nueva carpeta" -->
-<div class="window" id="folder-create-modal" data-no-auto-z style="display:none; position:fixed; ...">
+<div class="window" id="folder-create-modal" data-no-auto-z style="display:none; position:fixed;">
     <div class="title-bar">
         <div class="title-bar-text">📁 Nueva carpeta</div>
         <div class="title-bar-controls">
@@ -238,7 +231,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL confirmar borrar carpeta -->
-<div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; position:fixed; ...">
+<div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; position:fixed;">
     <div class="title-bar">
         <div class="title-bar-text">Confirmar eliminación de carpeta</div>
         <div class="title-bar-controls">
