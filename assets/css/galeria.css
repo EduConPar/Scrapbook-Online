@@ -170,10 +170,19 @@ html, body {
 .gal-card:hover .gal-name { color: var(--accent-text); }
 
 .gal-thumb {
-    width: 100%;
+    width: calc(100% - 4px);
     aspect-ratio: 1 / 1;
     background: var(--inset-bg);
-    box-shadow: inset 1px 1px var(--bezel-dark-1), inset -1px -1px var(--bezel-light-1);
+    /* Marco hundido de 4 capas (idéntico a .profile-avatar-frame): da el
+       mismo "frame Win98" que llevan las fotos de perfil. El calc() y el
+       align-self centran la thumb dentro de la card dejando 2px a cada lado
+       para que las sombras outset se vean. */
+    box-shadow:
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+    align-self: center;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -350,8 +359,8 @@ html, body {
 .gal-wip-ext-small {
     font-size: 9px;
     padding: 1px 4px;
-    background: rgba(0,0,0,0.55);
-    color: #fff;
+    background: rgba(0,0,0,0.55);  /* fondo oscuro intencional sobre la miniatura */
+    color: var(--overlay-text);
     border-radius: 1px;
 }
 

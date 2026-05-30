@@ -46,9 +46,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <meta charset="UTF-8">
     <title>Galería</title>
     <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/tokens.css'); ?>">
+    <link rel="stylesheet" href="../assets/css/base.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/base.css'); ?>">
+    <link rel="stylesheet" href="../assets/css/themes.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/themes.css'); ?>">
     <link rel="stylesheet" href="../assets/css/galeria.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/galeria.css'); ?>">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
@@ -98,7 +98,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <main id="gal-main-area">
         <div id="gal-tabs">
   <button class="button gal-tab active" data-tab="galeria">🖼 Galería</button>
-  <button class="button gal-tab" data-tab="ocs">🎭 Personajes</button>
+  <button class="button gal-tab" data-tab="ocs">🎭 OCs</button>
 </div>
         <div id="gal-toolbar">
             <button class="button" id="gal-upload">⬆ Subir imagen</button>
@@ -110,6 +110,41 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="gal-grid-empty" style="display:none;">
             <p>No hay imágenes en la galería todavía.</p>
             <p><small>Pulsa <strong>⬆ Subir imagen</strong> para empezar.</small></p>
+        </div>
+
+        <!-- ══════════ PANEL OCs ══════════ -->
+        <div id="ocs-panel" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+          <div id="ocs-toolbar">
+            <button class="button default" id="ocs-new-btn">＋ Nuevo OC</button>
+            <span id="ocs-status"></span>
+            <span id="ocs-count"></span>
+            <button class="button" id="ocs-refresh-btn" title="Recargar">↻</button>
+          </div>
+          <div id="ocs-body" style="display:flex;flex:1;overflow:hidden;">
+            <!-- Sidebar -->
+            <aside id="ocs-sidebar">
+              <div class="gal-side-head">🔍 Buscar</div>
+              <div class="gal-side-pad">
+                <input type="text" id="ocs-search" placeholder="Nombre del OC...">
+              </div>
+              <div class="gal-side-head">🏷 Etiquetas</div>
+              <div id="ocs-cat-list" style="flex:1;overflow-y:auto;padding:4px;">
+                <div class="gal-empty">Sin etiquetas.</div>
+              </div>
+              <div id="ocs-sidebar-footer">
+                <button class="button" id="ocs-clear-filters">Limpiar filtros</button>
+                <button class="button" id="ocs-new-cat-btn">＋ Etiqueta</button>
+              </div>
+            </aside>
+            <!-- Grid centrado -->
+            <div id="ocs-grid-wrap">
+              <div id="ocs-grid"></div>
+              <div id="ocs-grid-empty" style="display:none;">
+                <p>No hay OCs todavía.</p>
+                <p><small>Pulsa <strong>＋ Nuevo OC</strong> para empezar.</small></p>
+              </div>
+            </div>
+          </div>
         </div>
     </main>
 </div>
@@ -1864,46 +1899,11 @@ window.addEventListener('load', tryAutoConnectDrive);
        · CSS y JS al final del body
 ═══════════════════════════════════════════════════════════ -->
 
-<!-- ══════════ PANEL OCs ══════════ -->
-<div id="ocs-panel" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
-  <div id="ocs-toolbar">
-    <button class="button default" id="ocs-new-btn">＋ Nuevo personaje</button>
-    <span id="ocs-status"></span>
-    <span id="ocs-count"></span>
-    <button class="button" id="ocs-refresh-btn" title="Recargar">↻</button>
-  </div>
-  <div id="ocs-body" style="display:flex;flex:1;overflow:hidden;">
-    <!-- Sidebar -->
-    <aside id="ocs-sidebar">
-      <div class="gal-side-head">🔍 Buscar</div>
-      <div class="gal-side-pad">
-        <input type="text" id="ocs-search" placeholder="Nombre del personaje...">
-      </div>
-      <div class="gal-side-head">🏷 Categorías</div>
-      <div id="ocs-cat-list" style="flex:1;overflow-y:auto;padding:4px;">
-        <div class="gal-empty">Sin categorías.</div>
-      </div>
-      <div id="ocs-sidebar-footer">
-        <button class="button" id="ocs-clear-filters">Limpiar filtros</button>
-        <button class="button" id="ocs-new-cat-btn">＋ Categoría</button>
-      </div>
-    </aside>
-    <!-- Grid centrado -->
-    <div id="ocs-grid-wrap">
-      <div id="ocs-grid"></div>
-      <div id="ocs-grid-empty" style="display:none;">
-        <p>No hay personajes todavía.</p>
-        <p><small>Pulsa <strong>＋ Nuevo personaje</strong> para empezar.</small></p>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ══════════ FICHA ══════════ -->
 <div id="ocs-ficha" style="display:none;">
   <div id="ocs-ficha-inner" class="window">
     <div class="title-bar">
-      <div class="title-bar-text" id="ocs-ficha-title">Personaje</div>
+      <div class="title-bar-text" id="ocs-ficha-title">OC</div>
       <div class="title-bar-controls">
         <button aria-label="Close" id="ocs-ficha-close"></button>
       </div>
@@ -1913,14 +1913,14 @@ window.addEventListener('load', tryAutoConnectDrive);
 </div>
 
 <!-- ══════════ FORM CREAR/EDITAR ══════════ -->
-<div class="window gal-dialog" id="ocs-form-dialog" style="display:none;width:560px;max-height:90vh;overflow-y:auto;">
-  <div class="title-bar">
-    <div class="title-bar-text" id="ocs-form-title">Nuevo personaje</div>
+<div class="window gal-dialog" id="ocs-form-dialog" style="display:none;width:560px;max-height:90vh;flex-direction:column;">
+  <div class="title-bar" style="flex-shrink:0;">
+    <div class="title-bar-text" id="ocs-form-title">Nuevo OC</div>
     <div class="title-bar-controls">
       <button aria-label="Close" id="ocs-form-close"></button>
     </div>
   </div>
-  <div class="window-body">
+  <div class="window-body" style="overflow-y:auto;flex:1;min-height:0;">
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;">
       <div style="flex-shrink:0;text-align:center;">
         <div id="ocs-form-foto-preview" class="ocs-foto-preview">🎭</div>
@@ -1930,7 +1930,7 @@ window.addEventListener('load', tryAutoConnectDrive);
       <div style="flex:1;min-width:0;">
         <div class="field-row-stacked" style="margin-bottom:6px;">
           <label>Nombre *</label>
-          <input type="text" id="ocs-form-nombre" maxlength="100" placeholder="Nombre del personaje">
+          <input type="text" id="ocs-form-nombre" maxlength="100" placeholder="Nombre del OC">
         </div>
         <div class="field-row-stacked">
           <label>Descripción / About</label>
@@ -1980,10 +1980,9 @@ window.addEventListener('load', tryAutoConnectDrive);
     </fieldset>
 
     <div class="field-row-stacked" style="margin-bottom:6px;">
-      <label>Categorías</label>
-      <div id="ocs-form-cats" style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;
-        background:var(--inset-bg);box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);min-height:26px;">
-      </div>
+      <label>Etiquetas <small style="color:var(--text-muted);">(con #, separadas por espacios — se crean si no existen)</small></label>
+      <input type="text" id="ocs-form-cats-input" placeholder="#principal #npc #villano">
+      <div id="ocs-form-cats-chips" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;min-height:18px;"></div>
     </div>
 
     <p id="ocs-form-status" style="font-size:11px;margin:4px 0;min-height:14px;"></p>
@@ -1998,20 +1997,16 @@ window.addEventListener('load', tryAutoConnectDrive);
 <!-- ══════════ DIALOG: NUEVA CATEGORÍA ══════════ -->
 <div class="window gal-dialog" id="ocs-cat-dialog" style="display:none;width:300px;">
   <div class="title-bar">
-    <div class="title-bar-text">＋ Nueva categoría</div>
+    <div class="title-bar-text">＋ Nueva etiqueta</div>
     <div class="title-bar-controls"><button aria-label="Close" id="ocs-cat-close"></button></div>
   </div>
   <div class="window-body">
     <div class="field-row-stacked" style="margin-bottom:6px;">
       <label>Nombre</label>
-      <input type="text" id="ocs-cat-nombre" maxlength="60" placeholder="ej: Protagonistas">
+      <input type="text" id="ocs-cat-nombre" maxlength="60" placeholder="ej: protagonista">
     </div>
     <div class="field-row-stacked" style="margin-bottom:6px;">
-      <label>Color del badge</label>
-      <div style="display:flex;gap:6px;align-items:center;">
-        <input type="color" id="ocs-cat-color" value="#4a9eff" style="width:40px;height:26px;cursor:pointer;">
-        <span id="ocs-cat-preview" class="ocs-cat-badge" style="background:#4a9eff;color:#fff;padding:1px 6px;">Preview</span>
-      </div>
+      <span id="ocs-cat-preview" class="ocs-cat-badge">#preview</span>
     </div>
     <p id="ocs-cat-status" style="font-size:11px;min-height:14px;margin:4px 0;"></p>
     <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:6px;">
@@ -2022,12 +2017,12 @@ window.addEventListener('load', tryAutoConnectDrive);
 </div>
 
 <!-- ══════════ PICKER DE FOTO ══════════ -->
-<div class="window gal-dialog" id="ocs-picker-dialog" style="display:none;width:460px;">
-  <div class="title-bar">
+<div class="window gal-dialog" id="ocs-picker-dialog" style="display:none;width:460px;max-height:90vh;flex-direction:column;">
+  <div class="title-bar" style="flex-shrink:0;">
     <div class="title-bar-text">📂 Elegir foto</div>
     <div class="title-bar-controls"><button aria-label="Close" id="ocs-picker-close"></button></div>
   </div>
-  <div class="window-body" style="padding:6px;">
+  <div class="window-body" style="padding:6px;overflow-y:auto;flex:1;min-height:0;">
     <input type="text" id="ocs-picker-search" placeholder="Buscar imagen..." style="width:100%;box-sizing:border-box;margin-bottom:6px;">
     <div id="ocs-picker-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;
       max-height:300px;overflow-y:auto;background:var(--inset-bg);
@@ -2056,7 +2051,99 @@ window.addEventListener('load', tryAutoConnectDrive);
   z-index: 1;
 }
 
-#ocs-panel { display:none; flex:1; flex-direction:column; overflow:hidden; }
+/* Dropdown personalizado del selector de usuario (OCs).
+   No usamos <select> nativo (98.css y los navegadores se pelean por
+   estilarlo). En su lugar: un <button> que ya hereda el look Win98 del
+   tema + una lista de items absoluta tipo menú. */
+.gal-userdrop { position: relative; display: inline-block; }
+.gal-userdrop-btn {
+  /* Hereda el bezel raised de `.button` de 98.css + themes.css.
+     Solo ajustamos tamaño y dejamos hueco para el chevrón. */
+  min-height: 21px;
+  min-width: 90px;
+  padding: 0 22px 0 8px;
+  font-size: 11px;
+  text-align: left;
+  position: relative;
+}
+/* Chevrón ▾ con dos gradientes — currentColor → toma el color del texto
+   del botón del tema activo. */
+.gal-userdrop-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 9px; height: 5px;
+  transform: translateY(-50%);
+  background-image:
+    linear-gradient(135deg, transparent 50%, currentColor 50%),
+    linear-gradient(225deg, transparent 50%, currentColor 50%);
+  background-position: 0 50%, 4px 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+/* Lista desplegable: estilo "menu" raised con tokens del tema. */
+.gal-userdrop-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  margin-top: 1px;
+  background: var(--win-bg);
+  color: var(--text);
+  box-shadow:
+    inset  1px  1px var(--bezel-light-1),
+    inset -1px -1px var(--bezel-dark-1),
+    inset  2px  2px var(--bezel-light-2),
+    inset -2px -2px var(--bezel-dark-2);
+  padding: 2px;
+  z-index: 4000;
+  display: none;
+}
+.gal-userdrop.is-open .gal-userdrop-menu { display: block; }
+.gal-userdrop-item {
+  padding: 3px 14px 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--text);
+}
+.gal-userdrop-item:hover,
+.gal-userdrop-item.is-selected {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Marcos del formulario (📋 Identidad, 📊 Stats, 🌍 Lore) — el fieldset
+   nativo de 98.css usa un border-image SVG con gris hardcoded; lo sustituyo
+   por un groove construido con box-shadow y tokens del tema, y la legend
+   recibe fondo del tema para que cubra el borde superior. */
+#ocs-form-dialog fieldset {
+  border: 0 !important;
+  border-image: none !important;
+  margin: 8px 0;
+  padding: 10px 12px 8px;
+  background: transparent;
+  box-shadow:
+    inset  1px  1px var(--bezel-dark-2),
+    inset -1px -1px var(--bezel-light-1),
+    inset  2px  2px var(--bezel-light-1),
+    inset -2px -2px var(--bezel-dark-2);
+}
+#ocs-form-dialog fieldset > legend {
+  background: var(--win-body-bg, var(--win-bg));
+  color: var(--text);
+  padding: 0 6px;
+}
+
+#ocs-panel {
+  display: none;          /* JS lo cambia a 'flex' al activar la pestaña */
+  flex: 1 1 auto;
+  width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+#ocs-panel.is-active { display: flex; }
 
 #ocs-toolbar {
   display: flex; align-items: center; gap: 8px;
@@ -2068,9 +2155,9 @@ window.addEventListener('load', tryAutoConnectDrive);
 
 #ocs-body { display:flex; flex:1; overflow:hidden; }
 
-/* Sidebar */
+/* Sidebar — mismas medidas que #gal-sidebar de la galería. */
 #ocs-sidebar {
-  width: 180px; flex-shrink: 0;
+  width: 220px; flex-shrink: 0;
   background: var(--win-bg);
   border-right: 1px solid var(--border);
   box-shadow: 1px 0 0 var(--bezel-light-1);
@@ -2081,17 +2168,18 @@ window.addEventListener('load', tryAutoConnectDrive);
   gap: 4px; border-top: 1px solid var(--border);
 }
 
-/* Grid centrado */
+/* Grid: misma distribución que #gal-grid — sin max-width ni centrado,
+   llena todo el alto y ancho disponibles. */
 #ocs-grid-wrap {
   flex: 1; display: flex; flex-direction: column;
-  overflow: hidden; align-items: center;
+  overflow: hidden;
 }
 #ocs-grid {
-  width: 100%; max-width: 900px;
-  overflow-y: auto; padding: 16px;
+  flex: 1;
+  overflow-y: auto; padding: 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px; align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px; align-content: start;
   box-sizing: border-box;
 }
 #ocs-grid-empty {
@@ -2100,7 +2188,7 @@ window.addEventListener('load', tryAutoConnectDrive);
   color:var(--text-faint); font-size:12px; text-align:center; padding:20px;
 }
 
-/* Cards */
+/* Cards — mismo look que .gal-card de la galería. */
 .ocs-card {
   background: var(--win-bg);
   border-top: 2px solid var(--bezel-light-1);
@@ -2114,15 +2202,22 @@ window.addEventListener('load', tryAutoConnectDrive);
 .ocs-card:hover .ocs-card-name { color: var(--accent-text); }
 .ocs-card:hover .ocs-chip { background: var(--accent-deep); }
 .ocs-card-thumb {
-  width: 100%; aspect-ratio: 3/4;
+  width: calc(100% - 4px); aspect-ratio: 1 / 1;   /* cuadrado como .gal-thumb */
   background: var(--inset-bg);
-  box-shadow: inset 1px 1px var(--bezel-dark-1), inset -1px -1px var(--bezel-light-1);
+  /* Mismo marco hundido que .profile-avatar-frame del perfil. El calc() +
+     align-self deja 2px a cada lado para que las sombras outset se vean. */
+  box-shadow:
+    -1px -1px 0 var(--bezel-dark-1),
+     1px  1px 0 var(--bezel-light-1),
+    -2px -2px 0 var(--bezel-dark-2),
+     2px  2px 0 var(--bezel-light-2);
+  align-self: center;
   display: flex; align-items: center; justify-content: center;
-  overflow: hidden; font-size: 36px;
+  overflow: hidden; font-size: 24px;
 }
 .ocs-card-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 .ocs-card-name {
-  font-size: 11px; font-weight: bold; margin-top: 4px;
+  font-size: 11px; margin-top: 4px;        /* sin bold, como .gal-name */
   text-align: center; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; color: var(--text);
 }
@@ -2131,47 +2226,73 @@ window.addEventListener('load', tryAutoConnectDrive);
   justify-content: center; margin-top: 3px;
 }
 .ocs-chip {
-  font-size: 9px; padding: 1px 5px; color: #fff;
+  font-size: 9px; padding: 1px 4px;
+  background: var(--accent); color: var(--accent-text);
+  border-radius: 2px;
   white-space: nowrap; display: inline-block;
 }
+.ocs-card:hover .ocs-chip { background: var(--accent-deep); }
 
-/* Sidebar cats */
+/* Sidebar — items idénticos a .gal-tag-item de la galería (sin colores). */
 .ocs-cat-item {
   display: flex; align-items: center; gap: 4px;
   padding: 4px 6px; font-size: 11px; cursor: pointer;
   border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 .ocs-cat-item:hover  { background:var(--accent); color:var(--accent-text); }
 .ocs-cat-item.active { background:var(--accent); color:var(--accent-text); font-weight:bold; }
-.ocs-cat-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.ocs-cat-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ocs-cat-count {
   font-size:10px; background:var(--inset-bg); color:var(--text-inset);
   padding:1px 5px;
   box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
-  min-width:16px; text-align:center; margin-left:auto;
+  min-width:16px; text-align:center;
+}
+.ocs-cat-item.active .ocs-cat-count {
+  background: var(--accent-deep); color: var(--accent-text);
 }
 .ocs-cat-badge {
-  font-size:9px; padding:1px 5px; color:#fff;
+  font-size:9px; padding:1px 5px;
+  background: var(--accent); color: var(--accent-text);
+  border-radius: 2px;
   display:inline-block; white-space:nowrap;
 }
+/* Variante "categoría aún no guardada": tono atenuado del acento. */
+.ocs-cat-badge.is-new {
+  background: var(--accent-deep, var(--accent));
+  opacity: 0.7;
+}
 
-/* Foto preview en form */
+/* Foto preview en form — mismo marco que .profile-avatar-frame. */
 .ocs-foto-preview {
   width:90px; height:120px; background:var(--inset-bg);
-  box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  box-shadow:
+    -1px -1px 0 var(--bezel-dark-1),
+     1px  1px 0 var(--bezel-light-1),
+    -2px -2px 0 var(--bezel-dark-2),
+     2px  2px 0 var(--bezel-light-2);
+  margin: 2px;
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; font-size:28px;
 }
 .ocs-foto-preview img { width:100%; height:100%; object-fit:cover; display:block; }
 
-/* Picker */
+/* Picker — marco hundido como .profile-avatar-frame, con calc + align-self
+   para centrar dejando 2px a cada lado para las sombras outset. */
 .ocs-picker-thumb {
-  aspect-ratio:1; background:var(--inset-bg);
-  box-shadow:inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  width: calc(100% - 4px); aspect-ratio:1;
+  background:var(--inset-bg);
+  box-shadow:
+    -1px -1px 0 var(--bezel-dark-1),
+     1px  1px 0 var(--bezel-light-1),
+    -2px -2px 0 var(--bezel-dark-2),
+     2px  2px 0 var(--bezel-light-2);
+  align-self: center; justify-self: center;
   overflow:hidden; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
-.ocs-picker-thumb:hover { box-shadow:0 0 0 2px var(--accent); }
+.ocs-picker-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .ocs-picker-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 
 /* ── FICHA OVERLAY ── */
@@ -2225,7 +2346,13 @@ window.addEventListener('load', tryAutoConnectDrive);
 .ocs-ficha-foto-img {
   width: 170px; height: 227px;
   background: var(--inset-bg);
-  box-shadow: inset 1px 1px var(--bezel-dark-1),inset -1px -1px var(--bezel-light-1);
+  /* Mismo marco hundido que .profile-avatar-frame. */
+  box-shadow:
+    -1px -1px 0 var(--bezel-dark-1),
+     1px  1px 0 var(--bezel-light-1),
+    -2px -2px 0 var(--bezel-dark-2),
+     2px  2px 0 var(--bezel-light-2);
+  margin: 2px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; font-size: 48px;
 }
@@ -2277,11 +2404,10 @@ window.addEventListener('load', tryAutoConnectDrive);
 'use strict';
 var _userId = <?php echo json_encode($userId); ?>;
 
-var _panel = document.getElementById('ocs-panel');
-var _mainArea = document.getElementById('gal-main');
-if (_panel && _mainArea) _mainArea.appendChild(_panel);
+/* El panel #ocs-panel ya está colocado dentro de #gal-main-area en el HTML
+   (justo después de #gal-grid-empty), así que no hace falta moverlo en JS. */
 
-var OCS_API = '/scrapbook-melon/assets/ocs/api.php';
+var OCS_API = '../assets/ocs/api.php';
 var _ocs = [], _categorias = [], _selectedCat = null, _searchTerm = '', _editingId = null;
 var _allUsers = [], _viewingUserId = null;
 
@@ -2316,11 +2442,19 @@ document.addEventListener('click', function(e) {
   document.querySelectorAll('.gal-tab').forEach(function(t){ t.classList.remove('active'); });
   tab.classList.add('active');
   var isOcs = tab.dataset.tab === 'ocs';
+  /* Cambio de vista COMPLETO: la barra lateral de la galería (buscar +
+     etiquetas) solo aplica al modo galería; en OCs se oculta para que la
+     vista de OCs ocupe todo el ancho. */
+  var sb = document.getElementById('gal-sidebar');
+  if (sb) sb.style.display = isOcs ? 'none' : '';
   ['gal-toolbar','gal-grid','gal-grid-empty'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.style.display=isOcs?'none':'';
   });
   var panel=document.getElementById('ocs-panel');
-  if (panel) panel.style.display=isOcs?'flex':'none';
+  if (panel) {
+    panel.classList.toggle('is-active', isOcs);
+    panel.style.display = isOcs ? 'flex' : 'none';
+  }
   if (isOcs && !_ocs.length && !_categorias.length) loadAll();
 });
 
@@ -2328,11 +2462,11 @@ document.addEventListener('click', function(e) {
 async function loadAll() {
   setStatus('Cargando…');
   try {
-    var res = await Promise.all([api('list_all'), api('categorias_list')]);
-    _allUsers   = res[0].users      || [];
-    _categorias = res[1].categorias || [];
+    var r = await api('list_all');
+    _allUsers = r.users || [];
     if (_viewingUserId === null) _viewingUserId = _userId;
-    _ocs = _ocsForUser(_viewingUserId);
+    _ocs        = _ocsForUser(_viewingUserId);
+    _categorias = _categoriasForUser(_viewingUserId);
     setStatus('');
     renderUserDropdown();
     renderSidebar();
@@ -2343,31 +2477,60 @@ function _ocsForUser(uid) {
   var u = _allUsers.find(function(u){ return u.id===uid; });
   return u ? u.ocs : [];
 }
+/* Categorías PROPIAS del usuario que se está viendo — la sidebar muestra
+   estas, no las del usuario logueado (como las etiquetas de la galería). */
+function _categoriasForUser(uid) {
+  var u = _allUsers.find(function(u){ return u.id===uid; });
+  return u ? (u.categorias || []) : [];
+}
 function renderUserDropdown() {
   var toolbar = document.getElementById('ocs-toolbar');
-  var existing = document.getElementById('ocs-user-select');
+  var existing = document.getElementById('ocs-userdrop');
   if (existing) existing.remove();
   if (_allUsers.length <= 1) return;
-  var sel = document.createElement('select');
-  sel.id = 'ocs-user-select';
-  sel.style.cssText='font-size:11px;padding:2px 6px;background:var(--inset-bg);color:var(--text);border:1px solid var(--border);';
+  /* Botón nativo de la app (hereda look Win98 raised del tema activo) +
+     menú flotante con un item por usuario. Sin <select> de por medio. */
+  var wrap = document.createElement('div');
+  wrap.id = 'ocs-userdrop';
+  wrap.className = 'gal-userdrop';
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'button gal-userdrop-btn';
+  var current = _allUsers.find(function(u){ return u.id === _viewingUserId; }) || _allUsers[0];
+  btn.textContent = current.label || current.username;
+  wrap.appendChild(btn);
+  var menu = document.createElement('div');
+  menu.className = 'gal-userdrop-menu';
   _allUsers.forEach(function(u){
-    var opt=document.createElement('option');
-    opt.value=u.id; opt.textContent=u.label||u.username;
-    if(u.id===_viewingUserId) opt.selected=true;
-    sel.appendChild(opt);
+    var item = document.createElement('div');
+    item.className = 'gal-userdrop-item' + (u.id === _viewingUserId ? ' is-selected' : '');
+    item.textContent = u.label || u.username;
+    item.addEventListener('click', function(){
+      _viewingUserId = u.id;
+      _ocs        = _ocsForUser(_viewingUserId);
+      _categorias = _categoriasForUser(_viewingUserId);
+      _selectedCat = null; _searchTerm = '';
+      var si = document.getElementById('ocs-search'); if (si) si.value = '';
+      var isOwn = _viewingUserId === _userId;
+      document.getElementById('ocs-new-btn').style.display     = isOwn ? '' : 'none';
+      document.getElementById('ocs-new-cat-btn').style.display = isOwn ? '' : 'none';
+      btn.textContent = u.label || u.username;
+      wrap.classList.remove('is-open');
+      renderUserDropdown();   /* repinta el .is-selected */
+      renderSidebar(); renderGrid();
+    });
+    menu.appendChild(item);
   });
-  sel.addEventListener('change', function(){
-    _viewingUserId=parseInt(this.value);
-    _ocs=_ocsForUser(_viewingUserId);
-    _selectedCat=null; _searchTerm='';
-    var si=document.getElementById('ocs-search'); if(si) si.value='';
-    var isOwn=_viewingUserId===_userId;
-    document.getElementById('ocs-new-btn').style.display=isOwn?'':'none';
-    document.getElementById('ocs-new-cat-btn').style.display=isOwn?'':'none';
-    renderSidebar(); renderGrid();
+  wrap.appendChild(menu);
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    wrap.classList.toggle('is-open');
   });
-  toolbar.insertBefore(sel, toolbar.firstChild);
+  /* Click fuera → cierra. Una sola vez por instancia. */
+  document.addEventListener('click', function onDoc(e){
+    if (!wrap.contains(e.target)) wrap.classList.remove('is-open');
+  });
+  toolbar.insertBefore(wrap, toolbar.firstChild);
 }
 
 /* ═══ SIDEBAR ═══ */
@@ -2375,11 +2538,10 @@ function renderSidebar() {
   var list=document.getElementById('ocs-cat-list'); if(!list) return;
   var counts={};
   _ocs.forEach(function(oc){ (oc.categorias||[]).forEach(function(c){ counts[c.id]=(counts[c.id]||0)+1; }); });
-  if (!_categorias.length) { list.innerHTML='<div class="gal-empty">Sin categorías todavía.</div>'; return; }
+  if (!_categorias.length) { list.innerHTML='<div class="gal-empty">Sin etiquetas todavía.</div>'; return; }
   list.innerHTML=_categorias.map(function(c){
     return '<div class="ocs-cat-item'+((_selectedCat===c.id)?' active':'')+'" data-id="'+c.id+'">'+
-      '<span class="ocs-cat-dot" style="background:'+esc(c.color)+'"></span>'+
-      '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(c.nombre)+'</span>'+
+      '<span class="ocs-cat-name">#'+esc(c.nombre)+'</span>'+
       '<span class="ocs-cat-count">'+(counts[c.id]||0)+'</span>'+
     '</div>';
   }).join('');
@@ -2408,7 +2570,7 @@ function renderGrid() {
   var emptyEl=document.getElementById('ocs-grid-empty');
   var countEl=document.getElementById('ocs-count');
   var list=filtered();
-  if (countEl) countEl.textContent=list.length+(list.length===1?' personaje':' personajes');
+  if (countEl) countEl.textContent=list.length+(list.length===1?' OC':' OCs');
   grid.innerHTML='';
   if (!list.length) { emptyEl.style.display=''; return; }
   emptyEl.style.display='none';
@@ -2418,7 +2580,7 @@ function renderGrid() {
     var url=thumbUrl(oc.foto_id);
     var imgH=url?'<img src="'+esc(url)+'" alt="" loading="lazy">':'🎭';
     var cats=(oc.categorias||[]).map(function(c){
-      return '<span class="ocs-chip" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>';
+      return '<span class="ocs-chip">#'+esc(c.nombre)+'</span>';
     }).join('');
     card.innerHTML='<div class="ocs-card-thumb">'+imgH+'</div>'+
       '<div class="ocs-card-name">'+esc(oc.nombre)+'</div>'+
@@ -2448,7 +2610,7 @@ async function openFicha(id) {
     var url=thumbUrl(oc.foto_id);
     var imgH=url?'<img src="'+esc(url)+'" alt="">':'🎭';
     var cats=(oc.categorias||[]).map(function(c){
-      return '<span class="ocs-cat-badge" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>';
+      return '<span class="ocs-cat-badge">#'+esc(c.nombre)+'</span>';
     }).join('');
 
     /* Columna izquierda: stats agrupados */
@@ -2532,7 +2694,7 @@ var _FIELDS = ['nombre','alias','fecha_nacimiento','edad','especie','genero','or
 function openForm(id) {
   _editingId=id||null;
   var dlg=document.getElementById('ocs-form-dialog');
-  document.getElementById('ocs-form-title').textContent=id?'Editar personaje':'Nuevo personaje';
+  document.getElementById('ocs-form-title').textContent=id?'Editar OC':'Nuevo OC';
   document.getElementById('ocs-form-delete').style.display=id?'':'none';
   document.getElementById('ocs-form-status').textContent='';
   _FIELDS.forEach(function(f){ var el=document.getElementById('ocs-form-'+f); if(el) el.value=''; });
@@ -2559,23 +2721,64 @@ function openForm(id) {
       renderFormCats((oc.categorias||[]).map(function(c){ return c.id; }));
     }
   }
-  dlg.style.display='block'; centerDialog(dlg);
+  /* flex (no block) para que el window-body pueda crecer/encoger con su
+     overflow propio mientras la title-bar queda fija arriba. */
+  dlg.style.display='flex'; centerDialog(dlg);
 }
 function closeForm(){ document.getElementById('ocs-form-dialog').style.display='none'; }
 
-function renderFormCats(sel) {
-  var cont=document.getElementById('ocs-form-cats');
-  if (!_categorias.length) { cont.innerHTML='<span style="font-size:10px;color:var(--text-muted);">Sin categorías todavía.</span>'; return; }
-  cont.innerHTML=_categorias.map(function(c){
-    return '<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:10px;">'+
-      '<input type="checkbox" data-catid="'+c.id+'"'+(sel.indexOf(c.id)!==-1?' checked':'')+'>'+
-      '<span class="ocs-cat-badge" style="background:'+esc(c.color)+';">'+esc(c.nombre)+'</span>'+
-    '</label>';
+/* Pinta el input de categorías a partir de los IDs seleccionados (al editar
+   un OC ya guardado) y actualiza los chips de previsualización. */
+function renderFormCats(selIds) {
+  var inp = document.getElementById('ocs-form-cats-input');
+  var names = (selIds || []).map(function(id){
+    var c = _categorias.find(function(c){ return c.id === id; });
+    return c ? c.nombre : null;
+  }).filter(Boolean);
+  inp.value = names.map(function(n){ return '#' + n; }).join(' ');
+  updateFormCatsChips();
+}
+
+/* Misma idea que las etiquetas de la galería: extrae los #tag del texto. */
+function _parseCatTags(raw) {
+  if (!raw) return [];
+  var seen = {}, out = [];
+  var rx = /#([\p{L}0-9_-]+)/gu;
+  var m;
+  while ((m = rx.exec(raw)) !== null) {
+    var t = m[1].toLowerCase();
+    if (!seen[t]) { seen[t] = 1; out.push(t); }
+  }
+  if (!out.length) {
+    raw.split(/[,\s]+/).forEach(function(tok){
+      tok = tok.replace(/^#/, '').toLowerCase().replace(/[^\p{L}0-9_-]/gu, '');
+      if (tok && !seen[tok]) { seen[tok] = 1; out.push(tok); }
+    });
+  }
+  return out;
+}
+
+/* Repinta los chips por debajo del input: las categorías existentes salen con
+   su color real; las nuevas con un fondo neutro y un signo + para indicar
+   que se van a crear al guardar. */
+function updateFormCatsChips() {
+  var cont = document.getElementById('ocs-form-cats-chips');
+  if (!cont) return;
+  var tags = _parseCatTags(document.getElementById('ocs-form-cats-input').value);
+  if (!tags.length) { cont.innerHTML = ''; return; }
+  cont.innerHTML = tags.map(function(t){
+    var c = _categorias.find(function(c){ return c.nombre.toLowerCase() === t; });
+    if (c) {
+      return '<span class="ocs-cat-badge">#'+esc(c.nombre)+'</span>';
+    }
+    return '<span class="ocs-cat-badge is-new" title="Se creará al guardar">+#'+esc(t)+'</span>';
   }).join('');
 }
-function getSelectedCats(){
-  return Array.from(document.querySelectorAll('#ocs-form-cats input:checked'))
-    .map(function(b){ return parseInt(b.dataset.catid); });
+
+/* Devuelve las CategoríasNames (el backend resuelve nombre→id, creando las
+   nuevas con color por defecto). */
+function getCategoriasNames() {
+  return _parseCatTags(document.getElementById('ocs-form-cats-input').value);
 }
 
 function _getField(id){ var el=document.getElementById('ocs-form-'+id); return el?el.value.trim():''; }
@@ -2600,7 +2803,7 @@ async function submitForm() {
       fecha_nacimiento:_getField('fecha_nacimiento'), ocupacion:_getField('ocupacion'),
       peso:_getField('peso')
     },
-    categorias:getSelectedCats()
+    categoriasNames: getCategoriasNames()
   };
   if (_editingId) body.id=_editingId;
   btn.disabled=true; st.style.color=''; st.textContent='Guardando…';
@@ -2614,7 +2817,7 @@ async function submitForm() {
 async function deleteOc() {
   if(!_editingId) return;
   var oc=_ocs.find(function(o){ return o.id===_editingId; });
-  if(!confirm('¿Eliminar "'+(oc&&oc.nombre||'este personaje')+'"? No se puede deshacer.')) return;
+  if(!confirm('¿Eliminar "'+(oc&&oc.nombre||'este OC')+'"? No se puede deshacer.')) return;
   try {
     var r=await api('delete',{id:_editingId});
     if(r.error) throw new Error(r.error);
@@ -2630,6 +2833,7 @@ document.getElementById('ocs-form-close').addEventListener('click',closeForm);
 document.getElementById('ocs-form-cancel').addEventListener('click',closeForm);
 document.getElementById('ocs-form-submit').addEventListener('click',submitForm);
 document.getElementById('ocs-form-delete').addEventListener('click',deleteOc);
+document.getElementById('ocs-form-cats-input').addEventListener('input', updateFormCatsChips);
 
 /* ═══ PICKER ═══ */
 function setFotoPreview(did) {
@@ -2637,10 +2841,26 @@ function setFotoPreview(did) {
   var prev=document.getElementById('ocs-form-foto-preview');
   if(url) prev.innerHTML='<img src="'+esc(url)+'" alt="">';
 }
-function openPicker() {
+async function openPicker() {
   var dlg=document.getElementById('ocs-picker-dialog');
-  dlg.style.display='block'; centerDialog(dlg);
+  dlg.style.display='flex'; centerDialog(dlg);
   document.getElementById('ocs-picker-search').value='';
+  /* Si la pestaña Galería todavía no se abrió, _files está vacío.
+     Cargamos el listado de Drive aquí mismo para que el picker funcione
+     sin tener que abrir antes la galería. */
+  if (!window._files || !window._files.length) {
+    var grid=document.getElementById('ocs-picker-grid');
+    grid.innerHTML='<div class="gal-empty" style="grid-column:1/-1;">Cargando…</div>';
+    try {
+      if (typeof listDriveFiles === 'function') {
+        var files = await listDriveFiles();
+        window._files = files || [];
+      }
+    } catch (e) {
+      grid.innerHTML='<div class="gal-empty" style="grid-column:1/-1;">No se pudo cargar: '+esc(e.message||e)+'</div>';
+      return;
+    }
+  }
   renderPicker('');
 }
 function closePicker(){ document.getElementById('ocs-picker-dialog').style.display='none'; }
@@ -2648,17 +2868,23 @@ function renderPicker(q) {
   var grid=document.getElementById('ocs-picker-grid');
   var files=(window._files||[]).filter(function(f){
     if(!f.mimeType||f.mimeType.indexOf('image/')===-1) return false;
+    /* Excluye WIPs (tag #wip y extensiones no-renderizables tipo .psd/.csp/.kra)
+       para que el picker solo muestre fotos listas para usar como retrato. */
+    if (typeof hasWipTag === 'function' && hasWipTag(f)) return false;
+    if (typeof isWip     === 'function' && isWip(f))     return false;
     if(q&&f.name.toLowerCase().indexOf(q.toLowerCase())===-1) return false;
     return true;
   });
   if(!files.length){
-    grid.innerHTML='<div class="gal-empty" style="grid-column:1/-1;">'+(window._files&&window._files.length?'Sin resultados.':'Conecta la galería primero.')+'</div>';
+    grid.innerHTML='<div class="gal-empty" style="grid-column:1/-1;">'+(window._files&&window._files.length?'Sin resultados.':'No hay imágenes en la galería.')+'</div>';
     return;
   }
   grid.innerHTML=files.map(function(f){
-    var url=thumbUrl(f.id);
+    /* Pedimos directamente la miniatura a Drive — no necesitamos esperar
+       a que la galería rellene _thumbCache. */
+    var url='https://drive.google.com/thumbnail?id='+encodeURIComponent(f.id)+'&sz=w200';
     return '<div class="ocs-picker-thumb" data-id="'+esc(f.id)+'" title="'+esc(f.name)+'">'+
-      '<img src="'+esc(url)+'" loading="lazy" alt=""></div>';
+      '<img src="'+esc(url)+'" loading="lazy" referrerpolicy="no-referrer" alt=""></div>';
   }).join('');
   grid.querySelectorAll('.ocs-picker-thumb').forEach(function(th){
     th.addEventListener('click',function(){
@@ -2673,12 +2899,10 @@ document.getElementById('ocs-picker-close').addEventListener('click',closePicker
 document.getElementById('ocs-picker-cancel').addEventListener('click',closePicker);
 document.getElementById('ocs-picker-search').addEventListener('input',function(){ renderPicker(this.value); });
 
-/* ═══ CATEGORÍAS ═══ */
+/* ═══ ETIQUETAS ═══ */
 function openCatDlg() {
   var dlg=document.getElementById('ocs-cat-dialog');
   document.getElementById('ocs-cat-nombre').value='';
-  document.getElementById('ocs-cat-color').value='#4a9eff';
-  document.getElementById('ocs-cat-preview').style.background='#4a9eff';
   document.getElementById('ocs-cat-status').textContent='';
   dlg.style.display='block'; centerDialog(dlg);
 }
@@ -2687,16 +2911,22 @@ async function submitCat() {
   var btn=document.getElementById('ocs-cat-submit');
   var st=document.getElementById('ocs-cat-status');
   var nombre=document.getElementById('ocs-cat-nombre').value.trim();
-  var color=document.getElementById('ocs-cat-color').value;
   if(!nombre){ st.textContent='Pon un nombre.'; st.style.color='var(--error-text)'; return; }
   btn.disabled=true; st.style.color=''; st.textContent='Creando…';
   try {
-    var r=await api('categoria_create',{nombre,color});
+    /* Sin picker — el backend asigna color por defecto y nunca se usa visualmente. */
+    var r=await api('categoria_create',{nombre});
     if(r.error) throw new Error(r.error);
     closeCatDlg();
     var rc=await api('categorias_list');
-    _categorias=rc.categorias||[];
-    renderSidebar(); renderFormCats([]);
+    var newCats = rc.categorias || [];
+    /* Las categorías recién creadas pertenecen al usuario logueado. Refresca
+       la copia cacheada en _allUsers y, si está viéndose a sí mismo, también
+       la lista activa de la sidebar. */
+    var mine = _allUsers.find(function(u){ return u.id === _userId; });
+    if (mine) mine.categorias = newCats;
+    if (_viewingUserId === _userId) _categorias = newCats;
+    renderSidebar(); updateFormCatsChips();
   } catch(e){ st.textContent='Error: '+e.message; st.style.color='var(--error-text)'; }
   finally { btn.disabled=false; }
 }
@@ -2704,9 +2934,6 @@ document.getElementById('ocs-new-cat-btn').addEventListener('click',openCatDlg);
 document.getElementById('ocs-cat-close').addEventListener('click',closeCatDlg);
 document.getElementById('ocs-cat-cancel').addEventListener('click',closeCatDlg);
 document.getElementById('ocs-cat-submit').addEventListener('click',submitCat);
-document.getElementById('ocs-cat-color').addEventListener('input',function(){
-  document.getElementById('ocs-cat-preview').style.background=this.value;
-});
 
 /* ═══ FILTROS ═══ */
 document.getElementById('ocs-search').addEventListener('input',function(){ _searchTerm=this.value; renderGrid(); });
