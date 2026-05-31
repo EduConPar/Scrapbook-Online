@@ -1,0 +1,680 @@
+<?php
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+session_start();
+require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+
+$userKey = $_SESSION['user'] ?? null;
+if (!$userKey || !isset($loginUsers[$userKey])) {
+    header('Location: ../index.php');
+    exit;
+}
+$userLabel = $loginUsers[$userKey]['label'];
+
+refreshActiveThemeCss($userKey, $userLabel);
+$_userThemes      = loadUserThemes($userKey);
+$activeTheme      = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+    $activeThemeCss   = '../' . themeCssRelPath($activeTheme, $userLabel);
+    if (!file_exists(dirname(__DIR__) . '/' . themeCssRelPath($activeTheme, $userLabel))) $activeThemeCss = '';
+}
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Tienda</title>
+    <link rel="stylesheet" href="../assets/css/98.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/tokens.css'); ?>">
+    <link rel="stylesheet" href="../assets/css/base.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/base.css'); ?>">
+    <link rel="stylesheet" href="../assets/css/themes.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/themes.css'); ?>">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
+    <style>
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--win-bg); color: var(--text); font-family: 'Pixelated MS Sans Serif', Arial, sans-serif; }
+
+    #tienda-main { display: flex; height: 100vh; overflow: hidden; }
+
+    /* Sidebar — mismas medidas que la galería. Tabs apiladas verticalmente,
+       Principal arriba y Donaciones empujada al fondo con margin-top:auto. */
+    #tienda-sidebar {
+      width: 220px; flex-shrink: 0;
+      background: var(--win-bg);
+      border-right: 1px solid var(--border);
+      box-shadow: 1px 0 0 var(--bezel-light-1);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .tienda-tab {
+      padding: 8px 12px; font-size: 12px; cursor: pointer;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tienda-tab:hover  { background: var(--accent); color: var(--accent-text); }
+    .tienda-tab.active { background: var(--accent); color: var(--accent-text); font-weight: bold; }
+
+    /* Botón de Donaciones — separado de la lista de tabs, raised Win98
+       estándar. Vive al fondo de la sidebar dentro de su propia caja. */
+    #tienda-donar-footer {
+      margin-top: auto;
+      padding: 10px 8px;
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -1px 0 var(--bezel-light-1);
+    }
+    #tienda-donar-btn {
+      width: 100%;
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    /* Cuando la vista activa es Donaciones, el botón aparece "pulsado". */
+    #tienda-donar-btn.is-active {
+      box-shadow:
+        inset -1px -1px var(--bezel-light-1),
+        inset  1px  1px var(--bezel-dark-1),
+        inset -2px -2px var(--bezel-light-2),
+        inset  2px  2px var(--bezel-dark-2);
+    }
+
+    /* Área principal */
+    #tienda-main-area {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden; background: var(--win-bg);
+    }
+
+    /* Wallet — balance prominente en la sidebar, siempre visible en
+       cualquier pestaña. Marco hundido de 4 capas, como las thumbs. */
+    #tienda-wallet {
+      margin: 8px; padding: 10px 12px;
+      background: var(--inset-bg); color: var(--text);
+      text-align: center;
+      box-shadow:
+        inset  1px  1px var(--bezel-dark-1),
+        inset -1px -1px var(--bezel-light-1),
+        inset  2px  2px var(--bezel-dark-2),
+        inset -2px -2px var(--bezel-light-2);
+    }
+    #tienda-wallet-label {
+      font-size: 9px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.12em;
+      margin-bottom: 4px;
+    }
+    #tienda-wallet-amount {
+      font-size: 22px; font-weight: bold;
+      color: var(--accent);
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      line-height: 1.1;
+    }
+    #tienda-wallet-amount .ic { font-size: 22px; }
+    #tienda-wallet-unit {
+      font-size: 9px; color: var(--text-muted);
+      margin-top: 2px; letter-spacing: 0.05em;
+    }
+
+    /* Bloque Discord en la sidebar — debajo del wallet. Muestra estado
+       (vinculado / no vinculado) + botón de acción. */
+    #tienda-discord {
+      margin: 0 8px 8px; padding: 8px 10px;
+      background: var(--win-bg);
+      box-shadow:
+        inset -1px -1px var(--bezel-dark-1),
+        inset  1px  1px var(--bezel-light-1),
+        inset -2px -2px var(--bezel-dark-2),
+        inset  2px  2px var(--bezel-light-2);
+      font-size: 11px;
+    }
+    #tienda-discord-label {
+      font-size: 9px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.12em;
+      margin-bottom: 4px; text-align: center;
+    }
+    #tienda-discord-name {
+      font-size: 11px; color: var(--accent); font-weight: bold;
+      text-align: center; padding: 4px 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #tienda-discord-name:empty::before { content: '— no vinculado —'; color: var(--text-muted); font-weight: normal; }
+    #tienda-discord button { width: 100%; margin-top: 4px; min-height: 22px; font-size: 11px; }
+
+    /* Toast flotante para mensajes de estado (Cargando, Compra OK, errores).
+       Solo se ve cuando tiene texto; en reposo está oculto. */
+    #tienda-status {
+      position: fixed; right: 12px; bottom: 12px;
+      padding: 6px 12px; font-size: 11px; z-index: 100;
+      background: var(--win-bg); color: var(--text);
+      box-shadow:
+        inset  1px  1px var(--bezel-light-1),
+        inset -1px -1px var(--bezel-dark-1),
+        inset  2px  2px var(--bezel-light-2),
+        inset -2px -2px var(--bezel-dark-2),
+        2px 2px 4px rgba(0,0,0,0.25);
+      display: none;
+    }
+    #tienda-status:not(:empty)      { display: block; }
+    #tienda-status.is-error          { color: var(--error-text); }
+    #tienda-status.is-ok             { color: var(--accent); font-weight: bold; }
+
+    /* Vista Principal — grid de items */
+    #tienda-view-principal {
+      flex: 1; overflow-y: auto; padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px; align-content: start;
+    }
+    .tienda-card {
+      background: var(--win-bg);
+      border-top: 2px solid var(--bezel-light-1);
+      border-left: 2px solid var(--bezel-light-1);
+      border-right: 2px solid var(--bezel-dark-2);
+      border-bottom: 2px solid var(--bezel-dark-2);
+      padding: 8px; display: flex; flex-direction: column;
+      align-items: center; gap: 6px;
+    }
+    .tienda-card-icon {
+      position: relative;            /* ancla del badge de precio */
+      width: calc(100% - 4px); aspect-ratio: 1 / 1;
+      background: var(--inset-bg);
+      box-shadow:
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+      align-self: center;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 48px;
+    }
+    .tienda-card-name { font-size: 12px; font-weight: bold; text-align: center; color: var(--text); }
+    .tienda-card-desc { font-size: 10px; color: var(--text-muted); text-align: center; min-height: 26px; }
+    /* Badge de precio anclado arriba-derecha de la imagen del item. */
+    .tienda-card-price {
+      position: absolute; top: 4px; right: 4px;
+      font-size: 11px; font-weight: bold;
+      background: var(--accent); color: var(--accent-text);
+      padding: 2px 6px; border-radius: 2px;
+      box-shadow: 1px 1px 0 rgba(0,0,0,0.35);
+      line-height: 1.2;
+    }
+    .tienda-card .button { width: 100%; min-height: 22px; }
+    .tienda-card .button:disabled { opacity: 0.55; cursor: not-allowed; }
+    /* Card de un item que el usuario ya posee — atenuada para indicarlo. */
+    .tienda-card.is-owned { opacity: 0.75; }
+    .tienda-card.is-owned .tienda-card-icon::after {
+      content: '✓'; position: absolute; left: 4px; top: 4px;
+      font-size: 14px; font-weight: bold;
+      color: var(--accent); background: var(--win-bg);
+      padding: 1px 5px; border-radius: 2px;
+      box-shadow: 1px 1px 0 rgba(0,0,0,0.35);
+    }
+
+    /* Vista Donaciones — explicación + lista de donantes + botón al fondo.
+       El botón cambia la vista al iframe de Ko-fi (que sí se ve por
+       dentro con su look, pero envuelto en marco Win98). */
+    #tienda-view-donaciones {
+      flex: 1; display: none;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--win-bg);
+    }
+    #tienda-view-donaciones.is-active { display: flex; }
+
+    #donar-info {
+      flex: 1; display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .donar-intro {
+      padding: 22px 24px 18px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .donar-intro-emoji { font-size: 38px; line-height: 1; }
+    .donar-intro-title { font-size: 15px; font-weight: bold; margin-top: 8px; }
+    .donar-intro-text  { font-size: 11px; color: var(--text-muted); margin: 8px auto 14px; line-height: 1.55; max-width: 520px; }
+    .donar-intro #donar-go-btn { min-height: 28px; padding: 0 22px; font-size: 12px; font-weight: bold; }
+    .donar-intro-hint { font-size: 10px; color: var(--text-faint); margin-top: 8px; }
+
+    .donar-donors-section { flex: 1; overflow-y: auto; padding: 14px 18px; }
+    .donar-donors-title {
+      font-size: 9px; font-weight: bold; letter-spacing: 0.15em;
+      text-transform: uppercase; color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px; margin-bottom: 10px;
+    }
+    /* Flex en lugar de grid — así con pocos items quedan centrados
+       en lugar de pegados a la izquierda. */
+    .donar-donors-grid {
+      display: flex; flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+    .donar-donor {
+      width: 160px;
+      background: var(--win-bg);
+      border-top: 2px solid var(--bezel-light-1);
+      border-left: 2px solid var(--bezel-light-1);
+      border-right: 2px solid var(--bezel-dark-2);
+      border-bottom: 2px solid var(--bezel-dark-2);
+      padding: 10px 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .donar-donor-avatar {
+      width: 64px; height: 64px;
+      background: var(--inset-bg);
+      /* Mismo marco hundido de 4 capas que las fotos de perfil. */
+      box-shadow:
+        -1px -1px 0 var(--bezel-dark-1),
+         1px  1px 0 var(--bezel-light-1),
+        -2px -2px 0 var(--bezel-dark-2),
+         2px  2px 0 var(--bezel-light-2);
+      overflow: hidden; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px; color: var(--text-inset);
+    }
+    .donar-donor-avatar img {
+      width: 64px; height: 64px; object-fit: cover; display: block;
+      image-rendering: auto;
+    }
+    .donar-donor-name {
+      font-size: 12px; font-weight: bold; text-align: center;
+      color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      max-width: 100%;
+    }
+    .donar-donor-msg {
+      font-size: 10px; color: var(--text); text-align: center;
+      line-height: 1.4;
+      padding: 4px 6px; width: 100%; box-sizing: border-box;
+      background: var(--inset-bg);
+      box-shadow: inset 1px 1px var(--bezel-dark-1), inset -1px -1px var(--bezel-light-1);
+      font-style: italic;
+      display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .donar-donor-msg:empty { display: none; }
+
+
+    /* Ko-fi vive ahora en su propia ventana del escritorio. La pestaña
+       Donaciones solo muestra la explicación + el grid de donantes; el
+       botón "Donar" pide al desktop que abra la ventana de Ko-fi vía
+       postMessage (handler en desktop-base.php). */
+
+    /* Estado vacío / mensajes */
+    .tienda-empty {
+      padding: 40px; text-align: center;
+      color: var(--text-faint); font-size: 12px;
+    }
+    #tienda-status {
+      font-size: 11px; color: var(--text-muted); padding: 0 4px;
+    }
+    #tienda-status.is-error { color: var(--error-text); }
+    #tienda-status.is-ok    { color: var(--accent); }
+    </style>
+</head>
+<body class="<?php echo htmlspecialchars($activeThemeClass); ?>">
+
+<div id="tienda-main">
+    <aside id="tienda-sidebar">
+        <div id="tienda-wallet">
+            <div id="tienda-wallet-label">Tu balance</div>
+            <div id="tienda-wallet-amount">
+                <span class="ic">🧠</span>
+                <span id="tienda-balance-v">—</span>
+            </div>
+            <div id="tienda-wallet-unit">puntos de Autismo</div>
+        </div>
+        <div id="tienda-discord">
+            <div id="tienda-discord-label">Discord</div>
+            <div id="tienda-discord-name"></div>
+            <button type="button" class="button" id="tienda-discord-btn">…</button>
+        </div>
+        <div class="tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="temas">🎨 Temas</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="mascotas">🐾 Mascotas</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="haros">⚪ Haros</div>
+        <div id="tienda-donar-footer">
+            <button type="button" class="button" id="tienda-donar-btn" data-view="donaciones">☕ Donaciones</button>
+        </div>
+    </aside>
+    <main id="tienda-main-area">
+        <div id="tienda-view-principal">
+            <div class="tienda-empty">Cargando…</div>
+        </div>
+        <div id="tienda-view-donaciones">
+            <!-- Vista por defecto: explicación + botón + donantes. -->
+            <div id="donar-info">
+                <div class="donar-intro">
+                    <div class="donar-intro-emoji">🍉</div>
+                    <div class="donar-intro-title">Apoya el desarrollo</div>
+                    <div class="donar-intro-text">
+                        Scrapbook Melon es un proyecto personal y gratuito. Cualquier aportación
+                        ayuda a mantener el servidor encendido, pagar el dominio y seguir añadiendo
+                        funciones nuevas. Gracias 💛
+                    </div>
+                    <button type="button" class="button default" id="donar-go-btn">☕ Donar</button>
+                    <div class="donar-intro-hint">Pago seguro vía Stripe / PayPal en Ko-fi.</div>
+                </div>
+
+                <div class="donar-donors-section">
+                    <div class="donar-donors-title">Quienes han apoyado</div>
+                    <div class="donar-donors-grid" id="donar-donors-grid">
+                        <div style="text-align:center;color:var(--text-muted);font-size:11px;padding:20px;width:100%;">Cargando…</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<div id="tienda-status"></div>
+
+<script>
+(function(){
+'use strict';
+var API = '../assets/tienda/api.php';
+var KOFI_USER = 'melonhub';
+
+function esc(s){ return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function setStatus(msg, kind){
+    var el = document.getElementById('tienda-status');
+    el.textContent = msg || '';
+    el.className = 'tienda-status' + (kind === 'error' ? ' is-error' : kind === 'ok' ? ' is-ok' : '');
+}
+async function api(action, body){
+    var opts = { headers:{'Content-Type':'application/json'} };
+    if (body) { opts.method='POST'; opts.body=JSON.stringify(body); }
+    var r = await fetch(API+'?action='+action, opts);
+    return r.json();
+}
+
+var _balance = 0, _items = [], _owned = {}, _activeCat = 'discord';
+
+async function loadState(){
+    setStatus('Cargando…');
+    try {
+        var r = await api('state');
+        if (r.error) throw new Error(r.error);
+        _balance = r.autismo|0;
+        _items   = r.items || [];
+        _owned   = {};
+        (r.owned || []).forEach(function(id){ _owned[id|0] = true; });
+        renderBalance();
+        renderItems();
+        setStatus('');
+    } catch (e) {
+        setStatus('Error: ' + e.message, 'error');
+    }
+}
+
+function renderBalance(){
+    document.getElementById('tienda-balance-v').textContent = _balance;
+    /* Botones se rehabilitan/deshabilitan según balance Y posesión. */
+    document.querySelectorAll('[data-buy-id]').forEach(function(btn){
+        var id = btn.dataset.buyId | 0;
+        if (_owned[id]) { btn.disabled = true; btn.textContent = '✓ Ya lo tienes'; return; }
+        var p = parseInt(btn.dataset.price, 10);
+        btn.disabled = p > _balance;
+    });
+}
+function renderItems(){
+    var view = document.getElementById('tienda-view-principal');
+    var items = _items.filter(function(it){ return (it.categoria || 'discord') === _activeCat; });
+    if (!items.length) {
+        view.innerHTML = '<div class="tienda-empty">No hay items en esta categoría todavía.</div>';
+        return;
+    }
+    view.innerHTML = items.map(function(it){
+        /* El nombre visible es el del rol de Discord (si lo lleva); si no,
+           cae al nombre interno del item. Coloreamos el texto del nombre
+           con el color del rol cuando exista, así se mantiene la identidad
+           visual sin necesidad de un badge aparte. */
+        var displayName = it.discord_role_name || it.nombre;
+        var nameStyle = '';
+        if (it.discord_role_name) {
+            var c = it.discord_role_color | 0;
+            if (c > 0) {
+                var hex = '#' + ('000000' + c.toString(16)).slice(-6);
+                nameStyle = ' style="color:' + hex + ';"';
+            }
+        }
+        /* Descripción dinámica: si hay rol, genera la frase con el nombre
+           real; si no, cae al campo `descripcion` de la BD como fallback. */
+        var desc = it.discord_role_name
+            ? 'Adquiere el rol ' + it.discord_role_name + ' en :melonduagua: 3.0'
+            : (it.descripcion || '');
+        var owned = !!_owned[it.id|0];
+        var btnLabel = owned ? '✓ Ya lo tienes' : 'Comprar';
+        return '<div class="tienda-card' + (owned ? ' is-owned' : '') + '">' +
+            '<div class="tienda-card-icon">' +
+                esc(it.icono || '🎁') +
+                '<span class="tienda-card-price">' + it.precio + ' 🧠</span>' +
+            '</div>' +
+            '<div class="tienda-card-name"' + nameStyle + '>' + esc(displayName) + '</div>' +
+            '<div class="tienda-card-desc">' + esc(desc) + '</div>' +
+            '<button type="button" class="button" data-buy-id="' + it.id + '" data-price="' + it.precio + '">' + btnLabel + '</button>' +
+        '</div>';
+    }).join('');
+    view.querySelectorAll('[data-buy-id]').forEach(function(btn){
+        btn.addEventListener('click', function(){ buy(parseInt(btn.dataset.buyId, 10), btn); });
+    });
+    renderBalance();
+}
+
+async function buy(itemId, btn){
+    btn.disabled = true;
+    setStatus('Comprando…');
+    try {
+        var r = await api('buy', { item_id: itemId });
+        if (r.error) throw new Error(r.error);
+        _balance = r.autismo|0;
+        _owned[itemId|0] = true;     /* marcar como propio inmediatamente */
+        renderItems();               /* repinta para que la card pase a is-owned */
+        var msg = 'Compra realizada: ' + r.item.nombre + ' (-' + r.item.precio + ' 🧠)';
+        if (r.discord && r.discord.attempted) {
+            msg += r.discord.ok
+                ? ' · 🎉 rol de Discord asignado'
+                : ' · ⚠ rol no asignado (' + (r.discord.error || 'error') + ')';
+        }
+        setStatus(msg, 'ok');
+    } catch (e) {
+        setStatus('Error: ' + e.message, 'error');
+        btn.disabled = false;
+    }
+}
+
+/* ── Cambio de vista ──
+   Cubre tanto los .tienda-tab (Principal) como el botón #tienda-donar-btn
+   (Donaciones). La tab usa la clase .active (background acento), el botón
+   usa .is-active (bezel pulsado) — visualmente coherente con su rol. */
+document.querySelectorAll('[data-view]').forEach(function(el){
+    el.addEventListener('click', function(){
+        var view = el.dataset.view;
+        document.querySelectorAll('.tienda-tab').forEach(function(t){ t.classList.remove('active'); });
+        var donar = document.getElementById('tienda-donar-btn');
+        donar.classList.remove('is-active');
+        if (el.classList.contains('tienda-tab')) el.classList.add('active');
+        else el === donar && donar.classList.add('is-active');
+        var isDon = view === 'donaciones';
+        document.getElementById('tienda-view-principal').style.display = isDon ? 'none' : '';
+        document.getElementById('tienda-view-donaciones').classList.toggle('is-active', isDon);
+        /* Si la tab pulsada lleva categoría, repintamos el grid filtrando. */
+        if (!isDon && el.dataset.cat) {
+            _activeCat = el.dataset.cat;
+            renderItems();
+        }
+    });
+});
+
+/* ═══ DONACIONES ═══ */
+(function(){
+    var grid = document.getElementById('donar-donors-grid');
+    var pollHandle = null;
+    var lastJSON = null;
+
+    function renderDonors(donors){
+        if (!donors.length) {
+            grid.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:11px;padding:20px;width:100%;">Aún no hay donantes. ¡Podrías ser el primero!</div>';
+            return;
+        }
+        grid.innerHTML = donors.map(function(d){
+            var av = d.avatar_url
+                ? '<img src="' + esc(d.avatar_url) + '" alt="" referrerpolicy="no-referrer">'
+                : '👤';
+            var msg = d.mensaje ? '<div class="donar-donor-msg">' + esc(d.mensaje) + '</div>' : '';
+            return '<div class="donar-donor">' +
+                '<div class="donar-donor-avatar">' + av + '</div>' +
+                '<div class="donar-donor-name">' + esc(d.nombre) + '</div>' +
+                msg +
+            '</div>';
+        }).join('');
+    }
+
+    async function loadDonors(){
+        try {
+            var r = await api('donors');
+            if (r.error) throw new Error(r.error);
+            /* Solo re-renderizamos si la respuesta cambió — evita parpadeos
+               inútiles del DOM en cada poll. */
+            var json = JSON.stringify(r.donors || []);
+            if (json !== lastJSON) {
+                lastJSON = json;
+                renderDonors(r.donors || []);
+            }
+        } catch (e) {
+            grid.innerHTML = '<div style="text-align:center;color:var(--error-text);font-size:11px;padding:20px;width:100%;">No se pudo cargar la lista: ' + esc(e.message) + '</div>';
+        }
+    }
+
+    /* Polling cada 30 s mientras la pestaña Donaciones está visible. El
+       webhook de Ko-fi guarda en BD y la siguiente vuelta del poll lo
+       muestra sin necesidad de recargar la app. */
+    function startPolling(){
+        if (pollHandle) return;
+        pollHandle = setInterval(loadDonors, 30000);
+    }
+    function stopPolling(){
+        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+    }
+
+    /* Pide al desktop que abra la ventana de Ko-fi (iframe aparte).
+       El handler vive en desktop-base.php → listener 'message'. */
+    document.getElementById('donar-go-btn').addEventListener('click', function(){
+        try {
+            window.parent.postMessage({ type: 'open-kofi' }, '*');
+        } catch (e) {}
+        /* Refresco optimista cuando el usuario vuelva a esta pestaña. */
+        setTimeout(loadDonors, 500);
+    });
+
+    /* Las pestañas de la sidebar disparan el poll cuando entras en
+       Donaciones y lo paran cuando sales (ahorra requests). */
+    document.querySelectorAll('[data-view]').forEach(function(el){
+        el.addEventListener('click', function(){
+            if (el.dataset.view === 'donaciones') { loadDonors(); startPolling(); }
+            else { stopPolling(); }
+        });
+    });
+
+    loadDonors();
+})();
+
+/* ═══ DISCORD ═══ */
+(function(){
+    var nameEl = document.getElementById('tienda-discord-name');
+    var btn    = document.getElementById('tienda-discord-btn');
+    var linked = false;
+    var DISCORD_BASE = '../assets/discord-oauth';
+
+    function render(){
+        if (linked) {
+            btn.textContent = 'Desvincular';
+        } else {
+            nameEl.textContent = '';
+            btn.textContent    = '🔗 Conectar Discord';
+        }
+    }
+
+    async function refresh(){
+        try {
+            var r = await fetch(DISCORD_BASE + '/status.php', { credentials: 'same-origin' }).then(function(x){ return x.json(); });
+            if (r.error) throw new Error(r.error);
+            linked = !!r.linked;
+            nameEl.textContent = linked && r.username ? '@' + r.username : '';
+            render();
+        } catch (e) {
+            nameEl.textContent = '';
+            btn.textContent    = '🔗 Conectar Discord';
+        }
+    }
+
+    function openOAuth(){
+        var url = DISCORD_BASE + '/start.php';
+        var w = 520, h = 700;
+        var l = (window.screen.width  - w) / 2;
+        var t = (window.screen.height - h) / 2;
+        /* Como esta página vive en un iframe, abrimos la popup desde el
+           opener-top para que window.opener apunte a algo cerrable. */
+        window.open(url, 'discord-oauth',
+            'width=' + w + ',height=' + h + ',left=' + l + ',top=' + t +
+            ',menubar=no,toolbar=no,location=no,status=no'
+        );
+    }
+
+    async function disconnect(){
+        if (!confirm('¿Desvincular tu cuenta de Discord?')) return;
+        try {
+            var r = await fetch(DISCORD_BASE + '/disconnect.php', {
+                method: 'POST', credentials: 'same-origin'
+            }).then(function(x){ return x.json(); });
+            if (r.error) throw new Error(r.error);
+            linked = false;
+            refresh();
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
+    btn.addEventListener('click', function(){
+        if (linked) disconnect();
+        else openOAuth();
+    });
+
+    /* La popup de OAuth nos avisa al terminar. */
+    window.addEventListener('message', function(e){
+        if (e.data && e.data.type === 'discord-linked') refresh();
+    });
+
+    refresh();
+})();
+
+/* Polling del balance cada 15 s para que el contador de autismo se vea en
+   vivo (puntos por mensaje/voz/reacciones del bot, recompensas de admin,
+   etc). Endpoint ligero `balance` que solo devuelve `{autismo}`. */
+(function(){
+    setInterval(async function(){
+        if (document.hidden) return;     /* no consume cuando la tab está oculta */
+        try {
+            var r = await api('balance');
+            if (r.error || typeof r.autismo !== 'number') return;
+            if (r.autismo === _balance) return;
+            _balance = r.autismo;
+            renderBalance();
+        } catch (e) {}
+    }, 15000);
+})();
+
+loadState();
+})();
+</script>
+
+</body>
+</html>

@@ -451,9 +451,13 @@ case 'discord-publish': {
            19:30" en castellano, "5/30/26 7:30 PM" en otros idiomas). */
         'timestamp' => gmdate('c'),
     ];
-    /* description = caption + enlace bold/azul a la Melon Hub debajo. */
+    /* description = caption + nota call-to-action de reacciones + enlace a
+       la Melon Hub debajo. La nota le dice al lector explícitamente con
+       qué emoji se otorgan puntos al autor, así desaparece el "¿esto
+       cómo funciona?". El nombre del autor lo cogemos del `label`. */
     $hubUrl = 'https://youtu.be/rG2OjbcbzAo?si=6Fyd7qszYj964dIM';
-    $desc = ($cap !== '') ? ($cap . "\n\n") : '';
+    $desc  = ($cap !== '') ? ($cap . "\n\n") : '';
+    $desc .= '*(Reacciona con ❤️ para dar puntos a ' . $label . ' en la Melon Hub)*' . "\n\n";
     $desc .= '[**Click para entrar a la Melon Hub**](' . $hubUrl . ')';
     $embed['description'] = $desc;
 
@@ -463,7 +467,13 @@ case 'discord-publish': {
         'allowed_mentions' => ['parse' => []],
     ];
 
-    $ch = curl_init($webhook);
+    /* `?wait=true` para que Discord devuelva el JSON del mensaje
+       (incluyendo el id) en lugar de un 204 silencioso — necesario para
+       mapearlo a webhook_posts y dejar que el bot premie con autismo cada
+       reacción de corazón. */
+    $publishUrl = $webhook . (strpos($webhook, '?') === false ? '?' : '&') . 'wait=true';
+
+    $ch = curl_init($publishUrl);
     if ($avatarFsPath) {
         /* multipart/form-data: payload_json + files[0] (el avatar) */
         $postFields = [
@@ -491,14 +501,48 @@ case 'discord-publish': {
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($code >= 200 && $code < 300) {
-        jsonResponse(['ok' => true]);
+    if ($code < 200 || $code >= 300) {
+        /* Discord responde JSON con detalle del error */
+        $detail = '';
+        $j = json_decode((string)$resp, true);
+        if (is_array($j) && isset($j['message'])) $detail = ' — ' . $j['message'];
+        jsonError('Discord rechazó la publicación (HTTP ' . $code . ')' . $detail, 502);
     }
-    /* Discord responde JSON con detalle del error */
-    $detail = '';
-    $j = json_decode((string)$resp, true);
-    if (is_array($j) && isset($j['message'])) $detail = ' — ' . $j['message'];
-    jsonError('Discord rechazó la publicación (HTTP ' . $code . ')' . $detail, 502);
+
+    /* Extrae message_id + channel_id de la respuesta y los mapea al user
+       para que el bot pueda premiar reacciones de corazón. */
+    $msg               = json_decode((string)$resp, true);
+    $messageId         = is_array($msg) ? (string)($msg['id']         ?? '') : '';
+    $resolvedChannelId = is_array($msg) ? (string)($msg['channel_id'] ?? '') : '';
+    if ($messageId !== '') {
+        $st = $pdo->prepare('SELECT id FROM usuarios WHERE user_key = ?');
+        $st->execute([$userKey]);
+        $authorUserId = (int)$st->fetchColumn();
+        if ($authorUserId > 0) {
+            $pdo->prepare('INSERT INTO webhook_posts (message_id, user_id, kind, channel_id) VALUES (?, ?, ?, ?)
+                           ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)')
+                ->execute([$messageId, $authorUserId, 'discord', $resolvedChannelId]);
+        }
+        /* Añadir ❤️ por defecto al mensaje con el bot token. Si el bot no
+           tiene permiso en el canal, falla silenciosamente — la fila de
+           webhook_posts ya está guardada, así que las reacciones manuales
+           seguirán contando. */
+        $botToken = env('DISCORD_BOT_TOKEN', '');
+        if ($botToken !== '' && $resolvedChannelId !== '') {
+            $emoji = rawurlencode('❤️');
+            $ch2 = curl_init("https://discord.com/api/v10/channels/$resolvedChannelId/messages/$messageId/reactions/$emoji/@me");
+            curl_setopt_array($ch2, [
+                CURLOPT_CUSTOMREQUEST  => 'PUT',
+                CURLOPT_HTTPHEADER     => ['Authorization: Bot ' . $botToken, 'Content-Length: 0'],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 8,
+            ]);
+            curl_exec($ch2);
+            curl_close($ch2);
+        }
+    }
+
+    jsonResponse(['ok' => true, 'message_id' => $messageId]);
 }
 
 case 'save-quote': {

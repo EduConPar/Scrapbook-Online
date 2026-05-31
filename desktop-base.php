@@ -283,7 +283,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Temas</span>
     </div>
     <div class="desktop-icon" id="companion-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('companion', '💀'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_companionIcon = 'assets/img/appIcons/companionIcon.png';
+            echo file_exists(__DIR__ . '/' . $_companionIcon)
+                ? '<img src="' . $_companionIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('companion', '💀');
+        ?></div>
         <span>Companion</span>
     </div>
     <div class="desktop-icon" id="dnd-icon">
@@ -298,6 +303,10 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="dibujo-icon">
         <div class="desktop-icon-img"><?php echo desktopIcon('dibujo', '✏️'); ?></div>
         <span>Dibujo</span>
+    </div>
+    <div class="desktop-icon" id="tienda-icon">
+        <div class="desktop-icon-img"><?php echo desktopIcon('tienda', '🛒'); ?></div>
+        <span>Tienda</span>
     </div>
 </div>
 
@@ -390,6 +399,32 @@ window.DesktopState.whenReady = function(cb){
         </div>
     </div>
     <iframe id="dibujo-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
+<!-- KO-FI WINDOW (lo abre la app de Tienda vía postMessage; sin icono propio) -->
+<div class="window" id="kofi-window" style="display:none; position:fixed; left:32vw; top:8vh; width:36vw; height:80vh; min-width:380px; z-index:560; flex-direction:column;">
+    <div class="title-bar" id="kofi-titlebar">
+        <div class="title-bar-text">☕ Donar (Ko-fi)</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="kofi-close"></button>
+        </div>
+    </div>
+    <iframe id="kofi-iframe" src="" frameborder="0" referrerpolicy="no-referrer" style="flex:1; width:100%; border:none; display:block; background:#fff;"></iframe>
+</div>
+
+<!-- TIENDA WINDOW -->
+<div class="window" id="tienda-window" style="display:none; position:fixed; left:8vw; top:6vh; width:84vw; height:84vh; z-index:500; flex-direction:column;">
+    <div class="title-bar" id="tienda-titlebar">
+        <div class="title-bar-text">🛒 Tienda</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="tienda-close"></button>
+        </div>
+    </div>
+    <iframe id="tienda-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
 <!-- NOTIFICATION STACK -->
@@ -981,6 +1016,57 @@ window.notifSystem = (function() {
     });
 })();
 
+/* =========================
+   TIENDA
+   Iframe con la app de tienda (apps/tienda.php). Internamente tiene una
+   pestaña "Donaciones" que carga Ko-fi cuando se pulsa.
+========================= */
+(function() {
+    var tiendaIframe = document.getElementById('tienda-iframe');
+    var tiendaLoaded = false;
+
+    document.getElementById('tienda-icon').addEventListener('dblclick', function() {
+        if (!tiendaLoaded) { tiendaIframe.src = 'apps/tienda.php'; tiendaLoaded = true; }
+        if (taskbarManager.isRegistered('tienda-window')) {
+            taskbarManager.restore('tienda-window');
+        } else {
+            taskbarManager.register('tienda-window', 'Tienda', '🛒', 'flex');
+        }
+    });
+
+    document.getElementById('tienda-close').addEventListener('click', function() {
+        taskbarManager.unregister('tienda-window');
+    });
+})();
+
+/* =========================
+   KO-FI WINDOW (la abre la app de Tienda vía postMessage)
+   Sin icono propio: solo se muestra cuando llega un mensaje
+   {type:'open-kofi'} desde el iframe de la Tienda.
+========================= */
+(function() {
+    var kofiIframe = document.getElementById('kofi-iframe');
+    var kofiLoaded = false;
+    var KOFI_URL = 'https://ko-fi.com/melonhub/?hidefeed=true&widget=true&embed=true&preview=true';
+
+    function openKofi() {
+        if (!kofiLoaded) { kofiIframe.src = KOFI_URL; kofiLoaded = true; }
+        if (taskbarManager.isRegistered('kofi-window')) {
+            taskbarManager.restore('kofi-window');
+        } else {
+            taskbarManager.register('kofi-window', 'Donar (Ko-fi)', '☕', 'flex');
+        }
+    }
+
+    window.addEventListener('message', function(e) {
+        if (e.data && e.data.type === 'open-kofi') openKofi();
+    });
+
+    document.getElementById('kofi-close').addEventListener('click', function() {
+        taskbarManager.unregister('kofi-window');
+    });
+})();
+
 /* ──── Player right-click context menu ──── */
 (function() {
     var playerMain = document.getElementById('player-main');
@@ -1191,10 +1277,11 @@ window.notifSystem = (function() {
 
     window.WindowManager = { setup: setup };
 
-    /* ★ dibujo-window añadido aquí */
+    /* ★ dibujo-window, tienda-window, kofi-window añadidos aquí */
     [
         'calendar-window','archive-window','temas-window','dnd-window',
         'galeria-window','companion-window','dibujo-window',
+        'tienda-window','kofi-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
         'collab-dialog','spotify-import-dialog','tidal-import-dialog','confirm-dialog',
@@ -1208,11 +1295,12 @@ window.notifSystem = (function() {
 
 /* ──── Window minimize / maximize ──── */
 (function() {
-    /* ★ dibujo-window añadido aquí */
+    /* ★ dibujo-window, tienda-window, kofi-window añadidos aquí */
     var ids = [
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
         'galeria-window', 'create-playlist-dialog', 'profile-window',
-        'companion-window', 'dibujo-window'
+        'companion-window', 'dibujo-window',
+        'tienda-window', 'kofi-window'
     ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
