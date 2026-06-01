@@ -103,7 +103,7 @@ $apps = [
     ['name' => 'Música',       'url' => 'apps/musica-mobile.php',                                               'emoji' => '🎵', 'icon' => null,                                       'external' => false, 'wip' => false],
     ['name' => 'Perfil',       'url' => 'apps/perfil-mobile.php',                                               'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
     ['name' => 'Temas',        'url' => 'apps/temas.php',                                                       'emoji' => '🎨', 'icon' => 'assets/img/appIcons/temasIcon.png',        'external' => false, 'wip' => false],
-    ['name' => 'Tienda',       'url' => 'apps/tienda.php',                                                      'emoji' => '🛒', 'icon' => null,                                       'external' => false, 'wip' => false],
+    ['name' => 'Tienda',       'url' => 'apps/tienda.php',                                                      'emoji' => '🛒', 'icon' => 'assets/img/appIcons/tiendaIcon.png',       'external' => false, 'wip' => false],
 ];
 usort($apps, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 
@@ -114,6 +114,37 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
     if (file_exists(__DIR__ . "/assets/img/{$safe}.{$ext}")) {
         $userImg = "assets/img/{$safe}.{$ext}";
         break;
+    }
+}
+
+/* ── TEMA ACTIVO DEL USUARIO ──
+   Misma lógica que desktop-base.php: cargamos el tema del usuario para
+   aplicar su paleta de colores (border colors, accent, background…)
+   sobre el look base de Win98. Si no tiene tema custom, body queda con
+   los tokens por defecto de tokens.css. */
+require_once __DIR__ . '/assets/themes/theme-helpers.php';
+refreshActiveThemeCss($userKey, $userLabel);
+$_userThemes = loadUserThemes($userKey);
+$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+    $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
+    if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+}
+$wallpaper = getUserWallpaper($userLabel);
+
+/* Color de fondo del tema del usuario para inyectar en
+   <meta name="theme-color">. Android lo usa para tintar el área donde
+   está la barra del SO en modo standalone — sin esto se queda el teal
+   del default y no coincide con el tema. */
+$themeBgColor = '#000000';   /* fallback por defecto = negro */
+if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors']['desktopBg'])) {
+    $candidate = (string)$_userThemes['themes'][$activeTheme]['colors']['desktopBg'];
+    /* Sanitizar: solo aceptamos un hex #RRGGBB o #RGB válido. */
+    if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $candidate)) {
+        $themeBgColor = $candidate;
     }
 }
 ?>
@@ -133,100 +164,119 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
               || window.navigator.standalone === true;
         if (!sa) window.location.replace('mobile-landing.php');
     })();
+    /* --mh-vh: viewport height en px sincronizado con window.innerHeight.
+       Sobrevive al bfcache (al volver de otra app, refrescamos en
+       `pageshow`) → el footer NO se queda descuelgado fuera del viewport. */
+    (function(){
+        function setVh(){
+            document.documentElement.style.setProperty('--mh-vh', window.innerHeight + 'px');
+        }
+        setVh();
+        window.addEventListener('resize', setVh);
+        window.addEventListener('orientationchange', setVh);
+        window.addEventListener('pageshow', setVh);
+        window.addEventListener('visibilitychange', setVh);
+    })();
     </script>
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-    <meta name="theme-color" content="#0c2b54">
-    <title>Scrapbook Melon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- theme-color = mismo color que el fondo del tema del usuario,
+         para que la barra del SO en Android no destaque. -->
+    <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
+    <title>Melon Hub — <?= htmlspecialchars($userLabel) ?></title>
     <link rel="icon" href="data:,">
     <link rel="manifest" href="manifest.php<?= $tokenForManifest !== '' ? '?token=' . htmlspecialchars($tokenForManifest) : '' ?>">
     <link rel="apple-touch-icon" href="assets/img/start-icons/capi-start-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Melon Hub">
-    <link rel="stylesheet" href="assets/css/mobile.css">
+    <!-- Mismo stack visual que el escritorio Win98 + tema del usuario -->
+    <link rel="stylesheet" href="assets/css/98.css">
+    <link rel="stylesheet" href="assets/css/tokens.css">
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/themes.css">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
+    <link rel="stylesheet" href="assets/css/mobile-theme.css?v=<?= filemtime(__DIR__ . '/assets/css/mobile-theme.css') ?>">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        /* Tweaks específicos de mobile.php — todo lo común vive en
+           assets/css/mobile-theme.css. Aquí solo el ajuste de la lista
+           de apps para que ocupe el flex restante. */
+        .mh-apps { flex: 1; min-height: 0; }
+    </style>
 </head>
-<body>
-<div id="screen">
+<body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
 
-    <!-- Barra de estado tipo móvil antiguo -->
-    <div id="status-bar">
-        <div class="status-left">
-            <span class="signal">●●●●</span>
-            <span class="provider">MELON</span>
-        </div>
-        <div class="status-right">
-            <span id="status-clock">--:--</span>
-            <span class="battery">▮▮▮</span>
+<!-- VENTANA Win98 principal con el tema del usuario aplicado -->
+<div class="window mh-window" id="melonWindow">
+    <div class="title-bar">
+        <div class="title-bar-text">🍉 Melon Hub - <?= htmlspecialchars($userLabel) ?></div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize" disabled></button>
+            <button aria-label="Close" onclick="return false;"></button>
         </div>
     </div>
+    <div class="window-body">
 
-    <!-- Cabecera con saludo y fecha -->
-    <header id="mob-header">
-        <?php if ($userImg): ?>
-            <img class="mob-avatar" src="<?= htmlspecialchars($userImg) ?>" alt="">
-        <?php endif; ?>
-        <div class="mob-title">
-            <div class="mob-title-name">Scrapbook Melon</div>
-            <div class="mob-title-user">Hola, <?= htmlspecialchars($userLabel) ?></div>
+        <!-- Header: avatar + saludo + reloj -->
+        <div class="mh-userbar">
+            <div class="mh-userbar-avatar">
+                <?php if ($userImg): ?>
+                    <img src="<?= htmlspecialchars($userImg) ?>" alt="">
+                <?php else: ?>
+                    <span>👤</span>
+                <?php endif; ?>
+            </div>
+            <div class="mh-userbar-text">
+                <div class="mh-userbar-greeting">Hola,</div>
+                <div class="mh-userbar-name"><?= htmlspecialchars($userLabel) ?></div>
+            </div>
+            <div>
+                <div class="mh-userbar-clock" id="mh-clock">--:--</div>
+                <div class="mh-userbar-date" id="mh-date">—</div>
+            </div>
         </div>
-        <div id="mob-date">—</div>
-    </header>
 
-    <!-- Lista de apps (orden alfabético, se calcula en PHP arriba) -->
-    <main id="app-list" role="list">
-        <?php foreach ($apps as $app):
-            $hasIcon = $app['icon'] && file_exists(__DIR__ . '/' . $app['icon']);
-            $target  = $app['external'] ? ' target="_blank" rel="noopener"' : '';
-            $chev    = $app['external'] ? '↗' : '›';
-        ?>
-            <a class="app-row<?= $app['wip'] ? ' wip' : '' ?>" role="listitem" href="<?= htmlspecialchars($app['url']) ?>"<?= $target ?>>
-                <div class="app-icon">
-                    <?php if ($hasIcon): ?>
-                        <img src="<?= htmlspecialchars($app['icon']) ?>" alt="">
-                    <?php else: ?>
-                        <span class="app-icon-emoji"><?= htmlspecialchars($app['emoji']) ?></span>
-                    <?php endif; ?>
-                </div>
-                <div class="app-name"><?= htmlspecialchars($app['name']) ?></div>
-                <div class="app-chevron"><?= htmlspecialchars($chev) ?></div>
-            </a>
-        <?php endforeach; ?>
-    </main>
+        <!-- Lista de aplicaciones (sunken panel) -->
+        <div class="mh-panel mh-apps">
+            <?php foreach ($apps as $app):
+                $hasIcon = $app['icon'] && file_exists(__DIR__ . '/' . $app['icon']);
+                $target  = $app['external'] ? ' target="_blank" rel="noopener"' : '';
+                $chev    = $app['external'] ? '↗' : '›';
+            ?>
+                <a class="mh-row" href="<?= htmlspecialchars($app['url']) ?>"<?= $target ?>>
+                    <div class="mh-row-icon">
+                        <?php if ($hasIcon): ?>
+                            <img src="<?= htmlspecialchars($app['icon']) ?>" alt="">
+                        <?php else: ?>
+                            <span><?= htmlspecialchars($app['emoji']) ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="mh-row-name"><?= htmlspecialchars($app['name']) ?></div>
+                    <div class="mh-row-chev"><?= htmlspecialchars($chev) ?></div>
+                </a>
+            <?php endforeach; ?>
+        </div>
 
-    <!-- Soft keys del pie estilo Nokia/Symbian -->
-    <footer id="soft-keys">
-        <a class="soft-key" href="<?= strtolower(htmlspecialchars($userLabel)) ?>-desktop.php?desktop=1">Versión PC</a>
-        <a class="soft-key danger" href="logout.php">Cerrar sesión</a>
-    </footer>
+        <!-- Status bar Win98 con accesos rápidos -->
+        <div class="mh-statusbar">
+            <a href="<?= strtolower(htmlspecialchars($userLabel)) ?>-desktop.php?desktop=1">💻 Versión PC</a>
+            <a href="logout.php" class="danger">🚪 Cerrar sesión</a>
+        </div>
 
-</div>
-
-<!-- Banner de instalación PWA (Android / Chrome / Edge) -->
-<div id="install-banner" hidden>
-    <div class="install-msg">
-        <strong>Instala Melon</strong>
-        <span>Añade Scrapbook Melon a tu pantalla de inicio para abrirlo como una app.</span>
     </div>
-    <div class="install-actions">
-        <button id="install-dismiss" type="button">Más tarde</button>
-        <button id="install-btn" class="primary" type="button">Instalar</button>
-    </div>
-</div>
-
-<!-- Instrucciones manuales para iOS (Safari no expone beforeinstallprompt) -->
-<div id="install-ios" hidden>
-    <div class="ios-arrow">↓</div>
-    <p>Pulsa el botón <strong>Compartir</strong> y luego <strong>Añadir a pantalla de inicio</strong>.</p>
-    <button id="install-ios-close" type="button">Entendido</button>
 </div>
 
 <script>
-/* ─── Reloj y fecha en la barra de estado ─────────────────────────── */
+/* ─── Reloj y fecha del header ─────────────────────────────────── */
 (function() {
-    var clockEl = document.getElementById('status-clock');
-    var dateEl  = document.getElementById('mob-date');
-    var DAYS    = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    var MONTHS  = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    var clockEl = document.getElementById('mh-clock');
+    var dateEl  = document.getElementById('mh-date');
+    if (!clockEl || !dateEl) return;
+    var DAYS   = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    var MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
     function pad(n){ return n < 10 ? '0' + n : '' + n; }
     function tick() {
         var d = new Date();
@@ -238,66 +288,14 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
     setInterval(tick, 15000);
 })();
 
-/* ─── Service worker (necesario para que Chrome ofrezca instalar) ── */
+/* ─── Service worker (necesario para que Chrome ofrezca instalar la
+       PWA por si alguien aterrizó aquí sin instalar). El SW está
+       registrado pero su scope queda contenido — la verdadera
+       instalación se hace desde mobile-landing.php. */
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js', { scope: '<?= $projectBaseUrl ?>' })
         .catch(function(err){ console.warn('[mobile] sw register fail', err); });
 }
-
-/* ─── Banner de instalación PWA ─────────────────────────────────── */
-(function() {
-    var standalone = window.matchMedia('(display-mode: standalone)').matches
-                  || window.navigator.standalone === true;
-    if (standalone) return;   /* ya estamos dentro de la PWA */
-
-    var isIOS  = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    var banner = document.getElementById('install-banner');
-    var iosTip = document.getElementById('install-ios');
-    var btn    = document.getElementById('install-btn');
-    var btnX   = document.getElementById('install-dismiss');
-    var iosX   = document.getElementById('install-ios-close');
-
-    /* Si el usuario descartó el banner hace menos de 7 días, no insistir. */
-    var DISMISS_KEY = 'melon-install-dismissed';
-    var DAY = 24 * 60 * 60 * 1000;
-    var dismissedAt = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
-    if (dismissedAt && (Date.now() - dismissedAt) < 7 * DAY) return;
-
-    function rememberDismiss() {
-        localStorage.setItem(DISMISS_KEY, String(Date.now()));
-    }
-
-    if (isIOS) {
-        /* Safari móvil no soporta install programático: mostramos el
-           tip con la flecha que apunta al botón Compartir. */
-        iosTip.hidden = false;
-        iosX.addEventListener('click', function(){ iosTip.hidden = true; rememberDismiss(); });
-        btnX.addEventListener('click', function(){ banner.hidden = true; rememberDismiss(); });
-        return;
-    }
-
-    /* Android / Chromium: guardamos el evento beforeinstallprompt y lo
-       disparamos al pulsar el botón. */
-    var deferredPrompt = null;
-    window.addEventListener('beforeinstallprompt', function(e) {
-        e.preventDefault();
-        deferredPrompt = e;
-        banner.hidden = false;
-    });
-    btn.addEventListener('click', function() {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function(){
-            deferredPrompt = null;
-            banner.hidden = true;
-        });
-    });
-    btnX.addEventListener('click', function(){ banner.hidden = true; rememberDismiss(); });
-    window.addEventListener('appinstalled', function() {
-        banner.hidden = true;
-        rememberDismiss();
-    });
-})();
 </script>
 
 </body>

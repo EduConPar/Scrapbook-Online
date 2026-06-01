@@ -305,6 +305,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /* CTA principal — botón Win98 default a ancho completo. */
         .mh-cta-full { width: 100%; margin-top: 10px; min-height: 32px; font-size: 13px; }
+
+        /* ── Tabs (login / crear usuario) ── */
+        #installWindow .mh-tabs {
+            display: flex;
+            list-style: none;
+            padding: 0;
+            margin: 12px 0 0;
+            border-bottom: 1px solid #3a0000;
+            text-indent: 0;
+        }
+        #installWindow .mh-tabs > li {
+            flex: 1;
+            margin: 0;
+            background: #0c0404;
+            border: 1px solid #3a0000;
+            border-bottom: none;
+            text-align: center;
+            cursor: pointer;
+            box-shadow: none;
+            border-radius: 0;
+            z-index: 1;
+        }
+        #installWindow .mh-tabs > li[aria-selected="true"] {
+            background: #2a0c0c;
+            border-bottom: 1px solid #2a0c0c;
+            margin-bottom: -1px;
+            position: relative;
+            z-index: 2;
+        }
+        #installWindow .mh-tabs > li > a {
+            color: #d4a0a0;
+            display: block;
+            padding: 7px 4px;
+            font-size: 11px;
+            text-decoration: none;
+        }
+        #installWindow .mh-tabs > li[aria-selected="true"] > a {
+            color: #fff;
+            font-weight: bold;
+        }
+        #installWindow .mh-tabpanel { padding-top: 10px; }
+
+        /* ── Register form ── */
+        #installWindow .register-file-row {
+            gap: 4px;
+            display: flex;
+            margin-top: 4px;
+        }
+        #installWindow .register-file-row input[type="text"] {
+            flex: 1;
+            min-width: 0;
+            cursor: default;
+            margin-top: 0;
+        }
+        #installWindow #registerPhotoBrowse {
+            flex-shrink: 0;
+            min-width: 80px;
+            font-size: 11px;
+            padding: 3px 10px;
+            background: #1e0c0c !important;
+            color: #d4a0a0 !important;
+            border: 1px solid #3a1515 !important;
+            text-shadow: none !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,100,100,0.08),
+                0 1px 3px rgba(0,0,0,0.5) !important;
+        }
+        #installWindow #registerPhotoBrowse:hover {
+            background: #5a0000 !important;
+            color: #fff !important;
+            border-color: #a03030 !important;
+        }
+        #installWindow #registerPhotoBrowse:active {
+            background: #3a0000 !important;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+        }
     </style>
 </head>
 <body>
@@ -312,7 +388,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="login-window">
 
     <?php if ($step === 1): ?>
-        <!-- VENTANA: Login + pitch -->
+        <!-- VENTANA: Login + Crear usuario (dos tabs) + pitch -->
         <div class="window" id="installWindow">
             <div class="title-bar">
                 <div class="title-bar-text">📲 Instalar Melon Hub</div>
@@ -330,37 +406,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <p style="font-size:11px;margin:4px 0 6px;">
                     ¿Quieres instalar <strong>Melon Hub</strong> en tu móvil?
                     Se añade a tu pantalla de inicio y se abre como una app
-                    de verdad — sin barra del navegador.
+                    de verdad.
                 </p>
                 <ul class="mh-perks">
                     <li>✓ Icono directo en la pantalla de inicio</li>
-                    <li>✓ Inicia sesión solo una vez</li>
+                    <li>✓ Inicio de sesión automatico</li>
                     <li>✓ Sin pestañas, sin barra de URL</li>
-                    <li>✓ Funciona offline para lo básico</li>
+                    <li>✓ Reproductor de musica integrado</li>
                 </ul>
 
-                <form method="POST">
-                    <div class="field-row-stacked">
-                        <label for="usr">Usuario</label>
-                        <input type="text" id="usr" name="username"
-                               autocapitalize="off" autocorrect="off"
-                               autocomplete="username"
-                               value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required>
-                    </div>
-                    <div class="field-row-stacked" style="margin-top:8px;">
-                        <label for="pwd">Contraseña</label>
-                        <input type="password" id="pwd" name="password"
-                               autocomplete="current-password" required>
-                    </div>
-                    <?php if ($loginError): ?>
-                        <p class="mh-error"><?= htmlspecialchars($loginError) ?></p>
-                    <?php endif; ?>
-                    <div class="login-actions" style="margin-top:12px;">
-                        <button class="button default mh-cta-full" type="submit">
-                            Sí, instalar Melon Hub
-                        </button>
-                    </div>
-                </form>
+                <!-- TABS: Iniciar sesión / Crear usuario -->
+                <menu role="tablist" class="mh-tabs">
+                    <li role="tab" aria-selected="true"  data-tab="login"><a href="#">Iniciar sesión</a></li>
+                    <li role="tab" aria-selected="false" data-tab="register"><a href="#">+ Crear usuario</a></li>
+                </menu>
+
+                <!-- PANEL: LOGIN -->
+                <div class="mh-tabpanel" data-panel="login">
+                    <form method="POST">
+                        <div class="field-row-stacked">
+                            <label for="usr">Usuario</label>
+                            <input type="text" id="usr" name="username"
+                                   autocapitalize="off" autocorrect="off"
+                                   autocomplete="username"
+                                   value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required>
+                        </div>
+                        <div class="field-row-stacked" style="margin-top:8px;">
+                            <label for="pwd">Contraseña</label>
+                            <input type="password" id="pwd" name="password"
+                                   autocomplete="current-password" required>
+                        </div>
+                        <?php if ($loginError): ?>
+                            <p class="mh-error"><?= htmlspecialchars($loginError) ?></p>
+                        <?php endif; ?>
+                        <div class="login-actions" style="margin-top:12px;">
+                            <button class="button default mh-cta-full" type="submit">
+                                Sí, instalar Melon Hub
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- PANEL: CREAR USUARIO (oculto por defecto) -->
+                <div class="mh-tabpanel" data-panel="register" hidden>
+                    <form id="registerForm" enctype="multipart/form-data">
+                        <div class="field-row-stacked">
+                            <label>Foto de perfil</label>
+                            <div class="register-file-row">
+                                <input type="text" id="registerPhotoName" readonly placeholder="Sin archivo seleccionado">
+                                <button class="button" type="button" id="registerPhotoBrowse">Examinar...</button>
+                            </div>
+                            <input type="file" id="registerPhoto" name="photo" accept="image/*" style="display:none;">
+                        </div>
+                        <div class="field-row-stacked" style="margin-top:8px;">
+                            <label for="registerUsername">Nombre de usuario</label>
+                            <input type="text" id="registerUsername" name="username"
+                                   maxlength="30" autocapitalize="off" autocorrect="off" required>
+                        </div>
+                        <div class="field-row-stacked" style="margin-top:8px;">
+                            <label for="registerPassword">Contraseña</label>
+                            <input type="password" id="registerPassword" name="password" required>
+                        </div>
+                        <p class="mh-error" id="registerStatus" style="display:none;"></p>
+                        <div class="login-actions" style="margin-top:12px;">
+                            <button class="button default mh-cta-full" type="submit" id="registerSubmit">
+                                Crear cuenta
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -415,6 +529,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <script>
+<?php if ($step === 1): ?>
+/* ── Tabs Iniciar sesión / Crear usuario ────────────────────────── */
+(function(){
+    var tabs = document.querySelectorAll('.mh-tabs > li');
+    var panels = document.querySelectorAll('.mh-tabpanel');
+    tabs.forEach(function(tab){
+        tab.addEventListener('click', function(e){
+            e.preventDefault();
+            var target = tab.dataset.tab;
+            tabs.forEach(function(t){
+                t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+            });
+            panels.forEach(function(p){
+                p.hidden = (p.dataset.panel !== target);
+            });
+        });
+    });
+})();
+
+/* ── Formulario de registro (réplica del flujo de index.php) ─────── */
+(function(){
+    var form     = document.getElementById('registerForm');
+    var status   = document.getElementById('registerStatus');
+    var submit   = document.getElementById('registerSubmit');
+    var browse   = document.getElementById('registerPhotoBrowse');
+    var fileEl   = document.getElementById('registerPhoto');
+    var fileName = document.getElementById('registerPhotoName');
+    if (!form) return;
+
+    browse.addEventListener('click', function(){ fileEl.click(); });
+    fileEl.addEventListener('change', function(){
+        fileName.value = this.files.length ? this.files[0].name : '';
+    });
+
+    form.addEventListener('submit', function(e){
+        e.preventDefault();
+        status.style.display = 'none';
+        submit.disabled = true;
+        var fd = new FormData(form);
+        fetch('register-user.php', { method: 'POST', body: fd })
+            .then(function(r){
+                return r.text().then(function(body){
+                    /* Mostramos cuerpo crudo si no es JSON parseable o si el
+                       status no es 2xx — así vemos el error real del server. */
+                    if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + body.slice(0, 200));
+                    try { return JSON.parse(body); }
+                    catch (err) { throw new Error('Respuesta no JSON: ' + body.slice(0, 200)); }
+                });
+            })
+            .then(function(d){
+                submit.disabled = false;
+                if (!d || d.error) {
+                    status.textContent = (d && d.error) ? d.error : 'Error';
+                    status.style.display = '';
+                    return;
+                }
+                /* Cuenta creada → auto-login con las credenciales que el
+                   usuario acaba de escribir. Inyectamos los valores en el
+                   formulario de login y lo enviamos: mobile-landing.php
+                   los valida (acaban de crearse, así que pasarán),
+                   monta la sesión y renderiza directamente el step 2. */
+                var loginForm = document.querySelector('.mh-tabpanel[data-panel="login"] form');
+                if (loginForm) {
+                    document.getElementById('usr').value = document.getElementById('registerUsername').value;
+                    document.getElementById('pwd').value = document.getElementById('registerPassword').value;
+                    loginForm.submit();
+                } else {
+                    /* Fallback defensivo — no debería pasar. */
+                    window.location.href = 'mobile-landing.php';
+                }
+            })
+            .catch(function(err){
+                submit.disabled = false;
+                status.textContent = err.message || 'Error de red';
+                status.style.display = '';
+            });
+    });
+})();
+<?php endif; ?>
+
 <?php if ($step === 2): ?>
 /* ── Service Worker ────────────────────────────────────────────── */
 if ('serviceWorker' in navigator) {

@@ -336,7 +336,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Dibujo</span>
     </div>
     <div class="desktop-icon" id="tienda-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('tienda', '🛒'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_tiendaIcon = 'assets/img/appIcons/tiendaIcon.png';
+            echo file_exists(__DIR__ . '/' . $_tiendaIcon)
+                ? '<img src="' . $_tiendaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('tienda', '🛒');
+        ?></div>
         <span>Tienda</span>
     </div>
 </div>
@@ -448,7 +453,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- TIENDA WINDOW -->
 <div class="window" id="tienda-window" style="display:none; position:fixed; left:8vw; top:6vh; width:84vw; height:84vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="tienda-titlebar">
-        <div class="title-bar-text">🛒 Tienda</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('tiendaIcon', '🛒'); ?>Tienda</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>

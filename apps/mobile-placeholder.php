@@ -19,51 +19,86 @@ if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
     header('Location: ../index.php');
     exit;
 }
+$userKey   = $_SESSION['user'];
+$userLabel = $loginUsers[$userKey]['label'];
 
 $appName = isset($_GET['app']) ? trim((string)$_GET['app']) : 'Esta app';
 $appName = mb_substr($appName, 0, 40);
+
+/* ── TEMA DEL USUARIO (igual setup que mobile.php) ── */
+require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+refreshActiveThemeCss($userKey, $userLabel);
+$_userThemes = loadUserThemes($userKey);
+$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+$activeThemeClass = '';
+$activeThemeCss   = '';
+if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
+    $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__) . '/' . $activeThemeCss)) {
+        $activeThemeCss = '';
+    }
+}
+$themeBgColor = '#000000';
+if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors']['desktopBg'])) {
+    $candidate = (string)$_userThemes['themes'][$activeTheme]['colors']['desktopBg'];
+    if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $candidate)) {
+        $themeBgColor = $candidate;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script src="../assets/js/pwa-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0c2b54">
+    <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title><?= htmlspecialchars($appName) ?> — Próximamente</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="../assets/css/mobile.css">
+    <!-- Mismo look Win98 + tema usuario que el resto del móvil -->
+    <link rel="stylesheet" href="../assets/css/98.css">
+    <link rel="stylesheet" href="../assets/css/tokens.css">
+    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../assets/css/themes.css">
+    <?php if ($activeThemeCss): ?>
+    <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
+    <?php endif; ?>
+    <link rel="stylesheet" href="../assets/css/mobile-theme.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
-<body>
-<div id="screen">
-    <div id="status-bar">
-        <div class="status-left">
-            <span class="signal">●●●●</span>
-            <span class="provider">MELON</span>
-        </div>
-        <div class="status-right">
-            <span id="status-clock">--:--</span>
-            <span class="battery">▮▮▮</span>
+<body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
+
+<div class="window mh-window" id="placeholderWindow">
+    <div class="title-bar">
+        <div class="title-bar-text">🚧 <?= htmlspecialchars($appName) ?></div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize" disabled></button>
+            <button aria-label="Close" onclick="window.location.href='../mobile.php';"></button>
         </div>
     </div>
+    <div class="window-body">
 
-    <main class="wip-page">
-        <div class="big-icon">🚧</div>
-        <h1><?= htmlspecialchars($appName) ?></h1>
-        <p>Esta app aún no tiene versión adaptada a móvil. Estamos trabajando en ello — vuelve pronto.</p>
-        <a class="back-btn" href="../mobile.php">← Volver al menú</a>
-    </main>
+        <div class="mh-panel" style="display:flex;align-items:center;justify-content:center;">
+            <div class="mh-empty">
+                <span class="mh-empty-icon">🚧</span>
+                <div style="font-size:14px;font-weight:bold;color:var(--text, #000);margin-bottom:8px;">
+                    <?= htmlspecialchars($appName) ?>
+                </div>
+                <p style="font-size:12px;line-height:1.5;margin:0 0 14px;">
+                    Esta app aún no tiene versión adaptada a móvil.<br>
+                    Estamos trabajando en ello — vuelve pronto.
+                </p>
+            </div>
+        </div>
+
+        <div class="mh-statusbar">
+            <a href="../mobile.php">‹ Volver al menú</a>
+        </div>
+
+    </div>
 </div>
 
-<script>
-(function() {
-    var clockEl = document.getElementById('status-clock');
-    function pad(n){ return n < 10 ? '0' + n : '' + n; }
-    function tick() {
-        var d = new Date();
-        clockEl.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }
-    tick(); setInterval(tick, 15000);
-})();
-</script>
 </body>
 </html>

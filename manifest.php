@@ -12,6 +12,11 @@
 header('Content-Type: application/manifest+json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, private');
 
+require_once __DIR__ . '/assets/mobile-detect.php';
+setLongSessionCookie();
+session_start();
+require_once __DIR__ . '/assets/config.php';
+
 $token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
 if (!preg_match('/^[a-f0-9]{64}$/', $token)) $token = '';
 
@@ -21,6 +26,27 @@ if (!preg_match('/^[a-f0-9]{64}$/', $token)) $token = '';
 $qs = ['pwa' => '1'];
 if ($token !== '') $qs['t'] = $token;
 $startUrl = './mobile.php?' . http_build_query($qs);
+
+/* COLOR DE FONDO DEL SPLASH SCREEN
+   Si el usuario está logueado al instalar la PWA, el SO usará el
+   `desktopBg` de su tema como color del splash. Si no hay sesión
+   (o el tema no define el color), caemos a un negro grisáceo neutro
+   — mejor que el azul del default antiguo. Una vez instalada la
+   PWA, este color queda CACHEADO por el SO y no cambia hasta reinstalar. */
+$bgColor = '#1a1a1a';        /* negro grisáceo neutro */
+if (isset($_SESSION['user']) && isset($loginUsers[$_SESSION['user']])) {
+    require_once __DIR__ . '/assets/themes/theme-helpers.php';
+    $userKey = $_SESSION['user'];
+    $userLabel = $loginUsers[$userKey]['label'];
+    $_userThemes = loadUserThemes($userKey);
+    $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+    if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors']['desktopBg'])) {
+        $candidate = (string)$_userThemes['themes'][$activeTheme]['colors']['desktopBg'];
+        if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $candidate)) {
+            $bgColor = $candidate;
+        }
+    }
+}
 
 $manifest = [
     'name'              => 'Melon Hub',
@@ -32,8 +58,8 @@ $manifest = [
     'display'           => 'standalone',
     'display_override'  => ['standalone', 'minimal-ui'],
     'orientation'       => 'portrait',
-    'background_color'  => '#061629',
-    'theme_color'       => '#0c2b54',
+    'background_color'  => $bgColor,
+    'theme_color'       => $bgColor,
     'lang'              => 'es',
     'categories'        => ['lifestyle', 'social', 'utilities'],
     'icons'             => [
