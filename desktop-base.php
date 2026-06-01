@@ -1066,20 +1066,30 @@ window.notifSystem = (function() {
 ========================= */
 (function() {
     var kofiIframe = document.getElementById('kofi-iframe');
-    var kofiLoaded = false;
-    var KOFI_URL = 'https://ko-fi.com/melonhub/?hidefeed=true&widget=true&embed=true&preview=true';
+    var kofiCurrent = null;     /* URL actualmente cargada en el iframe */
+    var titleText = document.querySelector('#kofi-titlebar .title-bar-text');
+    var DEFAULT_KOFI_URL = 'https://ko-fi.com/melonhub/?hidefeed=true&widget=true&embed=true&preview=true';
 
-    function openKofi() {
-        if (!kofiLoaded) { kofiIframe.src = KOFI_URL; kofiLoaded = true; }
+    function openKofi(opts) {
+        opts = opts || {};
+        var url = opts.url || DEFAULT_KOFI_URL;
+        var title = opts.title || 'Donar (Ko-fi)';
+        /* Solo recarga el iframe si la URL es DISTINTA — abrir-cerrar-abrir
+           la misma URL no resetea el progreso del usuario en el checkout. */
+        if (url !== kofiCurrent) {
+            kofiIframe.src = url;
+            kofiCurrent = url;
+        }
+        if (titleText) titleText.textContent = '☕ ' + title;
         if (taskbarManager.isRegistered('kofi-window')) {
             taskbarManager.restore('kofi-window');
         } else {
-            taskbarManager.register('kofi-window', 'Donar (Ko-fi)', '☕', 'flex');
+            taskbarManager.register('kofi-window', title, '☕', 'flex');
         }
     }
 
     window.addEventListener('message', function(e) {
-        if (e.data && e.data.type === 'open-kofi') openKofi();
+        if (e.data && e.data.type === 'open-kofi') openKofi(e.data);
     });
 
     document.getElementById('kofi-close').addEventListener('click', function() {

@@ -188,7 +188,7 @@ case 'buy': {
    sensibles si en el futuro hay donantes reales. */
 case 'donors': {
     $rows = $pdo->query('
-        SELECT nombre, avatar_url, mensaje
+        SELECT nombre, avatar_url, mensaje, tipo
         FROM donaciones
         ORDER BY creado_en DESC, id DESC
         LIMIT 100

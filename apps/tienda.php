@@ -230,17 +230,75 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
       overflow: hidden;
     }
 
+    /* Grid de 3 columnas a todo el ancho del contenedor:
+       [placeholder 220px] [contenido fluido] [cuadro de encargos 220px].
+       El placeholder izquierdo es invisible pero ocupa exactamente el
+       mismo ancho que el cuadro de la derecha, así el texto del centro
+       sigue visualmente centrado en TODA la sección. El cuadro queda
+       fijo en la esquina derecha, no centrado con el texto. */
     .donar-intro {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) 220px;
+      align-items: start;
+      gap: 24px;
       padding: 22px 24px 18px;
-      text-align: center;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
+    .donar-intro::before { content: ''; }   /* placeholder izquierdo (col 1) */
+    .donar-intro-main {
+      text-align: center;
+      max-width: 520px;
+      margin: 0 auto;                        /* centra el bloque dentro de la col 2 */
+      min-width: 0;
+    }
     .donar-intro-emoji { font-size: 38px; line-height: 1; }
     .donar-intro-title { font-size: 15px; font-weight: bold; margin-top: 8px; }
-    .donar-intro-text  { font-size: 11px; color: var(--text-muted); margin: 8px auto 14px; line-height: 1.55; max-width: 520px; }
-    .donar-intro #donar-go-btn { min-height: 28px; padding: 0 22px; font-size: 12px; font-weight: bold; }
+    .donar-intro-text  { font-size: 11px; color: var(--text-muted); margin: 8px auto 14px; line-height: 1.55; }
+    .donar-intro-main #donar-go-btn { min-height: 28px; padding: 0 22px; font-size: 12px; font-weight: bold; }
     .donar-intro-hint { font-size: 10px; color: var(--text-faint); margin-top: 8px; }
+
+    /* Cuadro de encargos — vive en la columna 3 del grid. Como es un grid
+       item normal contribuye a la altura del padre, así que el border-bottom
+       de .donar-intro queda SIEMPRE debajo del cuadro. */
+    .donar-encargos {
+      padding: 10px 12px;
+      background: var(--inset-bg); color: var(--text);
+      box-shadow:
+        inset  1px  1px var(--bezel-dark-1),
+        inset -1px -1px var(--bezel-light-1),
+        inset  2px  2px var(--bezel-dark-2),
+        inset -2px -2px var(--bezel-light-2);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .donar-encargos-title {
+      font-size: 10px; font-weight: bold;
+      text-transform: uppercase; letter-spacing: 0.15em;
+      color: var(--text-muted); text-align: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px; margin-bottom: 2px;
+    }
+    .donar-encargo-btn {
+      min-height: 28px; padding: 4px 10px;
+      font-size: 11px;
+      display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+      text-decoration: none;
+    }
+    .donar-encargo-btn .ic { font-size: 14px; line-height: 1; }
+    .donar-encargo-btn .label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .donar-encargo-btn .price {
+      font-size: 11px; font-weight: bold;
+      background: var(--accent); color: var(--accent-text);
+      padding: 1px 6px; border-radius: 2px;
+    }
+    /* Texto informativo bajo los botones — separa visualmente con un
+       border-top sutil y se queda en tamaño pequeño + color atenuado. */
+    .donar-encargos-info {
+      font-size: 9px; color: var(--text-faint);
+      text-align: center; line-height: 1.45;
+      margin-top: 4px; padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
 
     .donar-donors-section { flex: 1; overflow-y: auto; padding: 14px 18px; }
     .donar-donors-title {
@@ -301,6 +359,22 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     }
     .donar-donor-msg:empty { display: none; }
 
+    /* Etiqueta del tipo de aportación. Color del fondo según tipo:
+       donante = accent del tema (amarillo en Capi),
+       suscriptor = morado neutral,
+       encargo = naranja. Todos con texto blanco para contraste. */
+    .donar-donor-tipo {
+      font-size: 9px; font-weight: bold;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 2px 6px; border-radius: 2px;
+      color: #fff;
+      text-shadow: 0 0 2px rgba(0,0,0,0.5);
+      display: inline-flex; align-items: center; gap: 3px;
+    }
+    .donar-donor-tipo.donacion     { background: var(--accent); color: var(--accent-text); text-shadow: none; }
+    .donar-donor-tipo.suscripcion  { background: #7c4dff; }
+    .donar-donor-tipo.encargo      { background: #e67e22; }
+
 
     /* Ko-fi vive ahora en su propia ventana del escritorio. La pestaña
        Donaciones solo muestra la explicación + el grid de donantes; el
@@ -352,15 +426,36 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <!-- Vista por defecto: explicación + botón + donantes. -->
             <div id="donar-info">
                 <div class="donar-intro">
-                    <div class="donar-intro-emoji">🍉</div>
-                    <div class="donar-intro-title">Apoya el desarrollo</div>
-                    <div class="donar-intro-text">
-                        Scrapbook Melon es un proyecto personal y gratuito. Cualquier aportación
-                        ayuda a mantener el servidor encendido, pagar el dominio y seguir añadiendo
-                        funciones nuevas. Gracias 💛
+                    <div class="donar-intro-main">
+                        <div class="donar-intro-emoji">🍉</div>
+                        <div class="donar-intro-title">Apoya el desarrollo</div>
+                        <div class="donar-intro-text">
+                            Scrapbook Melon es un proyecto personal y gratuito. Cualquier aportación
+                            ayuda a mantener el servidor encendido, pagar el dominio y seguir añadiendo
+                            funciones nuevas. Gracias 💛
+                        </div>
+                        <button type="button" class="button default" id="donar-go-btn">☕ Donar</button>
+                        <div class="donar-intro-hint">Pago seguro vía Stripe / PayPal en Ko-fi.</div>
                     </div>
-                    <button type="button" class="button default" id="donar-go-btn">☕ Donar</button>
-                    <div class="donar-intro-hint">Pago seguro vía Stripe / PayPal en Ko-fi.</div>
+
+                    <div class="donar-encargos">
+                        <div class="donar-encargos-title">🎨 Encargos</div>
+                        <a class="button donar-encargo-btn" href="https://ko-fi.com/c/064181251c" target="_blank" rel="noopener"
+                           data-kofi-title="Haro personalizado">
+                            <span class="ic">⚪</span><span class="label">Haro personalizado</span><span class="price">2 €</span>
+                        </a>
+                        <a class="button donar-encargo-btn" href="https://ko-fi.com/c/4de28dd45e" target="_blank" rel="noopener"
+                           data-kofi-title="Tema personalizado">
+                            <span class="ic">🎨</span><span class="label">Tema personalizado</span><span class="price">5 €</span>
+                        </a>
+                        <a class="button donar-encargo-btn" href="https://ko-fi.com/c/16c92f9fdf" target="_blank" rel="noopener"
+                           data-kofi-title="Mascota personalizada">
+                            <span class="ic">🐾</span><span class="label">Mascota personalizada</span><span class="price">10 €</span>
+                        </a>
+                        <p class="donar-encargos-info">
+                            Si no te apetece donar también puedes hacer un encargo para tener algo personalizado en tu perfil y no limitarte a las opciones de la tienda.
+                        </p>
+                    </div>
                 </div>
 
                 <div class="donar-donors-section">
@@ -525,14 +620,23 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             grid.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:11px;padding:20px;width:100%;">Aún no hay donantes. ¡Podrías ser el primero!</div>';
             return;
         }
+        var TIPOS = {
+            donacion:    { ic: '💛', label: 'Donante'     },
+            suscripcion: { ic: '🔁', label: 'Suscriptor'  },
+            encargo:     { ic: '🎨', label: 'Encargo'     },
+        };
         grid.innerHTML = donors.map(function(d){
             var av = d.avatar_url
                 ? '<img src="' + esc(d.avatar_url) + '" alt="" referrerpolicy="no-referrer">'
                 : '👤';
+            var tipo = TIPOS[d.tipo] || TIPOS.donacion;
+            var tipoEl = '<div class="donar-donor-tipo ' + esc(d.tipo || 'donacion') + '">' +
+                         '<span>' + tipo.ic + '</span><span>' + tipo.label + '</span></div>';
             var msg = d.mensaje ? '<div class="donar-donor-msg">' + esc(d.mensaje) + '</div>' : '';
             return '<div class="donar-donor">' +
                 '<div class="donar-donor-avatar">' + av + '</div>' +
                 '<div class="donar-donor-name">' + esc(d.nombre) + '</div>' +
+                tipoEl +
                 msg +
             '</div>';
         }).join('');
@@ -573,6 +677,29 @@ document.querySelectorAll('[data-view]').forEach(function(el){
         } catch (e) {}
         /* Refresco optimista cuando el usuario vuelva a esta pestaña. */
         setTimeout(loadDonors, 500);
+    });
+
+    /* Botones de encargos: las páginas /c/xxx de Ko-fi mandan
+       X-Frame-Options:SAMEORIGIN que prohíbe embeberlas en iframe (al
+       contrario que la página de donaciones, que sí permite ?embed=true).
+       Por eso aquí abrimos popup centrada en lugar de la ventana iframe.
+       El `target="_blank"` se conserva como fallback (click derecho →
+       "Abrir en pestaña nueva" sigue funcionando si el navegador bloquea
+       la popup). */
+    document.querySelectorAll('.donar-encargo-btn').forEach(function(a){
+        a.addEventListener('click', function(e){
+            e.preventDefault();
+            var w = 480, h = 740;
+            var l = (window.screen.width  - w) / 2;
+            var t = (window.screen.height - h) / 2;
+            var win = window.open(a.href, 'kofi-commission',
+                'width=' + w + ',height=' + h + ',left=' + l + ',top=' + t +
+                ',menubar=no,toolbar=no,location=no,status=no'
+            );
+            /* Si el navegador bloqueó la popup, caemos a pestaña nueva. */
+            if (!win) window.open(a.href, '_blank', 'noopener');
+            setTimeout(loadDonors, 500);
+        });
     });
 
     /* Las pestañas de la sidebar disparan el poll cuando entras en

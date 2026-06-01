@@ -34,13 +34,32 @@ if ($token === '' || !hash_equals($token, (string)($payload['verification_token'
     exit;
 }
 
-/* Solo Donation/Subscription nos interesan. Shop/Commission también podrían
-   funcionar pero los dejamos fuera por simplicidad. */
+/* Tipos aceptados: donaciones libres, suscripciones mensuales y compras
+   de comisiones (Commission). Todos contribuyen a sostener el proyecto,
+   así que todos entran en el mismo tablón de donantes. Shop Order
+   también pasa por aquí si tuvieras shop items configurados — lo
+   dejamos fuera por ahora porque no aplica. */
 $type = $payload['type'] ?? '';
-if ($type !== 'Donation' && $type !== 'Subscription') {
+$typeMap = [
+    'Donation'     => 'donacion',
+    'Subscription' => 'suscripcion',
+    'Commission'   => 'encargo',
+];
+if (!isset($typeMap[$type])) {
     http_response_code(204);
     exit;
 }
+$tipo = $typeMap[$type];
+
+/* Nombre humano de cada tipo de encargo a partir del direct_link_code
+   que Ko-fi mete en el payload. La parte que va después de /c/ en la URL
+   pública del encargo es esa misma clave. Si en el futuro añades más
+   tipos de comisión, sumas su código aquí. */
+$COMMISSION_NAMES = [
+    '064181251c' => 'Haro personalizado',
+    '4de28dd45e' => 'Tema personalizado',
+    '16c92f9fdf' => 'Mascota personalizada',
+];
 
 $txId = (string)($payload['kofi_transaction_id'] ?? '');
 if ($txId === '') { http_response_code(400); echo 'missing tx id'; exit; }
@@ -53,8 +72,28 @@ $nombre   = $isPublic ? trim((string)($payload['from_name'] ?? 'Anónimo')) : 'A
 if ($nombre === '') $nombre = 'Anónimo';
 $nombre   = mb_substr($nombre, 0, 80);
 
-$mensaje  = $isPublic ? trim((string)($payload['message'] ?? '')) : '';
-$mensaje  = $mensaje !== '' ? mb_substr($mensaje, 0, 200) : null;
+/* Para donaciones/suscripciones: el campo `message` del checkout es un
+   textarea libre = mensaje público del donante. Para encargos: ese mismo
+   campo son las Order Notes (descripción privada del pedido para el
+   artista), NO un mensaje de cara al público. Por eso en encargos
+   ignoramos `message` y mostramos "Encargó: {producto}" derivado del
+   shop_item, así la card del tablón es informativa sin filtrar la
+   descripción privada. */
+if ($type === 'Commission') {
+    $code = '';
+    if (isset($payload['shop_items'][0]['direct_link_code'])) {
+        $code = (string)$payload['shop_items'][0]['direct_link_code'];
+    }
+    $productName = $COMMISSION_NAMES[$code]
+        ?? (isset($payload['shop_items'][0]['variation_name'])
+            ? trim((string)$payload['shop_items'][0]['variation_name'])
+            : 'algo personalizado');
+    $mensaje = 'Encargó: ' . $productName;
+    if (mb_strlen($mensaje) > 200) $mensaje = mb_substr($mensaje, 0, 200);
+} else {
+    $mensaje = $isPublic ? trim((string)($payload['message'] ?? '')) : '';
+    $mensaje = $mensaje !== '' ? mb_substr($mensaje, 0, 200) : null;
+}
 
 $importe  = (float)($payload['amount'] ?? 0);
 if ($importe <= 0) $importe = null;
@@ -66,14 +105,15 @@ $avatar = null;
 
 try {
     $stmt = $pdo->prepare('
-        INSERT INTO donaciones (nombre, avatar_url, mensaje, importe, kofi_transaction_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO donaciones (nombre, avatar_url, mensaje, importe, tipo, kofi_transaction_id)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-            nombre = VALUES(nombre),
+            nombre  = VALUES(nombre),
             mensaje = VALUES(mensaje),
-            importe = VALUES(importe)
+            importe = VALUES(importe),
+            tipo    = VALUES(tipo)
     ');
-    $stmt->execute([$nombre, $avatar, $mensaje, $importe, $txId]);
+    $stmt->execute([$nombre, $avatar, $mensaje, $importe, $tipo, $txId]);
     http_response_code(200);
     echo 'ok';
 } catch (Throwable $e) {
