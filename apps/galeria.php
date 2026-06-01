@@ -44,6 +44,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script src="../assets/js/pwa-guard.js"></script>
     <title>Galería</title>
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/tokens.css'); ?>">
@@ -228,10 +229,10 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     </div>
 </div>
 
-<!-- Diálogo: PUBLICAR en perfil -->
+<!-- Diálogo unificado: PUBLICAR — siempre va a perfil + Discord. -->
 <div class="window gal-dialog" id="gal-publish-dialog" style="display:none;">
     <div class="title-bar">
-        <div class="title-bar-text">📤 Publicar en perfil</div>
+        <div class="title-bar-text">📤 Publicar</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="gal-pub-close"></button>
         </div>
@@ -242,32 +243,11 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <label for="gal-pub-text">Texto adjunto <small style="color:var(--text-muted);">(opcional, máx 1000)</small></label>
             <textarea id="gal-pub-text" maxlength="1000" rows="3" placeholder="Escribe algo sobre la imagen…" style="resize:vertical;min-height:60px;"></textarea>
         </div>
+        <p style="font-size:10px;color:var(--text-faint);margin:8px 0 0;">Se publicará en tu perfil y en Discord (Melon Hub) a la vez.</p>
         <p id="gal-pub-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
             <button class="button" id="gal-pub-cancel">Cancelar</button>
             <button class="button default" id="gal-pub-submit">Publicar</button>
-        </div>
-    </div>
-</div>
-
-<!-- Diálogo: PUBLICAR en Discord -->
-<div class="window gal-dialog" id="gal-discord-dialog" style="display:none;">
-    <div class="title-bar">
-        <div class="title-bar-text">🟣 Publicar en Discord</div>
-        <div class="title-bar-controls">
-            <button aria-label="Close" id="gal-disc-close"></button>
-        </div>
-    </div>
-    <div class="window-body">
-        <div id="gal-disc-preview"></div>
-        <div class="field-row-stacked" style="margin-top:6px;">
-            <label for="gal-disc-text">Mensaje <small style="color:var(--text-muted);">(opcional, máx 1900)</small></label>
-            <textarea id="gal-disc-text" maxlength="1900" rows="3" placeholder="Escribe algo (opcional)…" style="resize:vertical;min-height:60px;"></textarea>
-        </div>
-        <p id="gal-disc-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
-        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
-            <button class="button" id="gal-disc-cancel">Cancelar</button>
-            <button class="button default" id="gal-disc-submit">Publicar</button>
         </div>
     </div>
 </div>
@@ -301,8 +281,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <div id="gal-ctx-menu" data-no-auto-z="" style="display:none;">
     <div class="gal-ctx-opt" data-act="preview">🖼 Ver</div>
     <div class="gal-ctx-opt" data-act="download">📥 Descargar</div>
-    <div class="gal-ctx-opt" data-act="publish">📤 Publicar en perfil</div>
-    <div class="gal-ctx-opt" data-act="discord">🟣 Publicar en Discord</div>
+    <div class="gal-ctx-opt" data-act="publish">📤 Publicar</div>
     <div class="gal-ctx-opt" data-act="edit">✏ Renombrar / etiquetas</div>
     <div class="gal-ctx-opt gal-ctx-danger" data-act="delete">🗑 Eliminar</div>
 </div>
@@ -1131,14 +1110,48 @@ function renderGrid() {
             (ts.length ? '<div class="gal-card-tags">' +
                 ts.map(function(t) { return '<span class="gal-chip">#' + escapeHtml(t) + '</span>'; }).join('') +
             '</div>' : '');
-        /* Click izquierdo: extensión no-renderizable → descarga; resto → preview */
+        /* Click izquierdo: extensión no-renderizable → descarga; resto → preview.
+           El flag `_suppressClick` se enciende cuando un long-press táctil
+           ya ha abierto el menú contextual — así el touchend → click
+           sintético no abre además la preview. */
         card.addEventListener('click', function() {
+            if (card.dataset.suppressClick === '1') {
+                delete card.dataset.suppressClick;
+                return;
+            }
             if (wipExt) downloadToUser(f);
             else openPreview(f);
         });
         card.addEventListener('contextmenu', function(e) {
             e.preventDefault();
             openCtxMenu(e.clientX, e.clientY, f);
+        });
+
+        /* Long-press táctil ≈ click derecho. 500 ms sin moverse abren el
+           mismo menú contextual que en escritorio. */
+        var _lpTimer = null, _lpX = 0, _lpY = 0;
+        card.addEventListener('touchstart', function(e) {
+            if (!e.touches || e.touches.length !== 1) return;
+            _lpX = e.touches[0].clientX;
+            _lpY = e.touches[0].clientY;
+            _lpTimer = setTimeout(function() {
+                _lpTimer = null;
+                card.dataset.suppressClick = '1';
+                openCtxMenu(_lpX, _lpY, f);
+            }, 500);
+        }, { passive: true });
+        card.addEventListener('touchmove', function(e) {
+            if (!_lpTimer || !e.touches[0]) return;
+            if (Math.abs(e.touches[0].clientX - _lpX) > 8 ||
+                Math.abs(e.touches[0].clientY - _lpY) > 8) {
+                clearTimeout(_lpTimer); _lpTimer = null;
+            }
+        }, { passive: true });
+        card.addEventListener('touchend', function() {
+            if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+        });
+        card.addEventListener('touchcancel', function() {
+            if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
         });
         grid.appendChild(card);
     });
@@ -1369,8 +1382,6 @@ function openCtxMenu(x, y, file) {
        que la URL pública de Drive renderice (es un .psd/.kra). */
     var pubOpt = menu.querySelector('[data-act="publish"]');
     if (pubOpt) pubOpt.style.display = isWip(file) ? 'none' : '';
-    var discOpt = menu.querySelector('[data-act="discord"]');
-    if (discOpt) discOpt.style.display = isWip(file) ? 'none' : '';
     /* Forzar visibilidad Y estética inline: blindado contra cache del CSS. */
     menu.style.display    = 'block';
     menu.style.position   = 'fixed';
@@ -1601,79 +1612,53 @@ async function submitPublish() {
     st.style.color = ''; st.textContent = 'Configurando permisos…';
     try {
         await _ensureDrivePublic(f.id);
-        /* URL pública de Drive: el endpoint /thumbnail funciona sin
-           autenticación para ficheros con permiso "anyone". `sz=w1920`
-           limita el ancho. Es más estable que el formato lh3/d/{id}=. */
         var publicUrl = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w1920';
+        /* Publicamos en paralelo en perfil + Discord. Si una falla, la
+           otra puede haber tirado igualmente — mostramos el detalle. */
         st.textContent = 'Publicando…';
-        var r = await fetch('../assets/profile/api.php?action=add-post', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, image_url: publicUrl })
-        });
-        var data = await r.json();
-        if (data.error) throw new Error(data.error);
-        st.style.color = '';
-        st.textContent = '✔ Publicado en tu perfil.';
-        /* Avisar al desktop (donde vive perfil.php) para que recargue los
-           posts sin esperar a un refresh manual. */
-        try { window.parent.postMessage({ type: 'profile-post-added' }, '*'); } catch (e) {}
-        setTimeout(closePublishDialog, 900);
-    } catch (e) {
-        st.textContent = 'Error: ' + e.message;
-        st.style.color = 'var(--error-text)';
-    } finally {
-        btn.classList.remove('btn-busy'); btn.disabled = false;
-    }
-}
+        var [perfilResult, discordResult] = await Promise.allSettled([
+            fetch('../assets/profile/api.php?action=add-post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text, image_url: publicUrl })
+            }).then(function(r){ return r.json(); }).then(function(d){
+                if (d.error) throw new Error(d.error);
+                return d;
+            }),
+            fetch('../assets/profile/api.php?action=discord-publish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_url: publicUrl, caption: text })
+            }).then(function(r){ return r.json(); }).then(function(d){
+                if (d.error) throw new Error(d.error);
+                return d;
+            }),
+        ]);
 
-/* ─── Publicar en Discord ───────────────────────────────────
-   Igual que el flujo de publicar en perfil:
-   1) `_ensureDrivePublic(file.id)` → permiso "anyone reader" en Drive.
-   2) URL pública de Drive (drive.google.com/thumbnail).
-   3) POST a nuestro endpoint que reenvía al webhook del usuario.
-   El webhook URL no sale del servidor (lo lee el backend de la BD). */
-var _discordFile = null;
-function openDiscordDialog(f) {
-    if (isWip(f)) return;
-    _discordFile = f;
-    var dlg = document.getElementById('gal-discord-dialog');
-    var prev = document.getElementById('gal-disc-preview');
-    var src = _thumbCache.get(f.id) || f.thumbnailLink || '';
-    prev.innerHTML = src
-        ? '<img src="' + escapeAttr(src) + '" referrerpolicy="no-referrer" alt="" style="max-width:100%;max-height:200px;object-fit:contain;display:block;margin:0 auto;">'
-        : '<div style="text-align:center;padding:20px;color:var(--text-muted);">Cargando preview…</div>';
-    document.getElementById('gal-disc-text').value = '';
-    var st = document.getElementById('gal-disc-status');
-    st.textContent = ''; st.style.color = '';
-    dlg.style.display = 'block';
-    centerDialog(dlg);
-}
-function closeDiscordDialog() {
-    document.getElementById('gal-discord-dialog').style.display = 'none';
-    _discordFile = null;
-}
-async function submitDiscord() {
-    if (!_discordFile) return;
-    var f = _discordFile;
-    var btn = document.getElementById('gal-disc-submit');
-    var st  = document.getElementById('gal-disc-status');
-    var cap = document.getElementById('gal-disc-text').value.trim();
-    btn.classList.add('btn-busy'); btn.disabled = true;
-    st.style.color = ''; st.textContent = 'Configurando permisos…';
-    try {
-        await _ensureDrivePublic(f.id);
-        var publicUrl = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(f.id) + '&sz=w1920';
-        st.textContent = 'Enviando a Discord…';
-        var r = await fetch('../assets/profile/api.php?action=discord-publish', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_url: publicUrl, caption: cap })
-        });
-        var data = await r.json();
-        if (data.error) throw new Error(data.error);
-        st.style.color = ''; st.textContent = '✔ Publicado en Discord.';
-        setTimeout(closeDiscordDialog, 900);
+        var perfilOk  = perfilResult.status  === 'fulfilled';
+        var discordOk = discordResult.status === 'fulfilled';
+
+        if (perfilOk) {
+            /* Avisar al desktop (donde vive perfil.php) para que recargue
+               los posts sin esperar a un refresh manual. */
+            try { window.parent.postMessage({ type: 'profile-post-added' }, '*'); } catch (e) {}
+        }
+
+        if (perfilOk && discordOk) {
+            st.style.color = ''; st.textContent = '✔ Publicado en perfil y Discord.';
+            setTimeout(closePublishDialog, 1100);
+        } else if (perfilOk && !discordOk) {
+            st.style.color = 'var(--warning-text)';
+            st.textContent = '✔ Publicado en perfil. ⚠ Discord falló: ' + (discordResult.reason && discordResult.reason.message || 'error');
+        } else if (!perfilOk && discordOk) {
+            st.style.color = 'var(--warning-text)';
+            st.textContent = '✔ Publicado en Discord. ⚠ Perfil falló: ' + (perfilResult.reason && perfilResult.reason.message || 'error');
+        } else {
+            throw new Error(
+                'Perfil: ' + ((perfilResult.reason  && perfilResult.reason.message)  || 'error') +
+                ' / Discord: ' + ((discordResult.reason && discordResult.reason.message) || 'error')
+            );
+        }
     } catch (e) {
         st.textContent = 'Error: ' + e.message;
         st.style.color = 'var(--error-text)';
@@ -1833,9 +1818,6 @@ document.getElementById('gal-pub-cancel').addEventListener('click', closePublish
 document.getElementById('gal-pub-submit').addEventListener('click', submitPublish);
 
 /* Diálogo de Discord */
-document.getElementById('gal-disc-close').addEventListener('click', closeDiscordDialog);
-document.getElementById('gal-disc-cancel').addEventListener('click', closeDiscordDialog);
-document.getElementById('gal-disc-submit').addEventListener('click', submitDiscord);
 
 /* Ajustes de Discord (webhook) */
 document.getElementById('gal-discord-settings').addEventListener('click', openDiscordSettings);
@@ -1854,7 +1836,6 @@ document.getElementById('gal-ctx-menu').addEventListener('click', function(e) {
     if      (act === 'preview')  openPreview(f);
     else if (act === 'download') downloadToUser(f);
     else if (act === 'publish')  openPublishDialog(f);
-    else if (act === 'discord')  openDiscordDialog(f);
     else if (act === 'edit')     openEditDialog(f);
     else if (act === 'delete')   confirmDelete(f);
 });
@@ -1874,7 +1855,6 @@ document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
     if (document.getElementById('gal-ctx-menu').style.display !== 'none')     { closeCtxMenu(); return; }
     if (document.getElementById('gal-publish-dialog').style.display !== 'none') { closePublishDialog(); return; }
-    if (document.getElementById('gal-discord-dialog').style.display !== 'none') { closeDiscordDialog(); return; }
     if (document.getElementById('gal-discord-settings-dialog').style.display !== 'none') { closeDiscordSettings(); return; }
     if (document.getElementById('gal-edit-dialog').style.display !== 'none')  { closeEditDialog(); return; }
     if (document.getElementById('gal-preview').style.display !== 'none')      { closePreview(); return; }

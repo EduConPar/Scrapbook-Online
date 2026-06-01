@@ -22,6 +22,12 @@ Options -Indexes
 # UTF-8 por defecto para PHP
 AddDefaultCharset UTF-8
 
+# MIME para el manifest PWA — sin esto algunos navegadores no reconocen
+# el manifest y rechazan ofrecer la instalación.
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
 # Cache mediano para estáticos
 <IfModule mod_expires.c>
     ExpiresActive On

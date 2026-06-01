@@ -245,6 +245,12 @@ body.has-start-icon .win-logo span { display: none; }
     margin: 8px;
     border: 1px solid transparent;
     vertical-align: top;
+    /* Táctil: el icono come el gesto durante el long-press de drag para
+       que el navegador no haga scroll vertical mientras tanto. */
+    touch-action: none;
+    /* Evita el callout de selección y el flash azul al tocarlo. */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .desktop-icon:hover {
@@ -264,6 +270,20 @@ body.has-start-icon .win-logo span { display: none; }
 .desktop-icon.long-pressing {
     transform: scale(1.04);
     transition: transform 0.18s ease;
+}
+
+/* Modo "Mover" activo en táctil: el usuario ya confirmó desde el menú
+   contextual y el icono espera el siguiente toque para arrancar el drag.
+   El wobble es el feedback estilo home-screen de Android/iOS. */
+.desktop-icon.move-pending {
+    outline: 2px dashed var(--accent, #f4d03f);
+    outline-offset: 2px;
+    animation: di-wobble 0.45s ease-in-out infinite alternate;
+    z-index: 10;
+}
+@keyframes di-wobble {
+    from { transform: rotate(-2deg); }
+    to   { transform: rotate(2deg);  }
 }
 .desktop-icon.snapping {
     transition: left 0.18s ease-out, top 0.18s ease-out;
@@ -436,15 +456,21 @@ body.has-start-icon .win-logo span { display: none; }
 
 .win-draggable > .title-bar {
     cursor: move;
+    /* En táctil, evita que el navegador interprete el arrastre de la
+       title-bar como scroll vertical de la página. */
+    touch-action: none;
 }
 
 .win-draggable > .title-bar .title-bar-controls button {
     cursor: default;
+    /* Los botones de la title-bar sí deben reaccionar a tap nativo. */
+    touch-action: manipulation;
 }
 
 .win-managed { overflow: visible !important; }
 
-.win-handle { position: absolute; z-index: 10; }
+/* Mismo motivo: los handles de resize necesitan tragarse los gestos. */
+.win-handle { position: absolute; z-index: 10; touch-action: none; }
 .win-handle-n  { top: -4px;    left: 8px;   right: 8px;  height: 8px; cursor: n-resize; }
 .win-handle-s  { bottom: -4px; left: 8px;   right: 8px;  height: 8px; cursor: s-resize; }
 .win-handle-e  { right: -4px;  top: 8px; bottom: 8px;    width:  8px; cursor: e-resize; }

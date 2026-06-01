@@ -48,6 +48,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script src="../assets/js/pwa-guard.js"></script>
     <title>Nuestro espacio</title>
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">

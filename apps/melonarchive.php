@@ -26,6 +26,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script src="../assets/js/pwa-guard.js"></script>
     <title>MelonArchive</title>
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">

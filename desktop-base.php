@@ -7,6 +7,15 @@
 error_reporting(E_ALL);
 
 if (!isset($desktopLabel)) { header('Location: index.php'); exit; }
+
+/* Móviles SIEMPRE entran por la landing (mobile-landing.php) — el
+   escritorio Win98 no es accesible desde móvil. La landing decide si
+   pintar el pitch de instalación o rebotar al home (cuando ya está
+   dentro de la PWA). Override con ?desktop=1 o cookie force_desktop. */
+require_once __DIR__ . '/assets/mobile-detect.php';
+if (isMobileDevice()) { header('Location: mobile-landing.php'); exit; }
+
+setLongSessionCookie();
 header('Content-Type: text/html; charset=UTF-8');
 
 session_start();
@@ -103,6 +112,11 @@ function appTitleIcon(string $pngName, string $emoji): string {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <!-- Tablets: layout fijo a 1280 → el navegador lo escala para encajar
+         en el ancho del dispositivo. Pinch-zoom queda habilitado para
+         que el usuario amplíe los elementos pequeños de Win98 si los
+         dedos no caben. -->
+    <meta name="viewport" content="width=1280, user-scalable=yes">
     <title><?php echo htmlspecialchars($desktopLabel); ?> - Escritorio</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/css/98.css">
@@ -209,6 +223,11 @@ window.DesktopState.whenReady = function(cb){
 <!-- DESKTOP CONTEXT MENU (right-click) -->
 <ul id="desktop-ctx-menu" class="desk-ctx">
     <li data-action="new-folder">📁 Nueva carpeta</li>
+</ul>
+
+<!-- ICON CONTEXT MENU (táctil: long-press sobre un icono) -->
+<ul id="desktop-icon-ctx-menu" class="desk-ctx">
+    <li data-action="move">📦 Mover</li>
 </ul>
 
 <!-- FOLDER WINDOW TEMPLATE -->
@@ -1229,22 +1248,31 @@ window.notifSystem = (function() {
         el.style.transform = 'none';
     }
 
-    document.addEventListener('mousemove', function(e) {
+    /* Helper: coordenadas (x,y) tanto para eventos de ratón como táctiles.
+       Para `touchend` los datos vienen en `changedTouches`, no en `touches`. */
+    function ptXY(e) {
+        if (e.touches && e.touches.length)               return { x: e.touches[0].clientX,        y: e.touches[0].clientY        };
+        if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function onPointerMove(e) {
         if (!active) return;
         var el = active.el;
+        var p = ptXY(e);
         var PAD = 40;
         var VW = window.innerWidth, VH = window.innerHeight;
 
         if (active.mode === 'drag') {
-            var newL = e.clientX - active.ox;
-            var newT = e.clientY - active.oy;
+            var newL = p.x - active.ox;
+            var newT = p.y - active.oy;
             var w = el.offsetWidth, h = el.offsetHeight;
             newL = Math.max(PAD - w, Math.min(VW - PAD, newL));
             newT = Math.max(0,       Math.min(VH - PAD, newT));
             el.style.left = newL + 'px';
             el.style.top  = newT + 'px';
         } else {
-            var dx = e.clientX - active.sx, dy = e.clientY - active.sy;
+            var dx = p.x - active.sx, dy = p.y - active.sy;
             var d = active.dir;
             var MAX_W = VW - PAD * 2, MAX_H = VH - PAD * 2;
             if (d.indexOf('e') !== -1) el.style.width  = Math.min(MAX_W, Math.max(MIN_W, active.sw + dx)) + 'px';
@@ -1260,11 +1288,21 @@ window.notifSystem = (function() {
                 el.style.top    = (active.st + active.sh - nh) + 'px';
             }
         }
-    });
+        /* Evita scroll/zoom del navegador mientras se arrastra/resize en táctil. */
+        if (e.cancelable) e.preventDefault();
+    }
 
-    document.addEventListener('mouseup', function() {
+    function onPointerUp() {
         if (active) { blocker.style.display = 'none'; active = null; }
-    });
+    }
+
+    document.addEventListener('mousemove', onPointerMove);
+    document.addEventListener('mouseup',   onPointerUp);
+    /* `passive:false` en touchmove → necesario para poder llamar a
+       preventDefault() y bloquear el scroll mientras se arrastra. */
+    document.addEventListener('touchmove', onPointerMove, { passive: false });
+    document.addEventListener('touchend',  onPointerUp);
+    document.addEventListener('touchcancel', onPointerUp);
 
     function setup(id, dragOnly) {
         var el = document.getElementById(id);
@@ -1274,14 +1312,19 @@ window.notifSystem = (function() {
 
         var titleBar = el.querySelector('.title-bar');
         if (titleBar) {
-            titleBar.addEventListener('mousedown', function(e) {
-                if (e.button !== 0 || e.target.closest('.title-bar-controls')) return;
+            function startDrag(e) {
+                /* En mouse, ignora botones secundarios; en táctil no aplica. */
+                if (e.type === 'mousedown' && e.button !== 0) return;
+                if (e.target.closest('.title-bar-controls')) return;
                 e.preventDefault();
                 fixPos(el);
                 var r = el.getBoundingClientRect();
+                var p = ptXY(e);
                 blocker.style.display = 'block';
-                active = { el: el, mode: 'drag', ox: e.clientX - r.left, oy: e.clientY - r.top };
-            });
+                active = { el: el, mode: 'drag', ox: p.x - r.left, oy: p.y - r.top };
+            }
+            titleBar.addEventListener('mousedown', startDrag);
+            titleBar.addEventListener('touchstart', startDrag, { passive: false });
         }
 
         if (dragOnly) return;
@@ -1289,18 +1332,21 @@ window.notifSystem = (function() {
         ['n','s','e','w','ne','nw','se','sw'].forEach(function(d) {
             var h = document.createElement('div');
             h.className = 'win-handle win-handle-' + d;
-            h.addEventListener('mousedown', function(e) {
-                if (e.button !== 0) return;
+            function startResize(e) {
+                if (e.type === 'mousedown' && e.button !== 0) return;
                 e.preventDefault();
                 e.stopPropagation();
                 fixPos(el);
                 var r = el.getBoundingClientRect();
+                var p = ptXY(e);
                 blocker.style.display = 'block';
                 active = { el: el, mode: 'resize', dir: d,
-                           sx: e.clientX, sy: e.clientY,
-                           sw: r.width,   sh: r.height,
-                           sl: r.left,    st: r.top };
-            });
+                           sx: p.x, sy: p.y,
+                           sw: r.width,  sh: r.height,
+                           sl: r.left,   st: r.top };
+            }
+            h.addEventListener('mousedown', startResize);
+            h.addEventListener('touchstart', startResize, { passive: false });
             el.appendChild(h);
         });
     }
@@ -1444,6 +1490,74 @@ window.notifSystem = (function() {
         GRID_H: GRID_H
     };
 
+    /* ─── Menú contextual táctil para iconos ─────────────────────────────
+       En tablet, mantener pulsado un icono ya no entra directamente en
+       modo arrastrar — abre este menú con la opción "📦 Mover". Tras
+       pulsar Mover, el icono queda en estado .move-pending (anim wobble)
+       y la siguiente pulsación sobre él arranca el drag sin esperar los
+       350 ms del long-press. Cualquier toque fuera cancela el estado. */
+    var _ctxMenuEl = null;
+    var _ctxIcon   = null;
+
+    function ensureIconCtxMenu(){
+        if (_ctxMenuEl) return _ctxMenuEl;
+        _ctxMenuEl = document.getElementById('desktop-icon-ctx-menu');
+        if (!_ctxMenuEl) return null;
+        _ctxMenuEl.addEventListener('click', function(e){
+            var li = e.target.closest('li[data-action]');
+            if (!li) return;
+            if (li.dataset.action === 'move' && _ctxIcon) {
+                _ctxIcon.classList.add('move-pending');
+            }
+            hideIconCtxMenu();
+        });
+        /* Listener global (captura) para cerrar el menú y/o cancelar el
+           modo mover cuando el usuario toca fuera. Vive aquí para no
+           duplicarlo por cada icono. */
+        document.addEventListener('touchstart', function(e){
+            var menuShown        = _ctxMenuEl.classList.contains('show');
+            var tappedMenu       = !!e.target.closest('#desktop-icon-ctx-menu');
+            var tappedPendingIco = !!e.target.closest('.desktop-icon.move-pending');
+            if (menuShown && !tappedMenu) hideIconCtxMenu();
+            if (!tappedPendingIco && !tappedMenu) {
+                document.querySelectorAll('.desktop-icon.move-pending').forEach(function(i){
+                    i.classList.remove('move-pending');
+                });
+            }
+        }, true);
+        return _ctxMenuEl;
+    }
+
+    function showIconCtxMenu(icon){
+        var menu = ensureIconCtxMenu();
+        if (!menu) return;
+        _ctxIcon = icon;
+        /* Lo posicionamos JUNTO al icono, no bajo el dedo del usuario.
+           Si lo metiéramos donde está el dedo, al levantarlo el touchend
+           dispararía click sintético sobre la opción "Mover" sin haberla
+           tocado intencionalmente. */
+        menu.classList.add('show');
+        menu.style.left = '0px';
+        menu.style.top  = '0px';
+        var w = menu.offsetWidth, h = menu.offsetHeight;
+        var VW = window.innerWidth, VH = window.innerHeight;
+        var r = icon.getBoundingClientRect();
+        /* Por defecto: a la derecha del icono, alineado por arriba. */
+        var px = r.right + 8;
+        var py = r.top;
+        if (px + w > VW - 4) px = r.left - w - 8;   /* no cabe → izquierda */
+        if (px < 4)           px = Math.max(4, Math.min(r.left, VW - w - 4));
+        if (py + h > VH - 4)  py = VH - h - 4;
+        if (py < 4)           py = 4;
+        menu.style.left = px + 'px';
+        menu.style.top  = py + 'px';
+    }
+
+    function hideIconCtxMenu(){
+        if (_ctxMenuEl) _ctxMenuEl.classList.remove('show');
+        _ctxIcon = null;
+    }
+
     function attachDrag(icon, desk){
         var holdTimer = null;
         var dragging  = false;
@@ -1469,18 +1583,33 @@ window.notifSystem = (function() {
 
         function onDown(e){
             if(e.type === 'mousedown' && e.button !== 0) return;
+            var isTouch = (e.type === 'touchstart');
             var p = pointer(e);
             startX = p.clientX; startY = p.clientY;
             originX = parseFloat(icon.style.left) || 0;
             originY = parseFloat(icon.style.top)  || 0;
             moved = false;
 
-            icon.classList.add('long-pressing');
-            holdTimer = setTimeout(function(){
+            /* Táctil con el icono en "modo mover" (ya se confirmó desde el
+               menú): saltamos el long-press y armamos el drag al instante. */
+            if (isTouch && icon.classList.contains('move-pending')) {
+                icon.classList.remove('move-pending');
                 armed = true;
-                icon.classList.remove('long-pressing');
                 icon.classList.add('dragging');
-            }, HOLD_MS);
+            } else {
+                icon.classList.add('long-pressing');
+                holdTimer = setTimeout(function(){
+                    icon.classList.remove('long-pressing');
+                    if (isTouch) {
+                        /* En táctil → mostramos menú "Mover" en vez de
+                           empezar a arrastrar de golpe. */
+                        showIconCtxMenu(icon);
+                    } else {
+                        armed = true;
+                        icon.classList.add('dragging');
+                    }
+                }, HOLD_MS);
+            }
 
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
@@ -1528,6 +1657,9 @@ window.notifSystem = (function() {
             icon.classList.remove('long-pressing');
             icon.classList.remove('dragging');
             if(dragging){
+                /* Drag completado → salimos del modo "move-pending" si lo
+                   teníamos puesto (entró por flujo táctil del menú). */
+                icon.classList.remove('move-pending');
                 var droppedInFolder = false;
                 if(window.DesktopFolders){
                     var rect = icon.getBoundingClientRect();
@@ -1569,6 +1701,39 @@ window.notifSystem = (function() {
     } else {
         bootstrap();
     }
+})();
+
+/* =========================================================
+   DOUBLE-TAP → DBLCLICK (táctil)
+   ─────────────────────────────────────────────────────────
+   En táctil, los navegadores no siempre sintetizan dblclick
+   con dos pulsaciones rápidas. Lo emulamos manualmente para
+   .desktop-icon (incluye iconos del escritorio y carpetas):
+   dos taps sobre el mismo elemento en < 400 ms → dispatch
+   sintético de dblclick. attachDrag() ya bloquea esto si
+   hubo arrastre real (la clase .dragging se mantiene).
+========================================================= */
+(function(){
+    var GAP = 400;
+    var last = { id: null, t: 0 };
+    document.addEventListener('touchend', function(e){
+        if (!e.changedTouches || e.changedTouches.length !== 1) return;
+        var icon = e.target.closest('.desktop-icon');
+        if (!icon || !icon.id) return;
+        if (icon.classList.contains('dragging'))     return;   /* drag activo */
+        if (icon.classList.contains('move-pending')) return;   /* esperando mover */
+        /* Si el menú "Mover" está abierto, este touchend cierra el
+           long-press, no es un primer tap del doble. */
+        var menu = document.getElementById('desktop-icon-ctx-menu');
+        if (menu && menu.classList.contains('show')) return;
+        var now = (new Date()).getTime();
+        if (last.id === icon.id && now - last.t < GAP) {
+            last = { id: null, t: 0 };
+            icon.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+        } else {
+            last = { id: icon.id, t: now };
+        }
+    });
 })();
 
 /* =========================================================
@@ -1996,6 +2161,28 @@ window.notifSystem = (function() {
             if(e.target.closest('.desktop-icon')) return;
             e.preventDefault(); showCtxMenu(e.clientX, e.clientY);
         });
+        /* Long-press en zona vacía del escritorio ≈ click derecho.
+           600 ms para no chocar con los 350 ms del drag de iconos. */
+        var lpTimer = null, lpX = 0, lpY = 0;
+        desk.addEventListener('touchstart', function(e){
+            if (e.target.closest('.desktop-icon')) return;
+            if (!e.touches || e.touches.length !== 1) return;
+            lpX = e.touches[0].clientX;
+            lpY = e.touches[0].clientY;
+            lpTimer = setTimeout(function(){
+                lpTimer = null;
+                showCtxMenu(lpX, lpY);
+            }, 600);
+        }, { passive: true });
+        desk.addEventListener('touchmove', function(e){
+            if (!lpTimer || !e.touches[0]) return;
+            if (Math.abs(e.touches[0].clientX - lpX) > 10 ||
+                Math.abs(e.touches[0].clientY - lpY) > 10) {
+                clearTimeout(lpTimer); lpTimer = null;
+            }
+        }, { passive: true });
+        desk.addEventListener('touchend',    function(){ if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
+        desk.addEventListener('touchcancel', function(){ if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } });
         document.addEventListener('click', function(){ hideCtxMenu(); });
         document.addEventListener('contextmenu', function(e){ if(!e.target.closest('#desktop')) hideCtxMenu(); });
         document.addEventListener('keydown', function(e){ if(e.key === 'Escape') hideCtxMenu(); });

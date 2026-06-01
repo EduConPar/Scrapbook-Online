@@ -26,6 +26,7 @@ if ($userKey && file_exists($themeHelpers)) {
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<script src="../assets/js/pwa-guard.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>D&D Fichas</title>
 <link rel="stylesheet" href="../assets/css/tokens.css">

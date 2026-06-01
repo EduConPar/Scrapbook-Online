@@ -1,8 +1,21 @@
 <?php
 header('Content-Type: text/html; charset=UTF-8');
+/* Sesión persistente 30 días → al abrir la PWA / volver al móvil, no
+   pide login. Tiene que ir antes de session_start(). */
+require_once __DIR__ . '/assets/mobile-detect.php';
+setLongSessionCookie();
 session_start();
 require_once __DIR__ . '/assets/config.php';
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
+
+/* Móviles SIEMPRE entran por la landing. Es la única puerta a Melon
+   Hub — la landing decide si pintar el pitch de instalación o rebotar
+   al usuario al home (cuando ya está dentro de la PWA). Override con
+   ?desktop=1 (o cookie force_desktop). */
+if (isMobileDevice()) {
+    header('Location: mobile-landing.php');
+    exit;
+}
 
 /* Base URL del proyecto, derivada del script actual. Asegura que las
    rutas a CSS de temas funcionen sea cual sea la URL de acceso
@@ -79,7 +92,11 @@ if ($selectedUser && isset($users[$selectedUser])) {
     if (isset($_POST['password'])) {
         if (password_verify($_POST['password'], $users[$selectedUser]['password'])) {
             $_SESSION['user'] = $selectedUser;
-            header('Location: ' . strtolower($selectedLabel) . '-desktop.php');
+            /* Móviles → menú feature-phone. PC/tablet → escritorio Win98. */
+            $target = isMobileDevice()
+                ? 'mobile.php'
+                : strtolower($selectedLabel) . '-desktop.php';
+            header('Location: ' . $target);
             exit;
         }
         $loginError = true;
