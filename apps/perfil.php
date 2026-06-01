@@ -6,7 +6,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
 <!-- PROFILE WINDOW -->
 <div class="window" id="profile-window">
     <div class="title-bar">
-        <div class="title-bar-text">👤 <?php echo htmlspecialchars($desktopLabel); ?></div>
+        <div class="title-bar-text"><?php echo appTitleIcon('profileIcon', '👤'); ?><?php echo htmlspecialchars($desktopLabel); ?></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>

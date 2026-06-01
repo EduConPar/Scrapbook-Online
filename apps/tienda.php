@@ -658,18 +658,38 @@ document.querySelectorAll('[data-view]').forEach(function(el){
 
 /* Polling del balance cada 15 s para que el contador de autismo se vea en
    vivo (puntos por mensaje/voz/reacciones del bot, recompensas de admin,
-   etc). Endpoint ligero `balance` que solo devuelve `{autismo}`. */
+   etc). Endpoint ligero `balance` que solo devuelve `{autismo}`.
+   Usa fetch directo con `cache:'no-store'` + cache-buster por timestamp
+   para sortear cualquier caché del navegador o de un proxy en medio. */
 (function(){
-    setInterval(async function(){
-        if (document.hidden) return;     /* no consume cuando la tab está oculta */
+    async function pollBalance(){
+        if (document.hidden) return;
         try {
-            var r = await api('balance');
+            var r = await fetch(API + '?action=balance&t=' + Date.now(), {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: { 'Content-Type': 'application/json' }
+            }).then(function(x){ return x.json(); });
             if (r.error || typeof r.autismo !== 'number') return;
+            console.log('[tienda] poll balance:', r.autismo, '(local:', _balance, ')');
             if (r.autismo === _balance) return;
             _balance = r.autismo;
             renderBalance();
-        } catch (e) {}
-    }, 15000);
+        } catch (e) { console.warn('[tienda] poll error:', e.message); }
+    }
+    /* Primera llamada a los 3 s para arrancar rápido, luego cada 15 s. */
+    setTimeout(pollBalance, 3000);
+    setInterval(pollBalance, 15000);
+
+    /* El escritorio nos avisa cuando el usuario reabre la ventana de la
+       tienda — refrescamos balance + items + compras al instante en lugar
+       de esperar al próximo ciclo del polling. */
+    window.addEventListener('message', function(e){
+        if (e.data && e.data.type === 'tienda-refresh') {
+            pollBalance();           /* update inmediato del wallet */
+            loadState();             /* refresca items + compras */
+        }
+    });
 })();
 
 loadState();

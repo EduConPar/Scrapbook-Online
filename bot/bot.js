@@ -17,6 +17,7 @@ const cfg = {
     guildId          : process.env.DISCORD_GUILD_ID,
     msgPoints        : Number(process.env.POINTS_PER_MESSAGE      || 1),
     voicePoints      : Number(process.env.POINTS_PER_VOICE_MINUTE || 1),
+    voiceMinPerPoint : Math.max(1, Number(process.env.VOICE_MINUTES_PER_POINT || 1)),
     reactionPoints   : Number(process.env.POINTS_PER_REACTION     || 10),
     msgCooldownSec   : Number(process.env.MESSAGE_COOLDOWN_SECONDS || 60),
     excludedChannels : (process.env.EXCLUDED_CHANNEL_IDS || '').split(',').map(s => s.trim()).filter(Boolean),
@@ -112,9 +113,13 @@ client.on(Events.VoiceStateUpdate, async (oldS, newS) => {
         const start = voiceJoins.get(uid);
         voiceJoins.delete(uid);
         if (!start) return;
-        const minutes = Math.floor((Date.now() - start) / 60_000);
-        if (minutes >= 1) {
-            await awardPoints(uid, minutes * cfg.voicePoints, `${minutes} min en voz`);
+        const minutes  = Math.floor((Date.now() - start) / 60_000);
+        /* Premiamos 1 "intervalo" cada `VOICE_MINUTES_PER_POINT` minutos
+           completos. Por defecto el intervalo es 1 min (compat con antes);
+           con `VOICE_MINUTES_PER_POINT=2` da 1 punto cada 2 min. */
+        const intervals = Math.floor(minutes / cfg.voiceMinPerPoint);
+        if (intervals >= 1) {
+            await awardPoints(uid, intervals * cfg.voicePoints, `${minutes} min en voz`);
         }
         return;
     }
@@ -199,8 +204,9 @@ async function shutdown(signal) {
     console.log(`\n${signal} recibido — cerrando…`);
     const now = Date.now();
     for (const [uid, start] of voiceJoins) {
-        const minutes = Math.floor((now - start) / 60_000);
-        if (minutes >= 1) await awardPoints(uid, minutes * cfg.voicePoints, 'shutdown');
+        const minutes   = Math.floor((now - start) / 60_000);
+        const intervals = Math.floor(minutes / cfg.voiceMinPerPoint);
+        if (intervals >= 1) await awardPoints(uid, intervals * cfg.voicePoints, 'shutdown');
     }
     await pool.end().catch(()=>{});
     client.destroy();

@@ -86,6 +86,18 @@ function desktopIcon(string $name, string $emoji) {
     }
     return $emoji;
 }
+
+/* Helper para el title-bar de las ventanas: usa el PNG de
+   assets/img/appIcons/{pngName}.png si existe (16×16) o cae al emoji.
+   Pensado para que cada ventana de app muestre el MISMO icono que aparece
+   en el escritorio, no un emoji distinto. */
+function appTitleIcon(string $pngName, string $emoji): string {
+    $rel = "assets/img/appIcons/{$pngName}.png";
+    if (file_exists(__DIR__ . '/' . $rel)) {
+        return '<img src="' . $rel . '" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;" alt="">';
+    }
+    return $emoji . ' ';
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -326,7 +338,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- ARCHIVE WINDOW -->
 <div class="window" id="archive-window">
     <div class="title-bar" id="archive-titlebar">
-        <div class="title-bar-text">📼 MelonArchive</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('melonArchiveIcon', '📼'); ?>MelonArchive</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -339,7 +351,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- TEMAS WINDOW -->
 <div class="window" id="temas-window" style="display:none; position:fixed; left:10vw; top:6vh; width:80vw; height:80vh; z-index:550; flex-direction:column;">
     <div class="title-bar" id="temas-titlebar">
-        <div class="title-bar-text">🎨 Temas</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('temasIcon', '🎨'); ?>Temas</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -352,7 +364,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- COMPANION WINDOW -->
 <div class="window" id="companion-window" style="display:none; position:fixed; left:10vw; top:6vh; width:80vw; height:80vh; z-index:550; flex-direction:column;">
     <div class="title-bar" id="companion-titlebar">
-        <div class="title-bar-text">💀 Helldivers Companion</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('companionIcon', '💀'); ?>Helldivers Companion</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -1026,7 +1038,15 @@ window.notifSystem = (function() {
     var tiendaLoaded = false;
 
     document.getElementById('tienda-icon').addEventListener('dblclick', function() {
-        if (!tiendaLoaded) { tiendaIframe.src = 'apps/tienda.php'; tiendaLoaded = true; }
+        if (!tiendaLoaded) {
+            tiendaIframe.src = 'apps/tienda.php';
+            tiendaLoaded = true;
+        } else {
+            /* Iframe ya estaba cargado: pedimos al iframe que refresque su
+               estado (balance, items, compras) para que el wallet de la
+               sidebar no se quede congelado tras minutos cerrada. */
+            try { tiendaIframe.contentWindow.postMessage({ type: 'tienda-refresh' }, '*'); } catch (e) {}
+        }
         if (taskbarManager.isRegistered('tienda-window')) {
             taskbarManager.restore('tienda-window');
         } else {
