@@ -16,6 +16,7 @@ if (!function_exists('curl_init')) {
 
 $action     = isset($_GET['action']) ? $_GET['action'] : 'playlists';
 $playlistId = isset($_GET['list']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $_GET['list']) : '';
+$videoId    = isset($_GET['id'])   ? preg_replace('/[^A-Za-z0-9_-]/', '', $_GET['id']) : '';
 
 /* Caché de respuestas de Innertube en SQL (app_cache), ya no en disco.
    TTL de 1h. Devuelve false cuando no hay entrada vigente (compat). */
@@ -253,6 +254,19 @@ if ($action === 'playlists') {
         );
     }
     echo json_encode(array('videos' => $videos));
+
+/* ── INFO DE UN VÍDEO (descripción, autor, vistas) ── */
+} elseif ($action === 'video-info' && $videoId) {
+    /* Endpoint `player` devuelve videoDetails con shortDescription. */
+    $data = innertubeCall('player', array('videoId' => $videoId));
+    if (!$data) { echo json_encode(array('error' => 'No se pudo obtener info del vídeo')); exit; }
+    $details = isset($data['videoDetails']) ? $data['videoDetails'] : array();
+    echo json_encode(array(
+        'description' => isset($details['shortDescription']) ? $details['shortDescription'] : '',
+        'author'      => isset($details['author'])           ? $details['author']           : '',
+        'viewCount'   => isset($details['viewCount'])        ? $details['viewCount']        : '',
+        'lengthSec'   => isset($details['lengthSeconds'])    ? (int)$details['lengthSeconds'] : 0,
+    ));
 
 } else {
     echo json_encode(array('error' => 'Accion invalida'));
