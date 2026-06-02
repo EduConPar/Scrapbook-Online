@@ -251,6 +251,34 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-pl-head:active .mu-pl-arrow { color: var(--accent-text, #fff); }
         .mu-playlist.open .mu-pl-arrow { transform: rotate(90deg); }
 
+        /* Botón de play en el header de cada playlist. Inicia la
+           reproducción desde el primer track al pulsarlo. Si la
+           playlist está vacía queda en disabled. */
+        .mu-pl-play {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
+            padding: 0;
+            margin: 0 4px 0 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text, #000);
+            font-family: inherit;
+        }
+        .mu-pl-play svg {
+            width: 16px;
+            height: 16px;
+            display: block;
+        }
+        .mu-pl-play:disabled {
+            color: var(--text-faint, #888);
+            cursor: not-allowed;
+        }
+        .mu-pl-head:active .mu-pl-play { color: var(--accent-text, #fff); }
+
         /* Lista de tracks dentro de una playlist abierta. */
         .mu-tracks {
             display: none;
@@ -350,10 +378,13 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-player {
             position: fixed;
             left: 0; right: 0;
-            bottom: 0;
+            /* Bottom = statusbar_top exacto, sin gap ni overlap.
+               statusbar_height (22px) + window-body padding-bottom
+               (max 8px o env safe-area). */
+            bottom: calc(22px + max(8px, env(safe-area-inset-bottom, 0px)));
             background: var(--btn-bg, silver);
             border-top: 2px solid var(--accent, #000080);
-            padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+            padding: 8px 12px;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -426,18 +457,867 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             min-height: 40px;
             font-size: 16px;
         }
+        /* Visualmente sugerir que el mini-player es tappable. */
+        .mu-player-info, .mu-player-thumb {
+            cursor: pointer;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* ════════════════════════════════════════════════════════════
+           NOW PLAYING — vista fullscreen con vinilo girando
+           Estética Win98 con la paleta del tema del usuario. El splash
+           del thumbnail blureado sigue presente pero atenuado, para
+           que pinte sobre el fondo sin tapar la silver del tema.
+           ════════════════════════════════════════════════════════════ */
+        .mu-full {
+            /* ── Solo el efecto LCD/glow del texto vive aquí ──
+               Los FONDOS los heredamos del tema activo (var(--win-bg),
+               var(--input-bg), etc.) como cualquier otra app. La
+               "vibe LCD" sale del glow del acento sobre el chrome
+               Win98 normal + scanlines globales sutiles. */
+            --lcd:      var(--accent, #00ff88);
+            --lcd-soft: color-mix(in srgb, var(--accent, #00ff88) 65%, transparent);
+            --lcd-dim:  color-mix(in srgb, var(--accent, #00ff88) 35%, transparent);
+            --lcd-veil: color-mix(in srgb, var(--accent, #00ff88) 5%, transparent);
+
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            overflow: hidden;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        .mu-full.visible { transform: translateY(0); }
+        /* Scanlines globales sobre toda la ventana. mix-blend-mode da
+           ese tinte CRT auténtico sin tapar el texto. */
+        .mu-full::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                var(--lcd-veil) 0,
+                var(--lcd-veil) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            mix-blend-mode: screen;
+            pointer-events: none;
+            z-index: 999;
+        }
+        /* Splash desactivado: el fondo del fullscreen usa solo el tema
+           del usuario (var(--win-bg) en .mu-full). El elemento se queda
+           en el DOM por si en el futuro quieres reactivarlo. */
+        .mu-full-splash { display: none; }
+        /* La ventana Win98 ocupa todo el viewport y vive por encima del
+           splash. Body translúcido para que la paleta cale a través. */
+        .mu-full-window {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            background: transparent;
+            box-shadow: none;
+            padding: 3px;
+        }
+        .mu-full-window > .title-bar { flex-shrink: 0; }
+        .mu-full-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            margin: 0;
+            padding: 10px 12px;
+            background: transparent;
+            overflow: hidden;
+            gap: 10px;
+        }
+
+        /* Display sunken: el vinilo vive dentro de un panel hundido
+           Win98 (como la pantalla de un reproductor). Le da volumen y
+           "marco" sin tener que tocar el propio disco. */
+        .mu-full-display {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            min-height: 0;
+            background: var(--input-bg, #000);
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a);
+            /* Brillo radial sutil que sugiere "pantalla de tubo". */
+            background-image:
+                radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        /* Scanlines retro encima del display. */
+        .mu-full-display::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                repeating-linear-gradient(
+                    to bottom,
+                    rgba(255,255,255,0.025) 0,
+                    rgba(255,255,255,0.025) 1px,
+                    transparent 1px,
+                    transparent 3px
+                );
+            pointer-events: none;
+        }
+        .mu-vinyl-wrap {
+            width: min(72vw, 300px);
+            max-height: 100%;
+            aspect-ratio: 1;
+            position: relative;
+            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.65));
+        }
+        .mu-vinyl {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background:
+                repeating-radial-gradient(circle at center,
+                    rgba(255,255,255,0.04) 0,
+                    rgba(255,255,255,0.04) 1px,
+                    transparent 1px,
+                    transparent 5px),
+                radial-gradient(circle at center,
+                    #1f1f1f 0%,
+                    #0a0a0a 70%,
+                    #050505 100%);
+            animation: mu-spin 6s linear infinite;
+        }
+        .mu-vinyl.paused { animation-play-state: paused; }
+        @keyframes mu-spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        .mu-vinyl::after {
+            content: '';
+            position: absolute;
+            inset: 6px;
+            border-radius: 50%;
+            box-shadow:
+                inset 12px -20px 30px rgba(255,255,255,0.04),
+                inset -6px 8px 18px rgba(0,0,0,0.6);
+            pointer-events: none;
+        }
+        /* Etiqueta central — círculo con el thumbnail (mqdefault, 16:9
+           sin letterbox). 36% del diámetro: tamaño clásico de etiqueta
+           de vinilo, el cover del thumbnail rellena sin bandas porque
+           la fuente ya viene 16:9. */
+        .mu-vinyl-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 36%;
+            height: 36%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background-color: var(--accent, #000080);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            box-shadow:
+                0 0 0 2px rgba(0,0,0,0.5),
+                inset 0 0 0 1px rgba(255,255,255,0.12);
+            overflow: hidden;
+        }
+        .mu-vinyl-label.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: var(--accent-text, #fff);
+        }
+        .mu-vinyl-hole {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 3.2%;
+            height: 3.2%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: #050505;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.18);
+            z-index: 2;
+        }
+
+        /* Info — display LCD/holograma sobre fondo negro. Misma estética
+           que antes (glow + scanlines + blink) pero el color de luz lo
+           dicta `var(--accent)` del tema activo en vez del verde fijo.
+           Las dos custom properties internas (--lcd y --lcd-soft) se
+           recalculan con color-mix si el tema cambia. */
+        .mu-full-info {
+            --lcd:      var(--accent, #00ff88);
+            --lcd-soft: color-mix(in srgb, var(--accent, #00ff88) 65%, transparent);
+            --lcd-veil: color-mix(in srgb, var(--accent, #00ff88) 5%, transparent);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--input-bg, #fff);
+            color: var(--lcd);
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a);
+            box-sizing: border-box;
+            flex-shrink: 0;
+            min-height: 50px;
+            position: relative;
+            overflow: hidden;
+        }
+        /* Scanlines retro tintadas con el acento del tema. */
+        .mu-full-info::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                var(--lcd-veil) 0,
+                var(--lcd-veil) 1px,
+                transparent 1px,
+                transparent 3px
+            );
+            pointer-events: none;
+        }
+        .mu-full-info-marker {
+            font-family: 'VT323', monospace;
+            font-size: 24px;
+            color: var(--lcd);
+            text-shadow: 0 0 8px var(--lcd-soft);
+            line-height: 1;
+            flex-shrink: 0;
+            animation: mu-blink 1s steps(2) infinite;
+        }
+        @keyframes mu-blink {
+            from { opacity: 1; }
+            to   { opacity: 0.25; }
+        }
+        .mu-full-info-text {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+        }
+        /* Wrappers con altura fija + clipping horizontal. La altura es
+           1 línea exacta (line-height × font-size). El texto vive en
+           un <span> hijo inline-block que puede desbordar y se anima
+           horizontalmente si excede el ancho del wrap. */
+        .mu-full-title-wrap {
+            font-size: clamp(18px, 5.5vw, 24px);
+            line-height: 1.15;
+            height: 1.15em;
+            overflow: hidden;
+            white-space: nowrap;
+            margin: 0 0 2px;
+        }
+        .mu-full-artist-wrap {
+            font-size: clamp(13px, 3.8vw, 16px);
+            line-height: 1.3;
+            height: 1.3em;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        /* Track: contenedor que se anima horizontalmente. En reposo es
+           inline-block con un único hijo (el span del texto). Cuando
+           el JS detecta overflow añade .marquee y entonces pasa a
+           inline-flex con un gap entre las dos copias del texto. */
+        .mu-full-title-track,
+        .mu-full-artist-track {
+            display: inline-block;
+            will-change: transform;
+        }
+        .mu-full-title,
+        .mu-full-artist {
+            display: inline-block;
+            font-family: 'VT323', monospace;
+            letter-spacing: 1px;
+            text-shadow: 0 0 6px var(--lcd-soft);
+            line-height: inherit;
+        }
+        .mu-full-title  { color: var(--lcd); }
+        .mu-full-artist { color: var(--lcd-soft); }
+
+        /* Marquee continuo tipo ticker: el track recorre una distancia
+           igual a (ancho del texto + gap), llevando el clon a la
+           posición donde estaba el original → loop sin "vuelta atrás",
+           hay un espacio en blanco entre cada pasada del título. */
+        .mu-full-title-wrap.marquee .mu-full-title-track,
+        .mu-full-artist-wrap.marquee .mu-full-artist-track {
+            display: inline-flex;
+            gap: 3em;
+            animation: mu-marquee var(--mu-marquee-duration, 12s) linear infinite;
+        }
+        @keyframes mu-marquee {
+            from { transform: translateX(0); }
+            to   { transform: translateX(calc(-1 * var(--mu-marquee-cycle, 100%))); }
+        }
+
+        /* Progress bar tipo cassette deck: barra hundida con relleno
+           accent + tiempos VT323 a los lados. */
+        .mu-full-progress-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+        .mu-full-time {
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            color: var(--text, #000);
+            font-variant-numeric: tabular-nums;
+            min-width: 38px;
+            text-align: center;
+        }
+        .mu-full-progress {
+            flex: 1;
+            height: 14px;
+            background: var(--input-bg, #fff);
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a);
+            position: relative;
+            overflow: hidden;
+            padding: 2px;
+            box-sizing: border-box;
+        }
+        .mu-full-progress-fill {
+            height: 100%;
+            width: 0;
+            background:
+                linear-gradient(
+                    90deg,
+                    var(--accent, #000080) 0%,
+                    var(--accent-deep, var(--accent, #1084d0)) 100%
+                );
+            transition: width 0.25s linear;
+        }
+
+        /* Controles LCD: dark + glow accent.
+           98.css mete colores hardcoded en .button, hay que override-arlos
+           con !important. El text-shadow `0 0 #222` lo borra con un glow
+           del color del tema. */
+        .mu-full-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            padding: 4px 0 2px;
+        }
+        /* Botones Win98 normales del tema — sin overrides de fondo.
+           Solo controlamos tamaño y centrado del icono SVG/CSS. */
+        .mu-full-btn {
+            min-width: 60px;
+            min-height: 52px;
+            padding: 0 12px;
+            font-size: 20px;
+            font-family: inherit;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text, #000);
+        }
+        .mu-full-btn.primary {
+            min-width: 88px;
+            min-height: 60px;
+            font-size: 26px;
+        }
+
+        /* ── Iconos play/pausa dibujados con CSS ──
+           Evita la lotería de renderizado de ⏸/▶ como emoji con fondo
+           en algunos dispositivos. Forma siempre centrada y un solo
+           color (currentColor) que sigue al `color` del botón. */
+        .mu-icon-play,
+        .mu-icon-pause {
+            display: inline-block;
+            color: inherit;
+            line-height: 0;
+        }
+        .mu-icon-pause { display: none; }
+        .is-playing > .mu-icon-play   { display: none; }
+        .is-playing > .mu-icon-pause  { display: inline-flex; }
+
+        /* Triángulo play: CSS borders. */
+        #mu-toggle .mu-icon-play {
+            width: 0; height: 0;
+            border-style: solid;
+            border-width: 6px 0 6px 10px;
+            border-color: transparent transparent transparent currentColor;
+            margin-left: 2px;            /* compensación óptica del triángulo */
+        }
+        #mu-full-toggle .mu-icon-play {
+            width: 0; height: 0;
+            border-style: solid;
+            border-width: 11px 0 11px 18px;
+            border-color: transparent transparent transparent currentColor;
+            margin-left: 4px;            /* compensación óptica */
+        }
+
+        /* Dos barras de pausa: pseudo-elementos. */
+        .mu-icon-pause {
+            align-items: center;
+            justify-content: center;
+        }
+        .mu-icon-pause::before,
+        .mu-icon-pause::after {
+            content: '';
+            display: block;
+            background: currentColor;
+        }
+        #mu-toggle .mu-icon-pause::before,
+        #mu-toggle .mu-icon-pause::after {
+            width: 3px;
+            height: 11px;
+            margin: 0 2px;
+        }
+        #mu-full-toggle .mu-icon-pause::before,
+        #mu-full-toggle .mu-icon-pause::after {
+            width: 6px;
+            height: 22px;
+            margin: 0 3px;
+        }
+
+        /* Tiempo del progreso con glow LCD (sigue siendo "pantalla"). */
+        .mu-full-time {
+            color: var(--lcd) !important;
+            text-shadow: 0 0 5px var(--lcd-soft);
+        }
+        /* Fila de acciones secundarias: shuffle + añadir. Icon-only. */
+        .mu-full-extras {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            gap: 8px;
+            flex-shrink: 0;
+            padding: 2px 0;
+        }
+        .mu-full-extra {
+            flex: 0 0 auto;
+            width: 56px;
+            min-height: 36px;
+            padding: 0;
+            font-family: inherit;
+            color: var(--text, #000);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mu-full-extra svg {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
+        /* Estado "pulsado" del shuffle — bezel invertido como botón Win98
+           apretado, para marcar que el modo aleatorio está activo. */
+        .mu-full-extra.is-on {
+            box-shadow:
+                inset -1px -1px var(--bezel-light-2, #fff),
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-1, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-2, grey) !important;
+            color: var(--accent, #000080);
+        }
+
+        /* Footer: chevron-down ancho completo que minimiza el fullscreen. */
+        .mu-full-footer {
+            flex-shrink: 0;
+            display: flex;
+            margin: 0 1px 1px;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .mu-full-footer-btn {
+            flex: 1;
+            min-height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text, #000);
+            font-family: inherit;
+        }
+        .mu-full-footer-btn svg {
+            width: 22px;
+            height: 22px;
+            display: block;
+        }
 
         /* ── MODALES WIN98 reutilizables ──
            Overlay + ventana centrada con title-bar + window-body. Pensado
            como bottom-sheet en móvil pero usando estructura Win98. */
+        /* ════════════════════════════════════════════════════════════
+           LOCK SCREEN — modo reposo del reproductor.
+           Estructura: overlay full-viewport con vinilo centrado,
+           scanlines LCD y hint deslizable. El opening "mezcla" el
+           reproductor con el negro vía transición de opacity sobre
+           todo el overlay (su contenido aparece al mismo tiempo que
+           el fondo negro tapa el fullscreen subyacente).
+           ════════════════════════════════════════════════════════════ */
+        .mu-lock {
+            position: fixed;
+            inset: 0;
+            z-index: 350;
+            overflow: hidden;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            /* Paleta tipo terminal — fondo negro + verde fosforescente
+               fijo. NO usa el acento del tema porque el modo reposo
+               siempre tiene look CRT-monocromo. Los tokens LCD locales
+               sobrescriben los del fullscreen (que sí siguen al tema). */
+            --lock-bg:        #0a0a0a;
+            --lock-surface:   #050505;
+            --lock-bezel-hi:  #2a2a2a;     /* gris neutro para los bezels claros */
+            --lock-bezel-lo:  #1a1a1a;
+            --lock-bezel-dk:  #000;
+            /* Override LCD tokens: verde terminal más apagado. Menos
+               saturación que el #00ff88 anterior — se sigue leyendo
+               como fósforo CRT pero descansa más la vista. */
+            --lcd:      #22cc66;
+            --lcd-soft: rgba(34, 204, 102, 0.65);
+            --lcd-dim:  rgba(34, 204, 102, 0.35);
+            --lcd-veil: rgba(34, 204, 102, 0.06);
+            --accent:      #22cc66;
+            --accent-deep: #117740;
+            --accent-text: #0d1f12;
+            background: var(--lock-bg);
+            color: var(--lcd);
+            transition: opacity 1.2s ease, visibility 0s linear 1.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .mu-lock.visible {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transition: opacity 1.2s ease, visibility 0s linear 0s;
+        }
+
+        /* Filtro LCD del lock: solo CRT scanlines en blanco grisáceo,
+           sin tinte verde sobre el fondo. El verde queda RESERVADO
+           para el texto/HUD; el background se mantiene gris-negro
+           neutro. La viñeta también en gris para reforzar la
+           sensación de "tubo de rayos catódicos" sin colorear. */
+        .mu-lock::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center,
+                rgba(0, 0, 0, 0) 50%,
+                rgba(0, 0, 0, 0.35) 100%);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .mu-lock::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(to bottom,
+                rgba(255, 255, 255, 0.04) 0,
+                rgba(255, 255, 255, 0.04) 1px,
+                transparent 1px,
+                transparent 3px);
+            mix-blend-mode: screen;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Ahorro batería: cuando el lock está visible, las animaciones
+           del fullscreen subyacente se pausan. Como el lock es opaco y
+           lo tapa por completo, no se ve nada → es absurdo gastar GPU
+           rotando un vinilo invisible. */
+        .mu-full.behind-lock,
+        .mu-full.behind-lock *,
+        .mu-full.behind-lock *::before,
+        .mu-full.behind-lock *::after {
+            animation-play-state: paused !important;
+        }
+
+        /* Layout EXACTO al .mu-full-window: title-bar arriba, body
+           con padding y gap idénticos, footer abajo. La diferencia
+           es que aquí los huecos del header, controles, extras y
+           footer son divs vacíos que reservan el espacio para que
+           vinilo/info/progress queden en la misma posición vertical
+           que en el fullscreen. */
+        .mu-lock {
+            display: flex;
+            flex-direction: column;
+            /* Replica el padding interno del .mu-full-window (3px en
+               cada lado) para que el title-bar/body/footer empiecen
+               en las MISMAS coordenadas que en el fullscreen. Sin
+               este padding la HUD quedaba 3px más arriba. */
+            padding: 3px;
+            box-sizing: border-box;
+        }
+
+        /* Hueco del title-bar: misma altura mínima (22px). Fondo
+           transparente para que el filtro LCD (::before/::after) se
+           vea a través — si fuera opaco quedaría como una franja
+           negra sin tintar mientras el resto sí tiene el tinte. */
+        .mu-lock-titlebar {
+            flex-shrink: 0;
+            min-height: 22px;
+            background: transparent;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Body con misma estructura interna que .mu-full-body. */
+        .mu-lock-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 10px 12px;
+            gap: 10px;
+            background: transparent;
+            overflow: hidden;
+            position: relative;
+            z-index: 2;
+        }
+        /* Huecos vacíos donde estaban los controles y los extras.
+           min-height EXACTO del fullscreen: controls primary 60px +
+           padding (4+2); extras button 36px + padding (2+2). Sin
+           padding propio en el hole → el min-height define la altura. */
+        .mu-lock-controls-hole {
+            flex-shrink: 0;
+            min-height: 66px;
+        }
+        .mu-lock-extras-hole {
+            flex-shrink: 0;
+            min-height: 40px;
+        }
+        /* Hueco del footer: misma altura que .mu-full-footer-btn
+           (min-height 32px) + safe-area + margen del .mu-full-footer.
+           Transparente para que el LCD también tinte aquí. */
+        .mu-lock-footer-hole {
+            flex-shrink: 0;
+            min-height: 32px;
+            margin: 0 1px 1px;
+            padding-bottom: env(safe-area-inset-bottom);
+            background: transparent;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Display sunken con vinilo — replica EXACTA de .mu-full-display
+           pero con la paleta dark. Incluye el radial gradient CRT y
+           las scanlines. */
+        .mu-lock-display {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+            min-height: 0;
+            background: var(--lock-surface);
+            background-image:
+                radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%);
+            box-shadow:
+                inset -1px -1px var(--lock-bezel-hi),
+                inset  1px  1px var(--lock-bezel-dk),
+                inset -2px -2px var(--lock-bezel-lo),
+                inset  2px  2px var(--lock-bezel-dk);
+            position: relative;
+            overflow: hidden;
+        }
+        .mu-lock-display::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(to bottom,
+                rgba(255,255,255,0.025) 0,
+                rgba(255,255,255,0.025) 1px,
+                transparent 1px,
+                transparent 3px);
+            pointer-events: none;
+        }
+        /* Vinilo wrap: spec IDÉNTICO al .mu-vinyl-wrap del fullscreen. */
+        .mu-lock-vinyl-wrap {
+            width: min(72vw, 300px);
+            max-height: 100%;
+            aspect-ratio: 1;
+            position: relative;
+            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.65));
+        }
+
+        /* Info LCD — clon del .mu-full-info, mismos glow + scanlines
+           pero sobre tokens dark. */
+        .mu-lock-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--lock-surface);
+            color: var(--lcd);
+            box-shadow:
+                inset -1px -1px var(--lock-bezel-hi),
+                inset  1px  1px var(--lock-bezel-dk),
+                inset -2px -2px var(--lock-bezel-lo),
+                inset  2px  2px var(--lock-bezel-dk);
+            box-sizing: border-box;
+            flex-shrink: 0;
+            min-height: 50px;
+            position: relative;
+            overflow: hidden;
+        }
+        .mu-lock-info-marker {
+            font-family: 'VT323', monospace;
+            font-size: 24px;
+            color: var(--lcd);
+            text-shadow: 0 0 8px var(--lcd-soft);
+            line-height: 1;
+            flex-shrink: 0;
+            animation: mu-blink 1s steps(2) infinite;
+        }
+        .mu-lock-info-text {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+        }
+
+        /* Title/artist con misma estructura wrap+track+span para
+           reusar el sistema de marquee. */
+        .mu-lock-title-wrap {
+            font-size: clamp(18px, 5.5vw, 24px);
+            line-height: 1.15;
+            height: 1.15em;
+            overflow: hidden;
+            white-space: nowrap;
+            margin: 0 0 2px;
+        }
+        .mu-lock-artist-wrap {
+            font-size: clamp(13px, 3.8vw, 16px);
+            line-height: 1.3;
+            height: 1.3em;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .mu-lock-title-track,
+        .mu-lock-artist-track {
+            display: inline-block;
+            will-change: transform;
+        }
+        .mu-lock-title,
+        .mu-lock-artist {
+            display: inline-block;
+            font-family: 'VT323', monospace;
+            letter-spacing: 1px;
+            text-shadow: 0 0 6px var(--lcd-soft);
+            line-height: inherit;
+        }
+        .mu-lock-title  { color: var(--lcd); }
+        .mu-lock-artist { color: var(--lcd-soft); }
+        .mu-lock-title-wrap.marquee .mu-lock-title-track,
+        .mu-lock-artist-wrap.marquee .mu-lock-artist-track {
+            display: inline-flex;
+            gap: 3em;
+            animation: mu-marquee var(--mu-marquee-duration, 12s) linear infinite;
+        }
+
+        /* Progress + tiempos — réplica del fullscreen con tokens dark. */
+        .mu-lock-progress-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+        .mu-lock-time {
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            color: var(--lcd);
+            text-shadow: 0 0 5px var(--lcd-soft);
+            font-variant-numeric: tabular-nums;
+            min-width: 38px;
+            text-align: center;
+        }
+        .mu-lock-progress {
+            flex: 1;
+            height: 14px;
+            background: var(--lock-surface);
+            box-shadow:
+                inset -1px -1px var(--lock-bezel-hi),
+                inset  1px  1px var(--lock-bezel-dk),
+                inset -2px -2px var(--lock-bezel-lo),
+                inset  2px  2px var(--lock-bezel-dk);
+            position: relative;
+            overflow: hidden;
+            padding: 2px;
+            box-sizing: border-box;
+        }
+        .mu-lock-progress-fill {
+            height: 100%;
+            width: 0;
+            /* Gradiente verde terminal apagado para casar con --lcd. */
+            background: linear-gradient(90deg, #0d5530 0%, #22cc66 100%);
+            box-shadow: 0 0 8px rgba(34, 204, 102, 0.4);
+            transition: width 0.25s linear;
+        }
+
+        /* Hint deslizable abajo — el ÚNICO elemento que se mueve con
+           el dedo durante el swipe. */
+        .mu-lock-hint {
+            position: absolute;
+            left: 50%;
+            bottom: max(28px, env(safe-area-inset-bottom) + 28px);
+            transform: translateX(-50%);
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            letter-spacing: 1.5px;
+            color: var(--lcd);
+            text-shadow: 0 0 6px var(--lcd-soft);
+            opacity: 0.8;
+            animation: mu-blink 2s ease-in-out infinite;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 2;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            will-change: transform, opacity;
+        }
+
         .mu-modal-backdrop {
             position: fixed; inset: 0;
             background: rgba(0,0,0,0.55);
-            z-index: 200;
+            /* z-index 400 → por encima del fullscreen (z 300) para que
+               cualquier modal abierto desde el reproductor se vea sobre
+               él en lugar de quedar tapado. */
+            z-index: 400;
             display: flex;
             align-items: flex-end;
             justify-content: center;
             padding: 0;
+        }
+        /* Icono SVG opcional en el title-bar del modal — hereda el color
+           del titlebar-text y se alinea verticalmente con el texto. */
+        .mu-modal .title-bar-text {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mu-modal .title-bar-text svg {
+            width: 14px;
+            height: 14px;
+            display: block;
+            color: var(--titlebar-text, #fff);
         }
         .mu-modal-backdrop[hidden] { display: none !important; }
         .mu-modal {
@@ -631,9 +1511,175 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
     <div class="mu-player-controls">
         <button class="button mu-btn" id="mu-prev" type="button" aria-label="Anterior">⏮</button>
-        <button class="button default mu-btn primary" id="mu-toggle" type="button" aria-label="Play/Pausa">▶</button>
+        <button class="button default mu-btn primary" id="mu-toggle" type="button" aria-label="Play/Pausa">
+            <span class="mu-icon-play"  aria-hidden="true"></span>
+            <span class="mu-icon-pause" aria-hidden="true"></span>
+        </button>
         <button class="button mu-btn" id="mu-next" type="button" aria-label="Siguiente">⏭</button>
     </div>
+</div>
+
+<!-- ─── NOW PLAYING fullscreen ────────────────────────────────────
+     Ventana Win98 a pantalla completa con vinilo en panel hundido,
+     progress bar tipo cassette deck y status bar al pie. -->
+<div class="mu-full" id="mu-full" aria-hidden="true">
+    <div class="mu-full-splash" id="mu-full-splash"></div>
+    <div class="window mu-full-window">
+        <div class="title-bar">
+            <div class="title-bar-text">🎵 Melon Player — <span id="mu-full-tb-pl">Reproduciendo</span></div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mu-full-close" type="button"></button>
+            </div>
+        </div>
+        <div class="window-body mu-full-body">
+
+            <!-- Display sunken con el vinilo -->
+            <div class="mu-full-display">
+                <div class="mu-vinyl-wrap">
+                    <div class="mu-vinyl" id="mu-vinyl">
+                        <div class="mu-vinyl-label empty" id="mu-vinyl-label">🎵</div>
+                        <div class="mu-vinyl-hole"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de info con LCD verde "tipo CRT".
+                 Estructura para marquee continuo tipo ticker:
+                 wrap (clipping fijo) → track (animable) → span (texto).
+                 Si hay overflow, el JS clona el span dentro del track
+                 y la animación scrollea el track una distancia
+                 (texto + gap), creando un loop visual sin "vuelta atrás". -->
+            <div class="mu-full-info">
+                <div class="mu-full-info-marker">♪</div>
+                <div class="mu-full-info-text">
+                    <div class="mu-full-title-wrap" id="mu-full-title-wrap">
+                        <span class="mu-full-title-track" id="mu-full-title-track">
+                            <span class="mu-full-title" id="mu-full-title">—</span>
+                        </span>
+                    </div>
+                    <div class="mu-full-artist-wrap" id="mu-full-artist-wrap">
+                        <span class="mu-full-artist-track" id="mu-full-artist-track">
+                            <span class="mu-full-artist" id="mu-full-artist">—</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress bar tipo deck con tiempo a los lados -->
+            <div class="mu-full-progress-row">
+                <span class="mu-full-time" id="mu-full-time-cur">0:00</span>
+                <div class="mu-full-progress" id="mu-full-progress">
+                    <div class="mu-full-progress-fill" id="mu-full-progress-fill"></div>
+                </div>
+                <span class="mu-full-time" id="mu-full-time-tot">0:00</span>
+            </div>
+
+            <!-- Controles grandes -->
+            <div class="mu-full-controls">
+                <button class="button mu-full-btn" id="mu-full-prev" type="button" aria-label="Anterior">⏮</button>
+                <button class="button default mu-full-btn primary" id="mu-full-toggle" type="button" aria-label="Play/Pausa">
+                    <span class="mu-icon-play"  aria-hidden="true"></span>
+                    <span class="mu-icon-pause" aria-hidden="true"></span>
+                </button>
+                <button class="button mu-full-btn" id="mu-full-next" type="button" aria-label="Siguiente">⏭</button>
+            </div>
+            <!-- Acciones secundarias: shuffle + añadir canción a otra playlist.
+                 SVG inline con stroke=currentColor → monocromo, sin pastilla
+                 de emoji, hereda el color del tema. -->
+            <div class="mu-full-extras">
+                <button class="button mu-full-extra" id="mu-full-shuffle" type="button" aria-label="Aleatorio" aria-pressed="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="16 3 21 3 21 8"/>
+                        <line x1="4" y1="20" x2="21" y2="3"/>
+                        <polyline points="21 16 21 21 16 21"/>
+                        <line x1="15" y1="15" x2="21" y2="21"/>
+                        <line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                </button>
+                <button class="button mu-full-extra" id="mu-full-add" type="button" aria-label="Añadir a playlist">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="12" y1="5"  x2="12" y2="19"/>
+                        <line x1="5"  y1="12" x2="19" y2="12"/>
+                    </svg>
+                </button>
+                <button class="button mu-full-extra" id="mu-full-lock" type="button" aria-label="Bloquear pantalla">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4" y="11" width="16" height="10" rx="1.5"/>
+                        <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <!-- Footer: chevron-down que minimiza el fullscreen y vuelve a la
+             vista de playlists. NO navega fuera del reproductor. -->
+        <div class="mu-full-footer">
+            <button class="button mu-full-footer-btn" id="mu-full-menu" type="button" aria-label="Cerrar reproductor">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ─── LOCK SCREEN ────────────────────────────────────────────────
+     MISMA distribución vertical que el .mu-full: title-bar arriba,
+     body con display/info/progress/controls/extras, footer abajo.
+     Diferencia: los huecos del title-bar, controls, extras y footer
+     son DIVS VACÍOS — reservan el espacio pero no muestran botones.
+     Los colores se sustituyen por la paleta dark/LCD. -->
+<div class="mu-lock" id="mu-lock" aria-hidden="true">
+    <!-- Hueco del title-bar (vacío, misma altura). -->
+    <div class="mu-lock-titlebar"></div>
+
+    <div class="mu-lock-body">
+        <!-- Display sunken con vinilo (flex: 1, igual que .mu-full-display). -->
+        <div class="mu-lock-display">
+            <div class="mu-lock-vinyl-wrap">
+                <div class="mu-vinyl mu-lock-vinyl" id="mu-lock-vinyl">
+                    <div class="mu-vinyl-label empty" id="mu-lock-vinyl-label">🎵</div>
+                    <div class="mu-vinyl-hole"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info LCD: marker + title/artist con marquee. -->
+        <div class="mu-lock-info">
+            <div class="mu-lock-info-marker">♪</div>
+            <div class="mu-lock-info-text">
+                <div class="mu-lock-title-wrap" id="mu-lock-title-wrap">
+                    <span class="mu-lock-title-track" id="mu-lock-title-track">
+                        <span class="mu-lock-title" id="mu-lock-title">—</span>
+                    </span>
+                </div>
+                <div class="mu-lock-artist-wrap" id="mu-lock-artist-wrap">
+                    <span class="mu-lock-artist-track" id="mu-lock-artist-track">
+                        <span class="mu-lock-artist" id="mu-lock-artist">—</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress + tiempos. -->
+        <div class="mu-lock-progress-row">
+            <span class="mu-lock-time" id="mu-lock-time-cur">0:00</span>
+            <div class="mu-lock-progress">
+                <div class="mu-lock-progress-fill" id="mu-lock-progress-fill"></div>
+            </div>
+            <span class="mu-lock-time" id="mu-lock-time-tot">0:00</span>
+        </div>
+
+        <!-- Hueco de los controles (vacío, misma altura que prev/play/next). -->
+        <div class="mu-lock-controls-hole"></div>
+        <!-- Hueco de la fila extras (vacío). -->
+        <div class="mu-lock-extras-hole"></div>
+    </div>
+
+    <!-- Hueco del footer (vacío, misma altura que el chevron de cerrar). -->
+    <div class="mu-lock-footer-hole"></div>
+
+    <!-- Hint flotante para el swipe (no rompe el layout). -->
+    <div class="mu-lock-hint" id="mu-lock-hint">↑  Desliza para desbloquear</div>
 </div>
 
 <!-- Host de modales (se rellena dinámicamente desde JS) -->
@@ -642,7 +1688,42 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- Iframe oculto donde vive el player de YouTube -->
 <div id="yt-host"><div id="yt-iframe"></div></div>
 
+
 <script>
+/* ─── Modo embebido ──────────────────────────────────────────────
+   Cuando esta página vive dentro del shell SPA (mobile.php),
+   delegamos toda la reproducción al motor del padre — el iframe de
+   YouTube y el mini-player del shell controlan el audio, aquí solo
+   gestionamos la UI de playlists. Standalone (acceso directo) sigue
+   funcionando con su propio motor por compatibilidad. */
+var EMBEDDED = (function(){ try { return window.parent !== window; } catch (_) { return false; } })();
+var SHELL    = EMBEDDED ? window.parent.MuShell : null;
+
+/* Ocultamos el mini-player local + el iframe YT local cuando estamos
+   embebidos: el shell ya muestra su propio mini-player y mantiene la
+   reproducción. */
+if (EMBEDDED) {
+    var _localPlayer = document.getElementById('mu-player');
+    if (_localPlayer) _localPlayer.style.display = 'none';
+    var _localYt = document.getElementById('yt-host');
+    if (_localYt) _localYt.style.display = 'none';
+    /* La vista grande del reproductor y la pantalla de bloqueo viven
+       en musica-mobile, pero como no tenemos YT_PLAYER local quedan
+       inservibles. Las ocultamos por completo. */
+    ['mu-full', 'mu-lock'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    /* Y la status-bar del fullscreen "‹ Menú" envía postMessage en
+       lugar de navegar para volver al launcher. */
+    document.addEventListener('click', function(e){
+        var menuLink = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        if (!menuLink) return;
+        e.preventDefault();
+        try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
+    }, true);
+}
+
 /* ─── Estado ────────────────────────────────────────────────────── */
 var API_MUSIC = '../assets/music/api.php';
 var ME_KEY    = <?= json_encode($userKey) ?>;
@@ -657,6 +1738,7 @@ var QUEUE     = [];        /* tracks de la playlist en reproducción */
 var CUR_IDX   = -1;        /* índice del track actual en QUEUE */
 var YT_PLAYER = null;      /* instancia YT.Player (no llamarla YT — choca con window.YT) */
 var YT_READY  = false;
+var SHUFFLE_ON = false;    /* modo aleatorio: next/prev eligen track al azar */
 /* Música del perfil — la cargamos en paralelo a las playlists para
    poder mostrar la estrella de reseña en cualquier track cuyo videoId
    ya tengas reseñado en tu lista de música. Solo items PROPIOS. */
@@ -774,6 +1856,15 @@ function renderPlaylists() {
             avatarsHtml += '</div>';
         }
 
+        var canPlay   = (pl.tracks || []).length > 0;
+        var playBtnHtml = '<button class="button mu-pl-play" type="button"' +
+                            ' data-pl-idx="' + i + '"' +
+                            (canPlay ? '' : ' disabled') +
+                            ' aria-label="Reproducir playlist">' +
+                            '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+                                '<polygon points="6 4 20 12 6 20"/>' +
+                            '</svg>' +
+                          '</button>';
         html += '<div class="mu-playlist" data-pl-idx="' + i + '">' +
                   '<div class="mu-pl-head">' +
                     '<div class="mu-pl-info">' +
@@ -781,6 +1872,7 @@ function renderPlaylists() {
                       '<div class="mu-pl-meta">' + meta + '</div>' +
                     '</div>' +
                     avatarsHtml +
+                    playBtnHtml +
                     '<div class="mu-pl-arrow">›</div>' +
                   '</div>' +
                   '<div class="mu-tracks">';
@@ -904,6 +1996,19 @@ listEl.addEventListener('click', function(e){
     /* Si acabamos de disparar long-press, ignora el click sintético
        que viene con el touchend para no togglear la playlist. */
     if (_lpFired) { _lpFired = false; e.preventDefault(); e.stopPropagation(); return; }
+    /* Botón ▶ del header — antes que el toggle del head para que el
+       tap NO abra/cierre la playlist accidentalmente. */
+    var playBtn = e.target.closest('.mu-pl-play');
+    if (playBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (playBtn.disabled) return;
+        var pi = parseInt(playBtn.dataset.plIdx, 10);
+        if (PLAYLISTS[pi] && (PLAYLISTS[pi].tracks || []).length) {
+            playFromPlaylist(pi, 0);     /* arranca desde el primer track */
+        }
+        return;
+    }
     var headEl = e.target.closest('.mu-pl-head');
     if (headEl) {
         var pl = headEl.parentElement;
@@ -920,15 +2025,450 @@ listEl.addEventListener('click', function(e){
 
 function onYTState(e) {
     var btn = document.getElementById('mu-toggle');
-    if (e.data === 1) { btn.textContent = '▌▌'; setMediaPlaybackState('playing'); }
-    else if (e.data === 2) { btn.textContent = '▶'; setMediaPlaybackState('paused'); }
+    if (e.data === 1)      { btn.classList.add('is-playing');    setMediaPlaybackState('playing'); }
+    else if (e.data === 2) { btn.classList.remove('is-playing'); setMediaPlaybackState('paused');  }
     else if (e.data === 0) nextTrack();
+    /* Espeja el estado en el toggle grande del fullscreen + pausa
+       la rotación del vinilo cuando no se está reproduciendo. */
+    muFullSyncPlay(e.data === 1);
+}
+
+/* ─── NOW PLAYING fullscreen + LOCK ─────────────────────────────
+   Timer único de progreso (500ms) que actualiza el progreso de
+   ambos paneles (fullscreen + lock) — solo corre cuando al menos
+   uno está visible para ahorrar batería. */
+var MU_PROGRESS_T = null;
+
+function muFullOpen() {
+    if (CUR_IDX < 0) return;                     /* nada sonando: no abre */
+    var el = document.getElementById('mu-full');
+    el.classList.add('visible');
+    el.setAttribute('aria-hidden', 'false');
+    muFullRefresh();
+    muProgressTimerSync();
+}
+function muFullClose() {
+    var el = document.getElementById('mu-full');
+    el.classList.remove('visible');
+    el.setAttribute('aria-hidden', 'true');
+    muProgressTimerSync();
+}
+function muProgressTimerSync() {
+    var fullVis = document.getElementById('mu-full').classList.contains('visible');
+    var lockVis = document.getElementById('mu-lock').classList.contains('visible');
+    if (fullVis || lockVis) muStartProgressTimer();
+    else                    muStopProgressTimer();
+}
+function muStartProgressTimer() {
+    if (MU_PROGRESS_T) return;
+    MU_PROGRESS_T = setInterval(muTickProgress, 500);
+    muTickProgress();
+}
+function muStopProgressTimer() {
+    if (MU_PROGRESS_T) { clearInterval(MU_PROGRESS_T); MU_PROGRESS_T = null; }
+}
+function muFmt(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ':' + (s < 10 ? '0' + s : s);
+}
+function muTickProgress() {
+    if (!YT_READY || !YT_PLAYER) return;
+    var cur = 0, tot = 0;
+    try {
+        cur = YT_PLAYER.getCurrentTime() || 0;
+        tot = YT_PLAYER.getDuration()    || 0;
+    } catch (_) {}
+    var pct = tot > 0 ? Math.min(100, (cur / tot) * 100) : 0;
+    var curStr = muFmt(cur), totStr = muFmt(tot);
+    /* Fullscreen */
+    var f1 = document.getElementById('mu-full-progress-fill');
+    var f2 = document.getElementById('mu-full-time-cur');
+    var f3 = document.getElementById('mu-full-time-tot');
+    if (f1) f1.style.width = pct + '%';
+    if (f2) f2.textContent = curStr;
+    if (f3) f3.textContent = totStr;
+    /* Lock screen */
+    var l1 = document.getElementById('mu-lock-progress-fill');
+    var l2 = document.getElementById('mu-lock-time-cur');
+    var l3 = document.getElementById('mu-lock-time-tot');
+    if (l1) l1.style.width = pct + '%';
+    if (l2) l2.textContent = curStr;
+    if (l3) l3.textContent = totStr;
+}
+/* Alias retro-compat: el resto del código aún llama Start/Stop. */
+function muFullStartProgressTimer() { muStartProgressTimer(); }
+function muFullStopProgressTimer()  { muStopProgressTimer();  }
+/* Marquee tipo ticker: si el texto no cabe en su wrap, duplica el
+   span dentro del track y anima el track una distancia igual a
+   (ancho del texto + gap). El clon llega exactamente a la posición
+   inicial del original → loop continuo sin saltos ni vuelta atrás.
+   Velocidad fija ~50 px/s → frases largas tardan más en cíclar. */
+function muSetupMarquee(wrapId, trackId, textId) {
+    var wrap  = document.getElementById(wrapId);
+    var track = document.getElementById(trackId);
+    var text  = document.getElementById(textId);
+    if (!wrap || !track || !text) return;
+    /* Reset: quita marquee, elimina cualquier clon previo, limpia props. */
+    wrap.classList.remove('marquee');
+    while (track.children.length > 1) track.removeChild(track.lastChild);
+    track.style.removeProperty('--mu-marquee-cycle');
+    track.style.removeProperty('--mu-marquee-duration');
+    /* requestAnimationFrame: esperamos al layout antes de medir. */
+    requestAnimationFrame(function(){
+        var textW = text.offsetWidth;
+        if (textW <= wrap.clientWidth + 4) return;  /* cabe — sin marquee */
+        /* Clon del span con aria-hidden para lectores de pantalla. */
+        var dup = text.cloneNode(true);
+        dup.removeAttribute('id');
+        dup.setAttribute('aria-hidden', 'true');
+        track.appendChild(dup);
+        /* Gap CSS = 3em → en píxeles. */
+        var em  = parseFloat(getComputedStyle(text).fontSize) || 16;
+        var gap = em * 3;
+        var cycle = textW + gap;                    /* distancia a recorrer */
+        var duration = Math.max(8, cycle / 50).toFixed(1) + 's';  /* ~50 px/s */
+        track.style.setProperty('--mu-marquee-cycle', cycle + 'px');
+        track.style.setProperty('--mu-marquee-duration', duration);
+        wrap.classList.add('marquee');
+    });
+}
+
+function muFullRefresh() {
+    if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+    var tr = QUEUE[CUR_IDX];
+    document.getElementById('mu-full-title').textContent  = tr.title  || tr.videoId || '—';
+    document.getElementById('mu-full-artist').textContent = tr.artist || '';
+    /* Re-evalúa marquee con el texto nuevo. */
+    muSetupMarquee('mu-full-title-wrap',  'mu-full-title-track',  'mu-full-title');
+    muSetupMarquee('mu-full-artist-wrap', 'mu-full-artist-track', 'mu-full-artist');
+    /* mqdefault: 320×180 16:9, sin letterbox. */
+    var thumbUrl = tr.videoId ? 'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg' : '';
+    var label  = document.getElementById('mu-vinyl-label');
+    var splash = document.getElementById('mu-full-splash');
+    if (thumbUrl) {
+        label.style.backgroundImage  = "url('" + thumbUrl + "')";
+        splash.style.backgroundImage = "url('" + thumbUrl + "')";
+        label.classList.remove('empty');
+        label.textContent = '';
+    } else {
+        label.style.backgroundImage  = '';
+        splash.style.backgroundImage = '';
+        label.classList.add('empty');
+        label.textContent = '🎵';
+    }
+    /* Title-bar: nombre de la playlist activa. */
+    var tbPl = document.getElementById('mu-full-tb-pl');
+    if (tbPl) {
+        var pl = (CUR_PL_IDX >= 0 && PLAYLISTS[CUR_PL_IDX]) ? PLAYLISTS[CUR_PL_IDX] : null;
+        tbPl.textContent = pl ? pl.name : 'Reproduciendo';
+    }
+    /* Replica los mismos datos en el lock (vinilo + info + marquee). */
+    muLockSync();
+    /* Sincroniza play state. */
+    var playing = !!(YT_PLAYER && YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1);
+    muFullSyncPlay(playing);
+}
+function muFullSyncPlay(isPlaying) {
+    var btn       = document.getElementById('mu-full-toggle');
+    var vinyl     = document.getElementById('mu-vinyl');
+    var lockVinyl = document.getElementById('mu-lock-vinyl');
+    if (btn)       btn.classList.toggle('is-playing', !!isPlaying);
+    if (vinyl)     vinyl.classList.toggle('paused', !isPlaying);
+    if (lockVinyl) lockVinyl.classList.toggle('paused', !isPlaying);
+}
+
+/* Tap en el mini-player (excepto en los botones) → abre fullscreen. */
+document.getElementById('mu-player').addEventListener('click', function(e){
+    if (e.target.closest('button')) return;      /* clicks de control siguen su flujo */
+    muFullOpen();
+});
+document.getElementById('mu-full-close').addEventListener('click', muFullClose);
+/* Chevron-down al pie → minimiza el fullscreen. Mismo comportamiento
+   que la X del title-bar, pero accesible con el pulgar. */
+document.getElementById('mu-full-menu').addEventListener('click', muFullClose);
+
+/* ─── LOCK SCREEN ──────────────────────────────────────────────
+   Click en el padlock → muLockOpen() añade .visible y la transición
+   CSS funde el reproductor con el fondo negro. Para los pollers que
+   gastan batería (progress timer). Swipe-up para desbloquear. */
+/* Theme-color del SO mientras el lock está activo: negro puro para
+   que la barra de estado/notch y la nav-bar se fundan con el modo
+   reposo y los bordes superior/inferior del dispositivo se vean
+   negros, dando sensación de pantalla apagada. */
+var THEME_COLOR_DEFAULT = '<?= htmlspecialchars($themeBgColor) ?>';
+function muSetThemeColor(color) {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', color);
+}
+
+function muLockOpen() {
+    if (CUR_IDX < 0) return;                 /* nada sonando: nada que bloquear */
+    var lock = document.getElementById('mu-lock');
+    var hint = document.getElementById('mu-lock-hint');
+    var full = document.getElementById('mu-full');
+    if (hint) { hint.style.transform = ''; hint.style.opacity = ''; }
+    muLockSync();                            /* pinta vinilo/info/progress antes del fade */
+    lock.classList.add('visible');
+    lock.setAttribute('aria-hidden', 'false');
+    if (full) full.classList.add('behind-lock');
+    muSetThemeColor('#000000');
+    /* Fullscreen API: oculta la barra de navegación del SO (los
+       3 botones inferiores en Android, gesture bar en iOS) y la
+       status bar. Solo funciona dentro de un gesto del usuario
+       — el click en el padlock cuenta como tal. iOS Safari tiene
+       soporte limitado; en PWA standalone con display:fullscreen
+       en el manifest funciona mejor. */
+    muRequestFullscreen();
+    muProgressTimerSync();
+}
+function muLockClose() {
+    var lock = document.getElementById('mu-lock');
+    var hint = document.getElementById('mu-lock-hint');
+    var full = document.getElementById('mu-full');
+    lock.classList.remove('visible');
+    lock.setAttribute('aria-hidden', 'true');
+    if (full) full.classList.remove('behind-lock');
+    muSetThemeColor(THEME_COLOR_DEFAULT);
+    muExitFullscreen();
+    setTimeout(function(){
+        if (hint) { hint.style.transform = ''; hint.style.opacity = ''; }
+    }, 1200);
+    muProgressTimerSync();
+}
+/* Helpers Fullscreen API con prefijos webkit por compatibilidad. */
+function muRequestFullscreen() {
+    var el = document.documentElement;
+    var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (fn) {
+        try { fn.call(el).catch(function(){}); } catch (_) {}
+    }
+}
+function muExitFullscreen() {
+    var fn = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (fn && (document.fullscreenElement || document.webkitFullscreenElement)) {
+        try { fn.call(document).catch(function(){}); } catch (_) {}
+    }
+}
+
+/* Sincroniza el lock con el track actual: vinilo (label + paused),
+   título, artista, marquee. El progreso lo refresca el timer común. */
+function muLockSync() {
+    if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+    var tr = QUEUE[CUR_IDX];
+    var thumbUrl = tr.videoId ? 'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg' : '';
+    var label = document.getElementById('mu-lock-vinyl-label');
+    var vinyl = document.getElementById('mu-lock-vinyl');
+    var titleEl  = document.getElementById('mu-lock-title');
+    var artistEl = document.getElementById('mu-lock-artist');
+    if (label) {
+        if (thumbUrl) {
+            label.style.backgroundImage = "url('" + thumbUrl + "')";
+            label.classList.remove('empty');
+            label.textContent = '';
+        } else {
+            label.style.backgroundImage = '';
+            label.classList.add('empty');
+            label.textContent = '🎵';
+        }
+    }
+    if (titleEl)  titleEl.textContent  = tr.title  || tr.videoId || '—';
+    if (artistEl) artistEl.textContent = tr.artist || '';
+    muSetupMarquee('mu-lock-title-wrap',  'mu-lock-title-track',  'mu-lock-title');
+    muSetupMarquee('mu-lock-artist-wrap', 'mu-lock-artist-track', 'mu-lock-artist');
+    if (vinyl) {
+        var playing = !!(YT_PLAYER && YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1);
+        vinyl.classList.toggle('paused', !playing);
+    }
+}
+
+document.getElementById('mu-full-lock').addEventListener('click', muLockOpen);
+
+/* Swipe up para desbloquear. SOLO se mueve el hint (.mu-lock-hint);
+   ni el fondo negro ni el vinilo se tocan. Threshold = mitad del
+   viewport (~400px en móvil estándar). Al alcanzarlo se dispara el
+   fade-out lento (1.2s) del lock screen entero. */
+(function attachLockSwipe() {
+    var lock = document.getElementById('mu-lock');
+    var hint = document.getElementById('mu-lock-hint');
+    if (!lock || !hint) return;
+    var startY = null;
+    var dragging = false;
+    function getThreshold() { return window.innerHeight / 3; }   /* ~1/3 de la pantalla */
+
+    lock.addEventListener('touchstart', function(e){
+        if (!e.touches || e.touches.length !== 1) return;
+        startY = e.touches[0].clientY;
+        dragging = true;
+        /* Sin transición durante el drag para que el hint siga al
+           dedo sin retraso. */
+        hint.style.transition = 'none';
+    }, { passive: true });
+    lock.addEventListener('touchmove', function(e){
+        if (!dragging || startY === null || !e.touches[0]) return;
+        var dy = startY - e.touches[0].clientY;
+        if (dy > 0) {
+            /* Amplificación visual x1.8 — el hint "vuela" con el
+               dedo. translateX(-50%) lo conserva centrado horizontal. */
+            hint.style.transform = 'translateX(-50%) translateY(' + (-dy * 1.8) + 'px)';
+            /* Fade gradual del hint conforme se acerca al threshold. */
+            var pct = Math.min(1, dy / getThreshold());
+            hint.style.opacity = String(0.8 - pct * 0.6);
+        }
+    }, { passive: true });
+    function endDrag(e) {
+        if (!dragging || startY === null) return;
+        dragging = false;
+        var t = e.changedTouches && e.changedTouches[0];
+        var dy = t ? (startY - t.clientY) : 0;
+        startY = null;
+        hint.style.transition = '';   /* restaura snap-back fluido */
+        if (dy >= getThreshold()) {
+            muLockClose();
+        } else {
+            /* Snap back: el hint vuelve a su sitio. */
+            hint.style.transform = '';
+            hint.style.opacity = '';
+        }
+    }
+    lock.addEventListener('touchend',    endDrag);
+    lock.addEventListener('touchcancel', endDrag);
+
+    /* Soporte mouse para testing en escritorio. */
+    var msDown = false;
+    lock.addEventListener('mousedown', function(e){
+        if (e.button !== 0) return;
+        startY = e.clientY;
+        msDown = true;
+        dragging = true;
+        hint.style.transition = 'none';
+    });
+    lock.addEventListener('mousemove', function(e){
+        if (!msDown || startY === null) return;
+        var dy = startY - e.clientY;
+        if (dy > 0) {
+            hint.style.transform = 'translateX(-50%) translateY(' + (-dy * 1.8) + 'px)';
+            var pct = Math.min(1, dy / getThreshold());
+            hint.style.opacity = String(0.8 - pct * 0.6);
+        }
+    });
+    function endMouseDrag(e) {
+        if (!msDown) return;
+        msDown = false;
+        var dy = startY !== null ? (startY - e.clientY) : 0;
+        startY = null;
+        hint.style.transition = '';
+        if (dy >= getThreshold()) muLockClose();
+        else {
+            hint.style.transform = '';
+            hint.style.opacity = '';
+        }
+    }
+    lock.addEventListener('mouseup',    endMouseDrag);
+    lock.addEventListener('mouseleave', endMouseDrag);
+})();
+document.getElementById('mu-full-prev').addEventListener('click', prevTrack);
+document.getElementById('mu-full-next').addEventListener('click', nextTrack);
+document.getElementById('mu-full-toggle').addEventListener('click', function(){
+    if (!YT_READY || !YT_PLAYER || CUR_IDX < 0) return;
+    var st = YT_PLAYER.getPlayerState();
+    if (st === 1) YT_PLAYER.pauseVideo();
+    else          YT_PLAYER.playVideo();
+});
+
+/* Shuffle: toggle visual + de comportamiento. El estado lo lleva
+   SHUFFLE_ON; next/prev miran esa flag para decidir secuencial o
+   random. */
+document.getElementById('mu-full-shuffle').addEventListener('click', function(){
+    SHUFFLE_ON = !SHUFFLE_ON;
+    this.classList.toggle('is-on', SHUFFLE_ON);
+    this.setAttribute('aria-pressed', SHUFFLE_ON ? 'true' : 'false');
+});
+
+/* Añadir canción actual a otra playlist. Lista todas las playlists,
+   chequea duplicados por videoId y pide confirmación si ya existe. */
+document.getElementById('mu-full-add').addEventListener('click', function(){
+    if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+    muOpenAddCurrentToPlaylist(QUEUE[CUR_IDX]);
+});
+
+function muOpenAddCurrentToPlaylist(tr) {
+    if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+    var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;">' +
+                     'Añadir "' + esc(tr.title || tr.videoId || 'canción') + '" a:' +
+                   '</p>';
+    bodyHtml += '<div class="mu-modal-list">';
+    PLAYLISTS.forEach(function(pl, pi){
+        var nTracks = (pl.tracks || []).length;
+        var sharedTag = pl.sharedLabel
+            ? '<span style="font-size:10px;color:var(--text-faint, #666);margin-left:6px;">de ' + esc(pl.sharedLabel) + '</span>'
+            : '';
+        bodyHtml += '<div class="mu-modal-list-item" data-pl-idx="' + pi + '">' +
+                      '<div class="item-main">' +
+                        '<div style="font-weight:bold;">' + esc(pl.name) + sharedTag + '</div>' +
+                        '<div style="font-size:11px;color:var(--text-faint, #666);">' +
+                            nTracks + ' canción' + (nTracks === 1 ? '' : 'es') +
+                        '</div>' +
+                      '</div>' +
+                    '</div>';
+    });
+    bodyHtml += '</div>';
+    bodyHtml += '<div class="modal-actions"><button class="button" data-act="cancel" type="button">Cancelar</button></div>';
+
+    /* Mismo SVG que el botón → coherencia visual entre trigger y modal. */
+    var addIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">' +
+                    '<line x1="12" y1="5"  x2="12" y2="19"/>' +
+                    '<line x1="5"  y1="12" x2="19" y2="12"/>' +
+                  '</svg>';
+    var m = muOpenModal({ titleIcon: addIcon, title: 'Añadir a playlist', body: bodyHtml });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    m.body.querySelectorAll('.mu-modal-list-item').forEach(function(el){
+        el.addEventListener('click', function(){
+            var pi = parseInt(el.dataset.plIdx, 10);
+            var pl = PLAYLISTS[pi];
+            if (!pl) return;
+            m.close();
+            muAddCurrentToPlaylistConfirmed(pl, tr);
+        });
+    });
+}
+
+function muAddCurrentToPlaylistConfirmed(pl, tr) {
+    var dup = tr.videoId && (pl.tracks || []).some(function(t){
+        return t && t.videoId && t.videoId === tr.videoId;
+    });
+    var doAdd = function(){
+        var newTracks = (pl.tracks || []).slice();
+        /* Copia plana de tr + addedBy (no mutamos el objeto original
+           que vive en QUEUE/PLAYLISTS). */
+        var trCopy = {};
+        for (var k in tr) if (tr.hasOwnProperty(k)) trCopy[k] = tr[k];
+        trCopy.addedBy = ME_LABEL;
+        newTracks.push(trCopy);
+        var payload = { id: pl.id, name: pl.name, tracks: newTracks };
+        if (pl.sharedFrom) payload.sharedFrom = pl.sharedFrom;
+        apiPost('save-playlist-item', payload).then(function(res){
+            if (!res.ok) { muAlert((res.data && res.data.error) || 'Error al añadir'); return; }
+            loadPlaylists();
+            muAlert('"' + (tr.title || 'Canción') + '" añadida a "' + pl.name + '"', 'Añadida');
+        });
+    };
+    if (dup) {
+        muConfirm(
+            '"' + (tr.title || 'Esta canción') + '" ya está en "' + pl.name + '". ¿Añadirla de nuevo?',
+            doAdd
+        );
+    } else {
+        doAdd();
+    }
 }
 
 /* ─── Reproductor YouTube ──────────────────────────────────────── */
 /* Carga la IFrame API una vez. El callback global onYouTubeIframeAPIReady
    es el contrato standard de la API. */
 window.onYouTubeIframeAPIReady = function() {
+    if (EMBEDDED) return;             /* shell maneja el player */
     YT_PLAYER = new window.YT.Player('yt-iframe', {
         height: '1', width: '1',
         playerVars: { playsinline: 1, autoplay: 0 },
@@ -940,6 +2480,7 @@ window.onYouTubeIframeAPIReady = function() {
     });
 };
 (function loadYT(){
+    if (EMBEDDED) return;             /* shell ya tiene su propio iframe API */
     var s = document.createElement('script');
     s.src = 'https://www.youtube.com/iframe_api';
     document.head.appendChild(s);
@@ -993,6 +2534,10 @@ function playFromPlaylist(pi, ti) {
     if (!pl) return;
     QUEUE = (pl.tracks || []).slice();
     CUR_IDX = ti;
+    CUR_PL_IDX = pi;
+    /* Embebida → delega al shell, pasando el nombre de la playlist
+       para el title-bar del fullscreen. */
+    if (SHELL) { SHELL.loadQueue(QUEUE, ti, pl.name); return; }
     playCurrent();
 }
 
@@ -1010,6 +2555,10 @@ function playCurrent() {
     document.getElementById('mu-thumb').innerHTML =
         '<img src="https://i.ytimg.com/vi/' + esc(tr.videoId) + '/mqdefault.jpg" alt="">';
     document.getElementById('mu-player').classList.add('visible');
+    /* Refresca también la vista fullscreen si está abierta — esto
+       actualiza el thumbnail del vinilo y el splash con cada cambio
+       de track. */
+    muFullRefresh();
     /* Registra metadata para la lock screen / auriculares / Bluetooth. */
     updateMediaSession(tr);
     /* Si el SDK aún no está, esperamos un tick. */
@@ -1022,16 +2571,31 @@ function playCurrent() {
     YT_PLAYER.loadVideoById(tr.videoId);
 }
 
+/* Devuelve un índice aleatorio de QUEUE distinto al actual. Se usa
+   tanto para prev como next cuando SHUFFLE_ON: si solo hay un track
+   se queda donde está. */
+function muPickRandomIdx() {
+    if (QUEUE.length <= 1) return CUR_IDX;
+    var r;
+    do { r = Math.floor(Math.random() * QUEUE.length); } while (r === CUR_IDX);
+    return r;
+}
 function nextTrack() {
     if (CUR_IDX < 0) return;
-    CUR_IDX++;
-    if (CUR_IDX >= QUEUE.length) CUR_IDX = 0;     /* loop circular */
+    if (SHUFFLE_ON) { CUR_IDX = muPickRandomIdx(); }
+    else {
+        CUR_IDX++;
+        if (CUR_IDX >= QUEUE.length) CUR_IDX = 0;     /* loop circular */
+    }
     playCurrent();
 }
 function prevTrack() {
     if (CUR_IDX < 0) return;
-    CUR_IDX--;
-    if (CUR_IDX < 0) CUR_IDX = QUEUE.length - 1;  /* loop circular */
+    if (SHUFFLE_ON) { CUR_IDX = muPickRandomIdx(); }
+    else {
+        CUR_IDX--;
+        if (CUR_IDX < 0) CUR_IDX = QUEUE.length - 1;  /* loop circular */
+    }
     playCurrent();
 }
 
@@ -1055,10 +2619,13 @@ function muOpenModal(opts) {
     var host = document.getElementById('mu-modal-host');
     var bd = document.createElement('div');
     bd.className = 'mu-modal-backdrop';
+    /* opts.titleIcon: HTML/SVG crudo que se inyecta antes del título.
+       Se confía la entrada — no la llaman desde input de usuario. */
+    var titleHtml = (opts.titleIcon ? opts.titleIcon : '') + esc(opts.title || '');
     bd.innerHTML =
         '<div class="window mu-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">' + esc(opts.title || '') + '</div>' +
+                '<div class="title-bar-text">' + titleHtml + '</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
@@ -1906,6 +3473,7 @@ loadPlaylists();
    y mostrar las estrellas en los tracks reseñados (re-renderiza solo
    si las playlists ya terminaron de cargar). */
 loadProfileMusic();
+
 </script>
 
 </body>

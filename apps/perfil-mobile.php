@@ -1041,6 +1041,19 @@ document.addEventListener('click', function(e){
 /* ─── Bootstrap ─────────────────────────────────────────────────── */
 fetchProfile();
 fetchLists();
+
+/* Embebido en el shell SPA → "‹ Menú" no navega, envía postMessage. */
+(function(){
+    var embedded = false;
+    try { embedded = window.parent !== window; } catch (_) {}
+    if (!embedded) return;
+    document.addEventListener('click', function(e){
+        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        if (!link) return;
+        e.preventDefault();
+        try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
+    }, true);
+})();
 </script>
 
 </body>

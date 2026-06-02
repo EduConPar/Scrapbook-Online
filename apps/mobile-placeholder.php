@@ -100,5 +100,20 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
 </div>
 
+<script>
+/* Embebido en el shell SPA → "‹ Volver al menú" envía postMessage. */
+(function(){
+    var embedded = false;
+    try { embedded = window.parent !== window; } catch (_) {}
+    if (!embedded) return;
+    document.addEventListener('click', function(e){
+        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        if (!link) return;
+        e.preventDefault();
+        try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
+    }, true);
+})();
+</script>
+
 </body>
 </html>
