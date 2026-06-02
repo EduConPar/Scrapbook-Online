@@ -118,10 +118,11 @@ function appTitleIcon(string $pngName, string $emoji): string {
          dedos no caben. -->
     <meta name="viewport" content="width=1280, user-scalable=yes">
     <title><?php echo htmlspecialchars($desktopLabel); ?> - Escritorio</title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="assets/img/mobile/icon.png" type="image/png">
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/base.css">
+    <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <link rel="stylesheet" href="assets/css/reproductor.css">
     <link rel="stylesheet" href="assets/css/perfil.css">
     <link rel="stylesheet" href="assets/css/themes.css">

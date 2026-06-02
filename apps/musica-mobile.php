@@ -100,11 +100,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Música — Scrapbook Melon</title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="../assets/img/mobile/icon.png" type="image/png">
     <!-- Mismo stack que mobile.php para Win98 + tema del usuario -->
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">
+    <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <link rel="stylesheet" href="../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -1722,6 +1723,40 @@ if (EMBEDDED) {
         e.preventDefault();
         try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
     }, true);
+
+    /* Nos suscribimos al shell para recibir 'mushell:track' cada vez
+       que cambia el track activo (next/prev/auto-advance) → reaplicamos
+       el highlight visual en la lista. */
+    try { window.parent.postMessage({ type: 'mushell:subscribe' }, '*'); } catch (_) {}
+    window.addEventListener('message', function(ev){
+        var d = ev.data || {};
+        if (d.type !== 'mushell:track' || !d.track || !d.track.videoId) return;
+        findAndHighlight(d.track.videoId, d.plName);
+    });
+}
+
+/* Localiza el par (pi, ti) que mejor describe el track actual del shell.
+   Prefiere la playlist cuyo nombre coincide con plName si viene; cae al
+   primer match por videoId si no. */
+function findAndHighlight(videoId, plName) {
+    if (!videoId) return;
+    function search(filterByName){
+        for (var pi = 0; pi < PLAYLISTS.length; pi++) {
+            var pl = PLAYLISTS[pi];
+            if (filterByName && plName && pl.name !== plName) continue;
+            var tracks = (pl && pl.tracks) || [];
+            for (var ti = 0; ti < tracks.length; ti++) {
+                if (tracks[ti] && tracks[ti].videoId === videoId) {
+                    CUR_PL_IDX = pi; CUR_IDX = ti; QUEUE = tracks.slice();
+                    applyPlayingHighlight(pi, ti);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    if (plName && search(true)) return;
+    search(false);
 }
 
 /* ─── Estado ────────────────────────────────────────────────────── */
@@ -1800,11 +1835,26 @@ function loadPlaylists() {
             document.getElementById('mu-pl-count').textContent =
                 PLAYLISTS.length + ' playlist' + (PLAYLISTS.length === 1 ? '' : 's');
             renderPlaylists();
+            /* Embebida → restaurar highlight desde el estado del shell.
+               Localizamos el track actual buscando su videoId en las
+               PLAYLISTS recién cargadas. */
+            restoreHighlightFromShell();
         })
         .catch(function(){
             document.getElementById('mu-list').innerHTML =
                 '<div class="mh-empty"><span class="mh-empty-icon">⚠️</span>Error cargando playlists</div>';
         });
+}
+
+/* Cuando estamos embebidos pedimos el track actual al shell y
+   buscamos su par (pl-idx, tr-idx) en PLAYLISTS para resaltar.
+   Si el shell no está, o no hay track sonando, no hace nada. */
+function restoreHighlightFromShell() {
+    if (!SHELL || typeof SHELL.getState !== 'function') return;
+    var st = null;
+    try { st = SHELL.getState(); } catch (_) {}
+    if (!st || !st.track || !st.track.videoId) return;
+    findAndHighlight(st.track.videoId, st.plName);
 }
 
 function renderPlaylists() {
@@ -2535,20 +2585,36 @@ function playFromPlaylist(pi, ti) {
     QUEUE = (pl.tracks || []).slice();
     CUR_IDX = ti;
     CUR_PL_IDX = pi;
+    /* Highlight visual del track activo — también cuando estamos
+       embebidos en el shell (antes solo lo hacía playCurrent que no
+       corre en modo embed). Selector con pl-idx + tr-idx para no
+       pintar tracks homónimos de otras playlists. */
+    applyPlayingHighlight(pi, ti);
     /* Embebida → delega al shell, pasando el nombre de la playlist
        para el title-bar del fullscreen. */
     if (SHELL) { SHELL.loadQueue(QUEUE, ti, pl.name); return; }
     playCurrent();
 }
 
+/* Pone .playing solo en el track del par (pi, ti). Limpia el resto. */
+function applyPlayingHighlight(pi, ti) {
+    document.querySelectorAll('.mu-track.playing').forEach(function(el){
+        el.classList.remove('playing');
+    });
+    if (pi == null || ti == null || pi < 0 || ti < 0) return;
+    var sel = document.querySelector(
+        '.mu-track[data-pl-idx="' + pi + '"][data-tr-idx="' + ti + '"]'
+    );
+    if (sel) sel.classList.add('playing');
+}
+
 function playCurrent() {
     if (CUR_IDX < 0 || CUR_IDX >= QUEUE.length) return;
     var tr = QUEUE[CUR_IDX];
     if (!tr || !tr.videoId) { nextTrack(); return; }
-    /* Marca visualmente el track activo en la lista. */
-    document.querySelectorAll('.mu-track.playing').forEach(function(el){ el.classList.remove('playing'); });
-    var sel = document.querySelector('.mu-track[data-tr-idx="' + CUR_IDX + '"]');
-    if (sel) sel.classList.add('playing');
+    /* Marca visualmente el track activo en la lista. Usa pl-idx + tr-idx
+       para no pintar tracks homónimos de otras playlists. */
+    applyPlayingHighlight(CUR_PL_IDX, CUR_IDX);
     /* Info en el mini-player. */
     document.getElementById('mu-now-title').textContent  = tr.title  || tr.videoId;
     document.getElementById('mu-now-artist').textContent = tr.artist || '';
@@ -2808,6 +2874,7 @@ function muOpenTrackMenu(pi, ti) {
     if (!tr) return;
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
+        { act: 'addPl',      label: '📋 Añadir a otra playlist' },
         { act: 'remove',     label: '🗑 Quitar de la playlist', danger: true }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -2830,6 +2897,7 @@ function muOpenTrackMenu(pi, ti) {
             var act = el.dataset.act;
             m.close();
             if (act === 'addProfile') addTrackToProfile(pi, ti);
+            if (act === 'addPl')      muOpenAddCurrentToPlaylist(tr);
             if (act === 'remove') {
                 muConfirm('¿Quitar "' + (tr.title || 'esta canción') + '" de la playlist?', function(){
                     removeTrackFromPlaylist(pi, ti);

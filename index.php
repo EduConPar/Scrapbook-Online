@@ -125,11 +125,44 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
     <title>Scrapbook Melon</title>
     <!-- Favicon vacío para evitar 404 automático cuando el host no tiene
          /favicon.ico (InfinityFree intercepta esos 404 con su redirect). -->
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="assets/img/mobile/icon.png" type="image/png">
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/login.css">
     <link rel="stylesheet" href="assets/css/themes.css">
+    <!-- Filtro LCD/VHS — siempre activo en el login, no depende del toggle.
+         Inline porque index.php no carga base.css. Scanlines + vignette. -->
+    <style>
+    html::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2147483645;
+        background-image: repeating-linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.10) 0,
+            rgba(0, 0, 0, 0.10) 1px,
+            rgba(255, 255, 255, 0.05) 1px,
+            rgba(255, 255, 255, 0.05) 2px,
+            transparent 2px,
+            transparent 3px
+        );
+    }
+    html::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2147483646;
+        background: radial-gradient(
+            ellipse 75% 60% at center,
+            transparent 60%,
+            rgba(0, 0, 0, 0.10) 85%,
+            rgba(0, 0, 0, 0.24) 100%
+        );
+    }
+    </style>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <script>
     /* Win98 dialogs — inline para no depender de un fichero JS externo

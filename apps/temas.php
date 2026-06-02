@@ -31,6 +31,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">
+    <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <link rel="stylesheet" href="../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
@@ -354,6 +355,17 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                 <input type="file" id="temas-starticon-file" accept="image/*,image/svg+xml" style="display:none;">
                 <button class="button" id="temas-starticon-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
                 <p id="temas-starticon-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
+            </div>
+
+            <div class="temas-side-head" style="border-top:1px solid var(--border);">📺 Efectos visuales</div>
+            <div id="temas-effects-area" style="padding:6px 4px;">
+                <div class="field-row">
+                    <input type="checkbox" id="lcd-filter-toggle">
+                    <label for="lcd-filter-toggle" style="font-size:11px;">Filtro LCD (scanlines)</label>
+                </div>
+                <p style="font-size:10px;margin:4px 0 0;color:var(--text-faint);line-height:1.4;">
+                    Líneas horizontales sutiles sobre toda la app. Se guarda por dispositivo.
+                </p>
             </div>
 
         </div>
@@ -1415,6 +1427,32 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
             okText: 'Sí', onOk: onOk
         });
     };
+})();
+</script>
+
+<!-- LCD filter toggle: sincroniza checkbox <-> localStorage <-> clase en
+     <html>. Si esta página está embebida en iframe (mobile.php o
+     desktop-base.php cargan temas/ vía iframe), aplicamos también la
+     clase en el documento padre — mismo origen, acceso directo OK. -->
+<script>
+(function(){
+    var KEY = 'lcd-filter';
+    var cb = document.getElementById('lcd-filter-toggle');
+    if (!cb) return;
+    /* Default ON: filtro activo salvo que el usuario lo desactive explícitamente. */
+    function get(){ try { return localStorage.getItem(KEY) !== '0'; } catch(_) { return true; } }
+    function apply(on){
+        document.documentElement.classList.toggle('lcd-filter-on', on);
+        if (window.top !== window) {
+            try { window.top.document.documentElement.classList.toggle('lcd-filter-on', on); } catch(_) {}
+        }
+    }
+    cb.checked = get();
+    apply(cb.checked);
+    cb.addEventListener('change', function(){
+        try { localStorage.setItem(KEY, cb.checked ? '1' : '0'); } catch(_) {}
+        apply(cb.checked);
+    });
 })();
 </script>
 

@@ -93,13 +93,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#000000">
     <title>Melon Hub — Instalar</title>
-    <link rel="icon" href="assets/pwa-icon.php?size=64" type="image/svg+xml">
+    <link rel="icon" href="assets/img/mobile/icon.png" type="image/png">
     <?php if ($deviceToken !== ''): ?>
         <link rel="manifest" href="manifest.php?token=<?= htmlspecialchars($deviceToken) ?>">
     <?php else: ?>
         <link rel="manifest" href="manifest.php">
     <?php endif; ?>
-    <link rel="apple-touch-icon" href="assets/img/start-icons/capi-start-icon.png">
+    <link rel="apple-touch-icon" href="assets/img/mobile/icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Melon Hub">
@@ -108,6 +108,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/login.css">
     <link rel="stylesheet" href="assets/css/themes.css">
+    <!-- Filtro LCD/VHS — siempre activo en la landing de instalación.
+         Inline porque esta página no carga base.css y login.css ya usa
+         body::before para el wallpaper. Aplicamos a html::before/::after
+         para no colisionar. -->
+    <style>
+    html::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2147483645;
+        background-image: repeating-linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.10) 0,
+            rgba(0, 0, 0, 0.10) 1px,
+            rgba(255, 255, 255, 0.05) 1px,
+            rgba(255, 255, 255, 0.05) 2px,
+            transparent 2px,
+            transparent 3px
+        );
+    }
+    html::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2147483646;
+        background: radial-gradient(
+            ellipse 75% 60% at center,
+            transparent 60%,
+            rgba(0, 0, 0, 0.10) 85%,
+            rgba(0, 0, 0, 0.24) 100%
+        );
+    }
+    </style>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <?php if ($baseWallpaper): ?>
     <style>body::before{ background-image:url('<?= htmlspecialchars($baseWallpaper) ?>'); opacity:1; }</style>
@@ -398,7 +433,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="window-body">
                 <div class="mh-hero">
-                    <img src="assets/pwa-icon.php?size=192" alt="Melon Hub">
+                    <img src="assets/img/mobile/icon.png" alt="Melon Hub">
                     <div class="mh-title">Melon Hub</div>
                     <div class="mh-sub">para móviles</div>
                 </div>
@@ -489,7 +524,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="window-body">
                 <div class="mh-hero">
-                    <img src="assets/pwa-icon.php?size=192" alt="Melon Hub">
+                    <img src="assets/img/mobile/icon.png" alt="Melon Hub">
                     <div class="mh-title">¡Casi listo!</div>
                     <div class="mh-sub">Cuenta activa: <?= htmlspecialchars($loginUsers[$_SESSION['user']]['label']) ?></div>
                 </div>

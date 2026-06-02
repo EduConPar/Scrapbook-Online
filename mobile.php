@@ -100,7 +100,7 @@ $apps = [
     ['name' => 'Dibujo',       'url' => 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fija',      'emoji' => '✏️', 'icon' => null,                                       'external' => true,  'wip' => false],
     ['name' => 'Galería',      'url' => 'apps/galeria.php',                                                     'emoji' => '🖼', 'icon' => null,                                       'external' => false, 'wip' => false],
     ['name' => 'MelonArchive', 'url' => 'apps/melonarchive.php',                                                'emoji' => '📼', 'icon' => 'assets/img/appIcons/melonArchiveIcon.png', 'external' => false, 'wip' => false],
-    ['name' => 'Música',       'url' => 'apps/musica-mobile.php',                                               'emoji' => '🎵', 'icon' => null,                                       'external' => false, 'wip' => false],
+    ['name' => 'Música',       'url' => 'apps/musica-mobile.php',                                               'emoji' => '🎵', 'icon' => 'assets/img/appIcons/musicaIcon.png',       'external' => false, 'wip' => false],
     ['name' => 'Perfil',       'url' => 'apps/perfil-mobile.php',                                               'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
     ['name' => 'Temas',        'url' => 'apps/temas.php',                                                       'emoji' => '🎨', 'icon' => 'assets/img/appIcons/temasIcon.png',        'external' => false, 'wip' => false],
     ['name' => 'Tienda',       'url' => 'apps/tienda.php',                                                      'emoji' => '🛒', 'icon' => 'assets/img/appIcons/tiendaIcon.png',       'external' => false, 'wip' => false],
@@ -183,16 +183,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
          para que la barra del SO en Android no destaque. -->
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Melon Hub — <?= htmlspecialchars($userLabel) ?></title>
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="assets/img/mobile/icon.png" type="image/png">
     <link rel="manifest" href="manifest.php<?= $tokenForManifest !== '' ? '?token=' . htmlspecialchars($tokenForManifest) : '' ?>">
-    <link rel="apple-touch-icon" href="assets/img/start-icons/capi-start-icon.png">
+    <link rel="apple-touch-icon" href="assets/img/mobile/icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Melon Hub">
     <!-- Mismo stack visual que el escritorio Win98 + tema del usuario -->
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/tokens.css">
-    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/base.css?v=<?= filemtime(__DIR__ . '/assets/css/base.css') ?>">
+    <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($activeThemeCss); ?>">
@@ -667,6 +668,61 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             display: block;
         }
 
+        /* ── SHELL MODALS (action menu vinilo + playlist picker + alert) ──
+           Modales bottom-sheet Win98 que viven sobre el shell. Aparecen
+           encima del fullscreen (z-index 300 > .mu-full 200). */
+        .shell-modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 300;
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px; box-sizing: border-box;
+        }
+        .shell-modal {
+            width: 100%; max-width: 380px;
+            max-height: calc(100vh - 32px);
+            display: flex; flex-direction: column;
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .shell-modal > .title-bar { flex-shrink: 0; min-height: 22px; }
+        .shell-modal > .window-body {
+            flex: 1; overflow-y: auto; padding: 12px 14px;
+            background: var(--win-body-bg, var(--win-bg, silver));
+            color: var(--text, #000);
+        }
+        .shell-modal-list { display: flex; flex-direction: column; gap: 6px; }
+        .shell-modal-item {
+            display: flex; align-items: center; gap: 12px;
+            justify-content: flex-start; text-align: left;
+            padding: 0 14px; font-size: 13px;
+            min-height: 44px; width: 100%;
+        }
+        .shell-modal-icon {
+            font-size: 16px; width: 20px; text-align: center;
+            flex-shrink: 0; color: var(--accent, #000080);
+        }
+        .shell-modal-item-pl {
+            flex-direction: column; align-items: flex-start;
+            gap: 2px; min-height: 50px;
+            padding: 8px 12px;
+        }
+        .shell-modal-item-pl-name { font-weight: bold; font-size: 13px; }
+        .shell-modal-item-pl-meta {
+            font-size: 11px; color: var(--text-faint, #666);
+        }
+        .shell-modal-msg {
+            font-size: 12px; line-height: 1.5;
+            margin: 0 0 12px; color: var(--text, #000);
+        }
+        .shell-modal-actions {
+            display: flex; justify-content: flex-end; gap: 6px;
+            margin-top: 12px; padding-top: 8px;
+            border-top: 1px solid var(--bezel-dark-2, grey);
+        }
+        .shell-modal-actions .button { min-height: 28px; min-width: 70px; }
+
         /* ── LOCK SCREEN ── */
         .mu-lock {
             position: fixed; inset: 0;
@@ -1018,6 +1074,24 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('popstate', function(){
         if (!appShell.hidden) closeApp();
     });
+
+    /* Deep-link desde notificación push: #chat=USERKEY
+       Carga el perfil con el mismo hash → perfil-mobile lo lee y abre
+       el modal de chat directamente con esa persona. Limpia el hash del
+       shell para que no se vuelva a disparar tras navegar.
+       Re-evaluado en cada hashchange: el SW llama Client.navigate(url)
+       cuando ya hay una pestaña abierta, lo que cambia el hash sin
+       recargar; sin el listener, el deep-link solo funcionaba en
+       pestaña nueva. */
+    function dispatchChatHash(){
+        var m = /#chat=([a-z0-9_-]+)/i.exec(location.hash);
+        if (!m) return;
+        var k = encodeURIComponent(m[1]);
+        try { history.replaceState(null, '', location.pathname); } catch (_) {}
+        openApp('apps/perfil-mobile.php#chat=' + k, 'Perfil');
+    }
+    dispatchChatHash();
+    window.addEventListener('hashchange', dispatchChatHash);
 })();
 
 /* ════════════════════════════════════════════════════════════════
@@ -1033,6 +1107,9 @@ window.MuShell = (function(){
     var pendingLoadId = null;
     var subscribers = [];
     var progressTimer = null;
+    /* Label del usuario actual — usado al añadir tracks a playlists
+       para el campo addedBy. */
+    var ME_LABEL = <?= json_encode($userLabel ?? '') ?>;
 
     function esc(s) {
         return String(s == null ? '' : s)
@@ -1183,7 +1260,7 @@ window.MuShell = (function(){
         startProgressTimer();
         if (!YT_READY || !YT_PLAYER) { pendingLoadId = tr.videoId; return; }
         YT_PLAYER.loadVideoById(tr.videoId);
-        broadcast({ type: 'mushell:track', idx: CUR_IDX, total: QUEUE.length, track: tr });
+        broadcast({ type: 'mushell:track', idx: CUR_IDX, total: QUEUE.length, track: tr, plName: CUR_PL_NAME });
     }
     function pickRandomIdx() {
         if (QUEUE.length <= 1) return CUR_IDX;
@@ -1281,12 +1358,11 @@ window.MuShell = (function(){
         this.setAttribute('aria-pressed', SHUFFLE_ON ? 'true' : 'false');
     });
 
-    /* Añadir a playlist: delega a la app de Música. Cierra fullscreen
-       y abre el iframe de música para que el usuario interactúe. */
+    /* Añadir a playlist: muestra picker de playlists directamente sobre
+       el fullscreen (sin cambiar de app). El modal se monta encima vía
+       z-index 300 > .mu-full 200. */
     document.getElementById('mu-full-add').addEventListener('click', function(){
-        closeFullscreen();
-        var link = document.querySelector('.shell-launch[data-app-name="Música"]');
-        if (link) link.click();
+        openShellPlaylistPicker();
     });
 
     /* Swipe-up para desbloquear (solo el hint se mueve). */
@@ -1319,6 +1395,26 @@ window.MuShell = (function(){
         }
         lock.addEventListener('touchend',    end);
         lock.addEventListener('touchcancel', end);
+    })();
+
+    /* ── Auto-lock al volver del background ──
+       Si la app estaba con una pista cargada cuando la pantalla se
+       apagó (o el usuario salió a otra app), al volver mostramos el
+       lock screen para que tenga la info de "now playing" delante.
+       Skip si el lock ya está abierto o si no hay pista. */
+    (function attachAutoLock(){
+        var wasActiveOnHide = false;
+        document.addEventListener('visibilitychange', function(){
+            if (document.visibilityState === 'hidden') {
+                wasActiveOnHide = (CUR_IDX >= 0);
+            } else if (document.visibilityState === 'visible') {
+                if (wasActiveOnHide && CUR_IDX >= 0) {
+                    var lock = document.getElementById('mu-lock');
+                    if (!lock.classList.contains('visible')) openLock();
+                }
+                wasActiveOnHide = false;
+            }
+        });
     })();
 
     /* ── Widget flotante (drag con long-press) ── */
@@ -1405,6 +1501,371 @@ window.MuShell = (function(){
         } catch (_) {}
     })();
 
+    /* ── Modales del shell (action menu + playlist picker + alerts) ──
+       Bottom-sheets Win98 reutilizables. El long-press sobre el vinilo
+       y el botón "+" del fullscreen usan estos para sus acciones. */
+
+    function getCurrentTrack(){
+        return (CUR_IDX >= 0 && QUEUE[CUR_IDX]) ? QUEUE[CUR_IDX] : null;
+    }
+
+    function shellOpenModal(opts){
+        var bd = document.createElement('div');
+        bd.className = 'shell-modal-backdrop';
+        bd.innerHTML =
+            '<div class="window shell-modal">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text">' + esc(opts.title || '') + '</div>' +
+                    '<div class="title-bar-controls">' +
+                        '<button aria-label="Close" type="button"></button>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="window-body"></div>' +
+            '</div>';
+        document.body.appendChild(bd);
+        var body = bd.querySelector('.window-body');
+        if (typeof opts.body === 'string') body.innerHTML = opts.body;
+        function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+        bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+        bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+        return { body: body, close: close, root: bd };
+    }
+    function shellAlert(msg, title){
+        var m = shellOpenModal({
+            title: title || 'Aviso',
+            body:
+                '<div class="shell-modal-msg">' + esc(msg) + '</div>' +
+                '<div class="shell-modal-actions">' +
+                    '<button class="button default" data-act="ok" type="button">OK</button>' +
+                '</div>'
+        });
+        m.body.querySelector('[data-act="ok"]').addEventListener('click', m.close);
+    }
+    function shellConfirm(msg, onOk){
+        var m = shellOpenModal({
+            title: 'Confirmar',
+            body:
+                '<div class="shell-modal-msg">' + esc(msg) + '</div>' +
+                '<div class="shell-modal-actions">' +
+                    '<button class="button" data-act="no" type="button">Cancelar</button>' +
+                    '<button class="button default" data-act="ok" type="button">OK</button>' +
+                '</div>'
+        });
+        m.body.querySelector('[data-act="no"]').addEventListener('click', m.close);
+        m.body.querySelector('[data-act="ok"]').addEventListener('click', function(){
+            m.close(); if (typeof onOk === 'function') onOk();
+        });
+    }
+
+    /* Menú vinilo: 2 acciones (perfil + playlist). */
+    function openVinylMenu(){
+        var tr = getCurrentTrack(); if (!tr) return;
+        var m = shellOpenModal({
+            title: tr.title || tr.videoId || 'Canción',
+            body:
+                '<div class="shell-modal-list">' +
+                    '<button class="button shell-modal-item" data-act="profile" type="button">' +
+                        '<span class="shell-modal-icon">➕</span>' +
+                        '<span>Añadir a mi perfil</span>' +
+                    '</button>' +
+                    '<button class="button shell-modal-item" data-act="playlist" type="button">' +
+                        '<span class="shell-modal-icon">📋</span>' +
+                        '<span>Añadir a una playlist</span>' +
+                    '</button>' +
+                '</div>'
+        });
+        m.body.querySelector('[data-act="profile"]').addEventListener('click', function(){
+            m.close(); addCurrentToProfile(tr);
+        });
+        m.body.querySelector('[data-act="playlist"]').addEventListener('click', function(){
+            m.close(); openShellPlaylistPicker(tr);
+        });
+    }
+
+    /* Picker: fetch playlists del usuario y permite elegir destino. */
+    function openShellPlaylistPicker(tr){
+        if (!tr) tr = getCurrentTrack();
+        if (!tr) return;
+        var m = shellOpenModal({
+            title: 'Añadir a playlist',
+            body: '<div class="shell-modal-msg" style="text-align:center;color:var(--text-faint,#666);">Cargando playlists…</div>'
+        });
+        fetch('assets/music/api.php?action=get-playlists', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var playlists = Array.isArray(d) ? d : [];
+                if (!playlists.length) {
+                    m.body.innerHTML =
+                        '<div class="shell-modal-msg">No tienes playlists todavía.</div>' +
+                        '<div class="shell-modal-actions">' +
+                            '<button class="button default" data-act="close" type="button">OK</button>' +
+                        '</div>';
+                    m.body.querySelector('[data-act="close"]').addEventListener('click', m.close);
+                    return;
+                }
+                var html =
+                    '<div class="shell-modal-msg">Añadir "' + esc(tr.title || tr.videoId || 'canción') + '" a:</div>' +
+                    '<div class="shell-modal-list">';
+                playlists.forEach(function(pl, pi){
+                    var n = (pl.tracks || []).length;
+                    var sharedTag = pl.sharedLabel
+                        ? '<span style="font-size:10px;color:var(--text-faint,#666);margin-left:6px;">de ' + esc(pl.sharedLabel) + '</span>'
+                        : '';
+                    html +=
+                        '<button class="button shell-modal-item shell-modal-item-pl" data-pi="' + pi + '" type="button">' +
+                            '<div class="shell-modal-item-pl-name">' + esc(pl.name) + sharedTag + '</div>' +
+                            '<div class="shell-modal-item-pl-meta">' + n + ' canción' + (n === 1 ? '' : 'es') + '</div>' +
+                        '</button>';
+                });
+                html += '</div>' +
+                    '<div class="shell-modal-actions">' +
+                        '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
+                    '</div>';
+                m.body.innerHTML = html;
+                m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+                m.body.querySelectorAll('[data-pi]').forEach(function(el){
+                    el.addEventListener('click', function(){
+                        var pi = parseInt(el.dataset.pi, 10);
+                        var pl = playlists[pi]; if (!pl) return;
+                        m.close(); addTrackToPlaylistShell(pl, tr);
+                    });
+                });
+            })
+            .catch(function(){
+                m.body.innerHTML =
+                    '<div class="shell-modal-msg" style="color:var(--error-text,#c00);">Error cargando playlists.</div>' +
+                    '<div class="shell-modal-actions"><button class="button default" data-act="close" type="button">OK</button></div>';
+                m.body.querySelector('[data-act="close"]').addEventListener('click', m.close);
+            });
+    }
+
+    /* POST save-playlist-item con el track añadido. Si hay duplicado por
+       videoId, confirmamos antes. */
+    function addTrackToPlaylistShell(pl, tr){
+        var dup = tr.videoId && (pl.tracks || []).some(function(t){ return t && t.videoId === tr.videoId; });
+        function doSave(){
+            var newTracks = (pl.tracks || []).slice();
+            var trCopy = {};
+            for (var k in tr) if (tr.hasOwnProperty(k)) trCopy[k] = tr[k];
+            trCopy.addedBy = ME_LABEL;
+            newTracks.push(trCopy);
+            var payload = { id: pl.id, name: pl.name, tracks: newTracks };
+            if (pl.sharedFrom) payload.sharedFrom = pl.sharedFrom;
+            fetch('assets/music/api.php?action=save-playlist-item', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d && d.error) { shellAlert(d.error); return; }
+                shellAlert('"' + (tr.title || 'Canción') + '" añadida a "' + pl.name + '"', 'Añadida');
+            })
+            .catch(function(){ shellAlert('Error al guardar.'); });
+        }
+        if (dup) shellConfirm('"' + (tr.title || 'Canción') + '" ya está en "' + pl.name + '". ¿Añadirla otra vez?', doSave);
+        else doSave();
+    }
+
+    /* Añade el track actual a la lista de música del perfil del usuario.
+       Replica el flow de musica-mobile (GET-merge-POST) para no perder
+       reseñas/featured de otros items. Tras guardar, ofrece reseñar. */
+    function addCurrentToProfile(tr){
+        if (!tr) tr = getCurrentTrack();
+        if (!tr) return;
+        fetch('assets/profile/api.php?action=get-lists', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                var music = (Array.isArray(d.music) ? d.music : [])
+                    .filter(function(m){ return m && !m.sharedFrom; });
+                if (tr.videoId && music.some(function(m){ return m && m.ytId === tr.videoId; })) {
+                    shellAlert('"' + (tr.title || tr.videoId) + '" ya está en tu perfil');
+                    return;
+                }
+                var newItem = {
+                    id: 'item_' + Date.now(),
+                    type: 'song',
+                    title: tr.title || tr.videoId || 'Sin título',
+                    artist: tr.artist || '',
+                    ytId: tr.videoId || '',
+                    image: tr.videoId ? 'https://img.youtube.com/vi/' + tr.videoId + '/mqdefault.jpg' : '',
+                    featured: false,
+                    addedAt: Math.floor(Date.now() / 1000)
+                };
+                music.push(newItem);
+                fetch('assets/profile/api.php?action=save-lists', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: 'music', items: music })
+                })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if (d && d.error) { shellAlert(d.error); return; }
+                    /* Localiza el item recién insertado por ytId (único) →
+                       el server le asignó un id canónico que necesitamos para
+                       guardar la reseña después. */
+                    var fresh = (d && Array.isArray(d.items)) ? d.items : music;
+                    var saved = tr.videoId
+                        ? fresh.find(function(m){ return m && m.ytId === tr.videoId; })
+                        : null;
+                    if (!saved) {
+                        shellAlert('"' + (tr.title || 'Canción') + '" añadida a tu perfil', 'Añadida');
+                        return;
+                    }
+                    /* Prompt: ¿quieres dejar una reseña? */
+                    shellReviewPrompt(
+                        '"' + (tr.title || 'Canción') + '" añadida. ¿Quieres dejar una reseña?',
+                        function(){ shellOpenReviewEditor(saved.id, saved.title || tr.title || ''); }
+                    );
+                })
+                .catch(function(){ shellAlert('Error al guardar.'); });
+            })
+            .catch(function(){ shellAlert('Error obteniendo el perfil.'); });
+    }
+
+    /* Prompt "¿Reseñar?" con dos botones — variante del shellConfirm con
+       texto adaptado y botón positivo destacado. */
+    function shellReviewPrompt(message, onYes){
+        var m = shellOpenModal({
+            title: '¿Añadir reseña?',
+            body:
+                '<div class="shell-modal-msg">' + esc(message) + '</div>' +
+                '<div class="shell-modal-actions">' +
+                    '<button class="button" data-act="no" type="button">No, gracias</button>' +
+                    '<button class="button default" data-act="yes" type="button">★ Sí</button>' +
+                '</div>'
+        });
+        m.body.querySelector('[data-act="no"]').addEventListener('click', m.close);
+        m.body.querySelector('[data-act="yes"]').addEventListener('click', function(){
+            m.close(); if (typeof onYes === 'function') onYes();
+        });
+    }
+
+    /* Editor de reseña en el shell. Estrellas con half-star detection
+       (tap en mitad izquierda = .5). Save → GET-merge-POST save-lists
+       para no pisar otros items del perfil. */
+    function shellOpenReviewEditor(musicId, title){
+        var sel = 0;
+        var bodyHtml =
+            '<div class="shell-modal-msg" style="text-align:center;font-weight:bold;">' + esc(title || 'Canción') + '</div>' +
+            '<div style="text-align:center;margin:6px 0 12px;">' +
+                '<div id="sh-re-stars" style="font-size:32px;line-height:1;color:var(--accent,#000080);user-select:none;"></div>' +
+                '<div id="sh-re-num" style="font-size:14px;margin-top:6px;font-weight:bold;min-height:18px;color:var(--accent,#000080);"></div>' +
+            '</div>' +
+            '<label for="sh-re-comment" style="font-size:11px;display:block;margin-bottom:4px;">Comentario (opcional)</label>' +
+            '<textarea id="sh-re-comment" rows="3" maxlength="500" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:13px;padding:6px 8px;" placeholder="Tu opinión..."></textarea>' +
+            '<div class="shell-modal-actions">' +
+                '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
+                '<button class="button default" data-act="save" type="button">Guardar</button>' +
+            '</div>';
+        var m = shellOpenModal({ title: '★ Reseña', body: bodyHtml });
+        var starsEl   = m.body.querySelector('#sh-re-stars');
+        var numEl     = m.body.querySelector('#sh-re-num');
+        var commentEl = m.body.querySelector('#sh-re-comment');
+
+        function paintStar(span, val, pos){
+            if (val >= pos)            { span.innerHTML = '★'; span.style.clipPath = ''; }
+            else if (val >= pos - 0.5) { span.innerHTML = '★'; span.style.clipPath = 'inset(0 50% 0 0)'; }
+            else                       { span.innerHTML = '☆'; span.style.clipPath = ''; }
+        }
+        function drawStars(){
+            starsEl.innerHTML = '';
+            for (var i = 1; i <= 5; i++) {
+                var s = document.createElement('span');
+                s.setAttribute('data-star', String(i));
+                s.style.cssText = 'display:inline-block;position:relative;width:1.1em;cursor:pointer;';
+                paintStar(s, sel, i);
+                starsEl.appendChild(s);
+            }
+            numEl.textContent = sel > 0 ? String(sel) : '';
+        }
+        drawStars();
+        starsEl.addEventListener('click', function(e){
+            var target = e.target.closest('[data-star]');
+            if (!target) return;
+            var rect = target.getBoundingClientRect();
+            var pos  = parseInt(target.getAttribute('data-star'), 10);
+            var half = (e.clientX - rect.left) < rect.width / 2;
+            sel = half ? pos - 0.5 : pos;
+            drawStars();
+        });
+
+        m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+        m.body.querySelector('[data-act="save"]').addEventListener('click', function(){
+            if (!sel) { shellAlert('Selecciona una puntuación'); return; }
+            var review = {
+                stars:      sel,
+                comment:    (commentEl.value || '').trim(),
+                reviewedAt: Math.floor(Date.now() / 1000)
+            };
+            /* GET-merge-POST: traemos la lista fresca para no pisar
+               cambios concurrentes en otros items. */
+            fetch('assets/profile/api.php?action=get-lists', { credentials: 'same-origin' })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    var music = (Array.isArray(d.music) ? d.music : [])
+                        .filter(function(it){ return it && !it.sharedFrom; });
+                    var idx = music.findIndex(function(it){ return it && it.id === musicId; });
+                    if (idx === -1) { shellAlert('No se encontró la canción en tu perfil'); m.close(); return; }
+                    music[idx].review = review;
+                    fetch('assets/profile/api.php?action=save-lists', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ category: 'music', items: music })
+                    })
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (d && d.error) { shellAlert(d.error); return; }
+                        m.close();
+                        /* Notify a followers — mismo flow que el editor del perfil. */
+                        fetch('assets/profile/api.php?action=notify-review', {
+                            method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ category: 'music', title: music[idx].title || '', itemType: music[idx].type || 'song' })
+                        }).catch(function(){});
+                    })
+                    .catch(function(){ shellAlert('Error guardando la reseña.'); });
+                })
+                .catch(function(){ shellAlert('Error obteniendo el perfil.'); });
+        });
+    }
+
+    /* Long-press sobre el vinilo del fullscreen → openVinylMenu. */
+    (function attachVinylLongPress(){
+        var vinyl = document.getElementById('mu-vinyl');
+        if (!vinyl) return;
+        var sx = 0, sy = 0, lpTimer = null, fired = false;
+        var LP_MS_V = 500, LP_MOVE_V = 12;
+        function start(e){
+            var t = (e.touches && e.touches[0]) || e;
+            sx = t.clientX || 0; sy = t.clientY || 0;
+            fired = false;
+            if (lpTimer) clearTimeout(lpTimer);
+            lpTimer = setTimeout(function(){
+                lpTimer = null; fired = true;
+                try { navigator.vibrate && navigator.vibrate(30); } catch (_) {}
+                openVinylMenu();
+            }, LP_MS_V);
+        }
+        function move(e){
+            if (!lpTimer) return;
+            var t = (e.touches && e.touches[0]) || e;
+            if (Math.abs((t.clientX||0) - sx) > LP_MOVE_V || Math.abs((t.clientY||0) - sy) > LP_MOVE_V) {
+                clearTimeout(lpTimer); lpTimer = null;
+            }
+        }
+        function end(e){
+            if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+            if (fired && e && e.cancelable) e.preventDefault();
+        }
+        vinyl.addEventListener('touchstart', start, { passive: true });
+        vinyl.addEventListener('touchmove',  move,  { passive: true });
+        vinyl.addEventListener('touchend',   end);
+        vinyl.addEventListener('touchcancel', end);
+        vinyl.addEventListener('mousedown', start);
+        document.addEventListener('mouseup', end);
+    })();
+
     /* ── API pública / postMessage bridge ── */
     function loadQueue(tracks, startIdx, plName) {
         if (!tracks || !tracks.length) return;
@@ -1416,13 +1877,14 @@ window.MuShell = (function(){
     function getState() {
         var tr = (CUR_IDX >= 0 && QUEUE[CUR_IDX]) ? QUEUE[CUR_IDX] : null;
         return {
-            queue: QUEUE, idx: CUR_IDX, track: tr,
+            queue: QUEUE, idx: CUR_IDX, track: tr, plName: CUR_PL_NAME,
             playing: !!(YT_PLAYER && YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1)
         };
     }
     window.addEventListener('message', function(ev){
         var d = ev.data || {};
         if (d.type === 'mushell:load')          { loadQueue(d.queue, d.idx); subscribers.push(ev.source); }
+        else if (d.type === 'mushell:subscribe') { subscribers.push(ev.source); }
         else if (d.type === 'mushell:next')     next();
         else if (d.type === 'mushell:prev')     prev();
         else if (d.type === 'mushell:toggle')   togglePlay();
@@ -1441,6 +1903,131 @@ window.MuShell = (function(){
         loadQueue: loadQueue, next: next, prev: prev, toggle: togglePlay,
         openFullscreen: openFullscreen, openLock: openLock, getState: getState
     };
+})();
+
+/* ─── Web Push setup (shell-level) ────────────────────────────────
+   Vive aquí, no en perfil-mobile, para que el prompt de permisos
+   aparezca al entrar a la PWA, no escondido detrás de un tab.
+   - Registra el SW (/service-worker.js, ya servido desde la raíz).
+   - Si Notification.permission === 'default' pide permiso una vez.
+   - Con permiso concedido, pide la VAPID public, suscribe y POSTea
+     la sub al server. Errores silenciosos para no contaminar el shell. */
+(function setupPush(){
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+    /* Auto-reload del shell cuando un SW NUEVO sustituye a uno viejo.
+       Importante saltarlo en el PRIMER install (de null → SW recién
+       creado), porque si no la primera apertura se recarga sola y se
+       come el banner de permiso antes de que el usuario lo vea. */
+    var reloading = false;
+    var hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if (reloading || !hadController) return;
+        reloading = true;
+        location.reload();
+    });
+
+    /* Registro del SW como promise reutilizable. El banner del primer
+       install puede mostrarse ANTES de que esto termine; si el usuario
+       acepta, el subscribe espera al `then`. */
+    var regPromise = navigator.serviceWorker.register('service-worker.js');
+
+    /* Si la pestaña empieza SIN controller (primer install), mostramos el
+       banner ya — no esperamos a que SW.register termine para no perder
+       la primera oportunidad de pedir permiso. */
+    if (!hadController && Notification.permission === 'default') {
+        showPushBanner(function(){
+            Notification.requestPermission().then(function(perm){
+                if (perm !== 'granted') return;
+                regPromise.then(subscribeToPush).catch(function(){});
+            });
+        });
+    }
+
+    regPromise.then(function(reg){
+        /* Fuerza al browser a comprobar si hay una versión nueva del SW
+           en cada carga del shell. Si la hay, se descarga, instala y
+           activa inmediatamente (skipWaiting), disparando controllerchange. */
+        reg.update().catch(function(){});
+        if (Notification.permission === 'denied') return;
+        /* Si ya está concedido (la PWA se recarga, o reentras), suscribimos
+           de inmediato — no hace falta volver a pedir permiso. */
+        if (Notification.permission === 'granted') {
+            subscribeToPush(reg);
+            return;
+        }
+        /* Chrome/Safari/Firefox bloquean Notification.requestPermission()
+           sin gesto del usuario. Inyectamos un banner en mobile.php que el
+           usuario tiene que tocar conscientemente — el tap del botón cuenta
+           como gesto y Chrome abre el prompt nativo. */
+        showPushBanner(function(){
+            Notification.requestPermission().then(function(perm){
+                if (perm === 'granted') subscribeToPush(reg);
+            });
+        });
+    }).catch(function(){});
+
+    function showPushBanner(onAccept) {
+        if (document.getElementById('push-perm-banner')) return;
+        var bd = document.createElement('div');
+        bd.id = 'push-perm-banner';
+        bd.style.cssText = [
+            'position:fixed', 'left:0', 'right:0',
+            'top:env(safe-area-inset-top,0)',
+            'z-index:9500',
+            'padding:10px 12px',
+            'background:var(--accent,#000080)',
+            'color:var(--accent-text,#fff)',
+            'display:flex', 'align-items:center', 'gap:10px',
+            'font-size:12px',
+            'box-shadow:0 2px 6px rgba(0,0,0,0.4)'
+        ].join(';');
+        bd.innerHTML =
+            '<span style="flex:1;">🔔 Activa las notificaciones para no perderte mensajes.</span>' +
+            '<button class="button" id="push-perm-ok"    type="button" style="min-height:26px;font-size:11px;">Activar</button>' +
+            '<button class="button" id="push-perm-skip"  type="button" style="min-height:26px;font-size:11px;">Luego</button>';
+        document.body.appendChild(bd);
+        function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+        document.getElementById('push-perm-ok').addEventListener('click', function(){
+            close(); onAccept();
+        });
+        document.getElementById('push-perm-skip').addEventListener('click', close);
+    }
+
+    function subscribeToPush(reg) {
+        fetch('assets/profile/api.php?action=get-vapid-public-key', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok || !d.publicKey) return;
+                return reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(d.publicKey)
+                });
+            })
+            .then(function(sub){
+                if (!sub) return;
+                var json = sub.toJSON();
+                fetch('assets/profile/api.php?action=save-push-subscription', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        endpoint: json.endpoint,
+                        p256dh:   json.keys && json.keys.p256dh,
+                        auth:     json.keys && json.keys.auth
+                    })
+                });
+            })
+            .catch(function(){});
+    }
+
+    function urlBase64ToUint8Array(b64) {
+        var padding = '='.repeat((4 - b64.length % 4) % 4);
+        var base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+        var raw = atob(base64);
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+    }
 })();
 </script>
 

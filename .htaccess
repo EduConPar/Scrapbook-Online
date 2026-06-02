@@ -39,6 +39,21 @@ AddDefaultCharset UTF-8
     ExpiresByType application/javascript "access plus 1 day"
 </IfModule>
 
+# Service worker: NUNCA cachear. Sin esto el navegador puede tardar
+# hasta 24h en darse cuenta de un cambio en service-worker.js. La regla
+# fuerza revalidación en cada navegación → updates instantáneos.
+<Files "service-worker.js">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </IfModule>
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresDefault "now"
+    </IfModule>
+</Files>
+
 # Subidas de imágenes (avatar, wallpapers, momentos): hasta 5 MB
 <IfModule mod_php.c>
     php_value upload_max_filesize 5M

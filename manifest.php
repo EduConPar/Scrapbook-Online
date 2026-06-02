@@ -63,36 +63,26 @@ $manifest = [
     'lang'              => 'es',
     'categories'        => ['lifestyle', 'social', 'utilities'],
     'icons'             => [
-        /* Chrome Android exige PNG (no acepta SVG para el check de
-           instalabilidad PWA) en tamaños 192 Y 512. Apuntamos al mismo
-           archivo en ambos tamaños — el contenido es 376x391, Chrome
-           acepta la declaración aunque las dimensiones reales sean
-           distintas. Mantenemos también la versión SVG como secundaria
-           por si algún navegador la prefiere. */
+        /* Variantes escaladas a partir de icon.png (raíz, 64×64) con
+           assets/push/resize-icon.php. Las dimensiones declaradas tienen
+           que coincidir con las del archivo o Chrome rechaza instalación. */
         [
-            'src'     => 'assets/img/start-icons/capi-start-icon.png',
+            'src'     => 'assets/img/mobile/icon-192.png',
             'sizes'   => '192x192',
             'type'    => 'image/png',
             'purpose' => 'any',
         ],
         [
-            'src'     => 'assets/img/start-icons/capi-start-icon.png',
+            'src'     => 'assets/img/mobile/icon-512.png',
             'sizes'   => '512x512',
             'type'    => 'image/png',
             'purpose' => 'any',
         ],
         [
-            'src'     => 'assets/img/start-icons/capi-start-icon.png',
+            'src'     => 'assets/img/mobile/icon-512.png',
             'sizes'   => '512x512',
             'type'    => 'image/png',
             'purpose' => 'maskable',
-        ],
-        /* SVG como extra (Chrome desktop, Edge, Firefox lo aceptan). */
-        [
-            'src'     => 'assets/pwa-icon.php?size=512',
-            'sizes'   => 'any',
-            'type'    => 'image/svg+xml',
-            'purpose' => 'any',
         ],
     ],
 ];

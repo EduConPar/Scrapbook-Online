@@ -29,6 +29,9 @@
    POST  ?action=leave-collab          { action: 'leave'|'remove', category, itemId, collaboratorUser? }
    POST  ?action=notify-review         { category, itemTitle, mtype? }
    POST  ?action=play-music-item       { ... }
+   GET   ?action=get-vapid-public-key
+   POST  ?action=save-push-subscription   { endpoint, p256dh, auth }
+   POST  ?action=delete-push-subscription { endpoint }
 
    ALMACENAMIENTO: 100% SQL.
      - profile / posts / post_likes / follows / notifications
@@ -283,6 +286,60 @@ function pf_chatId(PDO $pdo, int $a, int $b): int {
     if ($id) return (int)$id;
     $pdo->prepare("INSERT INTO chats (user_a, user_b) VALUES (?, ?)")->execute([$a, $b]);
     return (int)$pdo->lastInsertId();
+}
+
+/* Envía Web Push best-effort a todas las subscripciones del destinatario.
+   Errores 410 (Gone) / 404 limpian la sub muerta de la BD. Cualquier otro
+   fallo se silencia — el mensaje ya está persistido. */
+function pf_tryWebPush(PDO $pdo, int $toUid, string $fromKey, string $text): void {
+    global $loginUsers;
+    $libPath = dirname(__DIR__) . '/push/webpush.php';
+    if (!file_exists($libPath)) return;     /* no instalado todavía */
+    $keysPath = dirname(__DIR__) . '/push/vapid-keys.php';
+    if (!file_exists($keysPath)) return;    /* corre generate-vapid.php primero */
+
+    $stmt = $pdo->prepare("SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?");
+    $stmt->execute([$toUid]);
+    $subs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$subs) return;
+
+    require_once $libPath;
+    try { $wp = new WebPush(); } catch (Throwable $e) { return; }
+
+    $fromLabel = $loginUsers[$fromKey]['label'] ?? $fromKey;
+    /* Avatar del remitente como icono de la notificación. Si no hay
+       avatar resoluble cae al notification-icon.png del SW (la sandía). */
+    $fromAvatarRel = getUserImage($fromLabel);
+    $iconUrl = $fromAvatarRel !== '' ? ('/scrapbookOnline/' . $fromAvatarRel) : null;
+    $payload = json_encode([
+        'type'  => 'chat',
+        'title' => '💬 ' . $fromLabel,
+        'body'  => mb_substr($text, 0, 120),
+        'from'  => $fromKey,
+        'icon'  => $iconUrl,
+        /* Deep-link: el shell parsea #chat= y carga perfil-mobile con el
+           mismo hash → handleChatHash() abre el modal de chat.
+           `?pwa=1` hace que la URL haga match con el start_url del
+           manifest (./mobile.php?pwa=1) — sin esto Chrome a veces no
+           reconoce la URL como "perteneciente" a la PWA instalada y
+           openWindow() abre una pestaña del navegador en vez del
+           contenedor standalone. */
+        'url'   => '/scrapbookOnline/mobile.php?pwa=1#chat=' . $fromKey,
+    ], JSON_UNESCAPED_UNICODE);
+
+    foreach ($subs as $s) {
+        try {
+            list($code, $_resp) = $wp->send([
+                'endpoint' => $s['endpoint'],
+                'p256dh'   => $s['p256dh'],
+                'auth'     => $s['auth'],
+            ], $payload, 60);
+            /* 201/202/204 = OK; 404/410 = sub muerta. */
+            if ($code === 404 || $code === 410) {
+                $pdo->prepare("DELETE FROM push_subscriptions WHERE id = ?")->execute([$s['id']]);
+            }
+        } catch (Throwable $e) { /* silencio */ }
+    }
 }
 
 switch ($action) {
@@ -1202,6 +1259,11 @@ case 'send-message': {
     $col = ($uid < $toUid) ? 'last_seen_a' : 'last_seen_b';
     $pdo->prepare("UPDATE chats SET $col = NOW() WHERE id = ?")->execute([$chatId]);
 
+    /* ── Trigger Web Push al destinatario ──
+       Best-effort: si falla, el mensaje ya está guardado. Errores 410
+       (Gone) limpian la subscripción muerta. */
+    pf_tryWebPush($pdo, $toUid, $userKey, $text);
+
     jsonResponse(['ok' => true, 'message' => [
         'id'     => $msgId,
         'from'   => $userKey,
@@ -1209,6 +1271,45 @@ case 'send-message': {
         'sentAt' => time(),
     ]]);
 }
+
+case 'save-push-subscription': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b  = jsonBody();
+    $ep = trim($b['endpoint'] ?? '');
+    $p2 = trim($b['p256dh']   ?? '');
+    $au = trim($b['auth']     ?? '');
+    if (!$ep || !$p2 || !$au) jsonError('Subscription incompleta');
+    if (!preg_match('#^https?://[^\s<>"\']+$#i', $ep) || mb_strlen($ep) > 500) jsonError('Endpoint inválido');
+    /* UPSERT por endpoint — si el browser regenera la sub, sobrescribe. */
+    $pdo->prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+                   VALUES (?, ?, ?, ?)
+                   ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), p256dh=VALUES(p256dh), auth=VALUES(auth)")
+        ->execute([$uid, $ep, $p2, $au]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'delete-push-subscription': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $ep = trim(jsonBody()['endpoint'] ?? '');
+    if (!$ep) jsonError('Endpoint vacío');
+    $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?")
+        ->execute([$ep, $uid]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'get-vapid-public-key': {
+    require_once dirname(__DIR__) . '/push/webpush.php';
+    try {
+        $wp = new WebPush();
+        jsonResponse(['ok' => true, 'publicKey' => $wp->getPublicKeyB64()]);
+    } catch (Throwable $e) {
+        jsonResponse(['ok' => false, 'error' => 'VAPID no configurado']);
+    }
+}
+
+
 
 /* ─── Ver perfil ajeno ──────────────────────────────────── */
 

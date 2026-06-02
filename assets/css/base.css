@@ -525,3 +525,48 @@ body.has-start-icon .win-logo span { display: none; }
 .ar-handle[data-dir="nw"] { top:-4px;    left:-4px;   width:12px;  height:12px; cursor:nw-resize; }
 .ar-handle[data-dir="se"] { bottom:-4px; right:-4px;  width:12px;  height:12px; cursor:se-resize; }
 .ar-handle[data-dir="sw"] { bottom:-4px; left:-4px;   width:12px;  height:12px; cursor:sw-resize; }
+
+/* ──────────────────────────────────────────────────────────────────────
+   LCD FILTER (VHS look) — scanlines sutiles + vignette.
+   Activo por defecto. Se desactiva desde Temas → Personalización
+   (localStorage 'lcd-filter' === '0').
+   La clase la pone el boot script en <html>. Los pseudo-elementos viven
+   en <body> en vez de <html> porque en móvil (mobile-theme.css fija
+   html/body con overflow:hidden + height:100vh) algunos WebKit clippan
+   los pseudos del html y el filtro no se ve. Body los respeta siempre.
+   - body::before: scanlines mixtas (oscura + clara desplazada 1px).
+   - body::after: vignette radial (esquinas oscurecidas).
+   pointer-events:none → no bloquea interacción.
+   ────────────────────────────────────────────────────────────────────── */
+html.lcd-filter-on body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483645;
+    background-image: repeating-linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0.10) 0,
+        rgba(0, 0, 0, 0.10) 1px,
+        rgba(255, 255, 255, 0.05) 1px,
+        rgba(255, 255, 255, 0.05) 2px,
+        transparent 2px,
+        transparent 3px
+    );
+}
+/* Vignette: solo en documentos top-level (clase 'lcd-filter-top' añadida
+   por el boot script cuando window.top === window). Las apps embebidas en
+   iframes no pintan vignette — para que no se duplique sobre el shell. */
+html.lcd-filter-top body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483646;
+    background: radial-gradient(
+        ellipse 75% 60% at center,
+        transparent 60%,
+        rgba(0, 0, 0, 0.10) 85%,
+        rgba(0, 0, 0, 0.24) 100%
+    );
+}
