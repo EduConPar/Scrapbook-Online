@@ -71,6 +71,29 @@ $userLabel = $loginUsers[$userKey]['label'];
 
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
 
+/* TV LAN URL — para Smart TVs que no soportan TLS 1.3/SNI moderno del
+   túnel cloudflared (Tizen <2018, webOS <4, Android TV 5). La TV está
+   en la misma WiFi → HTTP plano por IP local evita el handshake TLS y
+   carga instantáneo. Detección: override de .env > socket UDP > host. */
+$tvLanUrl = trim((string) env('LAN_URL', ''));
+if ($tvLanUrl === '') {
+    $lanIp = '';
+    $sock = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+    if ($sock) {
+        if (@socket_connect($sock, '8.8.8.8', 53)) {
+            @socket_getsockname($sock, $lanIp);
+        }
+        @socket_close($sock);
+    }
+    if (!$lanIp || $lanIp === '127.0.0.1') {
+        $alt = @gethostbyname(@gethostname());
+        if ($alt && $alt !== '127.0.0.1' && filter_var($alt, FILTER_VALIDATE_IP)) $lanIp = $alt;
+    }
+    if ($lanIp && $lanIp !== '127.0.0.1') {
+        $tvLanUrl = 'http://' . $lanIp . $projectBaseUrl . 'tv.php';
+    }
+}
+
 /* Token de dispositivo PARA EL MANIFEST. Si el usuario instala la PWA
    desde aquí (no desde la landing), también queremos que su start_url
    contenga el token y haga auto-login al abrirla — necesario en iOS
@@ -99,10 +122,10 @@ $apps = [
     ['name' => 'D&D',          'url' => 'apps/dnd.php',                                                         'emoji' => '⚔',  'icon' => null,                                       'external' => false, 'wip' => false],
     ['name' => 'Dibujo',       'url' => 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fija',      'emoji' => '✏️', 'icon' => null,                                       'external' => true,  'wip' => false],
     ['name' => 'Galería',      'url' => 'apps/galeria.php',                                                     'emoji' => '🖼', 'icon' => null,                                       'external' => false, 'wip' => false],
-    ['name' => 'MelonArchive', 'url' => 'apps/melonarchive-mobile.php',                                         'emoji' => '📼', 'icon' => 'assets/img/appIcons/melonArchiveIcon.png', 'external' => false, 'wip' => false],
-    ['name' => 'Música',       'url' => 'apps/musica-mobile.php',                                               'emoji' => '🎵', 'icon' => 'assets/img/appIcons/musicaIcon.png',       'external' => false, 'wip' => false],
-    ['name' => 'Perfil',       'url' => 'apps/perfil-mobile.php',                                               'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
-    ['name' => 'Temas',        'url' => 'apps/temas.php',                                                       'emoji' => '🎨', 'icon' => 'assets/img/appIcons/temasIcon.png',        'external' => false, 'wip' => false],
+    ['name' => 'MelonArchive', 'url' => 'apps/mobile/melonarchive-mobile.php',                                  'emoji' => '📼', 'icon' => 'assets/img/appIcons/melonArchiveIcon.png', 'external' => false, 'wip' => false],
+    ['name' => 'Música',       'url' => 'apps/mobile/musica-mobile.php',                                        'emoji' => '🎵', 'icon' => 'assets/img/appIcons/musicaIcon.png',       'external' => false, 'wip' => false],
+    ['name' => 'Perfil',       'url' => 'apps/mobile/perfil-mobile.php',                                        'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
+    ['name' => 'Temas',        'url' => 'apps/mobile/temas-mobile.php',                                         'emoji' => '🎨', 'icon' => 'assets/img/appIcons/temasIcon.png',        'external' => false, 'wip' => false],
     ['name' => 'Tienda',       'url' => 'apps/tienda.php',                                                      'emoji' => '🛒', 'icon' => 'assets/img/appIcons/tiendaIcon.png',       'external' => false, 'wip' => false],
 ];
 usort($apps, fn($a, $b) => strcasecmp($a['name'], $b['name']));
@@ -668,6 +691,82 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             display: block;
         }
 
+        /* ── MODAL "CONECTAR TV" ── */
+        .mu-tv-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 310;
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px;
+        }
+        .mu-tv-backdrop[hidden] { display: none !important; }
+        .mu-tv-window {
+            width: 100%; max-width: 360px;
+            max-height: calc(100vh - 32px);
+            display: flex; flex-direction: column;
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .mu-tv-window > .window-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 14px;
+        }
+        .mu-tv-intro {
+            font-size: 11px;
+            color: var(--text, #000);
+            line-height: 1.45;
+            margin: 0 0 12px;
+        }
+        .mu-tv-code-wrap {
+            background: var(--input-bg, #fff);
+            padding: 16px 12px;
+            margin: 0 0 12px;
+            text-align: center;
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-1, #808080),
+                inset -1px -1px var(--bezel-light-1, #fff);
+        }
+        .mu-tv-code {
+            font-family: 'VT323', Consolas, Monaco, monospace;
+            font-size: 36px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            color: var(--accent, #000080);
+            line-height: 1;
+        }
+        .mu-tv-code-meta {
+            margin-top: 6px;
+            font-size: 10px;
+            color: var(--text-faint, #666);
+        }
+        #mu-tv-url-inline { font-family: 'VT323', monospace; font-size: 12px; }
+        .mu-tv-url-row {
+            display: flex; gap: 6px;
+            margin-bottom: 10px;
+        }
+        .mu-tv-url-row input {
+            flex: 1; min-width: 0;
+            font-family: 'VT323', monospace;
+            font-size: 13px;
+            padding: 3px 6px;
+            color: var(--text, #000);
+            background: var(--input-bg, #fff);
+        }
+        .mu-tv-url-row .button {
+            min-height: 24px;
+            font-size: 11px;
+            padding: 0 10px;
+        }
+        .mu-tv-steps {
+            font-size: 11px;
+            color: var(--text, #000);
+            margin: 0; padding-left: 18px;
+            line-height: 1.55;
+        }
+        .mu-tv-steps li { margin-bottom: 4px; }
+
         /* ── SHELL MODALS (action menu vinilo + playlist picker + alert) ──
            Modales bottom-sheet Win98 que viven sobre el shell. Aparecen
            encima del fullscreen (z-index 300 > .mu-full 200). */
@@ -973,6 +1072,13 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                         <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
                     </svg>
                 </button>
+                <button class="button mu-full-extra" id="mu-full-tv" type="button" aria-label="Enviar a TV">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="2" y="5" width="20" height="13" rx="1.5"/>
+                        <line x1="8" y1="22" x2="16" y2="22"/>
+                        <line x1="12" y1="18" x2="12" y2="22"/>
+                    </svg>
+                </button>
             </div>
 
         </div>
@@ -999,6 +1105,40 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="mu-lock-artist" id="mu-lock-artist">—</div>
     </div>
     <div class="mu-lock-hint" id="mu-lock-hint">↑ Desliza para desbloquear</div>
+</div>
+
+<!-- Modal "Conectar TV" — se abre desde el botón 📺 del fullscreen.
+     Win98 window con QR + URL del companion tv.php. -->
+<div class="mu-tv-backdrop" id="mu-tv-backdrop"
+     data-lan-url="<?= htmlspecialchars($tvLanUrl, ENT_QUOTES) ?>" hidden>
+    <div class="window mu-tv-window">
+        <div class="title-bar">
+            <div class="title-bar-text">📺 Conectar a TV</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mu-tv-close" type="button"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <p class="mu-tv-intro">
+                En el navegador de tu TV abre <strong id="mu-tv-url-inline"></strong>
+                e introduce el código de abajo.
+            </p>
+            <div class="mu-tv-code-wrap">
+                <div class="mu-tv-code" id="mu-tv-code">— — — — — —</div>
+                <div class="mu-tv-code-meta" id="mu-tv-code-meta">Generando…</div>
+            </div>
+            <ol class="mu-tv-steps">
+                <li>Abre el navegador de tu Smart TV.</li>
+                <li>Ve a la URL de arriba.</li>
+                <li>Teclea el código de 6 dígitos con el mando.</li>
+                <li>Listo — la TV queda emparejada 30 días.</li>
+            </ol>
+            <div class="mu-tv-url-row">
+                <input type="text" id="mu-tv-url" readonly>
+                <button class="button" id="mu-tv-copy" type="button">Copiar</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Host del YouTube IFrame Player (off-screen). -->
@@ -1037,22 +1177,46 @@ if ('serviceWorker' in navigator) {
     var appShell   = document.getElementById('shell-app');
     var appFrame   = document.getElementById('app-frame');
 
-    /* Carga una app dentro del iframe y oculta el launcher. */
-    function openApp(url, name) {
-        if (!url) return;
-        appFrame.src = url;
+    /* Helpers de presentación — manipulan SOLO el DOM, sin tocar el
+       history. Quien llame a openApp() empuja un estado; popstate
+       (back del SO) restaura el estado anterior y reusa estos helpers.
+
+       OJO con history pollution: asignar `iframe.src` empuja una
+       entrada al history del TOP window. Esto rompe la navegación
+       cuando se abre, se cierra y se vuelve a abrir una app (la pila
+       queda llena de entradas fantasma y el back se desincroniza).
+       Usamos contentWindow.location.replace() para cargar sin empujar.
+       Tampoco reseteamos a 'about:blank' al volver al menú — el
+       iframe se queda oculto con la última URL hasta el próximo open. */
+    function showApp(url) {
         appShell.hidden = false;
         if (launcherEl) launcherEl.style.visibility = 'hidden';
-        /* URL hash para que el back-button del SO funcione. */
+        if (!url) return;
+        try { appFrame.contentWindow.location.replace(url); }
+        catch (_) { appFrame.src = url; }
+    }
+    function showMenu() {
+        if (appShell.hidden) return;
+        appShell.hidden = true;
+        if (launcherEl) launcherEl.style.visibility = '';
+    }
+
+    /* Abrir una app: empuja un estado al history para que el back del
+       teléfono nos devuelva al estado anterior (sea otra app abierta o
+       el menú). */
+    function openApp(url, name) {
+        if (!url) return;
+        showApp(url);
         try { history.pushState({ app: url, name: name }, '', '#app=' + encodeURIComponent(name || url)); }
         catch (_) {}
     }
-    /* Cierra el iframe y vuelve al launcher. */
-    function closeApp() {
-        appShell.hidden = true;
-        appFrame.src = 'about:blank';
-        if (launcherEl) launcherEl.style.visibility = '';
-        try { if (location.hash) history.replaceState(null, '', location.pathname); } catch (_) {}
+
+    /* Apps que piden volver vía postMessage (botón "cerrar" interno).
+       Disparamos history.back() para que pase por el mismo flujo que el
+       back físico: popstate decide si hay app anterior o si toca menú. */
+    function goBack() {
+        try { history.back(); }
+        catch (_) { showMenu(); }
     }
 
     /* Tap en un icono de app interna → cargar en iframe. */
@@ -1063,16 +1227,55 @@ if ('serviceWorker' in navigator) {
         });
     });
 
-    /* Apps embebidas → postMessage para volver al menú o lanzar otra. */
+    /* Apps embebidas → postMessage para volver atrás o lanzar otra. */
     window.addEventListener('message', function(ev){
         var d = ev.data || {};
-        if (d.type === 'shell:back')      closeApp();
+        if (d.type === 'shell:back')      goBack();
         else if (d.type === 'shell:open' && d.url) openApp(d.url, d.name);
+        else if (d.type === 'theme-activated') {
+            /* La app de Temas (iframe) activó un tema nuevo. Refrescamos:
+                 1) Reemplazamos el <link id="active-theme-link"> del shell
+                    con el CSS del tema nuevo (cache-bust con ?t=).
+                 2) Sustituimos la clase del tema en <body> conservando
+                    el resto (mh-body, etc.). El patrón es "-{userLabel}".
+               Resultado: el menú principal del shell adopta el tema sin
+               recargar la PWA y sin perder la app abierta encima. */
+            var newClass = d.className || '';
+            var basePath = d.cssBasePath || '';
+            var existing = document.getElementById('active-theme-link');
+            if (basePath) {
+                var href = basePath + (basePath.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
+                if (existing) existing.href = href;
+                else {
+                    var link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.id  = 'active-theme-link';
+                    link.href = href;
+                    document.head.appendChild(link);
+                }
+            } else if (existing) existing.remove();
+
+            var userLabelSlug = <?= json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)) ?>;
+            var themeClassRe  = new RegExp('-' + userLabelSlug + '$');
+            var keep = (document.body.className || '').split(/\s+/).filter(function(c){
+                return c && !themeClassRe.test(c);
+            });
+            if (newClass) keep.push(newClass);
+            document.body.className = keep.join(' ');
+        }
     });
 
-    /* Back-button del navegador (gesto en Android, swipe en iOS). */
-    window.addEventListener('popstate', function(){
-        if (!appShell.hidden) closeApp();
+    /* Back del SO (botón físico Android, gesto swipe iOS, back del
+       browser). Restauramos el estado anterior:
+         - Si había otra app abierta antes → la mostramos.
+         - Si no → cae al menú principal. */
+    window.addEventListener('popstate', function(e){
+        var s = e.state;
+        if (s && s.app) {
+            showApp(s.app);
+        } else {
+            showMenu();
+        }
     });
 
     /* Deep-link desde notificación push: #chat=USERKEY
@@ -1088,7 +1291,7 @@ if ('serviceWorker' in navigator) {
         if (!m) return;
         var k = encodeURIComponent(m[1]);
         try { history.replaceState(null, '', location.pathname); } catch (_) {}
-        openApp('apps/perfil-mobile.php#chat=' + k, 'Perfil');
+        openApp('apps/mobile/perfil-mobile.php#chat=' + k, 'Perfil');
     }
     dispatchChatHash();
     window.addEventListener('hashchange', dispatchChatHash);
@@ -1153,6 +1356,41 @@ window.MuShell = (function(){
         setMediaPlaybackState(playing ? 'playing' : 'paused');
         if (e.data === 0) next();
         broadcast({ type: 'mushell:state', state: e.data, idx: CUR_IDX });
+        publishNowPlaying(playing, true);
+    }
+
+    /* Publica el track actual al endpoint save-now-playing para que
+       la TV (tv.php) lo lea via polling. Best-effort, errores callados.
+       Throttled a 1 call/s mediante __NP_LAST. */
+    var __NP_LAST = 0;
+    function publishNowPlaying(isPlaying, force) {
+        if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+        var now = Date.now();
+        /* Throttle de 800ms para el tick periódico, pero los eventos
+           "importantes" (cambio de pista, play/pause) lo saltan para que
+           la TV reaccione al instante. */
+        if (!force && now - __NP_LAST < 800) return;
+        __NP_LAST = now;
+        var tr = QUEUE[CUR_IDX];
+        var pos = 0, dur = 0;
+        try { pos = YT_PLAYER && YT_PLAYER.getCurrentTime ? YT_PLAYER.getCurrentTime() : 0; } catch (_) {}
+        try { dur = YT_PLAYER && YT_PLAYER.getDuration    ? YT_PLAYER.getDuration()    : 0; } catch (_) {}
+        try {
+            fetch('assets/music/api.php?action=save-now-playing', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    videoId:   tr.videoId,
+                    title:     tr.title  || '',
+                    artist:    tr.artist || '',
+                    plName:    CUR_PL_NAME,
+                    position:  pos,
+                    duration:  dur,
+                    isPlaying: !!isPlaying,
+                }),
+                keepalive: true
+            });
+        } catch (_) {}
     }
 
     /* ── Media Session ── */
@@ -1261,6 +1499,7 @@ window.MuShell = (function(){
         if (!YT_READY || !YT_PLAYER) { pendingLoadId = tr.videoId; return; }
         YT_PLAYER.loadVideoById(tr.videoId);
         broadcast({ type: 'mushell:track', idx: CUR_IDX, total: QUEUE.length, track: tr, plName: CUR_PL_NAME });
+        publishNowPlaying(true, true);
     }
     function pickRandomIdx() {
         if (QUEUE.length <= 1) return CUR_IDX;
@@ -1291,6 +1530,7 @@ window.MuShell = (function(){
         progressTimer = setInterval(tickProgress, 500);
         tickProgress();
     }
+    var __NP_TICK = 0;
     function tickProgress() {
         if (!YT_READY || !YT_PLAYER) return;
         var cur = 0, tot = 0;
@@ -1300,6 +1540,14 @@ window.MuShell = (function(){
         if (fillEl) fillEl.style.width = pct + '%';
         var c1 = document.getElementById('mu-full-time-cur'); if (c1) c1.textContent = fmt(cur);
         var t1 = document.getElementById('mu-full-time-tot'); if (t1) t1.textContent = fmt(tot);
+        /* Sync periódico de posición con la TV cada ~5s para corregir
+           drift. publishNowPlaying tiene su propio throttle. */
+        if (Date.now() - __NP_TICK > 5000) {
+            __NP_TICK = Date.now();
+            var playing = false;
+            try { playing = YT_PLAYER.getPlayerState() === 1; } catch (_) {}
+            publishNowPlaying(playing);
+        }
     }
 
     /* ── Fullscreen player ── */
@@ -1364,6 +1612,100 @@ window.MuShell = (function(){
     document.getElementById('mu-full-add').addEventListener('click', function(){
         openShellPlaylistPicker();
     });
+
+    /* "Conectar TV": modal con URL del companion + QR para que el
+       usuario lo abra en el navegador del Smart TV. Una vez la TV está
+       en /tv.php, hereda automáticamente lo que sueña el móvil. */
+    (function attachTvCast(){
+        var bd        = document.getElementById('mu-tv-backdrop');
+        var closeBtn  = document.getElementById('mu-tv-close');
+        var openBtn   = document.getElementById('mu-full-tv');
+        var urlInput  = document.getElementById('mu-tv-url');
+        var copyBtn   = document.getElementById('mu-tv-copy');
+        var urlInline = document.getElementById('mu-tv-url-inline');
+        var codeBox   = document.getElementById('mu-tv-code');
+        var codeMeta  = document.getElementById('mu-tv-code-meta');
+
+        /* Smart TVs viejas suelen NO terminar el handshake TLS 1.3 del
+           túnel cloudflared y quedan en blanco indefinidamente. Si el
+           servidor pudo detectar una IP LAN, la usamos como URL de la
+           TV: HTTP plano en la WiFi de casa evita todo el problema TLS.
+           Fallback: la URL del origin actual (cloudflared u hosting). */
+        var lanUrl    = bd.getAttribute('data-lan-url') || '';
+        var publicUrl = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + 'tv.php';
+        var tvUrl     = lanUrl || publicUrl;
+        /* Mostramos el "http://" completo para que el usuario lo teclee
+           tal cual en la TV. Si solo enseñamos el host, muchos browsers
+           de Smart TV añaden automáticamente "https://" y rompen el
+           polling por cert self-signed. */
+        var tvHostUrl = tvUrl;
+
+        var countdown = null;
+        function stopCountdown(){ if (countdown) { clearInterval(countdown); countdown = null; } }
+
+        function fmt(code){
+            if (!code) return '— — — — — —';
+            return code.replace(/(\d{3})(\d{3})/, '$1 $2');
+        }
+
+        function loadCode(){
+            codeBox.textContent = '— — — — — —';
+            codeMeta.textContent = 'Generando…';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'assets/music/api.php?action=get-tv-code', true);
+            xhr.onreadystatechange = function(){
+                if (xhr.readyState !== 4) return;
+                try {
+                    var r = JSON.parse(xhr.responseText);
+                    if (r && r.code) {
+                        codeBox.textContent = fmt(r.code);
+                        var secs = r.expiresIn || 300;
+                        codeMeta.textContent = 'Expira en ' + Math.floor(secs/60) + ':' + ('0'+(secs%60)).slice(-2);
+                        stopCountdown();
+                        countdown = setInterval(function(){
+                            secs--;
+                            if (secs <= 0) {
+                                stopCountdown();
+                                codeBox.textContent = '— — — — — —';
+                                codeMeta.textContent = 'Caducado — pulsa "Regenerar"';
+                                return;
+                            }
+                            codeMeta.textContent = 'Expira en ' + Math.floor(secs/60) + ':' + ('0'+(secs%60)).slice(-2);
+                        }, 1000);
+                    } else {
+                        codeMeta.textContent = r && r.error ? r.error : 'Error generando código';
+                    }
+                } catch (_) {
+                    codeMeta.textContent = 'Error de red';
+                }
+            };
+            xhr.send();
+        }
+
+        function open(){
+            urlInput.value = tvUrl;
+            urlInline.textContent = tvHostUrl;
+            bd.hidden = false;
+            loadCode();
+        }
+        function close(){ bd.hidden = true; stopCountdown(); }
+
+        openBtn.addEventListener('click', open);
+        closeBtn.addEventListener('click', close);
+        bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+
+        codeBox.addEventListener('click', loadCode);
+
+        copyBtn.addEventListener('click', function(){
+            urlInput.select();
+            try {
+                if (navigator.clipboard) navigator.clipboard.writeText(tvUrl);
+                else document.execCommand('copy');
+                copyBtn.textContent = '✓ Copiado';
+                setTimeout(function(){ copyBtn.textContent = 'Copiar'; }, 1500);
+            } catch (_) {}
+        });
+    })();
 
     /* Swipe-up para desbloquear (solo el hint se mueve). */
     (function attachLockSwipe(){

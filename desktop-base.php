@@ -61,6 +61,14 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
 $wallpaper = getUserWallpaper($desktopLabel);
 $startIcon = getUserStartIcon($desktopLabel);
+
+/* Haro activo del usuario para el sistema de notificaciones — se emite
+   como global JS más abajo. Si user_settings no tiene preferencia, cae
+   al haro 'green' (base que todos los usuarios tienen). */
+require_once __DIR__ . '/assets/personalize/haro-paths.php';
+$haroUid       = userIdByKey($desktopUserKey);
+$haroSlug      = $haroUid ? activeHaroSlug($pdo, $haroUid) : 'green';
+$haroAssets    = haroPaths($haroSlug);
 if ($activeTheme !== '') {
     $uid = userIdByKey($desktopUserKey);
     $tWp = ''; $tSi = '';
@@ -293,7 +301,12 @@ window.DesktopState.whenReady = function(cb){
         <span>MelonArchive</span>
     </div>
     <div class="desktop-icon" id="calendar-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('calendar', '📅'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_calendarIcon = 'assets/img/appIcons/calendarioIcon.png';
+            echo file_exists(__DIR__ . '/' . $_calendarIcon)
+                ? '<img src="' . $_calendarIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
+                : desktopIcon('calendar', '📅');
+        ?></div>
         <span>Calendario</span>
     </div>
     <div class="desktop-icon" id="profile-icon">
@@ -324,7 +337,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Companion</span>
     </div>
     <div class="desktop-icon" id="dnd-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('dnd', '⚔'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_dndIcon = 'assets/img/appIcons/dndIcon.png';
+            echo file_exists(__DIR__ . '/' . $_dndIcon)
+                ? '<img src="' . $_dndIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
+                : desktopIcon('dnd', '⚔');
+        ?></div>
         <span>Fichas D&amp;D</span>
     </div>
     <div class="desktop-icon" id="galeria-icon">
@@ -333,7 +351,12 @@ window.DesktopState.whenReady = function(cb){
     </div>
     <!-- ★ NUEVO: icono Dibujo -->
     <div class="desktop-icon" id="dibujo-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('dibujo', '✏️'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_drawingIcon = 'assets/img/appIcons/drawingIcon.png';
+            echo file_exists(__DIR__ . '/' . $_drawingIcon)
+                ? '<img src="' . $_drawingIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
+                : desktopIcon('dibujo', '✏️');
+        ?></div>
         <span>Dibujo</span>
     </div>
     <div class="desktop-icon" id="tienda-icon">
@@ -479,21 +502,6 @@ window.DesktopState.whenReady = function(cb){
     </div>
 </div>
 
-<!-- COUNTDOWN PANEL -->
-<div id="countdown-panel" style="display:none; position:fixed; bottom:42px; right:48px; width:240px; z-index:8000; flex-direction:column;">
-    <div class="window" style="width:100%;">
-        <div class="title-bar">
-            <div class="title-bar-text">⏳ Próximos eventos</div>
-            <div class="title-bar-controls">
-                <button aria-label="Close" id="countdown-close"></button>
-            </div>
-        </div>
-        <div class="window-body" id="countdown-body" style="padding:8px; max-height:320px; overflow-y:auto;">
-            <p style="font-size:11px;color:#808080;">Cargando...</p>
-        </div>
-    </div>
-</div>
-
 <!-- TASKBAR -->
 <div id="taskbar">
     <button id="start-btn" class="button">
@@ -508,7 +516,6 @@ window.DesktopState.whenReady = function(cb){
     <div class="taskbar-sep"></div>
     <div id="taskbar-tasks"></div>
     <button class="button" id="tray-player-btn" title="Reproductor">♪▶</button>
-    <button class="button" id="tray-countdown-btn" title="Próximos eventos">⏳</button>
     <div id="system-tray">
         <span id="tray-clock">00:00</span>
     </div>
@@ -584,6 +591,10 @@ window.addEventListener('message', function(e) {
             document.body.style.backgroundImage = "url('" + wp + "?t=" + Date.now() + "')";
         } else {
             document.body.style.backgroundImage = '';
+        }
+    } else if (e.data.type === 'haro-changed') {
+        if (typeof window.applyHaroSlug === 'function') {
+            window.applyHaroSlug(e.data.slug || 'green');
         }
     } else if (e.data.type === 'start-icon-changed') {
         var si = e.data.icon || '';
@@ -790,6 +801,11 @@ window.taskbarManager = (function() {
     return { register: register, unregister: unregister, minimize: minimize, restore: restore, toggle: toggle, isRegistered: isRegistered, getButton: getButton };
 })();
 
+/* Haro activo del usuario — emitido por PHP. El sistema de
+   notificaciones lo usa como fuente de verdad para sus URLs y se puede
+   reasignar en runtime vía window.applyHaroSlug(slug) sin recargar. */
+window.ACTIVE_HARO = <?= json_encode($haroAssets, JSON_UNESCAPED_SLASHES) ?>;
+
 /* =========================
    SISTEMA UNIFICADO DE NOTIFICACIONES
 ========================= */
@@ -799,6 +815,148 @@ window.notifSystem = (function() {
     var shownIds     = {};
     var dismissedIds = {};
     var pendingQueue = [];
+
+    /* Animación del Haro: 29 frames @ 10 fps = 2900 ms.
+       - HARO_REVEAL_MS: la tarjeta hace pop mientras el Haro aún está
+         dando los últimos frames de su rodada, no esperando al final
+         exacto. Da sensación de que la entrega es continua.
+       - HARO_DURATION_MS: al cumplirse, swap del gif por el PNG estático
+         del último frame (extraído con ffmpeg). El "freeze" vía canvas
+         no funciona — drawImage(gif) captura el primer frame en casi
+         todos los browsers. Por eso usamos un PNG estático.
+
+       Las URLs vienen de window.ACTIVE_HARO (lo emite PHP según el haro
+       activo del usuario). Helpers para leerlas dinámicamente — así un
+       cambio de haro en personalización surte efecto al instante. */
+    function haroGifUrl()   { return (window.ACTIVE_HARO && window.ACTIVE_HARO.gif)   || 'assets/vids/greenHaro.gif'; }
+    function haroLastUrl()  { return (window.ACTIVE_HARO && window.ACTIVE_HARO.last)  || 'assets/vids/greenHaro-last.png'; }
+    function haroAudioUrl() { return (window.ACTIVE_HARO && window.ACTIVE_HARO.audio) || 'assets/sound/haro.mp3'; }
+    var HARO_REVEAL_MS   = 2200;
+    var HARO_DURATION_MS = 2900;
+
+    /* Precarga el PNG estático una vez para que el swap del gif al
+       último frame sea instantáneo (sin flash). */
+    (function preloadLastFrame() {
+        var p = new Image();
+        p.src = haroLastUrl();
+    })();
+
+    /* Audio que se reproduce al irse el Haro. Preload=auto para que el
+       primer play no espere a la red. Lo reusamos en cada dismiss
+       reseteando currentTime.
+
+       Warm-up: muchos browsers bloquean Audio.play() si no hay un
+       "gesture" reciente del usuario; un dismiss disparado desde un
+       setTimeout o desde un animationend NO cuenta como gesto. Para
+       desbloquear, hacemos un play+pause silencioso en el primer
+       click/keydown que llegue a la página. A partir de ahí, la
+       política de autoplay considera el elemento "iniciado por usuario"
+       y nos deja reproducirlo más tarde sin gesto activo. */
+    var haroAudio = new Audio(haroAudioUrl());
+    haroAudio.preload = 'auto';
+    (function primeOnFirstGesture() {
+        var primed = false;
+        function prime() {
+            if (primed) return;
+            primed = true;
+            try {
+                haroAudio.muted = true;
+                var p = haroAudio.play();
+                if (p && typeof p.then === 'function') {
+                    p.then(function() {
+                        haroAudio.pause();
+                        haroAudio.currentTime = 0;
+                        haroAudio.muted = false;
+                    }).catch(function() { haroAudio.muted = false; });
+                } else {
+                    haroAudio.pause();
+                    haroAudio.currentTime = 0;
+                    haroAudio.muted = false;
+                }
+            } catch (_) { haroAudio.muted = false; }
+            window.removeEventListener('click',   prime, true);
+            window.removeEventListener('keydown', prime, true);
+            window.removeEventListener('touchstart', prime, true);
+        }
+        window.addEventListener('click',      prime, true);
+        window.addEventListener('keydown',    prime, true);
+        window.addEventListener('touchstart', prime, true);
+    })();
+
+    /* El Haro vive a nivel del contenedor, no de un slot. Así sigue
+       en pantalla aunque todas las notificaciones de su "tanda" se
+       cierren — solo se va cuando el contenedor de slots se vacía.
+       Una nueva notif tras el dismiss del Haro arranca otra tanda. */
+    var activeHaro   = null;
+    var haroPending  = false;
+
+    /* Reproduce el sonido del Haro. Lo dispara cualquier "aparición" de
+       notificación: tanto la revelación en lote tras el giro del Haro
+       como cualquier notif que entre después (sin Haro). */
+    function playHaroSound() {
+        try {
+            haroAudio.currentTime = 0;
+            var pPlay = haroAudio.play();
+            if (pPlay && typeof pPlay.then === 'function') {
+                pPlay.catch(function(err) {
+                    console.warn('[notifSystem] haroAudio play bloqueado:', err);
+                });
+            }
+        } catch (e) {
+            console.warn('[notifSystem] haroAudio threw:', e);
+        }
+    }
+
+    function createHaroEl() {
+        if (activeHaro) return activeHaro;
+        var h = document.createElement('img');
+        h.className = 'notif-haro';
+        h.alt = '';
+        h.src = haroGifUrl() + '?t=' + Date.now();
+        container.appendChild(h);
+        activeHaro  = h;
+        haroPending = true;
+
+        /* REVEAL_MS: revela todos los slots pendientes mientras la
+           bola sigue dando sus últimos frames. Suena el audio en el
+           mismo instante en que las tarjetas aparecen. */
+        setTimeout(function() {
+            if (activeHaro !== h) return;
+            haroPending = false;
+            var pending = container.querySelectorAll('.notif-slot.pending');
+            for (var i = 0; i < pending.length; i++) {
+                var p = pending[i];
+                p.classList.remove('pending');
+                p.classList.add('revealed');
+                if (p._startDismiss) {
+                    var fn = p._startDismiss;
+                    p._startDismiss = null;
+                    fn();
+                }
+            }
+            if (pending.length) playHaroSound();
+        }, HARO_REVEAL_MS);
+
+        /* DURATION_MS: swap del gif por el PNG estático. */
+        setTimeout(function() {
+            if (activeHaro !== h) return;
+            h.src = haroLastUrl();
+            h.classList.add('landed');
+        }, HARO_DURATION_MS);
+
+        return h;
+    }
+
+    function dismissHaroEl() {
+        if (!activeHaro) return;
+        var h = activeHaro;
+        activeHaro  = null;
+        haroPending = false;
+        h.classList.add('exiting');
+        h.addEventListener('animationend', function() {
+            if (h.parentNode) h.remove();
+        }, { once: true });
+    }
 
     function relTime(sentAt) {
         if (!sentAt) return '';
@@ -814,13 +972,19 @@ window.notifSystem = (function() {
         });
     }
 
-    function removeCard(card) {
-        dismissedIds[card.dataset.id] = true;
-        delete shownIds[card.dataset.id];
-        card.classList.add('notif-card-exiting');
-        card.addEventListener('animationend', function() {
-            card.remove();
+    function removeSlot(slot) {
+        dismissedIds[slot.dataset.id] = true;
+        delete shownIds[slot.dataset.id];
+        slot.classList.add('notif-card-exiting');
+        slot.addEventListener('animationend', function() {
+            slot.remove();
             flushQueue();
+            /* El Haro solo se va cuando no quedan slots NI cola
+               pendiente. Si flushQueue creó nuevos slots, hay con qué
+               seguir y el Haro sigue donde está. */
+            if (!container.querySelector('.notif-slot') && pendingQueue.length === 0) {
+                dismissHaroEl();
+            }
         }, { once: true });
     }
 
@@ -839,9 +1003,23 @@ window.notifSystem = (function() {
         }
 
         var isAction = opts.type === 'action';
+
+        /* Política del Haro (a nivel del contenedor, no del slot):
+           - Si no hay Haro activo, esta notif inaugura una nueva tanda
+             y lo crea. Las que lleguen mientras la bola gire empezarán
+             pending y se revelarán todas juntas en HARO_REVEAL_MS.
+           - El Haro persiste mientras quede AL MENOS un slot; cuando
+             el último se va, dismissHaroEl() lo retira. */
+        if (!activeHaro) createHaroEl();
+        var startsPending = haroPending;
+
+        var slot = document.createElement('div');
+        slot.className = 'notif-slot';
+        if (startsPending) slot.classList.add('pending');
+        slot.dataset.id = opts.id;
+
         var card = document.createElement('div');
         card.className = 'window notif-card ' + (isAction ? 'notif-card-action' : 'notif-card-info');
-        card.dataset.id = opts.id;
 
         var tb = document.createElement('div'); tb.className = 'title-bar';
         var tbText = document.createElement('div'); tbText.className = 'title-bar-text';
@@ -876,29 +1054,79 @@ window.notifSystem = (function() {
             var row = document.createElement('div'); row.className = 'field-row';
             row.style.cssText = 'justify-content:flex-end;gap:4px;margin-top:5px;';
             var rejectBtn = document.createElement('button'); rejectBtn.className = 'button'; rejectBtn.textContent = 'Rechazar';
-            rejectBtn.addEventListener('click', function() { if (typeof opts.onReject === 'function') opts.onReject(); removeCard(card); });
+            rejectBtn.addEventListener('click', function() { if (typeof opts.onReject === 'function') opts.onReject(); removeSlot(slot); });
             var acceptBtn = document.createElement('button'); acceptBtn.className = 'button'; acceptBtn.textContent = 'Aceptar';
-            acceptBtn.addEventListener('click', function() { if (typeof opts.onAccept === 'function') opts.onAccept(); removeCard(card); });
+            acceptBtn.addEventListener('click', function() { if (typeof opts.onAccept === 'function') opts.onAccept(); removeSlot(slot); });
             row.appendChild(rejectBtn); row.appendChild(acceptBtn); body.appendChild(row);
         }
 
         card.appendChild(body);
-        container.insertBefore(card, container.firstChild);
-        shownIds[opts.id] = card;
+        slot.appendChild(card);
+        /* Insertamos al principio de la lista de slots (la más nueva
+           arriba). El <img> del Haro vive aparte como hijo del
+           contenedor (position:absolute, no afecta al flex layout). */
+        var firstSlot = container.querySelector('.notif-slot');
+        if (firstSlot) {
+            container.insertBefore(slot, firstSlot);
+        } else {
+            container.insertBefore(slot, container.firstChild);
+        }
+        shownIds[opts.id] = slot;
 
+        /* Si esta tarjeta entra visible YA (no espera a la revelación
+           del Haro), suena el audio en su aparición. Las pending suenan
+           todas juntas en el setTimeout REVEAL_MS de createHaroEl. */
+        if (!startsPending) playHaroSound();
+
+        /* Auto-dismiss: si el slot arranca pending, dejamos la función
+           guardada para dispararla al revelarse. Si no, arranca ya. */
+        var startDismiss = null;
         if (!isAction) {
             var delay = (typeof opts.autoDismissAfter === 'number') ? opts.autoDismissAfter : 5000;
-            setTimeout(function() {
-                if (card.parentNode) { if (typeof opts.onAutoDismiss === 'function') opts.onAutoDismiss(); removeCard(card); }
-            }, delay);
+            startDismiss = function() {
+                setTimeout(function() {
+                    if (slot.parentNode) {
+                        if (typeof opts.onAutoDismiss === 'function') opts.onAutoDismiss();
+                        removeSlot(slot);
+                    }
+                }, delay);
+            };
+            if (startsPending) {
+                slot._startDismiss = startDismiss;
+            } else {
+                startDismiss();
+            }
         }
+
+        /* Los setTimeout de revelación y freeze viven en createHaroEl
+           — están ligados al Haro, no a un slot concreto. */
     }
 
     setInterval(updateTimes, 30000);
 
+    /* Cambio de haro en runtime (lo dispara apps/temas.php al activar
+       uno en personalización). Actualiza window.ACTIVE_HARO, reinstancia
+       el <Audio> con la URL nueva y precarga el PNG del nuevo. */
+    window.applyHaroSlug = function(slug) {
+        slug = String(slug || 'green').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (!slug) slug = 'green';
+        window.ACTIVE_HARO = {
+            slug:  slug,
+            gif:   'assets/vids/' + slug + 'Haro.gif',
+            last:  'assets/vids/' + slug + 'Haro-last.png',
+            audio: 'assets/sound/' + slug + 'Haro.mp3'
+        };
+        try { haroAudio = new Audio(haroAudioUrl()); haroAudio.preload = 'auto'; } catch (_) {}
+        try { (new Image()).src = haroLastUrl(); } catch (_) {}
+        /* Si hay un Haro vivo en pantalla, swap inmediato a su nuevo gif. */
+        if (activeHaro) {
+            try { activeHaro.src = haroGifUrl() + '?t=' + Date.now(); } catch (_) {}
+        }
+    };
+
     return {
         show:        createCard,
-        dismiss:     function(id) { var c = shownIds[id]; if (c) removeCard(c); else dismissedIds[id] = true; },
+        dismiss:     function(id) { var s = shownIds[id]; if (s) removeSlot(s); else dismissedIds[id] = true; },
         isShown:     function(id) { return !!shownIds[id]; },
         isDismissed: function(id) { return !!dismissedIds[id]; }
     };
@@ -2214,133 +2442,6 @@ window.notifSystem = (function() {
     };
 })();
 
-/* =========================
-   COUNTDOWN PANEL
-========================= */
-(function() {
-    var btn     = document.getElementById('tray-countdown-btn');
-    var panel   = document.getElementById('countdown-panel');
-    var closeBtn = document.getElementById('countdown-close');
-    var body    = document.getElementById('countdown-body');
-    var visible = false;
-    var loaded  = false;
-
-    var tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
-
-    function pluralDias(n) {
-        if (n === 0) return '¡Hoy!';
-        if (n === 1) return 'mañana';
-        return 'en ' + n + ' días';
-    }
-
-    function colorPorDias(n) {
-        if (n <= 0)  return '#c00000';  // pasado/hoy
-        if (n <= 3)  return '#c05000';  // urgente
-        if (n <= 7)  return '#808000';  // próximo
-        return 'var(--text)';
-    }
-
-    function render(recordatorios) {
-        var hoy = new Date();
-        hoy.setHours(0, 0, 0, 0);
-
-        // Filtrar pasados (más de 1 día) y ordenar
-        var lista = recordatorios
-            .map(function(r) {
-                var fecha = new Date(r.fecha + 'T00:00:00');
-                var diff  = Math.round((fecha - hoy) / (1000 * 60 * 60 * 24));
-                return Object.assign({}, r, { diff: diff });
-            })
-            .filter(function(r) { return r.diff >= 0; })
-            .sort(function(a, b) { return a.diff - b.diff });
-
-        if (!lista.length) {
-            body.innerHTML = '<p style="font-size:11px;color:#808080;text-align:center;padding:8px 0;">No hay eventos próximos.</p>';
-            return;
-        }
-
-        body.innerHTML = '';
-        lista.forEach(function(r) {
-            var row = document.createElement('div');
-            row.style.cssText = 'padding:6px 4px; border-bottom:1px solid var(--surface1); display:flex; gap:6px; align-items:flex-start;';
-
-            var icon = document.createElement('span');
-            icon.style.cssText = 'font-size:15px; flex-shrink:0; line-height:1.4;';
-            icon.textContent = tiposIcono[r.tipo] || '📌';
-
-            var info = document.createElement('div');
-            info.style.cssText = 'flex:1; min-width:0;';
-
-            var titulo = document.createElement('div');
-            titulo.style.cssText = 'font-size:11px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-            titulo.textContent = r.titulo;
-
-           var sub = document.createElement('div');
-sub.style.cssText = 'font-size:10px; margin-top:1px;';
-
-var fecha = document.createElement('span');
-fecha.style.color = '#808080';
-fecha.textContent = r.fecha + (r.autor ? ' · ' + r.autor : '') + ' · ';
-
-var cuando = document.createElement('span');
-cuando.style.cssText = 'font-weight:bold; color:' + colorPorDias(r.diff) + ';';
-cuando.textContent = pluralDias(r.diff);
-
-sub.appendChild(fecha);
-sub.appendChild(cuando);
-            info.appendChild(titulo);
-            info.appendChild(sub);
-            row.appendChild(icon);
-            row.appendChild(info);
-            body.appendChild(row);
-        });
-    }
-
-    function load() {
-        // Necesitamos el parejaId — lo pedimos al calendario via API
-        // La API de recordatorios es relativa al iframe del calendario,
-        // así que hacemos la llamada desde desktop con la sesión activa
-        fetch('assets/couple/api.php?action=get-recordatorios&pareja_id=' + (window.DesktopParejaId || 0))
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                // pareja_id=0 puede no funcionar — usamos el endpoint sin filtro
-                // o pedimos todos los del usuario de sesión
-                render(Array.isArray(data) ? data : []);
-            })
-            .catch(function() {
-                body.innerHTML = '<p style="font-size:11px;color:#808080;">No se pudo cargar.</p>';
-            });
-    }
-
-    function show() {
-        panel.style.display = 'flex';
-        visible = true;
-        btn.classList.add('active');
-        if (!loaded) { load(); loaded = true; }
-    }
-
-    function hide() {
-        panel.style.display = 'none';
-        visible = false;
-        btn.classList.remove('active');
-    }
-
-    btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        visible ? hide() : show();
-    });
-
-    closeBtn.addEventListener('click', hide);
-
-    document.addEventListener('click', function(e) {
-        if (visible && !panel.contains(e.target) && e.target !== btn) hide();
-    });
-
-    // Recargar cada 5 minutos
-    setInterval(function() {
-        if (visible) load();
-    }, 5 * 60 * 1000);
-})();
 </script>
 
 </body>

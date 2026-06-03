@@ -790,10 +790,10 @@
     top: 36px;
     right: 10px;
     z-index: 9000;
-    width: 280px;
+    width: 320px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 14px;
     pointer-events: none;
 }
 
@@ -803,20 +803,75 @@
 }
 
 @keyframes notif-out {
-    from { transform: translateX(0); }
-    to   { transform: translateX(calc(100% + 20px)); }
+    from { transform: translateX(0); opacity: 1; }
+    to   { transform: translateX(calc(100% + 20px)); opacity: 0; }
+}
+
+/* Pop de la tarjeta: emerge desde la esquina inferior-izquierda del
+   gif, que es exactamente donde acaba la bola del Haro. La tarjeta
+   crece desde ese punto (transform-origin: top left de la tarjeta,
+   que coincide con esa posición de la bola). */
+@keyframes notif-card-pop {
+    0%   { opacity: 0; transform: scale(0); }
+    65%  { opacity: 1; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* Slot — entrada/salida vive aquí. Todos los slots tienen el mismo
+   padding-right para que sus tarjetas queden alineadas en ancho con
+   la del Haro (que necesita ese espacio para el gif). */
+.notif-slot {
+    position: relative;
+    width: 100%;
+    padding-right: 20px;
+    pointer-events: none;
+    animation: notif-in 0.28s ease-out forwards;
+}
+
+.notif-slot.notif-card-exiting {
+    animation: notif-out 0.26s ease-in forwards;
+    pointer-events: none;
+}
+
+/* El Haro vive a nivel del CONTENEDOR (no del slot) — así sobrevive
+   al dismiss de las notificaciones individuales y solo desaparece
+   cuando se han ido todas. Positioned absolute: no afecta al layout
+   flex de los slots. Anima entrada y salida igual que los slots. */
+.notif-haro {
+    position: absolute;
+    top: -100px;
+    right: -105px;
+    width: 170px;
+    height: 130px;
+    pointer-events: none;
+    image-rendering: -webkit-optimize-contrast;
+    z-index: 2;
+    animation: notif-in 0.28s ease-out forwards;
+}
+
+.notif-haro.exiting {
+    animation: notif-out 0.26s ease-in forwards;
 }
 
 .notif-card {
     pointer-events: auto;
     width: 100%;
     margin: 0;
-    animation: notif-in 0.22s ease-out forwards;
 }
 
-.notif-card-exiting {
-    animation: notif-out 0.22s ease-in forwards;
-    pointer-events: none;
+/* Pending: la tarjeta queda invisible hasta que la bola del Haro
+   aterriza. Aplica tanto al slot del Haro como a cualquier otro que
+   llegue mientras la bola sigue girando — todos se revelan a la vez. */
+.notif-slot.pending .notif-card {
+    opacity: 0;
+    transform: scale(0);
+    transform-origin: top right;
+}
+
+/* Cuando la bola aterriza, JS quita la clase pending y añade revealed
+   a todos los slots pendientes → todos hacen pop al mismo tiempo. */
+.notif-slot.revealed .notif-card {
+    animation: notif-card-pop 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .notif-time {

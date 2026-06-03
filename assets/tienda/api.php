@@ -42,10 +42,13 @@ switch ($action) {
 
 /* Estado completo: balance del usuario + items activos + historial. */
 case 'state': {
+    /* Solo items comprables (precio > 0). Los de precio 0 son "base"
+       — todos los usuarios los tienen sin necesidad de comprarlos, y
+       aparecen solo en la vista de personalización. */
     $items = $pdo->prepare('
-        SELECT id, nombre, descripcion, precio, icono, categoria, discord_role_id
+        SELECT id, nombre, slug, descripcion, precio, icono, categoria, discord_role_id
         FROM tienda_items
-        WHERE activo = 1
+        WHERE activo = 1 AND precio > 0
         ORDER BY categoria ASC, orden ASC, id ASC
     ');
     $items->execute();

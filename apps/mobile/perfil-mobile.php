@@ -9,14 +9,14 @@
      - get-lists    → 5 categorías (movies/series/books/games/music)
    UI: cabecera + pestañas horizontales scroll + lista vertical.
    ────────────────────────────────────────────────────────────────────── */
-require_once dirname(__DIR__) . '/assets/mobile-detect.php';
+require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
-require_once dirname(__DIR__) . '/assets/config.php';
-require_once dirname(__DIR__) . '/db.php';
+require_once dirname(__DIR__, 2) . '/assets/config.php';
+require_once dirname(__DIR__, 2) . '/db.php';
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
-    header('Location: ../index.php');
+    header('Location: ../../index.php');
     exit;
 }
 $userKey   = $_SESSION['user'];
@@ -43,8 +43,8 @@ try {
 $userImg = '';
 $safe = preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel);
 foreach (['png','jpg','jpeg','gif'] as $ext) {
-    if (file_exists(dirname(__DIR__) . "/assets/img/{$safe}.{$ext}")) {
-        $userImg = "../assets/img/{$safe}.{$ext}";
+    if (file_exists(dirname(__DIR__, 2) . "/assets/img/{$safe}.{$ext}")) {
+        $userImg = "../../assets/img/{$safe}.{$ext}";
         break;
     }
 }
@@ -53,7 +53,7 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
    Misma estrategia que mobile.php: el look hereda 98.css + tokens.css
    + tema del usuario, y el inline CSS solo refina lo específico de
    esta pantalla con variables del tema. */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
@@ -62,7 +62,7 @@ $activeThemeCss   = '';
 if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
     $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
     $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
-    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__) . '/' . $activeThemeCss)) {
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
         $activeThemeCss = '';
     }
 }
@@ -83,7 +83,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     (function(){
         var sa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
               || window.navigator.standalone === true;
-        if (!sa) window.location.replace('../mobile-landing.php');
+        if (!sa) window.location.replace('../../mobile-landing.php');
     })();
     /* --mh-vh sincronizado con window.innerHeight (sobrevive al bfcache). */
     (function(){
@@ -100,17 +100,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Perfil — Scrapbook Melon</title>
-    <link rel="icon" href="../assets/img/mobile/icon.png" type="image/png">
+    <link rel="icon" href="../../assets/img/mobile/icon.png" type="image/png">
     <!-- Win98 + tema del usuario para consistencia con mobile.php -->
-    <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../../assets/css/98.css">
+    <link rel="stylesheet" href="../../assets/css/tokens.css">
+    <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
-    <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
+    <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
-    <link rel="stylesheet" href="../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__) . '/assets/css/mobile-theme.css') ?>">
+    <link rel="stylesheet" href="../../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__, 2) . '/assets/css/mobile-theme.css') ?>">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         /* Tweaks específicos del perfil — el grueso del look viene de
@@ -1085,7 +1085,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
-            <button aria-label="Close" onclick="window.location.href='../mobile.php';"></button>
+            <button aria-label="Close" onclick="window.location.href='../../mobile.php';"></button>
         </div>
     </div>
     <div class="window-body">
@@ -1196,7 +1196,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Status bar Win98 al pie -->
         <div class="mh-statusbar">
-            <a href="../mobile.php">‹ Menú</a>
+            <a href="../../mobile.php">‹ Menú</a>
         </div>
 
     </div>
@@ -1204,8 +1204,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <script>
 /* ─── Estado y carga de datos ──────────────────────────────────── */
-var API = '../assets/profile/api.php';
-var COUPLE_API = '../assets/couple/api.php';
+var API = '../../assets/profile/api.php';
+var COUPLE_API = '../../assets/couple/api.php';
 var STATE = {
     lists: null, profile: null,
     current: 'movies', musicView: 'albums', statusView: 'pending',
@@ -1223,7 +1223,7 @@ var PAREJA_ID  = <?= (int)$parejaId ?>;
 var USER_KEY   = <?= json_encode($userKey) ?>;
 /* Mapa { userKey: { label, image } } igual que el desktop, para el
    diálogo de colaboradores (avatares + listado de invitables). El
-   `../` viene de que perfil-mobile.php vive en /apps/ y getUserImage()
+   `../../` viene de que perfil-mobile.php vive en /apps/ y getUserImage()
    devuelve la ruta relativa a la raíz del proyecto. */
 var PROFILE_USERS = <?php
     $udata = [];
@@ -1231,7 +1231,7 @@ var PROFILE_USERS = <?php
         $img = getUserImage($u['label']);
         $udata[$k] = [
             'label' => $u['label'],
-            'image' => $img !== '' ? '../' . $img : ''
+            'image' => $img !== '' ? '../../' . $img : ''
         ];
     }
     echo json_encode($udata);
@@ -3651,7 +3651,7 @@ function showForegroundNotification(fromKey, deltaCount) {
     try { embedded = window.parent !== window; } catch (_) {}
     if (!embedded) return;
     document.addEventListener('click', function(e){
-        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../../mobile.php"]');
         if (!link) return;
         e.preventDefault();
         try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}

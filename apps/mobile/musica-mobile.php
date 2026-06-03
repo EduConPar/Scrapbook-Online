@@ -9,13 +9,13 @@
    Sin editor de playlists, sin import Spotify/Tidal — esas son features
    complejas que viven en el reproductor de escritorio.
    ────────────────────────────────────────────────────────────────────── */
-require_once dirname(__DIR__) . '/assets/mobile-detect.php';
+require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
-require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__, 2) . '/assets/config.php';
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
-    header('Location: ../index.php');
+    header('Location: ../../index.php');
     exit;
 }
 $userKey   = $_SESSION['user'];
@@ -25,8 +25,8 @@ $userLabel = $loginUsers[$userKey]['label'];
 $resolveAvatar = function($label) {
     $safe = preg_replace('/[^A-Za-z0-9_-]/', '', (string)$label);
     foreach (['png','jpg','jpeg','gif'] as $ext) {
-        if (file_exists(dirname(__DIR__) . "/assets/img/{$safe}.{$ext}")) {
-            return "../assets/img/{$safe}.{$ext}";
+        if (file_exists(dirname(__DIR__, 2) . "/assets/img/{$safe}.{$ext}")) {
+            return "../../assets/img/{$safe}.{$ext}";
         }
     }
     return '';
@@ -49,7 +49,7 @@ foreach ($loginUsers as $k => $u) {
 /* ── TEMA ACTIVO DEL USUARIO ──
    Replica el setup de mobile.php para mantener consistencia visual:
    misma paleta de colores en todas las pantallas móviles. */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
@@ -60,7 +60,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
     /* refreshActiveThemeCss da una ruta relativa al root del proyecto;
        desde apps/ subimos un nivel para resolver el href. */
-    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__) . '/' . $activeThemeCss)) {
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
         $activeThemeCss = '';
     }
 }
@@ -83,7 +83,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     (function(){
         var sa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
               || window.navigator.standalone === true;
-        if (!sa) window.location.replace('../mobile-landing.php');
+        if (!sa) window.location.replace('../../mobile-landing.php');
     })();
     /* --mh-vh sincronizado con window.innerHeight (sobrevive al bfcache). */
     (function(){
@@ -100,17 +100,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Música — Scrapbook Melon</title>
-    <link rel="icon" href="../assets/img/mobile/icon.png" type="image/png">
+    <link rel="icon" href="../../assets/img/mobile/icon.png" type="image/png">
     <!-- Mismo stack que mobile.php para Win98 + tema del usuario -->
-    <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../../assets/css/98.css">
+    <link rel="stylesheet" href="../../assets/css/tokens.css">
+    <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
-    <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
+    <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
-    <link rel="stylesheet" href="../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__) . '/assets/css/mobile-theme.css') ?>">
+    <link rel="stylesheet" href="../../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__, 2) . '/assets/css/mobile-theme.css') ?>">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         /* Tweaks específicos de Música — todo lo común (window, userbar,
@@ -1460,7 +1460,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
-            <button aria-label="Close" onclick="window.location.href='../mobile.php';"></button>
+            <button aria-label="Close" onclick="window.location.href='../../mobile.php';"></button>
         </div>
     </div>
     <div class="window-body">
@@ -1497,7 +1497,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Status bar Win98 al pie -->
         <div class="mh-statusbar">
-            <a href="../mobile.php">‹ Menú</a>
+            <a href="../../mobile.php">‹ Menú</a>
         </div>
 
     </div>
@@ -1718,7 +1718,7 @@ if (EMBEDDED) {
     /* Y la status-bar del fullscreen "‹ Menú" envía postMessage en
        lugar de navegar para volver al launcher. */
     document.addEventListener('click', function(e){
-        var menuLink = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        var menuLink = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../../mobile.php"]');
         if (!menuLink) return;
         e.preventDefault();
         try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
@@ -1760,7 +1760,7 @@ function findAndHighlight(videoId, plName) {
 }
 
 /* ─── Estado ────────────────────────────────────────────────────── */
-var API_MUSIC = '../assets/music/api.php';
+var API_MUSIC = '../../assets/music/api.php';
 var ME_KEY    = <?= json_encode($userKey) ?>;
 var ME_LABEL  = <?= json_encode($userLabel) ?>;
 var PLAYLISTS = [];        /* respuesta del API */
@@ -2929,7 +2929,7 @@ function removeTrackFromPlaylist(pi, ti) {
 /* Añade la canción al apartado "música" del perfil del usuario.
    El API de perfil hace UPSERT + DELETE de los items NO presentes en la
    petición — por eso primero hacemos GET para reenviarlos todos. */
-var API_PROFILE = '../assets/profile/api.php';
+var API_PROFILE = '../../assets/profile/api.php';
 function profileApiGet(action) {
     return fetch(API_PROFILE + '?action=' + action, { credentials: 'same-origin' })
         .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });

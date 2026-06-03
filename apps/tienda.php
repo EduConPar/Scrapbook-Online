@@ -192,6 +192,13 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
       align-self: center;
       display: flex; align-items: center; justify-content: center;
       font-size: 48px;
+      overflow: hidden;
+    }
+    .tienda-card-icon-img {
+      max-width: 80%;
+      max-height: 80%;
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
     }
     .tienda-card-name { font-size: 12px; font-weight: bold; text-align: center; color: var(--text); }
     .tienda-card-desc { font-size: 10px; color: var(--text-muted); text-align: center; min-height: 26px; }
@@ -413,7 +420,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <button type="button" class="button" id="tienda-discord-btn">…</button>
         </div>
         <div class="tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
-        <div class="tienda-tab"        data-view="principal" data-cat="temas">🎨 Temas</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="interfaces">🎨 Interfaces</div>
         <div class="tienda-tab"        data-view="principal" data-cat="mascotas">🐾 Mascotas</div>
         <div class="tienda-tab"        data-view="principal" data-cat="haros">⚪ Haros</div>
         <div id="tienda-donar-footer">
@@ -550,9 +557,24 @@ function renderItems(){
             : (it.descripcion || '');
         var owned = !!_owned[it.id|0];
         var btnLabel = owned ? '✓ Ya lo tienes' : 'Comprar';
+        /* Para los haros el icono es el PNG del último frame del gif
+           (convención: assets/vids/{slug}Haro-last.png). Para el resto
+           se cae al emoji del campo `icono`. */
+        var iconHtml;
+        if (it.categoria === 'haros' && it.slug) {
+            /* Excepción específica del haro 'green': usa un PNG curado
+               en assets/img/haro/greenHaro-preview.png. El resto sigue
+               la convención assets/vids/{slug}Haro-last.png. */
+            var haroSrc = (it.slug === 'green')
+                ? '../assets/img/haro/greenHaro-preview.png'
+                : '../assets/vids/' + esc(it.slug) + 'Haro-last.png';
+            iconHtml = '<img class="tienda-card-icon-img" src="' + haroSrc + '" alt="">';
+        } else {
+            iconHtml = esc(it.icono || '🎁');
+        }
         return '<div class="tienda-card' + (owned ? ' is-owned' : '') + '">' +
             '<div class="tienda-card-icon">' +
-                esc(it.icono || '🎁') +
+                iconHtml +
                 '<span class="tienda-card-price">' + it.precio + ' 🧠</span>' +
             '</div>' +
             '<div class="tienda-card-name"' + nameStyle + '>' + esc(displayName) + '</div>' +

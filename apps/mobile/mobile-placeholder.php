@@ -10,13 +10,13 @@
    cambiar la URL del array $apps en mobile.php para que apunten a la
    nueva entrada.
    ────────────────────────────────────────────────────────────────────── */
-require_once dirname(__DIR__) . '/assets/mobile-detect.php';
+require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
-require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__, 2) . '/assets/config.php';
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
-    header('Location: ../index.php');
+    header('Location: ../../index.php');
     exit;
 }
 $userKey   = $_SESSION['user'];
@@ -26,7 +26,7 @@ $appName = isset($_GET['app']) ? trim((string)$_GET['app']) : 'Esta app';
 $appName = mb_substr($appName, 0, 40);
 
 /* ── TEMA DEL USUARIO (igual setup que mobile.php) ── */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
@@ -35,7 +35,7 @@ $activeThemeCss   = '';
 if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
     $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
     $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
-    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__) . '/' . $activeThemeCss)) {
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
         $activeThemeCss = '';
     }
 }
@@ -51,21 +51,21 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <script src="../assets/js/pwa-guard.js"></script>
+    <script src="../../assets/js/pwa-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title><?= htmlspecialchars($appName) ?> — Próximamente</title>
-    <link rel="icon" href="../assets/img/mobile/icon.png" type="image/png">
+    <link rel="icon" href="../../assets/img/mobile/icon.png" type="image/png">
     <!-- Mismo look Win98 + tema usuario que el resto del móvil -->
-    <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="stylesheet" href="../../assets/css/98.css">
+    <link rel="stylesheet" href="../../assets/css/tokens.css">
+    <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
-    <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
+    <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
-    <link rel="stylesheet" href="../assets/css/mobile-theme.css">
+    <link rel="stylesheet" href="../../assets/css/mobile-theme.css">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -76,7 +76,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
-            <button aria-label="Close" onclick="window.location.href='../mobile.php';"></button>
+            <button aria-label="Close" onclick="window.location.href='../../mobile.php';"></button>
         </div>
     </div>
     <div class="window-body">
@@ -95,7 +95,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         </div>
 
         <div class="mh-statusbar">
-            <a href="../mobile.php">‹ Volver al menú</a>
+            <a href="../../mobile.php">‹ Volver al menú</a>
         </div>
 
     </div>
@@ -108,7 +108,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     try { embedded = window.parent !== window; } catch (_) {}
     if (!embedded) return;
     document.addEventListener('click', function(e){
-        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../../mobile.php"]');
         if (!link) return;
         e.preventDefault();
         try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}

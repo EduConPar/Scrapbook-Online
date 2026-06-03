@@ -1,16 +1,30 @@
 <?php
-session_start();
-require_once dirname(__DIR__) . '/assets/config.php';
+/* ──────────────────────────────────────────────────────────────────────
+   TEMAS — versión móvil standalone
+   ──────────────────────────────────────────────────────────────────────
+   Versión móvil de apps/temas.php. Reusa los MISMOS IDs del HTML del
+   desktop y el MISMO JS — los endpoints (themes/api.php, personalize/
+   api.php, save-wallpaper, save-start-icon) son los mismos.
+   La única diferencia es el layout (un solo flujo vertical con tabs
+   horizontales scrollable) y los paths relativos (../../ en vez de ../).
 
-$userKey = $_SESSION['user'] ?? null;
-if (!$userKey || !isset($loginUsers[$userKey])) {
-    header('Location: ../index.php');
+   ⚠ Si tocas el JS del desktop, ten en cuenta que el bloque de JS de
+      este archivo es una copia adaptada de paths. Mantenlo en sync.
+   ────────────────────────────────────────────────────────────────────── */
+require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
+setLongSessionCookie();
+session_start();
+require_once dirname(__DIR__, 2) . '/assets/config.php';
+
+if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
+    header('Location: ../../index.php');
     exit;
 }
+$userKey   = $_SESSION['user'];
 $userLabel = $loginUsers[$userKey]['label'];
 
-/* Tema activo del usuario */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+/* Tema activo del usuario — mismo flow que el resto de apps móviles. */
+require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
@@ -18,439 +32,558 @@ $activeThemeClass = '';
 $activeThemeCss   = '';
 if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
     $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
-    $activeThemeCss   = '../' . themeCssRelPath($activeTheme, $userLabel);
-    if (!file_exists(dirname(__DIR__) . '/' . themeCssRelPath($activeTheme, $userLabel))) $activeThemeCss = '';
+    $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
+        $activeThemeCss = '';
+    }
+}
+$themeBgColor = '#000000';
+if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors']['desktopBg'])) {
+    $candidate = (string)$_userThemes['themes'][$activeTheme]['colors']['desktopBg'];
+    if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/i', $candidate)) {
+        $themeBgColor = $candidate;
+    }
 }
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <script src="../assets/js/pwa-guard.js"></script>
+    <script src="../../assets/js/pwa-guard.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Temas</title>
-    <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="icon" href="../../assets/img/mobile/icon.png" type="image/png">
+    <link rel="stylesheet" href="../../assets/css/98.css">
+    <link rel="stylesheet" href="../../assets/css/tokens.css">
+    <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
-    <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
+    <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
+    <link rel="stylesheet" href="../../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__, 2) . '/assets/css/mobile-theme.css') ?>">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--win-bg); color: var(--text); }
-        #temas-app { display: flex; height: 100vh; }
-        #temas-sidebar {
-            width: 180px;
-            background: var(--win-bg);
-            color: var(--text);
-            border-right: 1px solid var(--border);
-            box-shadow: 1px 0 0 var(--bezel-light-1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+        /* ──────────────────────────────────────────────────────────────
+           Look Win98 + tema del usuario:
+           - El reset / fuente / fondo lo aporta mobile-theme.css
+             (.mh-body + .mh-window + .title-bar + .window-body).
+           - El tema activo se inyecta vía <link id="active-theme-link">
+             y sobreescribe las CSS vars (--win-bg, --accent, etc).
+           - Aquí solo definimos tweaks específicos de esta app
+             (tabs, lista de temas, editor de colores, grids de personali-
+             zación, library) usando esas mismas vars para heredar el
+             tema sin colores hardcoded. */
+
+        /* Tabs Win98 — estilo "ribbon" arriba del primer panel. Botones
+           Win98 estándar con el activo pintado en accent del tema. */
+        .tm-tabs {
+            display: flex; gap: 4px;
+            padding: 6px 4px 4px;
+            background: var(--win-bg, silver);
+            overflow-x: auto;
+            flex-shrink: 0;
+            -webkit-overflow-scrolling: touch;
         }
-        .temas-side-head {
-            padding: 4px 8px;
-            background: linear-gradient(to right, var(--titlebar-start), var(--titlebar-end));
-            color: var(--titlebar-text);
+        .tm-tab {
+            min-height: 30px;
+            padding: 0 12px;
             font-size: 11px;
-            font-weight: bold;
-            letter-spacing: 0.5px;
-        }
-        #temas-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 4px;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .temas-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            padding: 5px 6px;
-            cursor: pointer;
-            border-bottom: 1px solid var(--border);
-            font-size: 11px;
-            color: var(--text);
-        }
-        .temas-item:hover {
-            background: var(--accent);
-            color: var(--accent-text);
-        }
-        .temas-item.active {
-            background: var(--accent);
-            color: var(--accent-text);
-        }
-        .temas-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .temas-item-badge {
-            font-size: 9px;
-            color: #008000;
-            font-weight: bold;
-        }
-        .temas-item.active .temas-item-badge,
-        .temas-item:hover .temas-item-badge { color: var(--accent-text); }
-        .temas-item-pub { font-size: 10px; flex-shrink: 0; }
-        .temas-item-dl  { font-size: 10px; flex-shrink: 0; }
-        /* Menú contextual de tema (publicar/quitar) */
-        .temas-ctx-menu {
-            position: fixed; z-index: 99999;
-            background: var(--btn-bg); color: var(--text);
-            border-top: 2px solid var(--bezel-light-1); border-left: 2px solid var(--bezel-light-1);
-            border-right: 2px solid var(--bezel-dark-2); border-bottom: 2px solid var(--bezel-dark-2);
-            box-shadow: 2px 2px 5px rgba(0,0,0,.35); font-size: 11px; padding: 2px; min-width: 170px;
-        }
-        .temas-ctx-opt { padding: 5px 12px; cursor: pointer; white-space: nowrap; }
-        .temas-ctx-opt:hover { background: var(--accent); color: var(--accent-text); }
-        .temas-ctx-opt.danger { color: var(--error-text); }
-        .temas-ctx-opt.danger:hover { background: var(--error-text); color: var(--win-bg); }
-        #temas-sidebar-footer {
-            padding: 6px 8px;
-            border-top: 1px solid var(--border);
-            box-shadow: 0 -1px 0 var(--bezel-light-1);
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        #temas-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background: var(--win-bg);
-            color: var(--text);
-        }
-        #temas-wallpaper-area {
-            padding: 6px 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            border-top: 1px solid var(--border);
-            box-shadow: 0 -1px 0 var(--bezel-light-1);
-        }
-        #temas-wallpaper-preview {
-            width: 100%;
-            aspect-ratio: 16/10;
-            background-color: var(--inset-bg);
-            background-size: cover;
-            background-position: center;
-            box-shadow: inset 1px 1px var(--bezel-dark-1),
-                        inset -1px -1px var(--bezel-light-1),
-                        inset 2px 2px var(--bezel-dark-2),
-                        inset -2px -2px var(--bezel-light-2);
-        }
-        #temas-tabs {
-            display: flex;
-            gap: 2px;
-            padding: 4px 4px 0 4px;
+            white-space: nowrap;
             flex-shrink: 0;
         }
-        .temas-tab-btn {
-            flex: 1 1 0;
-            min-width: 0;                 /* permite encoger por debajo del contenido */
-            font-size: 10px;
-            padding: 3px 4px;
-            min-height: 22px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-align: center;
+        .tm-tab.active {
+            background: var(--accent, #000080);
+            color: var(--accent-text, #fff);
         }
-        .temas-tab-btn.active {
-            background: var(--accent);
-            color: var(--accent-text);
-        }
-        .temas-tab-pane {
+
+        /* Paneles — heredan mh-panel (sunken Win98). Reforzamos las
+           propiedades de scroll por si la cascade falla en algún
+           browser móvil (algunos no propagan flex:1 + overflow:auto
+           cuando el padding-bottom del padre cambia con safe-area). */
+        .tm-pane {
             flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
             min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 8px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
         }
-        .temas-tab-pane[hidden] { display: none; }
+        .tm-pane[hidden] { display: none; }
 
-        /* ── Biblioteca de temas ── */
-        #temas-library { flex:1; overflow-y:auto; padding:12px; }
-        #temas-library-grid {
-            display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));
-            gap:14px;
+        /* Sección titulada (cabecera con título + body interno).
+           Replica el patrón de "Datos / Conexiones" de perfil-mobile. */
+        .tm-section { margin-bottom: 10px; }
+        .tm-section:last-child { margin-bottom: 0; }
+        .tm-section-title {
+            font-size: 11px; font-weight: bold;
+            padding: 4px 8px;
+            background: var(--titlebar-start, #000080);
+            color: var(--titlebar-text, #fff);
+            letter-spacing: 1px;
+            margin: 0;
+            text-transform: uppercase;
         }
-        .lib-card {
-            border-top:2px solid var(--bezel-light-1); border-left:2px solid var(--bezel-light-1);
-            border-right:2px solid var(--bezel-dark-2); border-bottom:2px solid var(--bezel-dark-2);
-            background:var(--win-bg); display:flex; flex-direction:column;
-        }
-        .lib-preview { cursor:pointer; padding:8px; }
-        .lib-preview:hover { filter:brightness(1.04); }
-        /* mini maqueta de ventana win98 con los colores del tema */
-        .lib-win { border:1px solid #000; border-radius:2px; overflow:hidden; box-shadow:2px 2px 0 rgba(0,0,0,.25); }
-        .lib-win-tb { display:flex; align-items:center; gap:4px; padding:3px 5px; font-size:9px; font-weight:bold; }
-        .lib-win-tb-dots { margin-left:auto; display:flex; gap:2px; }
-        .lib-win-tb-dots i { width:7px; height:7px; display:block; border:1px solid rgba(0,0,0,.4); }
-        .lib-win-body { padding:8px; min-height:54px; }
-        .lib-win-row { height:9px; border-radius:1px; margin-bottom:5px; }
-        .lib-win-btns { display:flex; gap:4px; margin-top:6px; }
-        .lib-win-btn { font-size:8px; padding:2px 6px; border-radius:1px; }
-        .lib-name { font-size:11px; font-weight:bold; text-align:center; padding:2px 4px; color:var(--text);
-                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .lib-author {
-            display:flex; align-items:center; gap:6px; padding:6px 8px; cursor:pointer;
-            border-top:1px solid var(--border);
-        }
-        .lib-author:hover { background:var(--accent); color:var(--accent-text); }
-        /* Marco cuadrado tipo Win98 (igual que el avatar de la pantalla de login) */
-        .lib-author-img {
-            width:24px; height:24px; object-fit:cover; flex-shrink:0; display:block;
-            image-rendering:pixelated;
+        .tm-section-body {
+            background: var(--win-bg, silver);
+            padding: 8px;
+            color: var(--text, #000);
             box-shadow:
-                -1px -1px 0 var(--bezel-dark-1),
-                 1px  1px 0 var(--bezel-light-1),
-                -2px -2px 0 var(--bezel-dark-2),
-                 2px  2px 0 var(--bezel-light-2);
-            margin:2px;
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
-        .lib-author-ph {
-            width:24px; height:24px; flex-shrink:0; display:flex;
-            align-items:center; justify-content:center; font-size:14px;
-            background:var(--inset-bg); color:var(--text-inset);
-            box-shadow:
-                -1px -1px 0 var(--bezel-dark-1),
-                 1px  1px 0 var(--bezel-light-1),
-                -2px -2px 0 var(--bezel-dark-2),
-                 2px  2px 0 var(--bezel-light-2);
-            margin:2px;
-        }
-        .lib-author-name { font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        #temas-library-empty { text-align:center; color:var(--text-faint); font-size:11px; padding:30px 10px; }
 
-        /* ── Vista de Personalización (Temas / Haros / Mascotas) ── */
-        #temas-personalize { flex:1; overflow-y:auto; padding:12px; background:var(--win-bg); color:var(--text); }
-        .pers-section { margin-bottom:18px; }
-        .pers-section:last-child { margin-bottom:0; }
-        .pers-section-title {
-            font-size:11px;
-            font-weight:bold;
-            margin:0 0 6px;
-            padding:3px 6px;
-            background:var(--titlebar-start, #000080);
-            color:var(--titlebar-text, #fff);
-            letter-spacing:1px;
-        }
-        .pers-grid {
-            display:grid;
-            grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
-            gap:8px;
-            padding:6px;
+        /* ── Lista de "Tus temas" ──
+           Cada item es una mini-ventana Win98 con:
+           - Mini-preview de la paleta del tema (4 swatches representan
+             titlebar, win-bg, accent, text). Da contexto visual claro
+             de cómo se ve cada tema sin tener que activarlo.
+           - Nombre del tema.
+           - Indicadores (📥 descargado / 🌐 publicado).
+           - Badge "ACTIVO" cuando es el tema actual. */
+        #temas-list { display: flex; flex-direction: column; gap: 6px; }
+        .temas-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px;
+            color: var(--text, #000);
+            background: var(--win-bg, silver);
+            cursor: pointer;
+            min-height: 56px;
             box-shadow:
-                inset  1px  1px var(--bezel-dark-1),
-                inset -1px -1px var(--bezel-light-1),
-                inset  2px  2px var(--bezel-dark-2),
-                inset -2px -2px var(--bezel-light-2);
-            background:var(--inset-bg);
-            min-height:80px;
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
-        .pers-item {
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            gap:4px;
-            padding:8px 4px 6px;
-            background:var(--win-bg);
+        .temas-item:active {
             box-shadow:
-                inset -1px -1px var(--bezel-dark-1),
-                inset  1px  1px var(--bezel-light-1);
-            cursor:pointer;
-            font-size:10px;
-            text-align:center;
-            user-select:none;
-            position:relative;
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-2, grey),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
-        .pers-item:hover { background:var(--btn-bg, #d4d0c8); }
-        .pers-item:active,
-        .pers-item.active {
+        /* Item seleccionado para edición — borde discontinuo Win98
+           clásico (estilo "selección de icono en escritorio"). */
+        .temas-item.active {
+            outline: 1px dotted var(--text, #000);
+            outline-offset: -3px;
+        }
+        /* Item correspondiente al TEMA ACTIVADO DEL SISTEMA — marca
+           visualmente fuerte: outline accent + fondo titlebar. */
+        .temas-item.is-active {
+            outline: 2px solid var(--accent, #000080);
+            outline-offset: -2px;
+            background: var(--titlebar-start, #000080);
+            color: var(--titlebar-text, #fff);
+        }
+        .temas-item.is-active .temas-item-name { font-weight: bold; }
+
+        /* Mini-preview de paleta — 2×2 grid con 4 colores definitorios. */
+        .temas-item-preview {
+            flex-shrink: 0;
+            width: 40px; height: 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 0;
             box-shadow:
-                inset  1px  1px var(--bezel-dark-1),
-                inset -1px -1px var(--bezel-light-1);
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+            overflow: hidden;
         }
-        .pers-item.active { background:var(--accent, #000080); color:var(--accent-text, #fff); }
-        .pers-item-icon {
-            width:48px; height:48px;
-            display:flex; align-items:center; justify-content:center;
-            font-size:32px; line-height:1;
+        .temas-item-preview > span { display: block; }
+        .temas-item.is-active .temas-item-preview {
+            box-shadow:
+                inset  1px  1px rgba(0,0,0,0.6),
+                inset -1px -1px rgba(255,255,255,0.5);
         }
-        .pers-item-icon img { max-width:100%; max-height:100%; display:block; }
-        .pers-item-name { line-height:1.2; word-break:break-word; }
-        .pers-item-badge {
-            position:absolute;
-            top:3px; right:3px;
-            font-size:8px;
-            padding:1px 4px;
-            background:rgba(0,0,0,0.4);
-            color:#fff;
-            border-radius:6px;
-            letter-spacing:1px;
+
+        .temas-item-name {
+            flex: 1; min-width: 0;
+            font-size: 13px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .pers-item.active .pers-item-badge { background:rgba(255,255,255,0.25); }
-        #temas-starticon-area {
+        /* Indicadores (descargado / publicado en biblioteca). */
+        .temas-item-dl, .temas-item-pub {
+            font-size: 14px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+        /* Badge "ACTIVO" — contrasta con el tema activo. */
+        .temas-item-badge {
+            font-size: 9px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            padding: 2px 6px;
+            background: var(--accent-text, #fff);
+            color: var(--accent, #000080);
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        .temas-item:not(.is-active) .temas-item-badge {
+            background: var(--accent, #000080);
+            color: var(--accent-text, #fff);
+        }
+
+        /* Footer de la pestaña "Mis temas" con botones grandes. */
+        .tm-actions {
+            display: flex; gap: 6px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .tm-actions .button { flex: 1; min-width: 0; min-height: 32px; font-size: 11px; }
+
+        /* Estado / status de operaciones — sunken Win98. */
+        #temas-status {
+            font-size: 11px;
             padding: 6px 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
+            margin-top: 8px;
+            background: var(--input-bg, #fff);
+            color: var(--input-text, var(--text, #000));
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+            min-height: 21px;
+        }
+
+        /* Toolbar de tema (input nombre + Guardar/Activar/Export/Import).
+           Misma estética raised que las section-body. */
+        #temas-toolbar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            padding: 8px;
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            margin-bottom: 8px;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
+        }
+        #temas-toolbar .field-row-stacked {
+            grid-column: 1 / -1;
+            margin: 0;
+        }
+        #temas-toolbar label { font-size: 10px; }
+        #temas-toolbar input[type="text"] {
+            width: 100%; font-size: 12px; padding: 4px;
+            box-sizing: border-box;
+        }
+        #temas-toolbar .button { min-height: 28px; font-size: 11px; }
+
+        /* Editor de colores — agrupado en cards Win98. Una columna en
+           móvil. Cada fila: label (truncable) + color picker + hex. */
+        #temas-editor {
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        #temas-editor .color-group {
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            padding: 8px;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
+        }
+        #temas-editor .color-group-title {
+            font-size: 11px; font-weight: bold;
+            margin: 0 0 6px;
+            color: var(--text, #000);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border-bottom: 1px dotted var(--text-faint, #aaa);
+            padding-bottom: 3px;
+        }
+        #temas-editor .color-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 6px; align-items: center;
+            margin-bottom: 6px;
+        }
+        #temas-editor .color-row:last-child { margin-bottom: 0; }
+        #temas-editor .color-row label {
+            font-size: 11px;
+            color: var(--text, #000);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #temas-editor input[type="color"] {
+            width: 44px; height: 30px; padding: 0;
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+        }
+        #temas-editor input[type="text"] {
+            width: 80px; font-size: 11px; padding: 3px 4px;
+            box-sizing: border-box;
+            font-family: Consolas, Monaco, monospace;
+        }
+
+        /* Wallpaper / start-icon previews — sunken Win98 con doble bezel. */
+        #temas-wallpaper-preview, #temas-starticon-preview {
+            width: 100%; height: 100px;
+            background-color: var(--inset-bg, #808080);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            margin-bottom: 6px;
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
         #temas-starticon-preview {
-            width: 64px;
-            height: 64px;
-            align-self: center;
-            background-color: var(--inset-bg);
+            height: 80px;
             background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            box-shadow: inset 1px 1px var(--bezel-dark-1),
-                        inset -1px -1px var(--bezel-light-1),
-                        inset 2px 2px var(--bezel-dark-2),
-                        inset -2px -2px var(--bezel-light-2);
         }
-        #temas-toolbar {
-            background: var(--win-bg);
-            color: var(--text);
-            border-bottom: 1px solid var(--border);
-            box-shadow: 0 1px 0 var(--bezel-light-1);
-            padding: 6px 10px;
+
+        /* Personalización — grids de Interfaces / Haros / Mascotas. */
+        .pers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+            gap: 6px;
+            padding: 6px;
+            background: var(--inset-bg, #c0c0c0);
+            color: var(--input-text, var(--text, #000));
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+            min-height: 60px;
+        }
+        .pers-item {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 4px;
+            padding: 8px 4px 6px;
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
+            cursor: pointer;
+            font-size: 10px; text-align: center;
+            user-select: none; position: relative;
+            min-height: 86px;
+        }
+        .pers-item.active {
+            background: var(--accent, #000080);
+            color: var(--accent-text, #fff);
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -1px -1px var(--bezel-light-1, #fff);
+        }
+        .pers-item-icon {
+            width: 48px; height: 48px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; line-height: 1;
+            overflow: hidden;
+        }
+        .pers-item-icon img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .pers-item-name { line-height: 1.2; word-break: break-word; }
+        .pers-item-badge {
+            position: absolute; top: 3px; right: 3px;
+            font-size: 8px; padding: 1px 4px;
+            background: rgba(0,0,0,0.4);
+            color: #fff;
+            border-radius: 6px; letter-spacing: 1px;
+        }
+        .pers-item.active .pers-item-badge { background: rgba(255,255,255,0.3); }
+
+        /* ── Biblioteca de temas ──
+           Cada item es un card Win98 raised con:
+           - .lib-preview arriba: vista previa del escritorio con el
+             tema (wallpaper + colores).
+           - .lib-name: TÍTULO del tema (grande, bold, alta jerarquía).
+           - .lib-author: barra inferior con avatar redondo del usuario
+             y su nombre (más pequeño, color muted). Separada del
+             título por un divider para distinguir jerarquía. */
+        #temas-library {
+            margin-top: 4px;
+        }
+        #temas-library-grid {
+            display: flex; flex-direction: column;
+            gap: 10px;
+        }
+        .lib-card {
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
+            padding: 8px;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
+        }
+        /* El preview ya NO muestra el escritorio del tema: solo una
+           mini ventana Win98 con los colores del tema, centrada sobre
+           un fondo neutro (a rayas tipo "checkered" sutil para que se
+           note que es un mockup, no el escritorio real). */
+        .lib-preview {
+            width: 100%; height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            box-sizing: border-box;
+            background:
+                repeating-linear-gradient(
+                    45deg,
+                    rgba(0,0,0,0.04) 0 6px,
+                    transparent       6px 12px
+                ),
+                var(--inset-bg, #c0c0c0);
+            margin-bottom: 8px;
+            cursor: pointer;
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+        }
+
+        /* Mini ventana Win98 que renderiza buildThemePreview(). */
+        .lib-win {
+            width: 70%;
+            max-width: 180px;
+            border: 1px solid #000;
+            box-shadow: 2px 2px 0 rgba(0,0,0,0.35);
+        }
+        .lib-win-tb {
+            display: flex; align-items: center; gap: 4px;
+            padding: 3px 5px;
+            font-size: 9px; font-weight: bold;
+        }
+        .lib-win-tb-dots {
+            margin-left: auto;
+            display: flex; gap: 2px;
+        }
+        .lib-win-tb-dots i {
+            width: 7px; height: 7px;
+            display: block;
+            border: 1px solid rgba(0,0,0,0.4);
+        }
+        .lib-win-body { padding: 6px 7px; min-height: 40px; }
+        .lib-win-row { height: 7px; margin-bottom: 4px; }
+        .lib-win-btns { display: flex; gap: 4px; margin-top: 4px; }
+        .lib-win-btn {
+            font-size: 8px;
+            padding: 1px 6px;
+            line-height: 1.4;
+        }
+        /* Título del tema — protagonista visual. */
+        .lib-name {
+            font-size: 15px;
+            font-weight: bold;
+            color: var(--text, #000);
+            padding: 0 2px 6px;
+            margin: 0;
+            line-height: 1.2;
+            word-break: break-word;
+            border-bottom: 1px dotted var(--text-muted, var(--text-faint, #888));
+        }
+        /* Autor — barra inferior secundaria, tap → ver perfil. */
+        .lib-author {
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-        #temas-toolbar .field-row-stacked { margin: 0; flex: 1; }
-        #temas-toolbar label { font-size: 10px; color: var(--text); }
-        #temas-toolbar input { font-size: 11px; padding: 2px 4px; }
-        #temas-editor {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-            background: var(--win-bg);
-            color: var(--text);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px 16px;
-            align-content: start;
-        }
-        .color-group-head {
-            grid-column: 1 / -1;
-            font-size: 11px;
-            font-weight: bold;
-            color: var(--accent);
-            border-bottom: 1px solid var(--border);
-            box-shadow: 0 1px 0 var(--bezel-light-1);
-            padding: 4px 2px 2px;
-            margin-top: 6px;
-            letter-spacing: 0.4px;
-        }
-        .color-group-head:first-child { margin-top: 0; }
-        .color-field {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .color-field-label { font-size: 11px; font-weight: bold; color: var(--text); }
-        .color-field-row { display: flex; gap: 4px; align-items: center; }
-        .color-field-row input[type="color"] {
-            width: 36px;
-            height: 24px;
-            padding: 0;
-            border: 1px solid var(--border);
+            padding: 6px 2px 2px;
             cursor: pointer;
+            min-height: 32px;
         }
-        .color-field-row input[type="text"] {
-            width: 80px;
-            font-size: 11px;
-            padding: 2px 4px;
-        }
-        #temas-status {
-            font-size: 11px;
-            padding: 4px 10px;
-            background: var(--win-bg);
-            color: var(--text);
-            border-top: 1px solid var(--border);
+        .lib-author:active { opacity: 0.7; }
+        .lib-author-img {
+            width: 24px; height: 24px;
             flex-shrink: 0;
+            object-fit: cover;
+            background: var(--inset-bg, #808080);
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff),
+                -2px -2px 0 var(--bezel-dark-2, grey),
+                 2px  2px 0 var(--bezel-light-2, #dfdfdf);
+            margin: 2px;
         }
+        .lib-author-ph {
+            display: inline-flex;
+            align-items: center; justify-content: center;
+            width: 24px; height: 24px;
+            flex-shrink: 0;
+            font-size: 16px;
+            background: var(--inset-bg, #808080);
+            color: var(--accent-text, #fff);
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff);
+            margin: 2px;
+        }
+        .lib-author-name {
+            flex: 1; min-width: 0;
+            font-size: 11px;
+            font-style: italic;
+            color: var(--text-muted, var(--text-faint, #808080));
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #temas-library-empty { text-align:center; color: var(--text-muted, var(--text-faint, #808080)); font-size: 11px; padding: 24px 10px; }
+
+        /* Field-rows en panes — ajustes táctiles. */
+        .tm-pane .field-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+        .tm-pane .field-row .button { min-height: 30px; font-size: 11px; }
+        .tm-pane input[type="text"] { font-size: 12px; padding: 4px 6px; }
+        .tm-pane input[type="checkbox"] { min-width: 20px; min-height: 20px; }
+
+        /* Modal de confirmación — centrado bien en móvil. */
+        #theme-delete-modal { max-width: 92vw !important; min-width: 280px !important; }
     </style>
 </head>
-<body class="<?php
-    /* Tema default = Win98 (tokens.css) para todos. Sin clase capi/angie. */
-    $bc = [];
-    if ($activeThemeClass) $bc[] = $activeThemeClass;
-    echo htmlspecialchars(implode(' ', $bc));
-?>">
-
-<div id="temas-app">
-    <div id="temas-sidebar">
-        <div id="temas-tabs">
-            <button class="button temas-tab-btn active" data-tab="themes">🎨 Mis temas</button>
-            <button class="button temas-tab-btn" data-tab="personalize">🖌 Personalización</button>
-            <button class="button temas-tab-btn" data-tab="library">🌐 Biblioteca</button>
+<body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
+<div class="window mh-window">
+    <div class="title-bar">
+        <div class="title-bar-text">🖌 Temas</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="tm-back"></button>
         </div>
+    </div>
+    <div class="window-body">
 
-        <!-- Tab: Mis temas -->
-        <div class="temas-tab-pane" id="temas-pane-themes">
+<div class="tm-tabs" id="temas-tabs">
+    <button class="button tm-tab active" data-tab="themes">🎨 Mis temas</button>
+    <button class="button tm-tab"        data-tab="personalize">🖌 Personalización</button>
+    <button class="button tm-tab"        data-tab="library">🌐 Biblioteca</button>
+</div>
+
+<!-- TAB 1: MIS TEMAS — lista + editor de colores + toolbar -->
+<div class="mh-panel tm-pane" id="temas-pane-themes">
+    <div class="tm-section">
+        <h3 class="tm-section-title">Tus temas</h3>
+        <div class="tm-section-body">
             <div id="temas-list"></div>
-            <div id="temas-sidebar-footer">
+            <div class="tm-actions">
                 <button class="button" id="temas-new">+ Nuevo</button>
                 <button class="button" id="temas-deactivate">Usar default</button>
             </div>
         </div>
-
-        <!-- Tab: Personalización -->
-        <div class="temas-tab-pane" id="temas-pane-personalize" hidden>
-            <div class="temas-side-head">🖼 Fondo</div>
-            <div id="temas-wallpaper-area">
-                <div id="temas-wallpaper-preview"></div>
-                <div class="field-row" style="gap:4px;">
-                    <input type="text" id="temas-wallpaper-name" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
-                    <button class="button" id="temas-wallpaper-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
-                </div>
-                <input type="file" id="temas-wallpaper-file" accept="image/*" style="display:none;">
-                <button class="button" id="temas-wallpaper-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
-                <p id="temas-wallpaper-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
-            </div>
-
-            <div class="temas-side-head" style="border-top:1px solid var(--border);">▶ Icono de inicio</div>
-            <div id="temas-starticon-area">
-                <div id="temas-starticon-preview"></div>
-                <div class="field-row" style="gap:4px;">
-                    <input type="text" id="temas-starticon-name" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
-                    <button class="button" id="temas-starticon-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
-                </div>
-                <input type="file" id="temas-starticon-file" accept="image/*,image/svg+xml" style="display:none;">
-                <button class="button" id="temas-starticon-save" style="width:100%;margin-top:4px;">Subir y aplicar</button>
-                <p id="temas-starticon-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
-            </div>
-
-            <div class="temas-side-head" style="border-top:1px solid var(--border);">📺 Efectos visuales</div>
-            <div id="temas-effects-area" style="padding:6px 4px;">
-                <div class="field-row">
-                    <input type="checkbox" id="lcd-filter-toggle">
-                    <label for="lcd-filter-toggle" style="font-size:11px;">Filtro LCD (scanlines)</label>
-                </div>
-                <p style="font-size:10px;margin:4px 0 0;color:var(--text-faint);line-height:1.4;">
-                    Líneas horizontales sutiles sobre toda la app. Se guarda por dispositivo.
-                </p>
-            </div>
-
-        </div>
-
-        <!-- Tab: Biblioteca -->
-        <div class="temas-tab-pane" id="temas-pane-library" hidden>
-            <div class="temas-side-head">🌐 Biblioteca de temas</div>
-            <p style="font-size:10px;color:var(--text-faint);padding:6px 4px;line-height:1.4;">
-                Temas publicados por la comunidad. Pulsa un tema para probarlo;
-                pulsa el autor para visitar su perfil.
-            </p>
-            <button class="button" id="temas-lib-refresh" style="width:100%;">↻ Recargar</button>
-        </div>
     </div>
 
-    <div id="temas-main">
+    <!-- Editor (visible cuando se selecciona o crea uno). -->
+    <div class="tm-section">
         <div id="temas-toolbar">
             <div class="field-row-stacked">
                 <label for="theme-name-input">Nombre del tema</label>
@@ -458,36 +591,159 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             </div>
             <button class="button" id="theme-save">Guardar</button>
             <button class="button" id="theme-activate">Activar</button>
-            <button class="button" id="theme-export"  title="Descargar este tema como JSON">⬇ Exportar</button>
-            <button class="button" id="theme-import"  title="Cargar un tema desde un fichero JSON">⬆ Importar</button>
+            <button class="button" id="theme-export"  title="Descargar tema como JSON">⬇ Exportar</button>
+            <button class="button" id="theme-import"  title="Cargar tema desde JSON">⬆ Importar</button>
             <input type="file" id="theme-import-file" accept="application/json,.json" style="display:none;">
         </div>
-        <div id="temas-editor">
-            <!-- color fields injected by JS -->
-        </div>
+        <div id="temas-editor"></div>
         <div id="temas-status">Crea un tema nuevo o selecciona uno existente para editarlo.</div>
-        <!-- Biblioteca (grid de temas publicados) -->
-        <div id="temas-library" hidden>
-            <div id="temas-library-grid"></div>
+    </div>
+</div>
+
+<!-- TAB 2: PERSONALIZACIÓN — efectos + grids de inventario.
+     (En móvil ocultamos Fondo e Icono de inicio: la PWA no los usa
+     visualmente, son props del escritorio Win98.) -->
+<div class="tm-pane" id="temas-pane-personalize" hidden>
+    <!-- Stubs ocultos para que el JS compartido del editor no pete al
+         hacer getElementById(). NO se renderizan en pantalla. -->
+    <div hidden>
+        <div id="temas-wallpaper-preview"></div>
+        <input type="text" id="temas-wallpaper-name">
+        <button id="temas-wallpaper-browse"></button>
+        <input type="file" id="temas-wallpaper-file">
+        <button id="temas-wallpaper-save"></button>
+        <p id="temas-wallpaper-status"></p>
+        <div id="temas-starticon-preview"></div>
+        <input type="text" id="temas-starticon-name">
+        <button id="temas-starticon-browse"></button>
+        <input type="file" id="temas-starticon-file">
+        <button id="temas-starticon-save"></button>
+        <p id="temas-starticon-status"></p>
+    </div>
+
+    <div class="tm-section">
+        <h3 class="tm-section-title">📺 Efectos visuales</h3>
+        <div class="tm-section-body">
+            <div class="field-row">
+                <input type="checkbox" id="lcd-filter-toggle">
+                <label for="lcd-filter-toggle" style="font-size:12px;">Filtro LCD (scanlines)</label>
+            </div>
+            <p style="font-size:10px;margin:6px 0 0;color:var(--text-faint);line-height:1.4;">
+                Líneas horizontales sutiles sobre toda la app. Se guarda por dispositivo.
+            </p>
         </div>
-        <!-- Personalización (Temas / Haros / Mascotas con cosas que tienes) -->
-        <div id="temas-personalize" hidden>
-            <section class="pers-section">
-                <h3 class="pers-section-title">🎨 Interfaces</h3>
-                <div class="pers-grid" id="pers-themes-grid"></div>
-            </section>
-            <section class="pers-section">
-                <h3 class="pers-section-title">⚪ Haros</h3>
-                <div class="pers-grid" id="pers-haros-grid"></div>
-            </section>
-            <section class="pers-section">
-                <h3 class="pers-section-title">🐾 Mascotas</h3>
-                <div class="pers-grid" id="pers-mascots-grid"></div>
-            </section>
+    </div>
+
+    <!-- Vista de Interfaces / Haros / Mascotas con cosas que tienes. -->
+    <div id="temas-personalize">
+        <section class="tm-section">
+            <h3 class="tm-section-title">🎨 Interfaces</h3>
+            <div class="pers-grid" id="pers-themes-grid"></div>
+        </section>
+        <section class="tm-section">
+            <h3 class="tm-section-title">⚪ Haros</h3>
+            <div class="pers-grid" id="pers-haros-grid"></div>
+        </section>
+        <section class="tm-section">
+            <h3 class="tm-section-title">🐾 Mascotas</h3>
+            <div class="pers-grid" id="pers-mascots-grid"></div>
+        </section>
+    </div>
+</div>
+
+<!-- TAB 3: BIBLIOTECA -->
+<div class="tm-pane" id="temas-pane-library" hidden>
+    <div class="tm-section">
+        <h3 class="tm-section-title">🌐 Biblioteca de temas</h3>
+        <div class="tm-section-body">
+            <p style="font-size:11px;color:var(--text);margin:0 0 8px;line-height:1.4;">
+                Temas publicados por la comunidad. Pulsa para probar; pulsa al autor para visitar su perfil.
+            </p>
+            <button class="button" id="temas-lib-refresh" style="width:100%;min-height:32px;">↻ Recargar</button>
+        </div>
+    </div>
+    <div id="temas-library">
+        <div id="temas-library-grid"></div>
+    </div>
+</div>
+
+        <!-- Status bar Win98 al pie con "Volver al menú". Replica el
+             patrón de perfil-mobile / musica-mobile. Vive fuera del
+             flujo de paneles para que esté siempre visible aunque
+             cambies de pestaña. -->
+        <div class="mh-statusbar">
+            <a href="#" id="tm-menu-link">‹ Menú</a>
+        </div>
+
+    </div><!-- /.window-body -->
+</div><!-- /.window.mh-window -->
+
+<!-- Modal de confirmación de borrado (reusado del desktop). -->
+<div class="window" id="theme-delete-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:280px; max-width:92vw; z-index:8500; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text">Confirmar eliminación de tema</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="theme-delete-x"></button>
+        </div>
+    </div>
+    <div class="window-body w98-confirm-body">
+        <div class="w98-confirm-row">
+            <div class="w98-icon-question"></div>
+            <div class="w98-confirm-text" id="theme-delete-text">¿Eliminar el tema?</div>
+        </div>
+        <div class="w98-confirm-btns">
+            <button id="theme-delete-ok" class="default">Sí</button>
+            <button id="theme-delete-cancel">No</button>
         </div>
     </div>
 </div>
 
+<script>
+/* Botones "‹ Menú": X de la title-bar Win98 + enlace de la status-bar
+   abajo. Ambos vuelven al shell de mobile.php vía postMessage
+   (cuando estamos en iframe) o history.back si la app está standalone. */
+(function(){
+    function goMenu(e){
+        if (e) e.preventDefault();
+        if (window.parent && window.parent !== window) {
+            try { window.parent.postMessage({ type: 'shell:back' }, '*'); return; } catch (_) {}
+        }
+        try { history.back(); } catch (_) { location.href = '../../mobile.php'; }
+    }
+    var topBtn = document.getElementById('tm-back');
+    if (topBtn) topBtn.addEventListener('click', goMenu);
+    var bottomLink = document.getElementById('tm-menu-link');
+    if (bottomLink) bottomLink.addEventListener('click', goMenu);
+})();
+
+/* Tab switcher — replica el del desktop pero sobre los paneles full-width. */
+(function() {
+    var tabs  = document.querySelectorAll('.tm-tab');
+    var panes = {
+        themes:      document.getElementById('temas-pane-themes'),
+        personalize: document.getElementById('temas-pane-personalize'),
+        library:     document.getElementById('temas-pane-library')
+    };
+    tabs.forEach(function(t) {
+        t.addEventListener('click', function() {
+            tabs.forEach(function(b) { b.classList.remove('active'); });
+            t.classList.add('active');
+            var which = t.dataset.tab;
+            Object.keys(panes).forEach(function(k) {
+                if (k === which) panes[k].removeAttribute('hidden');
+                else             panes[k].setAttribute('hidden', '');
+            });
+            if (which === 'library')     loadLibrary();
+            if (which === 'personalize') loadPersonalize();
+        });
+    });
+})();
+</script>
+
+<!-- ====================================================================
+     JS PRINCIPAL — copiado de apps/temas.php con paths ajustados.
+     Mantener en sync con el original si se modifica la lógica.
+     =================================================================== -->
 <script>
 const COLOR_DEFS = [
     /* — Superficies — */
@@ -676,29 +932,54 @@ function renderList() {
     var names = Object.keys(savedThemes).sort();
     if (!names.length) {
         var empty = document.createElement('div');
-        empty.style.cssText = 'padding:10px;font-size:11px;color:#808080;text-align:center;';
-        empty.textContent = 'No tienes temas';
+        empty.style.cssText = 'padding:14px;font-size:11px;color:var(--text-muted, var(--text-faint, #808080));text-align:center;';
+        empty.textContent = 'No tienes temas todavía. Pulsa "+ Nuevo" para crear uno.';
         listEl.appendChild(empty);
         return;
     }
     names.forEach(function(name) {
+        var t = savedThemes[name] || {};
+        var c = migrateLegacyColors(t.colors || {});
+        /* Cuatro colores definitorios del tema para el mini-preview.
+           Si el tema no los define, caemos a los defaults Win98 silver
+           para que el preview no quede vacío en temas viejos. */
+        var pTitle  = c.titlebarStart || '#000080';
+        var pWinBg  = c.winBg         || '#c0c0c0';
+        var pAccent = c.accent        || '#000080';
+        var pText   = c.text          || '#000000';
+
         var item = document.createElement('div');
-        item.className = 'temas-item';
+        item.className = 'temas-item' + (name === activeName ? ' is-active' : '');
         item.dataset.name = name;
+
+        /* Preview de paleta — 2×2 con los 4 colores. */
+        var prev = document.createElement('div');
+        prev.className = 'temas-item-preview';
+        ['titlebarStart','winBg','accent','text'].forEach(function(k){
+            var sw = document.createElement('span');
+            sw.style.background = ({
+                titlebarStart: pTitle,
+                winBg:         pWinBg,
+                accent:        pAccent,
+                text:          pText
+            })[k];
+            prev.appendChild(sw);
+        });
+        item.appendChild(prev);
+
         var n = document.createElement('span');
         n.className = 'temas-item-name';
         n.textContent = name;
         item.appendChild(n);
-        /* Indicador de tema descargado de la biblioteca */
-        if (savedThemes[name] && savedThemes[name].downloaded) {
+
+        if (t.downloaded) {
             var dl = document.createElement('span');
             dl.className = 'temas-item-dl';
             dl.textContent = '📥';
             dl.title = 'Descargado de la biblioteca';
             item.appendChild(dl);
         }
-        /* Indicador de publicado en biblioteca */
-        if (savedThemes[name] && savedThemes[name].public) {
+        if (t.public) {
             var pub = document.createElement('span');
             pub.className = 'temas-item-pub';
             pub.textContent = '🌐';
@@ -708,17 +989,16 @@ function renderList() {
         if (name === activeName) {
             var badge = document.createElement('span');
             badge.className = 'temas-item-badge';
-            badge.textContent = '✓ activo';
+            badge.textContent = 'Activo';
             item.appendChild(badge);
         }
         item.addEventListener('click', function() {
             nameInput.value = name;
             setEditorColors(migrateLegacyColors(savedThemes[name].colors || {}));
             setActiveItem(name);
-            editingOriginalName = name;   /* editando un tema existente */
+            editingOriginalName = name;
             statusEl.textContent = 'Editando "' + name + '"';
         });
-        /* Clic derecho → menú publicar/quitar de la biblioteca */
         item.addEventListener('contextmenu', function(e) {
             e.preventDefault();
             showThemeCtxMenu(e.clientX, e.clientY, name);
@@ -775,7 +1055,7 @@ function duplicateTheme(name){
         var base = (name + ' copia').slice(0, 27), n = 2;
         while (savedThemes[copyName] && n < 99) { copyName = base + ' ' + n; n++; }
     }
-    fetch('../assets/themes/api.php?action=save', {
+    fetch('../../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: copyName, colors: colors })   /* sin downloaded → original */
@@ -796,7 +1076,7 @@ function duplicateTheme(name){
 function deleteTheme(name){
     if(!savedThemes[name]) return;
     window._w98ConfirmDeleteTheme(name, function(){
-        fetch('../assets/themes/api.php?action=delete', {
+        fetch('../../assets/themes/api.php?action=delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: name })
@@ -812,7 +1092,7 @@ function deleteTheme(name){
 
 function setThemePublic(name, makePublic){
     if(!savedThemes[name]) return;
-    fetch('../assets/themes/api.php?action=set-public', {
+    fetch('../../assets/themes/api.php?action=set-public', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, public: makePublic })
@@ -828,7 +1108,7 @@ function setThemePublic(name, makePublic){
 }
 
 function loadThemes(cb) {
-    fetch('../assets/themes/api.php?action=get')
+    fetch('../../assets/themes/api.php?action=get')
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (!d || !d.ok) return;
@@ -857,7 +1137,7 @@ function loadThemes(cb) {
 
 document.getElementById('temas-new').addEventListener('click', resetEditor);
 document.getElementById('temas-deactivate').addEventListener('click', function() {
-    fetch('../assets/themes/api.php?action=set-active', {
+    fetch('../../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: '' })
@@ -885,7 +1165,7 @@ document.getElementById('theme-save').addEventListener('click', function() {
     var payload = { name: name, colors: colors };
     if (editingOriginalName) payload.oldName = editingOriginalName;
     var renamed = !!(editingOriginalName && editingOriginalName !== name);
-    fetch('../assets/themes/api.php?action=save', {
+    fetch('../../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -910,7 +1190,7 @@ document.getElementById('theme-activate').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Selecciona un tema primero.'; return; }
     if (!savedThemes[name]) { statusEl.textContent = 'Guarda el tema antes de activarlo.'; return; }
-    fetch('../assets/themes/api.php?action=set-active', {
+    fetch('../../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name })
@@ -946,8 +1226,9 @@ document.getElementById('theme-save').addEventListener('click', function() {
 });
 
 function applyLiveTheme(className, basePath) {
-    /* Local (la propia iframe de Temas): rutas con "../" */
-    var localHref = basePath ? '../' + basePath : '';
+    /* Local (la propia iframe de Temas-mobile, que vive en apps/mobile/):
+       sube DOS niveles para llegar a la raíz del proyecto. */
+    var localHref = basePath ? '../../' + basePath : '';
     applyToDocLocal(document, className, localHref);
     /* Padre: que se encargue de su body + propagar a sus iframes */
     if (window.parent && window.parent !== window) {
@@ -958,10 +1239,14 @@ function applyLiveTheme(className, basePath) {
 function applyToDocLocal(doc, className, cssHref) {
     if (!doc || !doc.body) return;
     var body = doc.body;
-    /* capi/angie ya no se aplican como clases de body; sólo conservar
-       'has-start-icon' que es estructural. */
+    /* Preservar clases estructurales (mh-body es CRÍTICA en la app
+       móvil — define el layout). El filtro elimina cualquier clase
+       que termine en "-{userLabel}" (el patrón themeCssClassName) para
+       quitar el tema anterior sin tocar otras clases personalizadas. */
+    var userLabelSlug = <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
+    var themeClassRe  = new RegExp('-' + userLabelSlug + '$');
     var keep = (body.className || '').split(/\s+/).filter(function(c) {
-        return c === 'has-start-icon';
+        return c && !themeClassRe.test(c);
     });
     if (className) keep.push(className);
     body.className = keep.join(' ');
@@ -1059,14 +1344,14 @@ document.getElementById('theme-import-file').addEventListener('change', function
 
         /* Auto-save + auto-activate */
         statusEl.textContent = 'Importando "' + name + '"…';
-        fetch('../assets/themes/api.php?action=save', {
+        fetch('../../assets/themes/api.php?action=save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: name, colors: clean })
         }).then(function(r) { return r.json(); })
           .then(function(d) {
               if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
-              return fetch('../assets/themes/api.php?action=set-active', {
+              return fetch('../../assets/themes/api.php?action=set-active', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ name: name })
@@ -1144,7 +1429,7 @@ function loadPersonalize() {
        con categoria='temas' en tienda_items. Los TEMAS DE COLORES del
        usuario (savedThemes) son otra cosa distinta y viven en el
        sidebar "Mis temas". */
-    fetch('../assets/personalize/api.php?action=inventory', { credentials: 'same-origin' })
+    fetch('../../assets/personalize/api.php?action=inventory', { credentials: 'same-origin' })
         .then(function(r){ return r.json(); })
         .then(function(d){
             if (!d || !d.ok) throw new Error(d && d.error || 'error');
@@ -1172,8 +1457,8 @@ function renderPersInventory(gridId, items, activeId, kind) {
                en assets/img/haro/greenHaro-preview.png. El resto sigue
                la convención assets/vids/{slug}Haro-last.png. */
             var _haroSrc = (it.slug === 'green')
-                ? '../assets/img/haro/greenHaro-preview.png'
-                : '../assets/vids/' + it.slug + 'Haro-last.png';
+                ? '../../assets/img/haro/greenHaro-preview.png'
+                : '../../assets/vids/' + it.slug + 'Haro-last.png';
             iconHtml = '<img src="' + _haroSrc + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;">';
         } else {
             iconHtml = it.icono || '◽';
@@ -1194,7 +1479,7 @@ function renderPersInventory(gridId, items, activeId, kind) {
 }
 
 function setActiveInterface(item) {
-    fetch('../assets/personalize/api.php?action=set-active-interface', {
+    fetch('../../assets/personalize/api.php?action=set-active-interface', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1233,7 +1518,7 @@ function buildPersItem(opts) {
 }
 
 function setActiveHaro(item) {
-    fetch('../assets/personalize/api.php?action=set-active-haro', {
+    fetch('../../assets/personalize/api.php?action=set-active-haro', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1254,7 +1539,7 @@ function setActiveHaro(item) {
 }
 
 function setActiveMascot(item) {
-    fetch('../assets/personalize/api.php?action=set-active-mascot', {
+    fetch('../../assets/personalize/api.php?action=set-active-mascot', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
@@ -1319,7 +1604,7 @@ function buildThemePreview(colors){
 function loadLibrary(){
     var grid = document.getElementById('temas-library-grid');
     grid.innerHTML = '<div id="temas-library-empty">Cargando…</div>';
-    fetch('../assets/themes/api.php?action=library')
+    fetch('../../assets/themes/api.php?action=library')
         .then(function(r){ return r.json(); })
         .then(function(d){
             if(!d || !d.ok || !Array.isArray(d.items) || !d.items.length){
@@ -1334,15 +1619,10 @@ function loadLibrary(){
                 var prev = document.createElement('div');
                 prev.className = 'lib-preview';
                 prev.title = 'Probar este tema';
-                /* El fondo del preview representa el escritorio del tema:
-                   color desktopBg + wallpaper encima si el tema trae uno. */
-                var prevColors = migrateLegacyColors(it.colors || {});
-                prev.style.backgroundColor = _libColor(prevColors, 'desktopBg', '#008080');
-                if (it.wallpaper) {
-                    prev.style.backgroundImage    = 'url("../' + it.wallpaper + '")';
-                    prev.style.backgroundSize     = 'cover';
-                    prev.style.backgroundPosition = 'center';
-                }
+                /* En móvil mostramos SOLO una ventana de prueba con
+                   los colores del tema (sin wallpaper / desktopBg).
+                   Así se ve directamente cómo quedan las superficies
+                   y controles aunque el tema no traiga fondo. */
                 prev.innerHTML = buildThemePreview(it.colors);
                 prev.addEventListener('click', function(){ tryLibraryTheme(it); });
                 card.appendChild(prev);
@@ -1356,7 +1636,7 @@ function loadLibrary(){
                 author.className = 'lib-author';
                 author.title = 'Ver el perfil de ' + it.label;
                 var imgHtml = it.image
-                    ? '<img class="lib-author-img" src="../' + it.image + '" alt="">'
+                    ? '<img class="lib-author-img" src="../../' + it.image + '" alt="">'
                     : '<span class="lib-author-ph">👤</span>';
                 author.innerHTML = imgHtml + '<span class="lib-author-name">' + escapeHtml(it.label) + '</span>';
                 author.addEventListener('click', function(e){
@@ -1391,7 +1671,7 @@ function showLibraryCtxMenu(x, y, it){
     el.textContent = '🗑 Quitar de la biblioteca';
     el.addEventListener('click', function(){
         hideThemeCtxMenu();
-        fetch('../assets/themes/api.php?action=set-public', {
+        fetch('../../assets/themes/api.php?action=set-public', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: it.name, public: false })
@@ -1439,7 +1719,7 @@ function downloadLibraryTheme(it){
         while (savedThemes[name] && n < 99) { name = base + '_' + n; n++; }
     }
     var labelSafe = <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
-    fetch('../assets/themes/api.php?action=save', {
+    fetch('../../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name, colors: colors, downloaded: true,
@@ -1450,7 +1730,7 @@ function downloadLibraryTheme(it){
           editingOriginalName = name;
           /* Activar el tema descargado para aplicar de golpe colores + fondo + icono.
              set-active devuelve los assets ya copiados al espacio del usuario. */
-          return fetch('../assets/themes/api.php?action=set-active', {
+          return fetch('../../assets/themes/api.php?action=set-active', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: name })
@@ -1523,7 +1803,7 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
         if (activeName) fd.append('theme', activeName);
         wpStatus.textContent = 'Subiendo…';
         wpSave.classList.add('btn-busy');
-        fetch('../assets/img/wallpapers/save-wallpaper.php', { method: 'POST', body: fd })
+        fetch('../../assets/img/wallpapers/save-wallpaper.php', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 wpSave.classList.remove('btn-busy');
@@ -1579,7 +1859,7 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
         if (activeName) fd.append('theme', activeName);
         siStatus.textContent = 'Subiendo…';
         siSave.classList.add('btn-busy');
-        fetch('../assets/img/start-icons/save-start-icon.php', { method: 'POST', body: fd })
+        fetch('../../assets/img/start-icons/save-start-icon.php', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 siSave.classList.remove('btn-busy');
@@ -1663,10 +1943,6 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
 })();
 </script>
 
-<!-- LCD filter toggle: sincroniza checkbox <-> localStorage <-> clase en
-     <html>. Si esta página está embebida en iframe (mobile.php o
-     desktop-base.php cargan temas/ vía iframe), aplicamos también la
-     clase en el documento padre — mismo origen, acceso directo OK. -->
 <script>
 (function(){
     var KEY = 'lcd-filter';
@@ -1688,6 +1964,5 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
     });
 })();
 </script>
-
 </body>
 </html>

@@ -21,6 +21,8 @@
    POST  ?action=add-track            { videoId, title, artist? }
    POST  ?action=yt-search-batch      { tracks[] }
    POST  ?action=import-playlist      { url }
+   POST  ?action=save-now-playing     { videoId, title, artist, plName, position, duration, isPlaying }
+   GET   ?action=get-now-playing
 
    ALMACENAMIENTO: 100% SQL.
      - playlists / playlist_tracks / playlist_collaborators
@@ -33,6 +35,32 @@
    ────────────────────────────────────────────────────────── */
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__, 2) . '/db.php';
+
+/* Para el polling de tv.php — fuerza socket nuevo en cada petición.
+   Las TVs viejas (Tizen <2018, webOS 3) reusan sockets keep-alive
+   cerrados por Apache (KeepAliveTimeout=5s) y todos los polls tras el
+   primero fallan con status=0. Aplicar antes que requireAuth para que
+   el header esté en cualquier respuesta del endpoint, incluyendo 401. */
+if (($_GET['action'] ?? '') === 'get-now-playing') {
+    header('Connection: close');
+}
+
+/* Bypass de requireAuth para el modo iframe de get-now-playing.
+   requireAuth devuelve JSON 401 con Content-Type application/json. El
+   iframe del polling de tv.php necesita HTML siempre (si no, dispara
+   un error cross-origin al intentar leer contentDocument). Aquí
+   devolvemos un HTML con {ok:false,error:"auth"} cuando no hay sesión. */
+if (($_GET['action'] ?? '') === 'get-now-playing' && isset($_GET['frame'])) {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    $sessUser = $_SESSION['user'] ?? null;
+    if (!$sessUser || !isset($loginUsers[$sessUser])) {
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!DOCTYPE html><html><body><pre id="d">'
+           . htmlspecialchars('{"ok":false,"error":"auth"}', ENT_QUOTES, 'UTF-8')
+           . '</pre></body></html>';
+        exit;
+    }
+}
 
 $u       = requireAuth();
 $userKey = $u['key'];
@@ -446,19 +474,104 @@ case 'yt-duration': {
 
 case 'yt-search-batch': {
     set_time_limit(600);
-    require_once __DIR__ . '/spotify-helpers.php';
     $b = jsonBody();
     if (!isset($b['tracks']) || !is_array($b['tracks'])) jsonError('Datos inválidos');
-    $results = [];
+
+    /* Preparo metadata por índice para preservar el mapeo cuando hagamos
+       los fetches en paralelo. */
+    $items = [];
     foreach ($b['tracks'] as $t) {
-        $title    = substr(strip_tags($t['title']  ?? ''), 0, 200);
-        $artist   = substr(strip_tags($t['artist'] ?? ''), 0, 200);
-        $duration = max(0, intval($t['duration'] ?? 0));
+        $title  = substr(strip_tags($t['title']  ?? ''), 0, 200);
+        $artist = substr(strip_tags($t['artist'] ?? ''), 0, 200);
         if (!$title) continue;
-        $video = searchYouTubeVideo($title . ' ' . $artist . ' audio');
-        if (!$video) continue;
-        $results[] = ['videoId' => $video['videoId'], 'title' => $title, 'artist' => $artist, 'duration' => $video['duration'] ?: $duration];
-        usleep(150000);
+        $items[] = [
+            'query'    => trim($title . ' ' . $artist . ' audio'),
+            'title'    => $title,
+            'artist'   => $artist,
+            'duration' => max(0, intval($t['duration'] ?? 0)),
+            'videoId'  => null,
+        ];
+    }
+    if (empty($items)) jsonResponse(['tracks' => []]);
+
+    /* ── Helper genérico de fetch paralelo con concurrencia limitada.
+       Aceptamos gzip (ENCODING) para reducir tamaño de transferencia. */
+    $multiFetch = function(array $urls, int $concurrent = 10) {
+        $headers = [
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language: en-US,en;q=0.9',
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        ];
+        $out  = [];
+        $keys = array_keys($urls);
+        foreach (array_chunk($keys, $concurrent, true) as $chunkKeys) {
+            $mh = curl_multi_init();
+            $handles = [];
+            foreach ($chunkKeys as $k) {
+                $ch = curl_init($urls[$k]);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 15,
+                    CURLOPT_HTTPHEADER     => $headers,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_ENCODING       => '',   /* acepta gzip → menos bytes en el cable */
+                ]);
+                curl_multi_add_handle($mh, $ch);
+                $handles[$k] = $ch;
+            }
+            $active = null;
+            do {
+                $status = curl_multi_exec($mh, $active);
+                if ($active) curl_multi_select($mh, 1.0);
+            } while ($active && $status == CURLM_OK);
+            foreach ($handles as $k => $ch) {
+                $out[$k] = curl_multi_getcontent($ch);
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+            }
+            curl_multi_close($mh);
+            /* Pausa corta entre chunks → suaviza el rate hacia YouTube
+               sin perder los beneficios del paralelismo. */
+            if (count($chunkKeys) >= $concurrent) usleep(200000);
+        }
+        return $out;
+    };
+
+    /* ── Fase 1: TODAS las búsquedas en paralelo (chunks de 10).
+       Extrae el primer videoId del HTML de results. */
+    $searchUrls = [];
+    foreach ($items as $i => $it) {
+        $searchUrls[$i] = 'https://www.youtube.com/results?search_query=' . urlencode($it['query']);
+    }
+    foreach ($multiFetch($searchUrls, 10) as $i => $html) {
+        if ($html && preg_match('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) {
+            $items[$i]['videoId'] = $m[1];
+        }
+    }
+
+    /* ── Fase 2: TODOS los /watch en paralelo para `lengthSeconds`.
+       Skip si la búsqueda no devolvió videoId. */
+    $watchUrls = [];
+    foreach ($items as $i => $it) {
+        if ($it['videoId']) $watchUrls[$i] = 'https://www.youtube.com/watch?v=' . $it['videoId'];
+    }
+    foreach ($multiFetch($watchUrls, 10) as $i => $html) {
+        if ($html && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $html, $d)) {
+            $items[$i]['duration'] = (int)$d[1];
+        }
+    }
+
+    /* Construye respuesta final solo con los que tienen videoId resuelto. */
+    $results = [];
+    foreach ($items as $it) {
+        if (!$it['videoId']) continue;
+        $results[] = [
+            'videoId'  => $it['videoId'],
+            'title'    => $it['title'],
+            'artist'   => $it['artist'],
+            'duration' => $it['duration'],
+        ];
     }
     jsonResponse(['tracks' => $results]);
 }
@@ -592,6 +705,111 @@ case 'import-playlist': {
     }
     if (empty($tracks)) jsonError('No se encontraron canciones en la playlist', 404);
     jsonResponse(['tracks' => $tracks]);
+}
+
+/* ─── TV LINK (código de emparejamiento) ──────────────────
+   El móvil llama get-tv-code → recibe un código de 6 dígitos.
+   La TV (sin sesión) lo introduce en tv.php → tv.php valida con
+   la tabla `tv_link_codes` y crea sesión persistente. */
+case 'get-tv-code': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    /* Auto-crea tabla idempotente. */
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS tv_link_codes (
+            code VARCHAR(6) PRIMARY KEY,
+            user_key VARCHAR(50) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_created (created_at)
+        ) DEFAULT CHARSET=utf8mb4
+    ");
+    /* Limpia códigos caducados (>5 min). */
+    $pdo->exec("DELETE FROM tv_link_codes WHERE created_at < NOW() - INTERVAL 5 MINUTE");
+    /* Genera código único — random_int es seguro criptográficamente. */
+    $code = '';
+    for ($i = 0; $i < 10; $i++) {
+        $code = sprintf('%06d', random_int(0, 999999));
+        $stmt = $pdo->prepare("SELECT 1 FROM tv_link_codes WHERE code = ?");
+        $stmt->execute([$code]);
+        if (!$stmt->fetchColumn()) break;
+    }
+    $pdo->prepare("INSERT INTO tv_link_codes (code, user_key) VALUES (?, ?)")
+        ->execute([$code, $userKey]);
+    jsonResponse(['code' => $code, 'expiresIn' => 300]);
+}
+
+/* ─── NOW PLAYING (TV companion view) ──────────────────────
+   El shell del móvil publica su estado de reproducción aquí y
+   tv.php hace polling cada segundo para mostrarlo en la TV.
+   Tabla auto-creada al primer save. */
+case 'save-now-playing': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    if (!$b) jsonError('Datos inválidos');
+
+    /* Crea la tabla si no existe — idempotente. */
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS now_playing (
+            user_id    INT PRIMARY KEY,
+            track_json TEXT NOT NULL,
+            is_playing TINYINT(1) DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) DEFAULT CHARSET=utf8mb4
+    ");
+
+    /* Sanitiza y guarda solo los campos que la TV necesita. */
+    $track = [
+        'videoId'  => isset($b['videoId']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $b['videoId']) : '',
+        'title'    => mb_substr(trim($b['title']  ?? ''), 0, 200),
+        'artist'   => mb_substr(trim($b['artist'] ?? ''), 0, 200),
+        'plName'   => mb_substr(trim($b['plName'] ?? ''), 0, 100),
+        'position' => isset($b['position']) ? max(0, (float)$b['position']) : 0,
+        'duration' => isset($b['duration']) ? max(0, (float)$b['duration']) : 0,
+    ];
+    $playing = !empty($b['isPlaying']) ? 1 : 0;
+
+    $pdo->prepare("INSERT INTO now_playing (user_id, track_json, is_playing)
+                   VALUES (?, ?, ?)
+                   ON DUPLICATE KEY UPDATE track_json=VALUES(track_json), is_playing=VALUES(is_playing)")
+        ->execute([$uid, json_encode($track, JSON_UNESCAPED_UNICODE), $playing]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'get-now-playing': {
+    /* Connection: close se setea al inicio del script (antes de
+       requireAuth) para que aplique también a 401. */
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    /* Si la tabla no existe (nunca se llamó save), devolvemos vacío. */
+    try {
+        $stmt = $pdo->prepare("SELECT track_json, is_playing, UNIX_TIMESTAMP(updated_at) AS ts
+                               FROM now_playing WHERE user_id = ?");
+        $stmt->execute([$uid]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) { $row = null; }
+    $payload = $row
+        ? [
+            'ok'        => true,
+            'track'     => json_decode($row['track_json'], true),
+            'isPlaying' => !!$row['is_playing'],
+            'updatedAt' => (int)$row['ts'],
+            'user'      => $u['label'],
+        ]
+        : ['ok' => true, 'track' => null, 'isPlaying' => false];
+
+    /* Modo iframe — para Smart TVs en las que ni XHR ni <script src>
+       funcionan tras el primer poll. El padre lee el JSON desde
+       iframe.contentDocument tras iframe.onload. Sin script dentro del
+       iframe (no corren en navegaciones dinámicas en algunos browsers). */
+    if (isset($_GET['frame'])) {
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        header('Content-Type: text/html; charset=utf-8');
+        echo '<!DOCTYPE html><html><body><pre id="d">' . htmlspecialchars($json, ENT_QUOTES, 'UTF-8') . '</pre></body></html>';
+        exit;
+    }
+
+    jsonResponse($payload);
 }
 
 default:

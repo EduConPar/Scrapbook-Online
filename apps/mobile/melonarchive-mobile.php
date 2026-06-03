@@ -11,20 +11,20 @@
      volver al launcher en vez de navegar. Al abrir el reproductor pausa
      la música del shell para no solapar dos streams de YouTube.
    ────────────────────────────────────────────────────────────────────── */
-require_once dirname(__DIR__) . '/assets/mobile-detect.php';
+require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
-require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__, 2) . '/assets/config.php';
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
-    header('Location: ../index.php');
+    header('Location: ../../index.php');
     exit;
 }
 $userKey   = $_SESSION['user'];
 $userLabel = $loginUsers[$userKey]['label'];
 
 /* Tema activo del usuario — mismo flow que el resto de apps móviles. */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
@@ -33,7 +33,7 @@ $activeThemeCss   = '';
 if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
     $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
     $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
-    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__) . '/' . $activeThemeCss)) {
+    if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
         $activeThemeCss = '';
     }
 }
@@ -49,20 +49,20 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <script src="../assets/js/pwa-guard.js"></script>
+    <script src="../../assets/js/pwa-guard.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>MelonArchive</title>
-    <link rel="icon" href="../assets/img/mobile/icon.png" type="image/png">
-    <link rel="stylesheet" href="../assets/css/98.css">
-    <link rel="stylesheet" href="../assets/css/tokens.css">
-    <link rel="stylesheet" href="../assets/css/base.css">
+    <link rel="icon" href="../../assets/img/mobile/icon.png" type="image/png">
+    <link rel="stylesheet" href="../../assets/css/98.css">
+    <link rel="stylesheet" href="../../assets/css/tokens.css">
+    <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
-    <link rel="stylesheet" href="../assets/css/themes.css">
+    <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
-    <link rel="stylesheet" id="active-theme-link" href="../<?= htmlspecialchars($activeThemeCss); ?>">
+    <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
-    <link rel="stylesheet" href="../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__) . '/assets/css/mobile-theme.css') ?>">
+    <link rel="stylesheet" href="../../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__, 2) . '/assets/css/mobile-theme.css') ?>">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         /* Refresh visual rules específicas de esta app — el grueso del
@@ -390,7 +390,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
-            <button aria-label="Close" onclick="window.location.href='../mobile.php';"></button>
+            <button aria-label="Close" onclick="window.location.href='../../mobile.php';"></button>
         </div>
     </div>
     <div class="window-body">
@@ -408,7 +408,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Status bar Win98 al pie con vuelta al menú. -->
         <div class="mh-statusbar">
-            <a href="../mobile.php">‹ Menú</a>
+            <a href="../../mobile.php">‹ Menú</a>
         </div>
     </div>
 </div>
@@ -466,7 +466,7 @@ var EMBEDDED = (function(){ try { return window.parent !== window; } catch (_) {
 var SHELL    = EMBEDDED ? window.parent.MuShell : null;
 if (EMBEDDED) {
     document.addEventListener('click', function(e){
-        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../mobile.php"]');
+        var link = e.target && e.target.closest && e.target.closest('.mh-statusbar a[href*="../../mobile.php"]');
         if (!link) return;
         e.preventDefault();
         try { window.parent.postMessage({ type: 'shell:back' }, '*'); } catch (_) {}
@@ -474,7 +474,7 @@ if (EMBEDDED) {
 }
 
 /* ─── Estado ────────────────────────────────────────────────────── */
-var API = '../assets/yt-archive.php';
+var API = '../../assets/yt-archive.php';
 var STATE = {
     view: 'playlists',          /* 'playlists' | 'videos' */
     currentPl: null,            /* { id, title } cuando estamos en videos */
