@@ -1081,7 +1081,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <div class="window mh-window" id="perfilWindow">
     <div class="title-bar">
-        <div class="title-bar-text">👤 Perfil - <?= htmlspecialchars($userLabel) ?></div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Perfil - <?= htmlspecialchars($userLabel) ?></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
@@ -1143,17 +1143,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <!-- Pestañas categoría (scroll horizontal) -->
             <nav class="pf-tabs" id="pf-tabs">
                 <button class="pf-tab active" data-cat="movies">🎬 Películas <span class="pf-tab-count" id="cnt-movies">·</span></button>
-                <button class="pf-tab" data-cat="series">📺 Series <span class="pf-tab-count" id="cnt-series">·</span></button>
+                <button class="pf-tab" data-cat="series"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series <span class="pf-tab-count" id="cnt-series">·</span></button>
                 <button class="pf-tab" data-cat="books">📖 Libros <span class="pf-tab-count" id="cnt-books">·</span></button>
                 <button class="pf-tab" data-cat="games">🎮 Juegos <span class="pf-tab-count" id="cnt-games">·</span></button>
-                <button class="pf-tab" data-cat="music">🎵 Música <span class="pf-tab-count" id="cnt-music">·</span></button>
+                <button class="pf-tab" data-cat="music"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Música <span class="pf-tab-count" id="cnt-music">·</span></button>
             </nav>
 
             <!-- Sub-toggle de música: álbumes vs canciones. Solo visible
                  cuando la pestaña activa es 'music'. -->
             <nav class="pf-subtabs" id="pf-music-subtabs" hidden>
                 <button class="pf-subtab active" data-mtab="albums" type="button">💿 Álbumes</button>
-                <button class="pf-subtab" data-mtab="songs" type="button">🎵 Canciones</button>
+                <button class="pf-subtab" data-mtab="songs" type="button"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
             </nav>
 
             <!-- Sub-toggle de estado: pendientes / en curso / completadas.
@@ -2462,7 +2462,7 @@ function openEditProfileDialog() {
 function openAddItemDialog(cat) {
     var labels = {
         movies: { title: '🎬 Añadir película', titleField: 'Título' },
-        series: { title: '📺 Añadir serie',    titleField: 'Título' },
+        series: { title: '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir serie',    titleField: 'Título' },
         books:  { title: '📖 Añadir libro',    titleField: 'Título' },
         games:  { title: '🎮 Añadir juego',    titleField: 'Título' }
     };
@@ -2578,7 +2578,7 @@ function openMusicAddDialog() {
             '<p style="font-size:12px;margin:0 0 10px;">¿Qué quieres añadir?</p>' +
             '<div class="pf-type-row">' +
                 '<button class="button pf-type-btn" data-t="song" type="button">' +
-                    '<span class="pf-type-emoji">🎵</span>Canción</button>' +
+                    '<span class="pf-type-emoji"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>Canción</button>' +
                 '<button class="button pf-type-btn" data-t="album" type="button">' +
                     '<span class="pf-type-emoji">💿</span>Álbum / Playlist</button>' +
             '</div>' +
@@ -2595,7 +2595,12 @@ function openMusicAddDialog() {
     }
 
     function renderStep2() {
-        titleEl.textContent = state.type === 'song' ? '🎵 Añadir canción' : '💿 Añadir álbum';
+        /* Song usa PNG musicaIcon vía innerHTML; album mantiene 💿. */
+        if (state.type === 'song') {
+            titleEl.innerHTML = '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir canción';
+        } else {
+            titleEl.textContent = '💿 Añadir álbum';
+        }
         bodyEl.innerHTML =
             '<div class="pf-form-row">' +
                 '<label for="ma-url">Enlace de YouTube o Spotify</label>' +

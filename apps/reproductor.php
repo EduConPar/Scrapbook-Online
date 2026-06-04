@@ -28,7 +28,7 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
 <!-- REPRODUCTOR -->
 <div class="window" id="music-player">
     <div class="title-bar" id="player-titlebar">
-        <div class="title-bar-text" id="player-tb-text"><span id="player-pl-name">♪ Reproductor</span></div>
+        <div class="title-bar-text" id="player-tb-text"><?php echo appTitleIcon('musicaIcon', '♪'); ?><span id="player-pl-name">Reproductor</span></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize" id="player-minimize"></button>
             <button aria-label="Close" id="player-close"></button>
@@ -429,7 +429,10 @@ function updatePlayerTitle(name) {
     var el     = document.getElementById('player-pl-name');
     var parent = document.getElementById('player-tb-text');
     if (!el || !parent) return;
-    el.textContent = '♪ ' + name;
+    /* El icono PNG ♪/musicaIcon vive ahora FUERA del span (en el HTML
+       del title-bar), así que aquí solo escribimos el nombre del
+       playlist — sin prefijo ♪ que duplicaría el icono. */
+    el.textContent = name;
     if (stopPlNameMarquee) { stopPlNameMarquee(); stopPlNameMarquee = null; }
     setTimeout(function() {
         stopPlNameMarquee = marqueeScroll(el, parent, 40, 1500);

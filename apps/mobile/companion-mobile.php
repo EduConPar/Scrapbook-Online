@@ -134,7 +134,7 @@ $companionUrl = 'https://helldiverscompanion.com';
 
 <div class="window mh-window" id="companionWindow">
     <div class="title-bar">
-        <div class="title-bar-text">💀 Companion</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/companionIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Companion</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>

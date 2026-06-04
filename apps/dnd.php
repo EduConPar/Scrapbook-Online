@@ -504,9 +504,9 @@ body{
 <div id="dnd-toolbar">
     <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (PDF editable, 5 páginas)">📜 Oficial</button>
     <button class="tb-btn has-tip"        id="tab-melon" onclick="switchSheet('melon')" data-tip="Ficha melon alternativa">🎨 Melon</button>
-    <button class="tb-btn has-tip"        id="tab-misfichas" onclick="switchToMisFichas()"      data-tip="Ver todas tus fichas guardadas">📁 Mis Fichas</button>
+    <button class="tb-btn has-tip"        id="tab-misfichas" onclick="switchToMisFichas()"      data-tip="Ver todas tus fichas guardadas"><img src="../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Mis Fichas</button>
     <div class="tb-sep"></div>
-    <button class="tb-btn has-tip" id="btn-dados" onclick="toggleDicePanel()" data-tip="Tirar dados (d4–d100)">🎲 Dados</button>
+    <button class="tb-btn has-tip" id="btn-dados" onclick="toggleDicePanel()" data-tip="Tirar dados (d4–d100)"><img src="../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Dados</button>
     <div class="tb-sep"></div>
     <div id="zoom-controls">
         <label>Zoom:</label>
@@ -534,7 +534,7 @@ body{
 <!-- MIS FICHAS -->
 <div id="mis-fichas-panel">
     <div id="mf-toolbar">
-        <strong>📁 Mis Fichas <span style="font-weight:normal;color:var(--text-muted);">(Google Drive)</span></strong>
+        <strong><img src="../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Mis Fichas <span style="font-weight:normal;color:var(--text-muted);">(Google Drive)</span></strong>
         <input type="text" id="mf-search" placeholder="Buscar por nombre..." oninput="renderFichasList()">
         <span id="mf-count" style="font-size:10px;color:var(--text-muted);"></span>
         <button class="tb-btn has-tip" onclick="triggerImport()" data-tip="Importar un PDF con datos">⬆ Importar</button>
@@ -558,7 +558,7 @@ body{
 <!-- DICE ROLLER (ventana flotante draggable) -->
 <div id="dice-panel" style="display:none;">
     <div id="dice-titlebar">
-        <span>🎲 Lanzar dados</span>
+        <span><img src="../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Lanzar dados</span>
         <button id="dice-close" onclick="toggleDicePanel(false)" title="Cerrar">✕</button>
     </div>
     <div id="dice-body">
@@ -577,7 +577,7 @@ body{
             <div id="dice-hint">Pulsa un dado para añadirlo · clic en un dado para quitarlo</div>
         </div>
         <div id="dice-actions">
-            <button class="tb-btn" id="dice-reroll" onclick="rerollAll()">🎲 Tirar dados</button>
+            <button class="tb-btn" id="dice-reroll" onclick="rerollAll()"><img src="../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Tirar dados</button>
             <button class="tb-btn" id="dice-clear" onclick="clearDice()">🗑 Limpiar</button>
             <button id="dice-mod-btn" onclick="openModifierDialog()" title="Añadir modificador">
                 <span class="dmod-plus">＋</span><span class="dmod-minus">−</span>
@@ -1367,7 +1367,7 @@ function renderFichasList(){
             '<div class="fc-tipo">'+tipoLbl+'</div>'+
             '<div class="fc-nombre">'+esc(nombreLimpio)+'</div>'+
             '<div class="fc-fecha">📅 '+esc(fecha)+'</div>'+
-            '<div class="fc-btns"><button data-a="cargar">📂 Cargar</button></div>';
+            '<div class="fc-btns"><button data-a="cargar"><img src="../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Cargar</button></div>';
         card.querySelector('.fc-del').onclick = function(e){
             e.stopPropagation();
             showConfirm('¿Eliminar <strong>'+esc(nombreLimpio)+'</strong> de Drive?', function(){

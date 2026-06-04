@@ -386,7 +386,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <div class="window mh-window">
     <div class="title-bar">
-        <div class="title-bar-text">📼 MelonArchive</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">MelonArchive</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
@@ -419,7 +419,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <div class="window mh-window ma-video-window">
         <div class="title-bar">
             <button class="ma-video-back-bar" id="ma-video-back" type="button" aria-label="Atrás">‹</button>
-            <div class="title-bar-text" id="ma-video-titlebar-text">📼 Reproductor</div>
+            <div class="title-bar-text" id="ma-video-titlebar-text"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Reproductor</div>
             <div class="title-bar-controls">
                 <button aria-label="Close" id="ma-video-close" type="button"></button>
             </div>
