@@ -50,6 +50,22 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <head>
     <meta charset="UTF-8">
     <script src="../../assets/js/pwa-guard.js"></script>
+    <script>
+    /* --mh-vh: viewport height en px sincronizado con window.innerHeight.
+       Sin esto, .mh-body cae a 100dvh (stale tras bfcache) o 100vh
+       (incluye la barra de URL → la ventana se desborda por debajo del
+       área visible). Hay que setearlo ANTES de que el CSS lo lea. */
+    (function(){
+        function setVh(){
+            document.documentElement.style.setProperty('--mh-vh', window.innerHeight + 'px');
+        }
+        setVh();
+        window.addEventListener('resize', setVh);
+        window.addEventListener('orientationchange', setVh);
+        window.addEventListener('pageshow', setVh);
+        window.addEventListener('visibilitychange', setVh);
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="<?= htmlspecialchars($themeBgColor) ?>">
     <title>Temas</title>
@@ -88,10 +104,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .tm-tab {
             min-height: 30px;
-            padding: 0 12px;
+            padding: 4px 12px;
             font-size: 11px;
+            line-height: 1;
             white-space: nowrap;
             flex-shrink: 0;
+            /* Centrado vertical del texto — sin esto el botón Win98
+               con min-height pinta el contenido pegado arriba. */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .tm-tab.active {
             background: var(--accent, #000080);
@@ -1453,13 +1475,14 @@ function renderPersInventory(gridId, items, activeId, kind) {
            el resto se usa el emoji del campo `icono`. */
         var iconHtml;
         if (kind === 'haro' && it.slug) {
-            /* Excepción específica del haro 'green': usa un PNG curado
-               en assets/img/haro/greenHaro-preview.png. El resto sigue
-               la convención assets/vids/{slug}Haro-last.png. */
-            var _haroSrc = (it.slug === 'green')
-                ? '../../assets/img/haro/greenHaro-preview.png'
-                : '../../assets/vids/' + it.slug + 'Haro-last.png';
-            iconHtml = '<img src="' + _haroSrc + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;">';
+            /* Convención: PNG curado del haro en assets/img/haro/
+               {slug}Haro-preview.png. Para haros antiguos sin curated,
+               cae al último frame del gif (assets/vids/{slug}Haro-last.png). */
+            iconHtml = '<img'
+                + ' src="../../assets/img/haro/' + it.slug + 'Haro-preview.png"'
+                + ' onerror="this.onerror=null;this.src=\'../../assets/vids/' + it.slug + 'Haro-last.png\';"'
+                + ' alt=""'
+                + ' style="max-width:100%;max-height:100%;object-fit:contain;">';
         } else {
             iconHtml = it.icono || '◽';
         }

@@ -562,13 +562,13 @@ function renderItems(){
            se cae al emoji del campo `icono`. */
         var iconHtml;
         if (it.categoria === 'haros' && it.slug) {
-            /* Excepción específica del haro 'green': usa un PNG curado
-               en assets/img/haro/greenHaro-preview.png. El resto sigue
-               la convención assets/vids/{slug}Haro-last.png. */
-            var haroSrc = (it.slug === 'green')
-                ? '../assets/img/haro/greenHaro-preview.png'
-                : '../assets/vids/' + esc(it.slug) + 'Haro-last.png';
-            iconHtml = '<img class="tienda-card-icon-img" src="' + haroSrc + '" alt="">';
+            /* Convención: PNG curado del haro en assets/img/haro/
+               {slug}Haro-preview.png. Para haros antiguos sin curated,
+               cae al último frame del gif (assets/vids/{slug}Haro-last.png). */
+            iconHtml = '<img class="tienda-card-icon-img"'
+                + ' src="../assets/img/haro/' + esc(it.slug) + 'Haro-preview.png"'
+                + ' onerror="this.onerror=null;this.src=\'../assets/vids/' + esc(it.slug) + 'Haro-last.png\';"'
+                + ' alt="">';
         } else {
             iconHtml = esc(it.icono || '🎁');
         }

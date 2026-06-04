@@ -117,16 +117,16 @@ $tokenForManifest = (string)($_SESSION['device_token'] ?? '');
    escritorio existen como parciales (perfil, reproductor) y todavía no
    tienen entrada standalone para móvil — apuntan al placeholder. */
 $apps = [
-    ['name' => 'Calendario',   'url' => 'apps/calendario.php',                                                  'emoji' => '📅', 'icon' => null,                                       'external' => false, 'wip' => false],
-    ['name' => 'Companion',    'url' => 'https://helldiverscompanion.com',                                      'emoji' => '💀', 'icon' => 'assets/img/appIcons/companionIcon.png',    'external' => true,  'wip' => false],
-    ['name' => 'D&D',          'url' => 'apps/dnd.php',                                                         'emoji' => '⚔',  'icon' => null,                                       'external' => false, 'wip' => false],
-    ['name' => 'Dibujo',       'url' => 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fija',      'emoji' => '✏️', 'icon' => null,                                       'external' => true,  'wip' => false],
-    ['name' => 'Galería',      'url' => 'apps/galeria.php',                                                     'emoji' => '🖼', 'icon' => null,                                       'external' => false, 'wip' => false],
+    ['name' => 'Calendario',   'url' => 'apps/calendario.php',                                                  'emoji' => '📅', 'icon' => 'assets/img/appIcons/calendarioIcon.png',   'external' => false, 'wip' => false],
+    ['name' => 'Companion',    'url' => 'apps/mobile/companion-mobile.php',                                     'emoji' => '💀', 'icon' => 'assets/img/appIcons/companionIcon.png',    'external' => false, 'wip' => false],
+    ['name' => 'D&D',          'url' => 'apps/mobile/dnd-mobile.php',                                           'emoji' => '⚔',  'icon' => 'assets/img/appIcons/dndIcon.png',          'external' => false, 'wip' => false],
+    ['name' => 'Dibujo',       'url' => 'apps/mobile/dibujo-mobile.php',                                        'emoji' => '✏️', 'icon' => 'assets/img/appIcons/drawingIcon.png',      'external' => false, 'wip' => false],
+    ['name' => 'Galería',      'url' => 'apps/mobile/galeria-mobile.php',                                       'emoji' => '🖼', 'icon' => null,                                       'external' => false, 'wip' => false],
     ['name' => 'MelonArchive', 'url' => 'apps/mobile/melonarchive-mobile.php',                                  'emoji' => '📼', 'icon' => 'assets/img/appIcons/melonArchiveIcon.png', 'external' => false, 'wip' => false],
     ['name' => 'Música',       'url' => 'apps/mobile/musica-mobile.php',                                        'emoji' => '🎵', 'icon' => 'assets/img/appIcons/musicaIcon.png',       'external' => false, 'wip' => false],
     ['name' => 'Perfil',       'url' => 'apps/mobile/perfil-mobile.php',                                        'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
     ['name' => 'Temas',        'url' => 'apps/mobile/temas-mobile.php',                                         'emoji' => '🎨', 'icon' => 'assets/img/appIcons/temasIcon.png',        'external' => false, 'wip' => false],
-    ['name' => 'Tienda',       'url' => 'apps/tienda.php',                                                      'emoji' => '🛒', 'icon' => 'assets/img/appIcons/tiendaIcon.png',       'external' => false, 'wip' => false],
+    ['name' => 'Tienda',       'url' => 'apps/mobile/tienda-mobile.php',                                        'emoji' => '🛒', 'icon' => 'assets/img/appIcons/tiendaIcon.png',       'external' => false, 'wip' => false],
 ];
 usort($apps, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 

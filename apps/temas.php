@@ -1168,13 +1168,14 @@ function renderPersInventory(gridId, items, activeId, kind) {
            el resto se usa el emoji del campo `icono`. */
         var iconHtml;
         if (kind === 'haro' && it.slug) {
-            /* Excepción específica del haro 'green': usa un PNG curado
-               en assets/img/haro/greenHaro-preview.png. El resto sigue
-               la convención assets/vids/{slug}Haro-last.png. */
-            var _haroSrc = (it.slug === 'green')
-                ? '../assets/img/haro/greenHaro-preview.png'
-                : '../assets/vids/' + it.slug + 'Haro-last.png';
-            iconHtml = '<img src="' + _haroSrc + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;">';
+            /* Convención: PNG curado del haro en assets/img/haro/
+               {slug}Haro-preview.png. Para haros antiguos sin curated,
+               cae al último frame del gif (assets/vids/{slug}Haro-last.png). */
+            iconHtml = '<img'
+                + ' src="../assets/img/haro/' + it.slug + 'Haro-preview.png"'
+                + ' onerror="this.onerror=null;this.src=\'../assets/vids/' + it.slug + 'Haro-last.png\';"'
+                + ' alt=""'
+                + ' style="max-width:100%;max-height:100%;object-fit:contain;">';
         } else {
             iconHtml = it.icono || '◽';
         }

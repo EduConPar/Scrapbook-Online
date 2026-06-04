@@ -2027,7 +2027,7 @@ window.notifSystem = (function() {
         div.className = 'desktop-icon';
         div.id = folder.id;
         div.dataset.folder = '1';
-        div.innerHTML = '<div class="desktop-icon-img">📁</div><span>' + esc(folder.name) + '</span>';
+        div.innerHTML = '<div class="desktop-icon-img"><img src="assets/img/appIcons/folderIcon.png" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt=""></div><span>' + esc(folder.name) + '</span>';
         div.style.position = 'absolute';
         div.style.margin = '0';
         var savedIconPos = window.DesktopIcons ? window.DesktopIcons.loadPositions()[folder.id] : null;
