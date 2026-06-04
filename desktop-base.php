@@ -374,7 +374,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Fichas D&amp;D</span>
     </div>
     <div class="desktop-icon" id="galeria-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('galeria', '🖼'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_galeriaIcon = 'assets/img/appIcons/galeriaIcon.png';
+            echo file_exists(__DIR__ . '/' . $_galeriaIcon)
+                ? '<img src="' . $_galeriaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('galeria', '🖼');
+        ?></div>
         <span>Galería</span>
     </div>
     <!-- ★ NUEVO: icono Dibujo -->
@@ -466,7 +471,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- GALERÍA WINDOW -->
 <div class="window" id="galeria-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="galeria-titlebar">
-        <div class="title-bar-text">🖼 Galería</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('galeriaIcon', '🖼'); ?>Galería</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -851,7 +856,11 @@ window.taskbarManager = (function() {
         var btn = document.createElement('button');
         btn.className = 'button taskbar-task-btn';
         btn.title = label;
-        btn.textContent = (icon ? icon + ' ' : '') + label;
+        /* `icon` puede ser un emoji o HTML (<img>). Para soportar ambos
+           usamos innerHTML y escapamos solo el label (controlado por
+           callers internos, pero por defensa). */
+        function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        btn.innerHTML = (icon ? icon + ' ' : '') + _esc(label);
         btn.addEventListener('click', function() { toggle(id); });
         tasksEl.appendChild(btn);
         registry[id] = { btn: btn, displayMode: displayMode || 'block' };
@@ -1353,7 +1362,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('galeria-window')) {
             taskbarManager.restore('galeria-window');
         } else {
-            taskbarManager.register('galeria-window', 'Galería', '🖼', 'flex');
+            taskbarManager.register('galeria-window', 'Galería', '<img src="assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
