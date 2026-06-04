@@ -383,6 +383,21 @@ window.DesktopState.whenReady = function(cb){
     <iframe id="calendar-iframe" src="" frameborder="0" style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
+<!-- MASCOTA WINDOW -->
+<div class="window" id="mascota-window"
+     style="display:none; position:fixed; left:15vw; top:8vh; width:380px; height:480px; z-index:550; flex-direction:column;">
+    <div class="title-bar" id="mascota-titlebar">
+        <div class="title-bar-text">🐾 Mascota</div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
+            <button aria-label="Close" id="mascota-close"></button>
+        </div>
+    </div>
+    <iframe id="mascota-frame" src="" frameborder="0"
+            style="flex:1; width:100%; border:none; display:block;"></iframe>
+</div>
+
 <!-- ARCHIVE WINDOW -->
 <div class="window" id="archive-window">
     <div class="title-bar" id="archive-titlebar">
@@ -501,6 +516,12 @@ window.DesktopState.whenReady = function(cb){
         </div>
     </div>
 </div>
+
+<!-- MASCOTA -->
+ <div id="mascota-root"></div>
+
+ <!-- MASCOTA MENU BTN — esquina inferior derecha encima del taskbar -->
+<button id="mascota-menu-btn" title="Mascota" aria-label="Menú mascota">⋯</button>
 
 <!-- TASKBAR -->
 <div id="taskbar">
@@ -1591,7 +1612,7 @@ window.notifSystem = (function() {
     [
         'calendar-window','archive-window','temas-window','dnd-window',
         'galeria-window','companion-window','dibujo-window',
-        'tienda-window','kofi-window',
+        'tienda-window','kofi-window','mascota-window',
         'playlist-editor','create-playlist-dialog','profile-window',
         'add-track-dialog','import-playlist-dialog',
         'collab-dialog','spotify-import-dialog','tidal-import-dialog','confirm-dialog',
@@ -1610,7 +1631,7 @@ window.notifSystem = (function() {
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
         'galeria-window', 'create-playlist-dialog', 'profile-window',
         'companion-window', 'dibujo-window',
-        'tienda-window', 'kofi-window'
+        'tienda-window', 'kofi-window', 'mascota-window'
     ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
@@ -2440,6 +2461,147 @@ window.notifSystem = (function() {
         init: init, updateHover: updateHover, clearHover: clearHover,
         tryDrop: tryDrop, openFolder: openFolderWindow, closeFolder: closeFolderWindowById
     };
+})();
+
+/* =========================
+   MASCOTA — botón ⋯ y ventana
+========================= */
+(function () {
+    var mascotaFrame  = document.getElementById('mascota-frame');
+    var mascotaLoaded = false;
+    var menuBtn       = document.getElementById('mascota-menu-btn');
+
+    /* Abre la ventana de gestión */
+    function openMascotaWindow() {
+        if (!mascotaLoaded) {
+            mascotaFrame.src = 'apps/mascota.php';
+            mascotaLoaded = true;
+        }
+        if (taskbarManager.isRegistered('mascota-window')) {
+            taskbarManager.restore('mascota-window');
+        } else {
+            taskbarManager.register('mascota-window', 'Mascota', '🐾', 'flex');
+        }
+    }
+
+    document.getElementById('mascota-close').addEventListener('click', function () {
+        taskbarManager.unregister('mascota-window');
+    });
+
+    /* Menú contextual del botón ⋯ */
+    menuBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+
+        /* Si ya existe, cerrarlo */
+        var existing = document.getElementById('mascota-ctx-inline');
+        if (existing) { existing.remove(); return; }
+
+        var menu = document.createElement('ul');
+        menu.id        = 'mascota-ctx-inline';
+        menu.className = 'desk-ctx show';
+
+        var items = [
+            { icon: '🐾', label: 'Ver mascota',   action: 'open'   },
+            { icon: '🍕', label: 'Alimentar',      action: 'feed'   },
+            { icon: '⚽', label: 'Jugar',           action: 'play'   },
+            { icon: '💬', label: '¿Cómo estás?',   action: 'status' },
+        ];
+
+        items.forEach(function (item) {
+            var li = document.createElement('li');
+            li.textContent = item.icon + ' ' + item.label;
+            li.style.cursor = 'pointer';
+            li.addEventListener('click', function () {
+                menu.remove();
+                handleMascotaMenuAction(item.action);
+            });
+            menu.appendChild(li);
+        });
+
+        document.body.appendChild(menu);
+
+        /* Cerrar al hacer click fuera */
+        setTimeout(function () {
+            document.addEventListener('click', function closeMascotaMenu() {
+                var m = document.getElementById('mascota-ctx-inline');
+                if (m) m.remove();
+                document.removeEventListener('click', closeMascotaMenu);
+            });
+        }, 0);
+    });
+
+    function handleMascotaMenuAction(action) {
+        switch (action) {
+            case 'open':
+                openMascotaWindow();
+                break;
+
+            case 'feed':
+                if (typeof window.MascotaEngine !== 'undefined') {
+                    window.MascotaEngine.feed();
+                } else {
+                    openMascotaWindow();
+                }
+                break;
+
+            case 'play':
+                if (typeof window.MascotaEngine !== 'undefined') {
+                    window.MascotaEngine.play();
+                } else {
+                    openMascotaWindow();
+                }
+                break;
+
+            case 'status':
+                if (typeof window.MascotaEngine !== 'undefined') {
+                    var s = window.MascotaEngine.getState();
+                    if (s && s.mascota) {
+                        var h = s.mascota.hambre;
+                        var f = s.mascota.felicidad;
+                        var msg;
+                        if (!s.mascota.viva)         msg = '💀 Ha muerto... ábrela para revivirla.';
+                        else if (h > 70 && f > 70)   msg = '😄 ¡Está genial!';
+                        else if (h < 25)              msg = '😢 Tiene mucha hambre...';
+                        else if (f < 30)              msg = '😔 Se siente sola.';
+                        else                          msg = '🙂 Bien (🍖' + h + ' ♥' + f + ')';
+                        window.notifSystem.show({
+                            id:    'mascota-status-' + Date.now(),
+                            type:  'info',
+                            title: '🐾 Tu mascota',
+                            message: msg,
+                            autoDismissAfter: 4000,
+                        });
+                    } else {
+                        openMascotaWindow();
+                    }
+                } else {
+                    openMascotaWindow();
+                }
+                break;
+        }
+    }
+
+    /* Exponer para que el engine pueda llamar a openMascotaWindow */
+    window.openMascotaWindow = openMascotaWindow;
+})();
+
+/* =========================
+   MASCOTA — engine (carga dinámica)
+========================= */
+(function () {
+    var script  = document.createElement('script');
+    script.src  = 'assets/mascota/engine.js';
+    script.onload = function () {
+        window.DesktopState.whenReady(function () {
+            if (typeof window.MascotaEngine === 'undefined') return;
+            window.MascotaEngine.init({
+                userId:   <?php echo (int)userIdByKey($desktopUserKey); ?>,
+                parejaId: <?php echo (int)$parejaId; ?>,
+                label:    <?php echo json_encode($desktopLabel); ?>
+            });
+        });
+    };
+    document.head.appendChild(script);
 })();
 
 </script>

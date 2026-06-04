@@ -569,4 +569,37 @@ html.lcd-filter-top body::after {
         rgba(0, 0, 0, 0.10) 85%,
         rgba(0, 0, 0, 0.24) 100%
     );
+
+    #mascota-menu-btn {
+    position: fixed;
+    bottom: 46px; /* encima del taskbar (42px) + 4px de margen */
+    right: 8px;
+    z-index: 7999; /* justo por debajo del engine (8000) */
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    /* Hereda el estilo .button de 98.css para encajar con el tema */
+    border: 2px solid;
+    border-color: var(--bezel-light1,#fff) var(--bezel-dark2,#404040)
+                  var(--bezel-dark2,#404040) var(--bezel-light1,#fff);
+    background: var(--win-bg,#c0c0c0);
+    color: var(--text,#000);
+    letter-spacing: 0;
+    font-family: var(--font-ui,'MS Sans Serif',sans-serif);
+}}
+#mascota-menu-btn:active {
+    border-color: var(--bezel-dark2,#404040) var(--bezel-light1,#fff)
+                  var(--bezel-light1,#fff) var(--bezel-dark2,#404040);
 }
+/* Menú contextual de la mascota — mismo estilo que .desk-ctx */
+#mascota-ctx-inline {
+    position: fixed;
+    bottom: 80px;
+    right: 8px;
+    z-index: 9999;
+    min-width: 160px;
+}
+
