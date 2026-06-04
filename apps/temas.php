@@ -386,8 +386,8 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <div id="temas-app">
     <div id="temas-sidebar">
         <div id="temas-tabs">
-            <button class="button temas-tab-btn active" data-tab="themes">🎨 Mis temas</button>
-            <button class="button temas-tab-btn" data-tab="personalize">🖌 Personalización</button>
+            <button class="button temas-tab-btn active" data-tab="themes"><img src="../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mis temas</button>
+            <button class="button temas-tab-btn" data-tab="personalize"><img src="../assets/img/appIcons/drawingIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Personalización</button>
             <button class="button temas-tab-btn" data-tab="library">🌐 Biblioteca</button>
         </div>
 

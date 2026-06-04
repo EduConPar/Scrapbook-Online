@@ -518,7 +518,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- Ventana Win98 que envuelve toda la app (patrón estándar mobile). -->
 <div class="window mh-window" id="galWindow">
     <div class="title-bar">
-        <div class="title-bar-text">🖼 Galería</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Galería</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
@@ -530,9 +530,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- Vista DESCONECTADA -->
 <div id="gal-connect-view" style="display:none;">
     <div class="gal-connect-box window">
-        <div class="title-bar"><div class="title-bar-text">🖼 Galería</div></div>
+        <div class="title-bar"><div class="title-bar-text"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Galería</div></div>
         <div class="window-body" style="text-align:center;padding:24px;">
-            <div style="font-size:48px;line-height:1;">🖼️</div>
+            <div><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;"></div>
             <h2 style="margin:10px 0 4px;">Galería</h2>
             <p style="margin:0 0 14px;font-size:11px;color:var(--text-muted);">
                 Conecta tu Google Drive para guardar y ver tus imágenes en la nube.
@@ -577,7 +577,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <!-- Área principal -->
     <main id="gal-main-area">
         <div id="gal-tabs">
-  <button class="button gal-tab active" data-tab="galeria">🖼 Galería</button>
+  <button class="button gal-tab active" data-tab="galeria"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Galería</button>
   <button class="button gal-tab" data-tab="ocs">🎭 OCs</button>
 </div>
         <div id="gal-toolbar">
@@ -776,7 +776,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <!-- Menú contextual -->
 <div id="gal-ctx-menu" data-no-auto-z="" style="display:none;">
-    <div class="gal-ctx-opt" data-act="preview">🖼 Ver</div>
+    <div class="gal-ctx-opt" data-act="preview"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Ver</div>
     <div class="gal-ctx-opt" data-act="download">📥 Descargar</div>
     <div class="gal-ctx-opt" data-act="publish">📤 Publicar</div>
     <div class="gal-ctx-opt" data-act="edit">✏ Renombrar / etiquetas</div>
@@ -2357,8 +2357,23 @@ document.addEventListener('keydown', function(e) {
     if (document.getElementById('gal-preview').style.display !== 'none')      { closePreview(); return; }
 });
 
-/* Cuando GIS termina de cargar intenta auto-conectar (si ya hubo consentimiento) */
-window.addEventListener('load', tryAutoConnectDrive);
+/* Cuando GIS termina de cargar intenta auto-conectar (si ya hubo
+   consentimiento). Si NO hay sesión previa, llamamos a showDisconnected()
+   para que se vea la pantalla con el botón "☁ Conectar con Drive".
+   Sin esta llamada explícita, tryAutoConnectDrive() salía silencioso y
+   tanto #gal-connect-view como #gal-main quedaban en display:none →
+   el usuario veía la app en blanco sin manera de iniciar el OAuth.
+   Mismo fix que el aplicado en dnd-mobile.php. */
+window.addEventListener('load', function(){
+    tryAutoConnectDrive();
+    /* Si no hay token cacheado y nunca se autorizó antes, mostramos la
+       vista de conexión. Si tryAutoConnectDrive arranca un silent
+       refresh y tiene éxito, showConnected() ya se encarga de cambiar
+       a la vista principal. */
+    if (!_driveToken || _driveToken.expires_at <= Date.now()){
+        showDisconnected();
+    }
+});
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -2401,7 +2416,7 @@ window.addEventListener('load', tryAutoConnectDrive);
     <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px;">
       <div style="flex-shrink:0;text-align:center;">
         <div id="ocs-form-foto-preview" class="ocs-foto-preview">🎭</div>
-        <button class="button" id="ocs-form-foto-btn" style="margin-top:4px;font-size:10px;">📂 Galería</button>
+        <button class="button" id="ocs-form-foto-btn" style="margin-top:4px;font-size:10px;"><img src="../../assets/img/appIcons/folderIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:2px;">Galería</button>
         <input type="hidden" id="ocs-form-foto-id">
       </div>
       <div style="flex:1;min-width:0;">
@@ -2496,7 +2511,7 @@ window.addEventListener('load', tryAutoConnectDrive);
 <!-- ══════════ PICKER DE FOTO ══════════ -->
 <div class="window gal-dialog" id="ocs-picker-dialog" style="display:none;width:460px;max-height:90vh;flex-direction:column;">
   <div class="title-bar" style="flex-shrink:0;">
-    <div class="title-bar-text">📂 Elegir foto</div>
+    <div class="title-bar-text"><img src="../../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Elegir foto</div>
     <div class="title-bar-controls"><button aria-label="Close" id="ocs-picker-close"></button></div>
   </div>
   <div class="window-body" style="padding:6px;overflow-y:auto;flex:1;min-height:0;">

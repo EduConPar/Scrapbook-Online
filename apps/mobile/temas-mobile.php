@@ -578,7 +578,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
 <div class="window mh-window">
     <div class="title-bar">
-        <div class="title-bar-text">🖌 Temas</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Temas</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="tm-back"></button>
         </div>
@@ -586,8 +586,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <div class="window-body">
 
 <div class="tm-tabs" id="temas-tabs">
-    <button class="button tm-tab active" data-tab="themes">🎨 Mis temas</button>
-    <button class="button tm-tab"        data-tab="personalize">🖌 Personalización</button>
+    <button class="button tm-tab active" data-tab="themes"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Mis temas</button>
+    <button class="button tm-tab"        data-tab="personalize"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Personalización</button>
     <button class="button tm-tab"        data-tab="library">🌐 Biblioteca</button>
 </div>
 

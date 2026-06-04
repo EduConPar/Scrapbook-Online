@@ -121,7 +121,7 @@ $apps = [
     ['name' => 'Companion',    'url' => 'apps/mobile/companion-mobile.php',                                     'emoji' => '💀', 'icon' => 'assets/img/appIcons/companionIcon.png',    'external' => false, 'wip' => false],
     ['name' => 'D&D',          'url' => 'apps/mobile/dnd-mobile.php',                                           'emoji' => '⚔',  'icon' => 'assets/img/appIcons/dndIcon.png',          'external' => false, 'wip' => false],
     ['name' => 'Dibujo',       'url' => 'apps/mobile/dibujo-mobile.php',                                        'emoji' => '✏️', 'icon' => 'assets/img/appIcons/drawingIcon.png',      'external' => false, 'wip' => false],
-    ['name' => 'Galería',      'url' => 'apps/mobile/galeria-mobile.php',                                       'emoji' => '🖼', 'icon' => null,                                       'external' => false, 'wip' => false],
+    ['name' => 'Galería',      'url' => 'apps/mobile/galeria-mobile.php',                                       'emoji' => '🖼', 'icon' => 'assets/img/appIcons/galeriaIcon.png',     'external' => false, 'wip' => false],
     ['name' => 'MelonArchive', 'url' => 'apps/mobile/melonarchive-mobile.php',                                  'emoji' => '📼', 'icon' => 'assets/img/appIcons/melonArchiveIcon.png', 'external' => false, 'wip' => false],
     ['name' => 'Música',       'url' => 'apps/mobile/musica-mobile.php',                                        'emoji' => '🎵', 'icon' => 'assets/img/appIcons/musicaIcon.png',       'external' => false, 'wip' => false],
     ['name' => 'Perfil',       'url' => 'apps/mobile/perfil-mobile.php',                                        'emoji' => '👤', 'icon' => 'assets/img/appIcons/profileIcon.png',      'external' => false, 'wip' => false],
@@ -250,6 +250,106 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             border: 0;
             display: block;
             background: transparent;
+        }
+
+        /* ── PANEL DE AJUSTES (slide-up sheet) ──
+           Backdrop fixed + ventana Win98 centrada que aparece al pulsar
+           "⚙ Ajustes" del statusbar. Cada opción es un botón Win98
+           grande. Al tap fuera o en X se cierra. */
+        #mh-settings-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 80;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        #mh-settings-backdrop.is-open { display: flex; }
+        #mh-settings-panel {
+            width: 100%;
+            max-width: 340px;
+            display: flex;
+            flex-direction: column;
+        }
+        #mh-settings-panel .window-body {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        #mh-settings-panel .mh-set-btn {
+            display: flex; align-items: center; gap: 10px;
+            min-height: 48px;
+            font-size: 13px;
+            text-align: left;
+            padding: 8px 12px;
+            text-decoration: none;
+            color: var(--text, #000);
+            background: var(--btn-bg, silver);
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
+            cursor: pointer;
+            border: 0;
+            box-sizing: border-box;
+            width: 100%;
+            font-family: inherit;
+        }
+        #mh-settings-panel .mh-set-btn:active {
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-2, grey);
+            padding: 9px 11px 7px 13px;
+        }
+        #mh-settings-panel .mh-set-btn.danger { color: var(--error-text, #800000); }
+        #mh-settings-panel .mh-set-emoji { font-size: 18px; line-height: 1; }
+        #mh-settings-panel .mh-set-text { flex: 1; min-width: 0; }
+        #mh-settings-panel .mh-set-text small {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted, #666);
+            margin-top: 2px;
+        }
+
+        /* ── MODAL CAMBIAR CONTRASEÑA ── (igual estilo Win98) */
+        #mh-cp-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 90;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        #mh-cp-backdrop.is-open { display: flex; }
+        #mh-cp-window { width: 100%; max-width: 320px; display: flex; flex-direction: column; }
+        #mh-cp-window .window-body {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #mh-cp-window label { font-size: 11px; }
+        #mh-cp-window input[type="password"] {
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 26px;
+            font-size: 13px;
+            margin-top: 3px;
+        }
+        #mh-cp-status { font-size: 11px; min-height: 14px; margin: 4px 0 0; }
+        #mh-cp-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+            margin-top: 6px;
         }
 
         /* ── WIDGET FLOTANTE (vinilo) ──
@@ -970,12 +1070,66 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <?php endforeach; ?>
         </div>
 
-        <!-- Status bar Win98 con accesos rápidos -->
+        <!-- Status bar Win98 con un único acceso: Ajustes (que abre el
+             panel inferior con las acciones de cuenta y enlaces). -->
         <div class="mh-statusbar">
-            <a href="<?= strtolower(htmlspecialchars($userLabel)) ?>-desktop.php?desktop=1">💻 Versión PC</a>
-            <a href="logout.php" class="danger">🚪 Cerrar sesión</a>
+            <a href="#" id="mh-settings-link">⚙ Ajustes</a>
         </div>
 
+    </div>
+</div>
+
+<!-- PANEL DE AJUSTES — abierto desde "⚙ Ajustes" del statusbar. -->
+<div id="mh-settings-backdrop">
+    <div class="window" id="mh-settings-panel">
+        <div class="title-bar">
+            <div class="title-bar-text">⚙ Ajustes</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-settings-close"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <button class="mh-set-btn" type="button" id="mh-set-change-password">
+                <span class="mh-set-emoji">🔑</span>
+                <span class="mh-set-text">Cambiar contraseña
+                    <small>Actualiza la contraseña de tu cuenta</small>
+                </span>
+            </button>
+            <a class="mh-set-btn danger" href="logout.php?to=manual">
+                <span class="mh-set-emoji">🚪</span>
+                <span class="mh-set-text">Cerrar sesión
+                    <small>Sale y vuelve a la pantalla de login</small>
+                </span>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CAMBIAR CONTRASEÑA — mismo endpoint que el escritorio. -->
+<div id="mh-cp-backdrop">
+    <div class="window" id="mh-cp-window">
+        <div class="title-bar">
+            <div class="title-bar-text">🔑 Cambiar contraseña</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-cp-close"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <label>Contraseña actual:
+                <input type="password" id="mh-cp-current" autocomplete="current-password">
+            </label>
+            <label>Nueva contraseña:
+                <input type="password" id="mh-cp-new" autocomplete="new-password" minlength="6">
+            </label>
+            <label>Repetir nueva:
+                <input type="password" id="mh-cp-confirm" autocomplete="new-password" minlength="6">
+            </label>
+            <p id="mh-cp-status"></p>
+            <div id="mh-cp-actions">
+                <button id="mh-cp-cancel">Cancelar</button>
+                <button id="mh-cp-ok" class="default">Aceptar</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -2370,6 +2524,116 @@ window.MuShell = (function(){
         for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
         return out;
     }
+})();
+</script>
+
+<script>
+/* ════════════════════════════════════════
+   PANEL DE AJUSTES + CAMBIAR CONTRASEÑA
+   ────────────────────────────────────────
+   - Panel: tap en "⚙ Ajustes" del statusbar → muestra backdrop con el
+     panel Win98 centrado. Cierra con X, tap fuera, o Esc.
+   - Cambiar contraseña: dentro del panel → abre modal con 3 inputs.
+     Validación cliente + POST a assets/auth/change-password.php (el
+     mismo endpoint que usa el escritorio). Status en línea con
+     resultado del backend.
+════════════════════════════════════════ */
+(function(){
+    /* ── panel ajustes ── */
+    var settingsLink = document.getElementById('mh-settings-link');
+    var settingsBp   = document.getElementById('mh-settings-backdrop');
+    var settingsClose = document.getElementById('mh-settings-close');
+
+    function openSettings(e){
+        if (e) e.preventDefault();
+        settingsBp.classList.add('is-open');
+    }
+    function closeSettings(){ settingsBp.classList.remove('is-open'); }
+
+    if (settingsLink)  settingsLink.addEventListener('click', openSettings);
+    if (settingsClose) settingsClose.addEventListener('click', closeSettings);
+    /* Tap en el backdrop (no en la ventana) cierra. */
+    if (settingsBp) settingsBp.addEventListener('click', function(e){
+        if (e.target === settingsBp) closeSettings();
+    });
+
+    /* ── modal cambiar contraseña ── */
+    var cpOpen   = document.getElementById('mh-set-change-password');
+    var cpBp     = document.getElementById('mh-cp-backdrop');
+    var cpClose  = document.getElementById('mh-cp-close');
+    var cpCancel = document.getElementById('mh-cp-cancel');
+    var cpOk     = document.getElementById('mh-cp-ok');
+    var cpCurrent = document.getElementById('mh-cp-current');
+    var cpNew     = document.getElementById('mh-cp-new');
+    var cpConfirm = document.getElementById('mh-cp-confirm');
+    var cpStatus  = document.getElementById('mh-cp-status');
+
+    function cpReset(){
+        cpCurrent.value = ''; cpNew.value = ''; cpConfirm.value = '';
+        cpStatus.textContent = ''; cpStatus.style.color = '';
+        cpOk.disabled = false;
+    }
+    function cpOpenModal(){
+        cpReset();
+        closeSettings();
+        cpBp.classList.add('is-open');
+        setTimeout(function(){ cpCurrent.focus(); }, 30);
+    }
+    function cpCloseModal(){ cpBp.classList.remove('is-open'); cpReset(); }
+
+    if (cpOpen)   cpOpen.addEventListener('click', cpOpenModal);
+    if (cpClose)  cpClose.addEventListener('click', cpCloseModal);
+    if (cpCancel) cpCancel.addEventListener('click', cpCloseModal);
+    if (cpBp) cpBp.addEventListener('click', function(e){
+        if (e.target === cpBp) cpCloseModal();
+    });
+
+    async function cpSubmit(){
+        var c = cpCurrent.value, n = cpNew.value, r = cpConfirm.value;
+        function err(msg){ cpStatus.style.color = 'var(--error-text,#c00)'; cpStatus.textContent = msg; }
+        if (!c || !n || !r)        return err('Rellena todos los campos.');
+        if (n.length < 6)          return err('La nueva debe tener al menos 6 caracteres.');
+        if (n !== r)               return err('La nueva contraseña y la repetición no coinciden.');
+        if (c === n)               return err('La nueva tiene que ser distinta de la actual.');
+
+        cpOk.disabled = true;
+        cpStatus.style.color = 'var(--text-muted,#666)';
+        cpStatus.textContent = 'Guardando…';
+        try {
+            var resp = await fetch('assets/auth/change-password.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current: c, new: n })
+            });
+            var data = await resp.json().catch(function(){ return { error: 'Respuesta inválida' }; });
+            if (!resp.ok || data.error){
+                err('✗ ' + (data.error || ('HTTP ' + resp.status)));
+                cpOk.disabled = false;
+                return;
+            }
+            cpStatus.style.color = 'var(--accent-deep,#080)';
+            cpStatus.textContent = '✔ Contraseña actualizada.';
+            setTimeout(cpCloseModal, 900);
+        } catch (e) {
+            err('✗ Error de red: ' + e.message);
+            cpOk.disabled = false;
+        }
+    }
+    if (cpOk) cpOk.addEventListener('click', cpSubmit);
+    [cpCurrent, cpNew, cpConfirm].forEach(function(el){
+        if (!el) return;
+        el.addEventListener('keydown', function(ev){
+            if (ev.key === 'Enter'){ ev.preventDefault(); cpSubmit(); }
+            else if (ev.key === 'Escape'){ ev.preventDefault(); cpCloseModal(); }
+        });
+    });
+
+    /* Esc global cierra cualquier panel abierto. */
+    document.addEventListener('keydown', function(ev){
+        if (ev.key !== 'Escape') return;
+        if (cpBp && cpBp.classList.contains('is-open')) cpCloseModal();
+        else if (settingsBp && settingsBp.classList.contains('is-open')) closeSettings();
+    });
 })();
 </script>
 

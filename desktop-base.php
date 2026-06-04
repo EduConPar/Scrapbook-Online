@@ -242,7 +242,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- FOLDER WINDOW TEMPLATE -->
 <div class="window" id="folder-window-template" data-no-auto-z style="display:none; position:fixed; width:460px; height:340px; flex-direction:column;">
     <div class="title-bar">
-        <div class="title-bar-text">📁 Carpeta</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('folderIcon', '📁'); ?>Carpeta</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -253,7 +253,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL "Nueva carpeta" -->
-<div class="window" id="folder-create-modal" data-no-auto-z style="display:none; position:fixed;">
+<div class="window" id="folder-create-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed;">
     <div class="title-bar">
         <div class="title-bar-text">📁 Nueva carpeta</div>
         <div class="title-bar-controls">
@@ -270,8 +270,36 @@ window.DesktopState.whenReady = function(cb){
     </div>
 </div>
 
+<!-- MODAL cambiar contraseña -->
+<div class="window" id="change-password-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed; width:340px;">
+    <div class="title-bar">
+        <div class="title-bar-text">🔑 Cambiar contraseña</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="change-password-x"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:14px;">
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            <label style="font-size:11px;">Contraseña actual:
+                <input id="cp-current" type="password" autocomplete="current-password" style="width:100%;display:block;margin-top:3px;">
+            </label>
+            <label style="font-size:11px;">Nueva contraseña:
+                <input id="cp-new" type="password" autocomplete="new-password" minlength="6" style="width:100%;display:block;margin-top:3px;">
+            </label>
+            <label style="font-size:11px;">Repetir nueva:
+                <input id="cp-confirm" type="password" autocomplete="new-password" minlength="6" style="width:100%;display:block;margin-top:3px;">
+            </label>
+        </div>
+        <p id="cp-status" style="margin:10px 0 0;font-size:11px;min-height:14px;"></p>
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:12px;">
+            <button id="cp-ok" class="default">Aceptar</button>
+            <button id="cp-cancel">Cancelar</button>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL confirmar borrar carpeta -->
-<div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; position:fixed;">
+<div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed;">
     <div class="title-bar">
         <div class="title-bar-text">Confirmar eliminación de carpeta</div>
         <div class="title-bar-controls">
@@ -346,7 +374,12 @@ window.DesktopState.whenReady = function(cb){
         <span>Fichas D&amp;D</span>
     </div>
     <div class="desktop-icon" id="galeria-icon">
-        <div class="desktop-icon-img"><?php echo desktopIcon('galeria', '🖼'); ?></div>
+        <div class="desktop-icon-img"><?php
+            $_galeriaIcon = 'assets/img/appIcons/galeriaIcon.png';
+            echo file_exists(__DIR__ . '/' . $_galeriaIcon)
+                ? '<img src="' . $_galeriaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('galeria', '🖼');
+        ?></div>
         <span>Galería</span>
     </div>
     <!-- ★ NUEVO: icono Dibujo -->
@@ -373,7 +406,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- CALENDAR WINDOW -->
 <div class="window" id="calendar-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="calendar-titlebar">
-        <div class="title-bar-text">📅 Calendario</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('calendarioIcon', '📅'); ?>Calendario</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -440,7 +473,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- DND WINDOW -->
 <div class="window" id="dnd-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="dnd-titlebar">
-        <div class="title-bar-text">⚔ Fichas D&amp;D</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('dndIcon', '⚔'); ?>Fichas D&amp;D</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -453,7 +486,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- GALERÍA WINDOW -->
 <div class="window" id="galeria-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="galeria-titlebar">
-        <div class="title-bar-text">🖼 Galería</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('galeriaIcon', '🖼'); ?>Galería</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -466,7 +499,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- ★ NUEVO: DIBUJO WINDOW -->
 <div class="window" id="dibujo-window" style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:500; flex-direction:column;">
     <div class="title-bar" id="dibujo-titlebar">
-        <div class="title-bar-text">✏️ Dibujo</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('drawingIcon', '✏️'); ?>Dibujo</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -511,6 +544,7 @@ window.DesktopState.whenReady = function(cb){
         <div id="start-sidebar">MelonOS 98</div>
         <div id="start-menu-items">
             <div class="menu-sep"></div>
+            <a class="menu-item" href="#" id="menu-change-password">Cambiar contraseña...</a>
             <a class="menu-item" href="logout.php">Cerrar sesión...</a>
             <div class="menu-sep"></div>
         </div>
@@ -675,6 +709,84 @@ document.addEventListener('click', function() {
 });
 
 /* =========================
+   CAMBIAR CONTRASEÑA
+   ========================
+   Abre un modal Win98 con 3 inputs (actual / nueva / repetir).
+   Valida en cliente (mismas reglas que en backend) y hace POST al
+   endpoint assets/auth/change-password.php. En éxito muestra un toast
+   verde y cierra; en error pinta el motivo en #cp-status. */
+(function(){
+    var link = document.getElementById('menu-change-password');
+    if (!link) return;
+    var modal   = document.getElementById('change-password-modal');
+    var current = document.getElementById('cp-current');
+    var newPwd  = document.getElementById('cp-new');
+    var confirm = document.getElementById('cp-confirm');
+    var status  = document.getElementById('cp-status');
+    var okBtn   = document.getElementById('cp-ok');
+
+    function reset(){
+        current.value = ''; newPwd.value = ''; confirm.value = '';
+        status.textContent = ''; status.style.color = '';
+        okBtn.disabled = false;
+    }
+    function open(e){
+        if (e) e.preventDefault();
+        reset();
+        modal.style.display = 'flex';
+        if (window.centerModal) window.centerModal(modal);
+        if (window.windowZ) windowZ.bringToFront('change-password-modal');
+        setTimeout(function(){ current.focus(); }, 30);
+    }
+    function close(){ modal.style.display = 'none'; reset(); }
+
+    link.addEventListener('click', open);
+    document.getElementById('change-password-x').addEventListener('click', close);
+    document.getElementById('cp-cancel').addEventListener('click', close);
+
+    async function submit(){
+        var c = current.value, n = newPwd.value, r = confirm.value;
+        if (!c || !n || !r){ status.style.color = 'var(--error-text,#c00)'; status.textContent = 'Rellena todos los campos.'; return; }
+        if (n.length < 6){ status.style.color = 'var(--error-text,#c00)'; status.textContent = 'La nueva debe tener al menos 6 caracteres.'; return; }
+        if (n !== r){ status.style.color = 'var(--error-text,#c00)'; status.textContent = 'La nueva contraseña y la repetición no coinciden.'; return; }
+        if (c === n){ status.style.color = 'var(--error-text,#c00)'; status.textContent = 'La nueva tiene que ser distinta de la actual.'; return; }
+
+        okBtn.disabled = true;
+        status.style.color = 'var(--text-muted,#666)';
+        status.textContent = 'Guardando…';
+        try {
+            var resp = await fetch('assets/auth/change-password.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current: c, new: n })
+            });
+            var data = await resp.json().catch(function(){ return { error: 'Respuesta inválida' }; });
+            if (!resp.ok || data.error){
+                status.style.color = 'var(--error-text,#c00)';
+                status.textContent = '✗ ' + (data.error || ('HTTP ' + resp.status));
+                okBtn.disabled = false;
+                return;
+            }
+            status.style.color = 'var(--accent-deep,#080)';
+            status.textContent = '✔ Contraseña actualizada.';
+            setTimeout(close, 900);
+        } catch (err) {
+            status.style.color = 'var(--error-text,#c00)';
+            status.textContent = '✗ Error de red: ' + err.message;
+            okBtn.disabled = false;
+        }
+    }
+    okBtn.addEventListener('click', submit);
+    /* Enter en cualquiera de los inputs envía. */
+    [current, newPwd, confirm].forEach(function(el){
+        el.addEventListener('keydown', function(ev){
+            if (ev.key === 'Enter'){ ev.preventDefault(); submit(); }
+            else if (ev.key === 'Escape'){ ev.preventDefault(); close(); }
+        });
+    });
+})();
+
+/* =========================
    ANIMACION SALIDA
 ========================= */
 document.querySelectorAll('a[href="logout.php"]').forEach(link => {
@@ -765,7 +877,11 @@ window.taskbarManager = (function() {
         var btn = document.createElement('button');
         btn.className = 'button taskbar-task-btn';
         btn.title = label;
-        btn.textContent = (icon ? icon + ' ' : '') + label;
+        /* `icon` puede ser un emoji o HTML (<img>). Para soportar ambos
+           usamos innerHTML y escapamos solo el label (controlado por
+           callers internos, pero por defensa). */
+        function _esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        btn.innerHTML = (icon ? icon + ' ' : '') + _esc(label);
         btn.addEventListener('click', function() { toggle(id); });
         tasksEl.appendChild(btn);
         registry[id] = { btn: btn, displayMode: displayMode || 'block' };
@@ -1267,7 +1383,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('galeria-window')) {
             taskbarManager.restore('galeria-window');
         } else {
-            taskbarManager.register('galeria-window', 'Galería', '🖼', 'flex');
+            taskbarManager.register('galeria-window', 'Galería', '<img src="assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -1608,6 +1724,21 @@ window.notifSystem = (function() {
 
     window.WindowManager = { setup: setup };
 
+    /* Helper global: centra un elemento `position:fixed` en el viewport.
+       Tiene que llamarse DESPUÉS de hacer display:flex (o lo que sea
+       distinto de none) para que offsetWidth/Height ya esté calculado.
+       Limita al borde superior/izquierdo a 8px mínimo para que en
+       pantallas pequeñas no quede pegado fuera de vista. */
+    window.centerModal = function(el){
+        if (!el) return;
+        var w = el.offsetWidth  || 320;
+        var h = el.offsetHeight || 200;
+        el.style.left = Math.max(8, (window.innerWidth  - w) / 2) + 'px';
+        el.style.top  = Math.max(8, (window.innerHeight - h) / 2) + 'px';
+        el.style.right  = 'auto';
+        el.style.bottom = 'auto';
+    };
+
     /* ★ dibujo-window, tienda-window, kofi-window añadidos aquí */
     [
         'calendar-window','archive-window','temas-window','dnd-window',
@@ -1622,6 +1753,10 @@ window.notifSystem = (function() {
         'profile-chat-window'
     ].forEach(function(id) { setup(id, false); });
     setup('music-player', true);
+    /* Modales pequeños — arrastrables por su title-bar pero sin resize. */
+    setup('change-password-modal', true);
+    setup('folder-create-modal',   true);
+    setup('folder-delete-modal',   true);
 })();
 
 /* ──── Window minimize / maximize ──── */
@@ -1675,6 +1810,66 @@ window.notifSystem = (function() {
 
     function snap(v, step){ return Math.round(v / step) * step; }
     function snapPos(x, y){ return { left: snap(x, GRID_W), top: snap(y, GRID_H) }; }
+
+    /* ¿Está la celda (left, top) — coordenadas YA snapeadas — ocupada
+       por algún OTRO icono del escritorio? `excludeId` evita que un
+       icono se "auto-bloquee" su propia posición durante el drag.
+       Comparamos las posiciones de cada icono snapeadas a la cuadrícula
+       por si alguno está un píxel descolocado por animaciones previas. */
+    function isCellOccupied(left, top, excludeId){
+        var icons = document.querySelectorAll('.desktop-icon');
+        for (var i = 0; i < icons.length; i++){
+            var ic = icons[i];
+            if (ic.id === excludeId) continue;
+            /* Solo iconos que tienen position absoluta/fija y left/top
+               numéricos. Ignora los que vivan en un folder window. */
+            var l = parseFloat(ic.style.left);
+            var t = parseFloat(ic.style.top);
+            if (isNaN(l) || isNaN(t)) continue;
+            if (snap(l, GRID_W) === left && snap(t, GRID_H) === top) return true;
+        }
+        return false;
+    }
+
+    /* Busca la celda LIBRE más cercana a (targetLeft, targetTop) en
+       distancia Manhattan/Chebyshev sobre la cuadrícula. La búsqueda
+       avanza en anillos concéntricos: ring=1 cubre las 8 celdas
+       contiguas, ring=2 las 16 siguientes, etc. Dentro de cada anillo
+       elegimos la celda con menor distancia EUCLÍDEA al objetivo, así
+       que el resultado se "siente" como la celda más cercana real.
+       Solo consideramos celdas DENTRO del escritorio. */
+    function findNearestEmptyCell(targetLeft, targetTop, excludeId, deskW, deskH){
+        if (!isCellOccupied(targetLeft, targetTop, excludeId)) {
+            return { left: targetLeft, top: targetTop };
+        }
+        var maxX = Math.max(0, deskW - GRID_W);
+        var maxY = Math.max(0, deskH - GRID_H);
+        var maxRing = Math.max(
+            Math.ceil(deskW / GRID_W),
+            Math.ceil(deskH / GRID_H)
+        );
+        for (var ring = 1; ring <= maxRing; ring++){
+            var best = null, bestDist = Infinity;
+            for (var dy = -ring; dy <= ring; dy++){
+                for (var dx = -ring; dx <= ring; dx++){
+                    /* Solo el borde del anillo — los interiores ya
+                       se probaron en iteraciones previas. */
+                    if (Math.abs(dx) !== ring && Math.abs(dy) !== ring) continue;
+                    var cl = targetLeft + dx * GRID_W;
+                    var ct = targetTop  + dy * GRID_H;
+                    if (cl < 0 || ct < 0)        continue;
+                    if (cl > maxX || ct > maxY)  continue;
+                    if (isCellOccupied(cl, ct, excludeId)) continue;
+                    var d = dx * dx + dy * dy;
+                    if (d < bestDist){ bestDist = d; best = { left: cl, top: ct }; }
+                }
+            }
+            if (best) return best;
+        }
+        /* Escritorio totalmente ocupado — fallback al destino original
+           (se solapará pero al menos no perdemos el icono). */
+        return { left: targetLeft, top: targetTop };
+    }
 
     function loadPositions(){ return window.DesktopState.icons || {}; }
     var _saveTimers = {};
@@ -1739,6 +1934,8 @@ window.notifSystem = (function() {
     window.DesktopIcons = {
         attachDrag: function(icon){ var desk = document.getElementById('desktop'); attachDrag(icon, desk); },
         snapPos: snapPos,
+        isCellOccupied: isCellOccupied,
+        findNearestEmptyCell: findNearestEmptyCell,
         savePosition: savePosition,
         loadPositions: loadPositions,
         GRID_W: GRID_W,
@@ -1928,6 +2125,15 @@ window.notifSystem = (function() {
                 }
                 if(!droppedInFolder){
                     var finalPos = snapPos(parseFloat(icon.style.left)||0, parseFloat(icon.style.top)||0);
+                    /* Si la celda destino ya está ocupada, buscamos la
+                       celda LIBRE más cercana (anillos concéntricos
+                       sobre la cuadrícula). Así el icono no rebota a
+                       origen ni se solapa — siempre acaba en la celda
+                       más próxima posible al punto donde lo soltaste. */
+                    finalPos = findNearestEmptyCell(
+                        finalPos.left, finalPos.top, icon.id,
+                        desk.clientWidth, desk.clientHeight
+                    );
                     icon.classList.add('snapping');
                     icon.style.left = finalPos.left + 'px';
                     icon.style.top  = finalPos.top  + 'px';
@@ -2069,6 +2275,16 @@ window.notifSystem = (function() {
             if(!name) return;
             var id = 'fld-' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
             var pos = window.DesktopIcons ? window.DesktopIcons.snapPos(x, y) : { left: x, top: y };
+            /* Si la celda de creación ya está ocupada (p.ej. clicaste muy
+               cerca de un icono existente), reubicamos la carpeta al
+               hueco libre más cercano antes de persistir. */
+            if (window.DesktopIcons && window.DesktopIcons.findNearestEmptyCell) {
+                var desk = document.getElementById('desktop');
+                pos = window.DesktopIcons.findNearestEmptyCell(
+                    pos.left, pos.top, id,
+                    desk.clientWidth, desk.clientHeight
+                );
+            }
             folders[id] = { id: id, name: name, pos: pos, children: [] };
             saveFolder(id);
             renderFolderIcon(folders[id]);
@@ -2119,6 +2335,7 @@ window.notifSystem = (function() {
         var input = document.getElementById('folder-create-input');
         input.value = 'Nueva carpeta';
         modal.style.display = 'flex';
+        if(window.centerModal) window.centerModal(modal);
         if(window.windowZ) windowZ.bringToFront('folder-create-modal');
         setTimeout(function(){ input.focus(); input.select(); }, 30);
         function ok(){ cleanup(); onAccept(input.value); }
@@ -2142,6 +2359,7 @@ window.notifSystem = (function() {
         document.getElementById('folder-delete-text').innerHTML =
             '¿Borrar la carpeta <strong>' + esc(folderName) + '</strong>?<br><small>Los iconos volverán al escritorio.</small>';
         modal.style.display = 'flex';
+        if(window.centerModal) window.centerModal(modal);
         if(window.windowZ) windowZ.bringToFront('folder-delete-modal');
         function ok(){ cleanup(); onAccept(); }
         function cancel(){ cleanup(); }
@@ -2319,6 +2537,16 @@ window.notifSystem = (function() {
             var w = el.offsetWidth || 76, h = el.offsetHeight || 76;
             pos.left = Math.max(0, Math.min(desk.clientWidth - w, pos.left));
             pos.top  = Math.max(0, Math.min(desk.clientHeight - h, pos.top));
+            /* Si la celda destino ya tiene otro icono, buscamos la libre
+               más cercana — mismo comportamiento que el drop manual del
+               drag-en-escritorio (sin esto, sacar de carpeta apilaba
+               iconos en la misma cuadrícula). */
+            if (window.DesktopIcons.findNearestEmptyCell) {
+                pos = window.DesktopIcons.findNearestEmptyCell(
+                    pos.left, pos.top, iconId,
+                    desk.clientWidth, desk.clientHeight
+                );
+            }
             el.style.left = pos.left + 'px'; el.style.top = pos.top + 'px';
             window.DesktopIcons.savePosition(iconId, pos);
         } else if(el) { el.style.display = ''; }
@@ -2343,7 +2571,13 @@ window.notifSystem = (function() {
         var baseL = window.innerWidth  * 0.18, baseT = window.innerHeight * 0.14;
         w.style.left = (baseL + count * 28) + 'px'; w.style.top = (baseT + count * 28) + 'px';
         w.style.zIndex = ''; w.style.display = 'flex';
-        var titleEl = w.querySelector('.title-bar-text'); if(titleEl) titleEl.textContent = '📁 ' + f.name;
+        var titleEl = w.querySelector('.title-bar-text');
+        if(titleEl) {
+            /* Render PNG folderIcon + nombre escapado (textContent solo
+               admite texto, así que innerHTML con escape para evitar XSS
+               si f.name viniese con < > etc). */
+            titleEl.innerHTML = '<img src="assets/img/appIcons/folderIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">' + esc(f.name);
+        }
         var closeBtn = w.querySelector('[aria-label="Close"]');
         var minBtn   = w.querySelector('[aria-label="Minimize"]');
         var maxBtn   = w.querySelector('[aria-label="Maximize"]');

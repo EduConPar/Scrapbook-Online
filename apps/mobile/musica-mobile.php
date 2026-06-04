@@ -1456,7 +1456,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <div class="window mh-window" id="musicaWindow">
     <div class="title-bar">
-        <div class="title-bar-text">🎵 Música - <?= htmlspecialchars($userLabel) ?></div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Música - <?= htmlspecialchars($userLabel) ?></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
@@ -1527,7 +1527,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <div class="mu-full-splash" id="mu-full-splash"></div>
     <div class="window mu-full-window">
         <div class="title-bar">
-            <div class="title-bar-text">🎵 Melon Player — <span id="mu-full-tb-pl">Reproduciendo</span></div>
+            <div class="title-bar-text"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Melon Player — <span id="mu-full-tb-pl">Reproduciendo</span></div>
             <div class="title-bar-controls">
                 <button aria-label="Close" id="mu-full-close" type="button"></button>
             </div>

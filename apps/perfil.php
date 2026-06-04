@@ -24,7 +24,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     <span class="profile-nav-count" id="profile-count-movies">—</span>
                 </div>
                 <div class="profile-nav-item" data-cat="series">
-                    <span class="profile-nav-icon">📺</span>
+                    <span class="profile-nav-icon"><img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                     <span class="profile-nav-label">Series</span>
                     <span class="profile-nav-count" id="profile-count-series">—</span>
                 </div>
@@ -39,7 +39,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     <span class="profile-nav-count" id="profile-count-games">—</span>
                 </div>
                 <div class="profile-nav-item" data-cat="music">
-                    <span class="profile-nav-icon">🎵</span>
+                    <span class="profile-nav-icon"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                     <span class="profile-nav-label">Música</span>
                     <span class="profile-nav-count" id="profile-count-music">—</span>
                 </div>
@@ -56,7 +56,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                         <span class="profile-nav-label">Reciente</span>
                     </div>
                     <div class="profile-nav-item" data-melon="alltime">
-                        <span class="profile-nav-icon">⏳</span>
+                        <span class="profile-nav-icon"><img src="assets/img/appIcons/calendarioIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                         <span class="profile-nav-label">Todo el tiempo</span>
                     </div>
                 </div>
@@ -180,7 +180,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     </div>
                 </div>
                 <div class="profile-cat-toolbar">
-                    <span id="music-catview-title">🎵 Música</span>
+                    <span id="music-catview-title"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Música</span>
                     <button class="button" id="music-catview-add-btn">+ Añadir</button>
                 </div>
                 <div id="music-tab-bar">
@@ -203,11 +203,11 @@ require_once dirname(__DIR__) . '/assets/config.php';
                 <div class="profile-social-head" id="profile-melon-title">⭐ Melon reviews</div>
                 <div id="profile-melon-cats">
                     <button class="button melon-cat-btn" data-mcat="movies">🎬 Películas</button>
-                    <button class="button melon-cat-btn" data-mcat="series">📺 Series</button>
+                    <button class="button melon-cat-btn" data-mcat="series"><img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series</button>
                     <button class="button melon-cat-btn" data-mcat="books">📚 Libros</button>
                     <button class="button melon-cat-btn" data-mcat="games">🎮 Videojuegos</button>
                     <button class="button melon-cat-btn" data-mcat="music" data-mtype="album">💿 Álbumes</button>
-                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="song">🎵 Canciones</button>
+                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="song"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
                 </div>
                 <div id="profile-melon-body">
                     <div id="profile-melon-status" style="padding:14px;text-align:center;font-size:11px;color:#808080;">Selecciona una categoría</div>
@@ -429,7 +429,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
         <div id="music-add-step1">
             <p style="margin:0 0 10px;font-size:11px;">¿Qué quieres añadir?</p>
             <div class="field-row" style="gap:6px;">
-                <button class="button" id="music-add-type-song" style="flex:1;">🎵 Canción</button>
+                <button class="button" id="music-add-type-song" style="flex:1;"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canción</button>
                 <button class="button" id="music-add-type-album" style="flex:1;">💿 Álbum / Playlist</button>
             </div>
         </div>
@@ -1162,6 +1162,18 @@ var PROFILE_USERS = <?php
         catView.style.display = 'flex';
         var titleEl  = document.getElementById('profile-catview-title');
         applyTopbarUser('profile-catview-avatar-wrap', titleEl, CATS[cat].icon, CATS[cat].label);
+        /* Sustituir emoji por PNG en las categorías que tienen icono
+           dedicado (series → melonArchive, music → musica). El resto
+           (movies, books, games) se queda con su emoji. */
+        if (titleEl) {
+            var CAT_PNG = {
+                series: 'assets/img/appIcons/melonArchiveIcon.png',
+                music:  'assets/img/appIcons/musicaIcon.png'
+            };
+            if (CAT_PNG[cat]) {
+                titleEl.innerHTML = '<img src="' + CAT_PNG[cat] + '" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">' + CATS[cat].label;
+            }
+        }
         var doneHead = document.getElementById('profile-catview-done-head');
         if (doneHead) doneHead.textContent = DONE_LABELS[cat];
         renderCatView(cat);
@@ -1422,7 +1434,17 @@ var PROFILE_USERS = <?php
 
     function openAddDialog(cat) {
         addDialogCat = cat;
-        addDlgTitle.textContent = '+ Añadir · ' + CATS[cat].icon;
+        /* Series y music tienen PNG dedicado — los renderizamos como
+           innerHTML; el resto usa textContent con el emoji del dict. */
+        var ADD_PNG = {
+            series: 'assets/img/appIcons/melonArchiveIcon.png',
+            music:  'assets/img/appIcons/musicaIcon.png'
+        };
+        if (ADD_PNG[cat]) {
+            addDlgTitle.innerHTML = '+ Añadir · <img src="' + ADD_PNG[cat] + '" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        } else {
+            addDlgTitle.textContent = '+ Añadir · ' + CATS[cat].icon;
+        }
         addNameInput.value = '';
         addImgInput.value  = '';
         document.getElementById('profile-add-error').textContent = '';
@@ -3032,6 +3054,9 @@ var PROFILE_USERS = <?php
         if (musicAddBtn) musicAddBtn.style.display = viewingUser ? 'none' : '';
         var musicTitleEl = document.getElementById('music-catview-title');
         applyTopbarUser('music-catview-avatar-wrap', musicTitleEl, '🎵', 'Música');
+        /* applyTopbarUser ha hecho textContent='🎵 Música' — sobreescribimos
+           con innerHTML para meter la imagen PNG en lugar del emoji. */
+        if (musicTitleEl) musicTitleEl.innerHTML = '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Música';
         renderMusicDestacados();
         renderMusicView(currentMusicTab);
     }
@@ -3499,7 +3524,12 @@ var PROFILE_USERS = <?php
             currentType = type; fetchedMeta = null;
             urlInput.value = ''; artistInput.value = '';
             preview.textContent = ''; preview.style.color = ''; errEl.textContent = '';
-            titleEl.textContent = type === 'song' ? '🎵 Añadir canción' : '💿 Añadir álbum';
+            /* Song usa PNG musicaIcon; album mantiene su emoji 💿. */
+            if (type === 'song') {
+                titleEl.innerHTML = '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir canción';
+            } else {
+                titleEl.textContent = '💿 Añadir álbum';
+            }
             step1.style.display = 'none'; step2.style.display = 'block';
             setTimeout(function() { urlInput.focus(); }, 0);
         }

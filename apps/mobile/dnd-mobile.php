@@ -648,7 +648,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <div class="window mh-window" id="dndWindow">
     <div class="title-bar">
-        <div class="title-bar-text">⚔ Fichas D&amp;D</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/dndIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Fichas D&amp;D</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
@@ -695,8 +695,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <button class="button" id="pdf-zoom-in" title="Acercar">+</button>
         <button class="button" id="pdf-zoom-reset" title="Ajustar">⛶</button>
         <div class="tb-sep"></div>
-        <button class="button" id="pdf-dice-toggle" title="Lanzar dados">🎲</button>
+        <button class="button" id="pdf-dice-toggle" title="Lanzar dados"><img src="../../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></button>
         <button class="button" id="pdf-save" title="Guardar en Drive">💾</button>
+        <button class="button" id="pdf-back-menu" title="Volver al menú principal" style="margin-left:auto;">‹ Menú</button>
     </div>
 
     <div id="pdf-viewer-canvas-wrap" style="position:relative;">
@@ -711,7 +712,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
              (lazy load de three.js). Posicionada fija dentro del visor. -->
         <div id="dice-overlay-m" class="window">
             <div class="title-bar">
-                <div class="title-bar-text">🎲 Lanzar dados</div>
+                <div class="title-bar-text"><img src="../../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Lanzar dados</div>
                 <div class="title-bar-controls">
                     <button aria-label="Close" id="dice-overlay-close"></button>
                 </div>
@@ -732,7 +733,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <div id="dice-hint-m">Pulsa un dado para añadirlo · pulsa el dado para quitarlo</div>
                 </div>
                 <div id="dice-actions-row">
-                    <button class="button" id="dice-reroll-m">🎲 Tirar</button>
+                    <button class="button" id="dice-reroll-m"><img src="../../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Tirar</button>
                     <button class="button" id="dice-clear-m">🗑 Limpiar</button>
                     <button class="button" id="dice-mod-btn-m" title="Modificador">＋/−</button>
                 </div>
@@ -2067,6 +2068,13 @@ function ensureDiceEngine(){
     if (topBtn) topBtn.addEventListener('click', goMenu);
     var lnk = document.getElementById('dnd-menu-link');
     if (lnk) lnk.addEventListener('click', goMenu);
+    /* Botón "‹ Menú" en el toolbar del visor PDF — atajo para volver
+       al menú principal sin cerrar primero el visor y luego ‹ Menú del
+       statusbar. El postMessage shell:back lo recibe mobile.php y hace
+       history.back() — el iframe entero se reemplaza, así que no hace
+       falta cerrar el visor manualmente. */
+    var pdfBackMenu = document.getElementById('pdf-back-menu');
+    if (pdfBackMenu) pdfBackMenu.addEventListener('click', goMenu);
 
     /* Toggle del overlay de dados dentro del visor PDF. La carga del
        motor 3D es lazy: se descarga Three.js sólo la primera vez que

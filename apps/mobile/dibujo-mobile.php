@@ -146,7 +146,7 @@ $excalidrawUrl = 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fij
      statusbar al pie. -->
 <div class="window mh-window" id="dibujoWindow">
     <div class="title-bar">
-        <div class="title-bar-text">✏️ Dibujo</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Dibujo</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize" disabled></button>
