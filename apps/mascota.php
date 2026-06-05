@@ -41,15 +41,32 @@ function getMascotaSSR(PDO $pdo, int $uid): array {
     $now       = time();
     $diffSecs  = max(0, $now - strtotime($row['ultima_vez']));
     $diffMins  = $diffSecs / 60;
+    $isEgg     = !((int)($row['eclosionado'] ?? 1));
+
     if ($row['viva'] && $diffMins > 0) {
-        $row['hambre']    = max(0, (int)$row['hambre']    - (int)floor($diffMins / 30));
-        $row['felicidad'] = max(0, (int)$row['felicidad'] - (int)floor($diffMins / 60));
-        if ($row['hambre'] === 0 && $diffSecs >= 86400) $row['viva'] = 0;
+        if ($isEgg) {
+            /* Huevo: temperatura -1/h. Si llega a 0 muere de frío. */
+            $row['temperatura'] = max(0, (int)($row['temperatura'] ?? 80) - (int)floor($diffMins / 60));
+            if ($row['temperatura'] <= 0) $row['viva'] = 0;
+        } else {
+            /* Mascota: decay clásico de hambre + felicidad. */
+            $row['hambre']    = max(0, (int)$row['hambre']    - (int)floor($diffMins / 30));
+            $row['felicidad'] = max(0, (int)$row['felicidad'] - (int)floor($diffMins / 60));
+            if ($row['hambre'] === 0 && $diffSecs >= 86400) $row['viva'] = 0;
+        }
     }
-    $row['viva']      = (bool)$row['viva'];
-    $row['hambre']    = (int)$row['hambre'];
-    $row['felicidad'] = (int)$row['felicidad'];
-    $row['edad']      = (int)$row['edad'];
+    $row['viva']        = (bool)$row['viva'];
+    $row['hambre']      = (int)$row['hambre'];
+    $row['felicidad']   = (int)$row['felicidad'];
+    $row['temperatura'] = (int)($row['temperatura'] ?? 80);
+    $row['edad']        = (int)$row['edad'];
+    $row['eclosionado'] = (bool)($row['eclosionado'] ?? 1);
+    /* Segundos restantes para que el huevo eclosione (UI cuenta atrás). */
+    if (!$row['eclosionado'] && !empty($row['eclosion_at'])) {
+        $row['segundos_para_eclosion'] = max(0, strtotime($row['eclosion_at']) - $now);
+    } else {
+        $row['segundos_para_eclosion'] = null;
+    }
     return $row;
 }
 $mascota = getMascotaSSR($pdo, $userId);
@@ -63,13 +80,12 @@ if ($hasMascota) {
     $memoria = $stmtM->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
-/* Skins disponibles */
-$skins = [
-    'meloncio'  => ['label' => 'Meloncio',  'emoji' => '🍈'],
-    'helldiver' => ['label' => 'Helldiver', 'emoji' => '🪖'],
-    'v1'        => ['label' => 'V1',        'emoji' => '🤖'],
-];
-$currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
+/* La skin ACTUAL de la mascota se lee directamente de la fila. Queda
+   fijada en el INSERT y no cambia aunque el usuario elija otra skin en
+   Temas → Personalización. Para "cambiar" hay que eliminar la mascota
+   (botón en la pestaña Estado o en el menú flotante) y la próxima
+   se creará con la skin preferida actual. */
+$currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -84,12 +100,17 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
     <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($themeCssRel) ?>">
     <?php endif; ?>
     <style>
-        /* ── Layout ─────────────────────────────────────────────── */
+        /* ── Layout base ─────────────────────────────────────────
+           Toda la ventana adopta el look Win98 con los tokens del
+           tema activo del usuario. Los nombres correctos son
+           --bezel-light-1/-2 y --bezel-dark-1/-2 (con guion). */
         html, body {
             margin: 0; padding: 0;
             height: 100%; overflow: hidden;
-            background: var(--win-body-bg, #c0c0c0);
+            background: var(--win-bg, silver);
+            color: var(--text, #000);
             font-size: 11px;
+            font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif;
         }
         #mascota-app {
             display: flex;
@@ -97,90 +118,138 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
             height: 100%;
         }
 
-        /* ── Tabs ───────────────────────────────────────────────── */
+        /* ── Tabs Win98 (tipo carpeta) ───────────────────────────
+           Pestañas raised con bezel inset de 4 capas; la activa
+           se solapa visualmente con el panel y baja 1px para dar
+           sensación de continuidad. */
         .tab-bar {
             display: flex;
-            gap: 2px;
+            gap: 0;
             padding: 4px 4px 0;
-            background: var(--win-bg, #c0c0c0);
-            border-bottom: 2px solid var(--border-strong, #808080);
+            background: var(--win-bg, silver);
+            border-bottom: 1px solid var(--bezel-dark-1, #0a0a0a);
             flex-shrink: 0;
         }
         .tab-btn {
-            padding: 3px 12px 4px;
+            min-height: 24px;
+            padding: 4px 14px;
+            margin: 0 -1px 0 0;
             font-size: 11px;
-            border: 2px solid;
-            border-color: var(--bezel-light1,#fff) var(--bezel-dark2,#404040) var(--bezel-dark2,#404040) var(--bezel-light1,#fff);
-            background: var(--win-bg, #c0c0c0);
-            cursor: pointer;
-            position: relative;
-            bottom: -2px;
+            font-family: inherit;
+            background: var(--btn-bg, silver);
             color: var(--text, #000);
+            cursor: pointer;
+            border: 0;
+            border-radius: 0;
+            position: relative;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
         .tab-btn.active {
-            border-bottom-color: var(--win-body-bg, #c0c0c0);
-            background: var(--win-body-bg, #c0c0c0);
             font-weight: bold;
-            z-index: 1;
+            z-index: 2;
+            top: 1px;
+            padding-bottom: 6px;
+            box-shadow:
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf),
+                inset -1px 0   var(--bezel-dark-1, #0a0a0a),
+                inset -2px 0   var(--bezel-dark-2, grey);
         }
-        .tab-panel { display: none; flex: 1; overflow-y: auto; padding: 10px; }
+        .tab-panel {
+            display: none; flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background: var(--win-bg, silver);
+        }
         .tab-panel.active { display: block; }
 
-        /* ── Stat bars ──────────────────────────────────────────── */
+        /* ── Stat bars (hambre/felicidad) ────────────────────────
+           Pista hundida Win98 (sunken inset 4-capas) + fill que
+           usa --accent del tema. */
         .stat-row {
             display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
         }
-        .stat-label { width: 72px; flex-shrink: 0; }
+        .stat-label { width: 72px; flex-shrink: 0; font-size: 11px; }
         .stat-track {
-            flex: 1; height: 14px;
-            background: var(--inset-bg, #808080);
-            border: 2px inset var(--border, #808080);
-            position: relative; overflow: hidden;
+            flex: 1; height: 16px;
+            background: var(--input-bg, #fff);
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
         .stat-fill {
             height: 100%; transition: width .4s ease;
+            background: var(--accent, #000080);
         }
-        .stat-val { width: 32px; text-align: right; flex-shrink: 0; }
+        .stat-val {
+            width: 36px; text-align: right; flex-shrink: 0;
+            font-size: 11px; font-variant-numeric: tabular-nums;
+        }
 
-        /* ── Skin selector ──────────────────────────────────────── */
+        /* ── Skin selector ─────────────────────────────────────── */
         .skin-grid {
             display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;
         }
         .skin-card {
-            border: 2px solid var(--border, #808080);
-            padding: 8px 14px; cursor: pointer; text-align: center;
-            background: var(--win-bg, #c0c0c0);
-            transition: border-color .15s;
+            padding: 10px 16px; cursor: pointer; text-align: center;
+            background: var(--btn-bg, silver);
+            color: var(--text, #000);
+            border: 0;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
-        .skin-card:hover { border-color: var(--accent, #000080); }
         .skin-card.selected {
-            border-color: var(--accent, #000080);
-            background: var(--selection-bg, #000080);
-            color: var(--selection-text, #fff);
+            background: var(--accent, #000080);
+            color: var(--accent-text, #fff);
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-2, grey);
         }
         .skin-card .skin-emoji { font-size: 24px; display: block; }
         .skin-card .skin-name  { font-size: 10px; margin-top: 3px; }
 
-        /* ── Memoria grid ───────────────────────────────────────── */
+        /* ── Memoria grid ─────────────────────────────────────── */
         .mem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
         .mem-card {
-            border: 2px inset var(--border, #808080);
-            background: var(--inset-bg, #fff);
             padding: 6px 8px;
+            background: var(--input-bg, #fff);
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
         .mem-card .mem-key  { color: var(--text-muted, #666); font-size: 10px; margin-bottom: 2px; }
         .mem-card .mem-val  { color: var(--text, #000); font-size: 11px; word-break: break-word; }
         .mem-card .mem-edit { float: right; font-size: 10px; cursor: pointer; color: var(--link-text,#00f); }
         .mem-empty { color: var(--text-muted,#666); font-style: italic; font-size: 11px; }
 
-        /* ── Sprite preview ─────────────────────────────────────── */
+        /* ── Sprite preview ─────────────────────────────────────
+           Panel hundido para el frame de la mascota. */
         .sprite-preview {
             width: 128px; height: 128px;
             image-rendering: pixelated;
-            border: 2px inset var(--border,#808080);
-            background: var(--inset-bg, #c0c0c0);
+            background: var(--input-bg, #fff);
             display: flex; align-items: center; justify-content: center;
             overflow: hidden;
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
         .sprite-preview img {
             width: 128px; height: 128px;
@@ -199,31 +268,83 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
         }
         .estado-sub  { color: var(--text-muted,#666); font-size: 10px; }
         .dead-banner {
-            background: #800; color: #fff; padding: 6px 10px;
-            border: 2px solid #400; margin-bottom: 8px; text-align: center;
+            background: var(--error-text, #800);
+            color: #fff;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            text-align: center;
+            font-weight: bold;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, rgba(255,255,255,0.5)),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, rgba(255,255,255,0.3));
         }
         .action-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+        /* ── Botón "eliminar (testeo)" — panel danger ──────────── */
+        .delete-zone {
+            margin-top: 16px;
+            padding: 10px;
+            background: var(--win-bg, silver);
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+        }
+        .delete-zone h4 {
+            margin: 0 0 4px;
+            color: var(--error-text, #c00);
+            font-size: 11px;
+        }
+        .delete-zone p {
+            margin: 0 0 8px;
+            font-size: 10px;
+            color: var(--text-muted, #666);
+        }
+        .btn-danger {
+            color: var(--error-text, #c00);
+            font-weight: bold;
+        }
 
         /* ── Rename input ────────────────────────────────────────── */
         .rename-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
         .rename-row input { flex: 1; }
 
-        /* ── Scrollbar win98 ─────────────────────────────────────── */
-        ::-webkit-scrollbar       { width: 16px; }
-        ::-webkit-scrollbar-track { background: var(--win-bg,#c0c0c0); }
+        /* ── Scrollbar Win98 con tokens ─────────────────────────── */
+        ::-webkit-scrollbar       { width: 16px; height: 16px; }
+        ::-webkit-scrollbar-track {
+            background: var(--win-bg, silver);
+            background-image:
+                repeating-linear-gradient(
+                    45deg,
+                    var(--bezel-light-2, #dfdfdf) 0 1px,
+                    transparent 1px 2px
+                );
+        }
         ::-webkit-scrollbar-thumb {
-            background: var(--win-bg,#c0c0c0);
-            border: 2px solid;
-            border-color: var(--bezel-light1,#fff) var(--bezel-dark2,#404040) var(--bezel-dark2,#404040) var(--bezel-light1,#fff);
+            background: var(--btn-bg, silver);
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
 
-        /* ── Notifications inline ───────────────────────────────── */
+        /* ── Notifications inline (usan tokens del tema) ────────── */
         .inline-msg {
-            padding: 4px 8px; margin-top: 6px; font-size: 11px;
-            border: 1px solid; display: none;
+            padding: 6px 10px; margin-top: 8px;
+            font-size: 11px;
+            display: none;
+            box-shadow:
+                inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+                inset  1px  1px var(--bezel-light-1, #fff),
+                inset -2px -2px var(--bezel-dark-2, grey),
+                inset  2px  2px var(--bezel-light-2, #dfdfdf);
         }
-        .inline-msg.ok    { border-color: #080; background: #dfd; color: #040; }
-        .inline-msg.error { border-color: #800; background: #fdd; color: #400; }
+        .inline-msg.ok    { background: var(--accent-deep, #060); color: #fff; }
+        .inline-msg.error { background: var(--error-text, #c00); color: #fff; }
     </style>
 </head>
 <body class="<?= htmlspecialchars($themeClass) ?>">
@@ -232,7 +353,6 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
     <!-- ── Tab bar ─────────────────────────────────────────────── -->
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="estado">🐾 Estado</button>
-        <button class="tab-btn"        data-tab="skins">🎨 Skins</button>
         <button class="tab-btn"        data-tab="memoria">💬 Memoria</button>
     </div>
 
@@ -255,23 +375,70 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
 
         <?php else: ?>
 
-        <?php if (!$mascota['viva']): ?>
-        <div class="dead-banner">💀 <?= htmlspecialchars($mascota['nombre']) ?> ha muerto de hambre...</div>
+        <?php
+        $isEgg = !$mascota['eclosionado'];
+        /* El huevo no tiene nombre — usar "Huevo" como display fallback
+           para que los mensajes no queden truncados ni feos. */
+        $displayName = trim((string)($mascota['nombre'] ?? '')) !== '' ? $mascota['nombre'] : 'Huevo';
+        if (!$mascota['viva']):
+            $deathMsg = $isEgg ? 'El huevo se enfrió y murió...'
+                               : htmlspecialchars($displayName).' ha muerto de hambre...';
+        ?>
+        <div class="dead-banner">💀 <?= $deathMsg ?></div>
         <?php endif; ?>
 
         <div class="estado-header">
-            <!-- Sprite preview: frame idle de la skin actual -->
+            <!-- Preview: huevo si no ha eclosionado; sprite si sí -->
             <div class="sprite-preview" id="sprite-preview">
+                <?php if ($isEgg): ?>
+                <span id="egg-preview" style="font-size:80px;line-height:1;">🥚</span>
+                <?php else: ?>
                 <img id="sprite-img"
                      src="../assets/mascota/skins/<?= htmlspecialchars($currentSkin) ?>/shime1.png"
                      alt="sprite"
                      onerror="this.style.display='none';this.parentNode.innerHTML='<span style=\'font-size:40px\'>🐾</span>'">
+                <?php endif; ?>
             </div>
 
             <div class="estado-info">
-                <div class="estado-name" id="display-name"><?= htmlspecialchars($mascota['nombre']) ?></div>
+                <div class="estado-name" id="display-name">
+                    <?= htmlspecialchars($displayName) ?>
+                    <?php if ($isEgg): ?><span style="font-size:10px;color:var(--text-muted,#666);">(sin nombre — se elige al eclosionar)</span><?php endif; ?>
+                </div>
+                <?php if ($isEgg): ?>
                 <div class="estado-sub">
-                    Skin: <strong><?= htmlspecialchars($skins[$currentSkin]['label'] ?? $currentSkin) ?></strong>
+                    <?php
+                    $secs = (int)$mascota['segundos_para_eclosion'];
+                    $days  = (int)floor($secs / 86400);
+                    $hours = (int)floor(($secs % 86400) / 3600);
+                    $mins  = (int)floor(($secs % 3600) / 60);
+                    if ($secs <= 0) {
+                        echo '<strong style="color:var(--accent,#080);">¡A punto de eclosionar!</strong>';
+                    } else {
+                        echo 'Eclosiona en: <strong>';
+                        if ($days > 0)  echo $days  . 'd ';
+                        if ($hours > 0) echo $hours . 'h ';
+                        echo $mins . 'm</strong>';
+                    }
+                    ?>
+                </div>
+
+                <!-- Temperatura: ÚNICA barra del huevo -->
+                <div class="stat-row" style="margin-top:10px;">
+                    <span class="stat-label">🔥 Temperatura</span>
+                    <div class="stat-track">
+                        <div class="stat-fill" id="fill-temperatura"
+                             style="width:<?= $mascota['temperatura'] ?>%;background:<?= $mascota['temperatura'] < 20 ? '#06f' : ($mascota['temperatura'] < 50 ? '#f93' : '#f60') ?>;">
+                        </div>
+                    </div>
+                    <span class="stat-val" id="val-temperatura"><?= $mascota['temperatura'] ?></span>
+                </div>
+                <p style="font-size:10px;color:var(--text-muted,#666);margin:6px 0 0;">
+                    Si la temperatura llega a 0 el huevo morirá. Dale calor regularmente.
+                </p>
+                <?php else: ?>
+                <div class="estado-sub">
+                    Skin: <strong><?= htmlspecialchars($currentSkin) ?></strong>
                     &nbsp;·&nbsp; Edad: <strong id="display-edad"><?= (int)$mascota['edad'] ?></strong> día<?= $mascota['edad'] !== 1 ? 's' : '' ?>
                 </div>
 
@@ -296,52 +463,55 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
                     </div>
                     <span class="stat-val" id="val-felicidad"><?= $mascota['felicidad'] ?></span>
                 </div>
+                <?php endif; ?>
             </div>
         </div>
 
-        <!-- Renombrar -->
+        <?php if (!$isEgg): ?>
+        <!-- Renombrar (solo cuando ya hay mascota) -->
         <div class="rename-row">
             <label>Nombre:</label>
             <input type="text" id="input-nombre" maxlength="40" value="<?= htmlspecialchars($mascota['nombre']) ?>">
             <button class="button" id="btn-renombrar">Guardar</button>
         </div>
+        <?php endif; ?>
 
-        <!-- Acciones -->
+        <!-- Acciones: cambian según huevo o mascota -->
         <div class="action-row">
-            <?php if ($mascota['viva']): ?>
+            <?php if (!$mascota['viva']): ?>
+            <button class="button default" id="btn-revivir">💊 Revivir</button>
+            <?php elseif ($isEgg): ?>
+            <button class="button default" id="btn-warm">🔥 Dar calor</button>
+            <?php else: ?>
             <button class="button default" id="btn-feed">🍕 Alimentar</button>
             <button class="button" id="btn-play"
                 <?= $mascota['hambre'] < 15 ? 'disabled title="Demasiada hambre para jugar"' : '' ?>>
                 ⚽ Jugar
             </button>
-            <?php else: ?>
-            <button class="button default" id="btn-revivir">💊 Revivir</button>
             <?php endif; ?>
         </div>
         <div class="inline-msg" id="msg-accion"></div>
 
+        <!-- ZONA DE PELIGRO / DEV ─────── -->
+        <div class="delete-zone">
+            <h4>⚠ Zona de testeo</h4>
+            <?php if ($isEgg && $mascota['viva']): ?>
+            <p>Forzar la eclosión saltándose los 3 días de espera. Te pedirá el nombre.</p>
+            <button class="button" id="btn-force-hatch" style="margin-bottom:8px;">🐣 Eclosionar (DEV)</button>
+            <?php endif; ?>
+            <p>Esta opción borra TODA la mascota y su memoria de forma permanente. Solo úsala para reiniciar pruebas.</p>
+            <button class="button btn-danger" id="btn-eliminar">🗑 Eliminar mascota</button>
+            <div class="inline-msg" id="msg-eliminar"></div>
+        </div>
+
         <?php endif; /* hasMascota */ ?>
     </div><!-- /tab-estado -->
 
-    <!-- ══════════════════════════════════════════════════════════
-         TAB: SKINS
-    ═══════════════════════════════════════════════════════════ -->
-    <div id="tab-skins" class="tab-panel">
-        <p style="margin:0 0 8px;color:var(--text-muted,#666);">Elige el aspecto de tu mascota:</p>
-        <div class="skin-grid" id="skin-grid">
-            <?php foreach ($skins as $key => $data): ?>
-            <div class="skin-card <?= $key === $currentSkin ? 'selected' : '' ?>"
-                 data-skin="<?= $key ?>">
-                <span class="skin-emoji"><?= $data['emoji'] ?></span>
-                <div class="skin-name"><?= htmlspecialchars($data['label']) ?></div>
-            </div>
-            <?php endforeach; ?>
-        </div>
-        <div class="inline-msg" id="msg-skin"></div>
-        <p style="margin:12px 0 0;font-size:10px;color:var(--text-muted,#666);">
-            Más skins se añadirán en futuras actualizaciones.
-        </p>
-    </div>
+    <!-- TAB Skins eliminada: la selección de skin de la mascota se
+         hace ahora desde la app de Temas → Personalización → Mascotas.
+         La skin de la mascota actual queda FIJA en el momento de su
+         creación; cambiar la preferencia solo afecta a la próxima
+         mascota (tras "Eliminar mascota"). -->
 
     <!-- ══════════════════════════════════════════════════════════
          TAB: MEMORIA
@@ -478,6 +648,65 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
         });
     }
 
+    /* DEV: forzar eclosión saltándose los 3 días. Pide nombre y, tras
+       OK, llama a hatch con dev=true. Recarga el iframe en éxito para
+       que la UI cambie de huevo a mascota. */
+    var btnForceHatch = document.getElementById('btn-force-hatch');
+    if (btnForceHatch) {
+        btnForceHatch.addEventListener('click', function() {
+            var nombre = (prompt('¿Qué nombre le pones a tu mascota?') || '').trim();
+            if (!nombre) return;
+            apiFetch('hatch', { nombre: nombre, dev: true }, function(err, d) {
+                if (!err && d && d.ok) {
+                    /* Si el escritorio padre tiene el huevo en pantalla,
+                       hacer la transición visual ahí también. */
+                    if (window.parent && window.parent.MascotaEngine
+                        && window.parent.MascotaEngine.getState) {
+                        var st = window.parent.MascotaEngine.getState();
+                        if (st && st.mascota) {
+                            st.mascota.eclosionado = true;
+                            st.mascota.nombre = nombre;
+                            st.mascota.hambre = 80;
+                            st.mascota.felicidad = 80;
+                        }
+                    }
+                    showMsg('msg-eliminar', '¡' + nombre + ' ha nacido! Recargando…', 'ok');
+                    setTimeout(function() { window.location.reload(); }, 700);
+                } else {
+                    showMsg('msg-eliminar', (d && d.error) ? d.error : 'Error', 'error');
+                }
+            });
+        });
+    }
+
+    /* Dar calor al huevo. Solo aparece cuando $isEgg en SSR. */
+    var btnWarm = document.getElementById('btn-warm');
+    if (btnWarm) {
+        btnWarm.addEventListener('click', function() {
+            apiFetch('warm', {}, function(err, d) {
+                if (!err && d && d.ok) {
+                    setBarValue('fill-temperatura', 'val-temperatura', d.temperatura);
+                    var msg = d.temperatura > 90 ? '¡Cálido y feliz! 🥰'
+                            : d.temperatura > 60 ? '¡Calor entregado! 🔥'
+                            :                       '¡Necesita más calor!';
+                    showMsg('msg-accion', msg, 'ok');
+                    if (window.parent && window.parent.MascotaEngine) {
+                        var s = window.parent.MascotaEngine.getState();
+                        if (s && s.mascota) {
+                            s.mascota.temperatura = d.temperatura;
+                            /* Forzar refresh del HUD del engine. */
+                            if (typeof window.parent.MascotaEngine.showBubble === 'function') {
+                                window.parent.MascotaEngine.showBubble('🔥');
+                            }
+                        }
+                    }
+                } else {
+                    showMsg('msg-accion', (d && d.error) ? d.error : 'Error', 'error');
+                }
+            });
+        });
+    }
+
     /* Alimentar */
     var btnFeed = document.getElementById('btn-feed');
     if (btnFeed) {
@@ -536,44 +765,37 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'meloncio') : 'meloncio';
         });
     }
 
-    /* ══════════════════════════════════════════════════════════
-       TAB SKINS
-    ═══════════════════════════════════════════════════════════ */
-    document.querySelectorAll('.skin-card').forEach(function(card) {
-        card.addEventListener('click', function() {
-            var skin = card.dataset.skin;
-            if (skin === currentSkin) return;
-
-            apiFetch('set-skin', { skin: skin }, function(err, d) {
+    /* Eliminar (testeo) — borra mascota + memoria de BD. Tras éxito
+       despawnea el sprite en el escritorio padre y recarga el iframe
+       para volver al estado "primera vez" (creador de mascota). */
+    var btnEliminar = document.getElementById('btn-eliminar');
+    if (btnEliminar) {
+        btnEliminar.addEventListener('click', function() {
+            if (!confirm('¿Eliminar la mascota PARA SIEMPRE?\n\nSe borrará TODO: hambre, felicidad, edad, memoria, etc.\n\nEsta opción es solo para testeo.')) return;
+            apiFetch('delete', {}, function(err, d) {
                 if (!err && d && d.ok) {
-                    currentSkin = skin;
-                    document.querySelectorAll('.skin-card').forEach(function(c){
-                        c.classList.toggle('selected', c.dataset.skin === skin);
-                    });
-                    /* Actualizar sprite preview */
-                    var img = document.getElementById('sprite-img');
-                    if (img) {
-                        img.style.display = '';
-                        img.src = '../assets/mascota/skins/' + skin + '/shime1.png';
+                    showMsg('msg-eliminar', 'Mascota eliminada. Recargando…', 'ok');
+                    /* Si el escritorio padre tiene la mascota spawneada,
+                       la quitamos antes de recargar la ventana. */
+                    if (window.parent && window.parent.MascotaEngine
+                        && window.parent.MascotaEngine.despawn) {
+                        try { window.parent.MascotaEngine.despawn(); } catch(_){}
                     }
-                    showMsg('msg-skin', 'Skin cambiada a ' + skin + ' ✓', 'ok');
-                    /* Notificar al engine */
-                    if (window.parent && window.parent.MascotaEngine) {
-                        var s = window.parent.MascotaEngine.getState();
-                        if (s) {
-                            s.skin = skin;
-                            /* Forzar recarga de frames en el engine */
-                            if (typeof window.parent.MascotaEngine.reloadSkin === 'function') {
-                                window.parent.MascotaEngine.reloadSkin(skin);
-                            }
-                        }
-                    }
+                    setTimeout(function() { window.location.reload(); }, 700);
                 } else {
-                    showMsg('msg-skin', 'Error al cambiar skin', 'error');
+                    showMsg('msg-eliminar', (d && d.error) ? d.error : 'Error al eliminar', 'error');
                 }
             });
         });
-    });
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       TAB SKINS — REMOVIDO.
+       La selección de skin vive ahora en Temas → Personalización →
+       Mascotas (assets/personalize/api.php?action=set-active-mascot).
+       Aquí solo dejamos esta nota; el endpoint `set-skin` queda en
+       api.php pero el frontend ya no lo llama.
+    ═══════════════════════════════════════════════════════════ */
 
     /* ══════════════════════════════════════════════════════════
        TAB MEMORIA

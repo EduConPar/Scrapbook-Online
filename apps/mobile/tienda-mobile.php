@@ -536,7 +536,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <div class="ti-tabs">
     <div class="button tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
     <div class="button tienda-tab"        data-view="principal" data-cat="interfaces">🎨 Interfaces</div>
-    <div class="button tienda-tab"        data-view="principal" data-cat="mascotas">🐾 Mascotas</div>
+    <div class="button tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</div>
     <div class="button tienda-tab"        data-view="principal" data-cat="haros">⚪ Haros</div>
 </div>
 
@@ -573,7 +573,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         </a>
         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/16c92f9fdf" target="_blank" rel="noopener"
            data-kofi-title="Mascota personalizada">
-            <span class="ic">🐾</span><span class="label">Mascota personalizada</span><span class="price">10 €</span>
+            <span class="ic"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Mascota personalizada</span><span class="price">10 €</span>
         </a>
         <p class="donar-encargos-info">
             Si no te apetece donar también puedes hacer un encargo para tener

@@ -569,37 +569,128 @@ html.lcd-filter-top body::after {
         rgba(0, 0, 0, 0.10) 85%,
         rgba(0, 0, 0, 0.24) 100%
     );
+}
 
-    #mascota-menu-btn {
+/* Botón flotante "☰" para el menú de la mascota.
+   Look 100% Win98 con tokens del tema activo del usuario:
+   - 4 capas inset bezel + borde negro exterior de 1px → marco crisp.
+   - Drop shadow corto (1px 1px 0 negro) en lugar de soft blur → look
+     más "ficha de aplicación Win98" que botón redondeado moderno.
+   - Tamaño 44×44 (mejor tap target y proporción cuadrada más obvia).
+   - Background y color heredan del tema vía --btn-bg / --text.
+   - :active invierte las capas (efecto hundido estándar).
+   Por defecto arriba-derecha; el JS de drag persiste la posición en
+   localStorage (`mascota-menu-btn-pos`). */
+#mascota-menu-btn {
     position: fixed;
-    bottom: 46px; /* encima del taskbar (42px) + 4px de margen */
+    top: 8px;
     right: 8px;
-    z-index: 7999; /* justo por debajo del engine (8000) */
-    width: 28px;
-    height: 28px;
-    font-size: 16px;
+    z-index: 9000;       /* encima del engine (8000) */
+    width: 36px;
+    height: 36px;
+    /* CRÍTICO: 98.css aplica `min-width: 75px; min-height: 23px` a todos
+       los <button>. Sin estos overrides el botón sale rectangular
+       aunque le pongamos width fija. Los reseteamos para forzar 1:1. */
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
+    box-sizing: border-box;
+    font-size: 18px;
     line-height: 1;
     padding: 0;
-    cursor: pointer;
-    /* Hereda el estilo .button de 98.css para encajar con el tema */
-    border: 2px solid;
-    border-color: var(--bezel-light1,#fff) var(--bezel-dark2,#404040)
-                  var(--bezel-dark2,#404040) var(--bezel-light1,#fff);
-    background: var(--win-bg,#c0c0c0);
-    color: var(--text,#000);
+    margin: 0;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    /* Borde sólido negro exterior — refuerza el rectángulo crisp y
+       evita la curvatura visual que daban las sombras suaves. */
+    border: 1px solid var(--bezel-dark-1, #0a0a0a);
+    border-radius: 0;
+    background: var(--btn-bg, silver);
+    color: var(--text, #000);
     letter-spacing: 0;
-    font-family: var(--font-ui,'MS Sans Serif',sans-serif);
-}}
-#mascota-menu-btn:active {
-    border-color: var(--bezel-dark2,#404040) var(--bezel-light1,#fff)
-                  var(--bezel-light1,#fff) var(--bezel-dark2,#404040);
+    font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif;
+    box-shadow:
+        inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+        inset  1px  1px var(--bezel-light-1, #fff),
+        inset -2px -2px var(--bezel-dark-2, grey),
+        inset  2px  2px var(--bezel-light-2, #dfdfdf),
+        2px 2px 0 var(--bezel-dark-1, #0a0a0a);   /* sombra dura "stamp" */
 }
-/* Menú contextual de la mascota — mismo estilo que .desk-ctx */
+#mascota-menu-btn.dragging {
+    cursor: grabbing;
+    box-shadow:
+        inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+        inset  1px  1px var(--bezel-light-1, #fff),
+        inset -2px -2px var(--bezel-dark-2, grey),
+        inset  2px  2px var(--bezel-light-2, #dfdfdf),
+        3px 3px 0 var(--bezel-dark-1, #0a0a0a);
+}
+#mascota-menu-btn:active:not(.dragging) {
+    /* Bezel invertido — efecto "hundido" estándar Win98. */
+    box-shadow:
+        inset -1px -1px var(--bezel-light-1, #fff),
+        inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+        inset -2px -2px var(--bezel-light-2, #dfdfdf),
+        inset  2px  2px var(--bezel-dark-2, grey),
+        1px 1px 0 var(--bezel-dark-1, #0a0a0a);
+}
+#mascota-menu-btn:focus {
+    outline: 1px dotted var(--text, #000);
+    outline-offset: -5px;
+}
+
+/* Menú contextual de la mascota — Win98 sólido + tokens del tema.
+   Mismo bezel raised que el botón, mismo color de hover (--accent).
+   Posición ajustada cerca del botón flotante; el JS también lo
+   reposiciona dinámicamente si el botón se ha movido. */
 #mascota-ctx-inline {
     position: fixed;
-    bottom: 80px;
+    top: 50px;
     right: 8px;
-    z-index: 9999;
-    min-width: 160px;
+    z-index: 9001;
+    min-width: 180px;
+    margin: 0;
+    padding: 2px;
+    list-style: none;
+    background: var(--btn-bg, silver);
+    color: var(--text, #000);
+    font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif;
+    font-size: 11px;
+    user-select: none;
+    border: 0;
+    box-shadow:
+        inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+        inset  1px  1px var(--bezel-light-1, #fff),
+        inset -2px -2px var(--bezel-dark-2, grey),
+        inset  2px  2px var(--bezel-light-2, #dfdfdf),
+        2px 2px 6px rgba(0,0,0,0.35);
 }
+#mascota-ctx-inline li {
+    padding: 4px 18px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--text, #000);
+}
+#mascota-ctx-inline li:hover {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+}
+#mascota-ctx-inline li.danger {
+    color: var(--error-text, #c00);
+}
+#mascota-ctx-inline li.danger:hover {
+    background: var(--error-text, #c00);
+    color: #fff;
+}
+#mascota-ctx-inline li.sep {
+    padding: 0;
+    margin: 2px 4px;
+    height: 1px;
+    background: var(--bezel-dark-2, grey);
+    box-shadow: 0 1px 0 var(--bezel-light-1, #fff);
+    cursor: default;
+}
+#mascota-ctx-inline li.sep:hover { background: var(--bezel-dark-2, grey); }
 

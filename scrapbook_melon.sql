@@ -228,6 +228,39 @@ CREATE TABLE `list_item_collaborators` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `mascotas`
+--
+
+CREATE TABLE `mascotas` (
+  `user_id` int(11) NOT NULL,
+  `nombre` varchar(60) NOT NULL DEFAULT 'Gabriel',
+  `skin` varchar(40) NOT NULL DEFAULT 'gabriel',
+  `hambre` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
+  `felicidad` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
+  `temperatura` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
+  `edad` int(11) NOT NULL DEFAULT 0,
+  `viva` tinyint(1) NOT NULL DEFAULT 1,
+  `eclosionado` tinyint(1) NOT NULL DEFAULT 0,
+  `ultima_vez` datetime NOT NULL DEFAULT current_timestamp(),
+  `eclosion_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `mascota_memoria`
+--
+
+CREATE TABLE `mascota_memoria` (
+  `user_id` int(11) NOT NULL,
+  `clave` varchar(40) NOT NULL,
+  `valor` varchar(255) NOT NULL,
+  `guardado_en` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `messages`
 --
 
@@ -959,6 +992,18 @@ ALTER TABLE `list_items`
 ALTER TABLE `list_item_collaborators`
   ADD PRIMARY KEY (`item_id`,`user_id`),
   ADD KEY `idx_collab_user` (`user_id`);
+
+--
+-- Indexes for table `mascotas`
+--
+ALTER TABLE `mascotas`
+  ADD PRIMARY KEY (`user_id`);
+
+--
+-- Indexes for table `mascota_memoria`
+--
+ALTER TABLE `mascota_memoria`
+  ADD PRIMARY KEY (`user_id`,`clave`);
 
 --
 -- Indexes for table `messages`

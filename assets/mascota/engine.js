@@ -1,4 +1,3 @@
-cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
 /**
  * assets/mascota/engine.js  — v2 (Shimeji edition)
  *
@@ -38,6 +37,52 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         BUBBLE_MS:      4000,
         IDLE_TIMEOUT_MS:6000,
         WINDOW_SCAN_MS: 2000,
+        TASKBAR_PX:     30,          /* alto real del taskbar (28px height + 2px border-top en base.css) */
+        /* Píxeles transparentes en el bottom del PNG. Medido en gabriel:
+           el contenido del sprite llega hasta la última fila (y=127)
+           → padding 0. Si una skin tuviera padding inferior, sube
+           este valor para que los pies visibles queden alineados con
+           la superficie (taskbar o techo de ventana). */
+        SPRITE_FOOT_PAD: 0,
+        /* Píxeles transparentes a los lados del cuerpo visible del
+           shimeji. Medidos del shime13/shime14 de gabriel: el
+           contenido va de la col 32 a la 120 dentro del PNG 128×.
+           Si añades skins con padding distinto, ajusta aquí. */
+        SPRITE_PAD_LEFT:  32,        /* pad a la IZQ del cuerpo en frame natural */
+        SPRITE_PAD_RIGHT: 8,         /* pad a la DCHA del cuerpo en frame natural (~7) */
+        /* Físicas de caída — ajustadas para 60fps (moveTick cada 16ms). */
+        GRAVITY:        1.2,         /* px/frame² aceleración */
+        MAX_FALL:       16,          /* terminal velocity */
+        FALL_LAUNCH_VY: 3,           /* velocidad inicial al soltar tras drag (si no hay momentum) */
+        /* MOMENTUM al soltar el drag — al lanzar, se calcula la velocidad
+           del cursor en los últimos ms y se aplica al state.vx/vy. */
+        MAX_THROW_VX:   30,          /* tope horizontal */
+        MAX_THROW_VY:   25,          /* tope vertical (hacia abajo) */
+        AIR_FRICTION:   0.985,       /* multiplicador por frame de vx en el aire */
+        /* REBOTE contra paredes (viewport o ventanas) durante una caída
+           con momentum horizontal. */
+        BOUNCE_DAMPING:   0.55,      /* energía conservada tras rebote (0=stop, 1=elástico) */
+        BOUNCE_THRESHOLD: 4,         /* |vx| mínimo para rebotar; menor → snap a la pared */
+        /* REBOTE contra el SUELO al aterrizar con velocidad vertical
+           alta. Con damping 0.5 y threshold 5: caída a vy=16 → bounce
+           a 8 → bounce a 4 (< threshold) → para. Da ~2 rebotes
+           naturales para una caída larga. */
+        GROUND_BOUNCE_DAMPING:   0.5,
+        GROUND_BOUNCE_THRESHOLD: 5,
+        /* Fricción horizontal aplicada al contactar el suelo (cada
+           rebote). vx *= esto en cada bounce — evita que la mascota
+           "deslice" eternamente al aterrizar con momentum lateral. */
+        GROUND_FRICTION: 0.7,
+        /* ESCALADA de ventanas — al toparse con una pared lateral en
+           lugar de siempre dar la vuelta, hay una probabilidad de
+           empezar a escalar verticalmente hasta el techo de la ventana. */
+        CLIMB_SPEED:  1.5,           /* px/frame hacia arriba (lento, sensación de esfuerzo) */
+        CLIMB_CHANCE: 0.5,           /* prob. de escalar al chocar (vs. girar) */
+        /* Si un HUEVO cae más de esta distancia (px) antes de aterrizar,
+           se rompe y la mascota muere. Soltar al suelo desde poca altura
+           es seguro; lanzar desde la mitad/arriba de la pantalla lo
+           destruye. */
+        EGG_BREAK_FALL_PX: 250,
 
         /* Definición de animaciones: array de números de frame */
         ANIMS: {
@@ -49,7 +94,7 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             fall:    { frames: [4, 5, 6, 7],                loop: true  },
             bounce:  { frames: [8, 9, 10],                  loop: false },
             drag:    { frames: [34, 35, 36, 37],            loop: true  },
-            wall:    { frames: [13],                        loop: true  },
+            wall:    { frames: [13, 14],                    loop: true  },
             ceiling: { frames: [23],                        loop: true  },
             eat:     { frames: [26,15,27,16,28,17,29,11],   loop: false },
             play:    { frames: [42,43,44,45,46],            loop: false },
@@ -68,7 +113,7 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         label:     '',
         mascota:   null,
         memoria:   {},
-        skin:      'meloncio',
+        skin:      'gabriel',
 
         x: 100, y: 0,
         targetX: 0,
@@ -76,6 +121,22 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         facingRight: true,
         dragging: false,
         dragOffX: 0, dragOffY: 0,
+        /* Físicas: cuando state.falling=true moveTick acelera state.vy
+           bajo gravedad y desciende state.y hasta tocar una superficie
+           (suelo o top de una ventana abierta). vx maneja el momentum
+           horizontal del lanzamiento — decae con AIR_FRICTION y rebota
+           contra paredes. */
+        falling: false,
+        vy: 0,
+        vx: 0,
+        /* Buffer de muestras (x, y, t) recientes durante el drag para
+           calcular velocidad de lanzamiento al soltar. */
+        dragSamples: [],
+        /* ESCALADA: cuando la mascota choca con un muro lateral y
+           decide subir en lugar de girarse. */
+        climbing:        false,
+        climbingWindow:  null,       /* DOMRect snapshot — { left, right, top, bottom } */
+        climbingSide:    null,       /* 'left' o 'right' — qué lado de la ventana toca */
 
         currentAnim: 'idle',
         frameIdx: 0,          /* índice dentro del array de frames de la anim actual */
@@ -169,15 +230,21 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             document.body.appendChild(root);
         }
         root.innerHTML = '';
+        /* Cubre TODO el viewport — sin reservar el área del taskbar y
+           sin `overflow: hidden`. Antes con `bottom: 42px` +
+           overflow:hidden, cualquier parte de la caja de la mascota
+           que cayera dentro de la zona reservada del taskbar se
+           recortaba (pies cortados, HUD/burbujas cortadas). Ahora la
+           mascota puede ocupar cualquier punto de la pantalla; la
+           función `groundY()` sigue siendo quien define el "suelo
+           lógico" para las físicas, y el taskbar visible (z-index
+           propio) se pinta encima sin necesidad de recortar nada. */
         root.style.cssText = [
             'position:fixed',
-            'bottom:0',
-            'left:0',
-            'width:100vw',
-            'height:calc(100vh - 42px)',
+            'inset:0',
             'pointer-events:none',
             'z-index:8000',
-            'overflow:hidden',
+            /* overflow:hidden eliminado a propósito — nada se corta. */
         ].join(';');
 
         /* Contenedor de la entidad */
@@ -235,7 +302,9 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         ].join(';');
         el.appendChild(bubble);
 
-        /* HUD barras */
+        /* HUD barras — DEBAJO del sprite. Ya no se cortan porque
+           eliminamos `overflow: hidden` del #mascota-root y lo
+           expandimos a todo el viewport. */
         var hud = document.createElement('div');
         hud.id = 'mascota-hud';
         hud.style.cssText = [
@@ -251,17 +320,27 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             'transition:opacity 0.2s',
             'z-index:1',
         ].join(';');
+        /* HUD con TRES barras: hambre 🍖, felicidad ♥, temperatura 🔥.
+           updateHUD() decide cuáles mostrar según el estado:
+           - HUEVO  → solo 🔥 (temperatura)
+           - MASCOTA → 🍖 + ♥ (hambre + felicidad) */
         hud.innerHTML = [
-            '<div style="display:flex;align-items:center;gap:4px;">',
+            '<div id="mascota-bar-hambre-row" style="display:flex;align-items:center;gap:4px;">',
                 '<span style="font-size:9px;width:10px;">🍖</span>',
                 '<div style="width:60px;height:8px;background:#ccc;border:1px solid #888;">',
                     '<div id="mascota-bar-hambre-fill" style="height:100%;background:#0a0;width:80%;transition:width 0.4s;"></div>',
                 '</div>',
             '</div>',
-            '<div style="display:flex;align-items:center;gap:4px;">',
+            '<div id="mascota-bar-happy-row" style="display:flex;align-items:center;gap:4px;">',
                 '<span style="font-size:9px;width:10px;">♥</span>',
                 '<div style="width:60px;height:8px;background:#ccc;border:1px solid #888;">',
                     '<div id="mascota-bar-happy-fill" style="height:100%;background:#e05;width:80%;transition:width 0.4s;"></div>',
+                '</div>',
+            '</div>',
+            '<div id="mascota-bar-temp-row" style="display:none;align-items:center;gap:4px;">',
+                '<span style="font-size:9px;width:10px;">🔥</span>',
+                '<div style="width:60px;height:8px;background:#ccc;border:1px solid #888;">',
+                    '<div id="mascota-bar-temp-fill" style="height:100%;background:#f93;width:80%;transition:width 0.4s,background 0.4s;"></div>',
                 '</div>',
             '</div>',
         ].join('');
@@ -340,38 +419,411 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
     }
 
     function groundY() {
-        return (window.innerHeight - 42) - SIZE_H;
+        /* Compensa CFG.SPRITE_FOOT_PAD para que los píxeles "pie" del
+           sprite queden ALINEADOS con el top del taskbar y no flotando.
+           Resultado: state.y + SIZE_H ≈ taskbarTop + SPRITE_FOOT_PAD,
+           es decir, los pies visibles tocan el taskbar. */
+        return (window.innerHeight - CFG.TASKBAR_PX) - SIZE_H + CFG.SPRITE_FOOT_PAD;
+    }
+
+    /* ── Detección de superficie ───────────────────────────────────
+       Dado (x, y) actuales, devuelve la `y` de la superficie sólida
+       más alta por debajo de la mascota. Considera:
+         - El suelo (top del taskbar) como fallback.
+         - El top de cada ventana abierta, SI la X del centro de la
+           mascota está dentro del rango horizontal de la ventana Y
+           la ventana está debajo de nuestra posición actual.
+       Se elige la más ALTA (smaller y) de entre las que están por
+       debajo de `y`, así no "saltamos" para arriba al detectarlas. */
+    function getSurfaceBelow(x, y) {
+        var groundLanding = groundY();
+        var best = groundLanding;
+        var centerX = x + SIZE_W / 2;
+        getOpenWindowRects().forEach(function (w) {
+            if (centerX < w.left || centerX > w.right) return;
+            /* y donde aterriza ENCIMA del techo. Compensamos
+               SPRITE_FOOT_PAD igual que el suelo — sin esto, los
+               pies visibles de la mascota flotarían 14px por encima
+               de la ventana al posarse. */
+            var landing = w.top - SIZE_H + CFG.SPRITE_FOOT_PAD;
+            if (landing >= y && landing < best) best = landing;
+        });
+        return best;
+    }
+
+    /* ── Colisión durante CAMINATA AUTÓNOMA ──
+       Las ventanas se tratan como MUROS que extienden hacia abajo
+       (más allá de su `w.bottom` real). Así la mascota caminando por
+       el suelo choca con la pared lateral de cualquier ventana en su
+       camino, aunque la ventana esté flotando en mitad de la pantalla
+       sin tocar el suelo (comportamiento estilo Shimeji clásico).
+
+       Excepción única: si la mascota está caminando EXACTAMENTE encima
+       de la ventana (su bottom toca el top de la ventana) → no es
+       colisión, está aterrizada sobre el techo. */
+    function checkWindowCollision(newX, newY) {
+        var petL = newX, petR = newX + SIZE_W;
+        var petB = newY + SIZE_H;
+        var wins = getOpenWindowRects();
+        if (window.MascotaDebug) {
+            console.log('[Mascota] checkCollision pet=', {l:petL,r:petR,t:newY,b:petB}, 'wins=', wins.length);
+        }
+        /* Threshold incluye SPRITE_FOOT_PAD: como la mascota aterriza
+           sobre el techo con petB = w.top + SPRITE_FOOT_PAD (no
+           directamente w.top), comparar con w.top + 4 daba falsos
+           positivos de "colisión con muro" cuando en realidad estaba
+           encima caminando. */
+        var onTopThreshold = CFG.SPRITE_FOOT_PAD + 4;
+        for (var i = 0; i < wins.length; i++) {
+            var w = wins[i];
+            if (petB <= w.top + onTopThreshold) continue;
+            if (petR > w.left && petL < w.right) {
+                if (window.MascotaDebug) console.log('[Mascota] HIT', w);
+                return w;
+            }
+        }
+        return null;
+    }
+
+    /** Intenta empezar una escalada por una pared de ventana.
+     *  Llamado desde la lógica de colisión lateral durante la caminata.
+     *  Solo escala si:
+     *    - El techo de la ventana está ESTRICTAMENTE más alto que la
+     *      posición actual (si no, no hay nada que escalar).
+     *    - Suerte: pasa el roll de CLIMB_CHANCE.
+     *  Devuelve true si arrancó la escalada (caller debe `return`). */
+    function maybeStartClimb(w, side) {
+        /* Posición final tras subir (con foot pad para no flotar). */
+        var landingY = w.top - SIZE_H + CFG.SPRITE_FOOT_PAD;
+        if (landingY >= state.y - 2) return false;  /* ventana NO está por encima */
+        if (Math.random() > CFG.CLIMB_CHANCE) return false;
+        /* Snap horizontal a la cara de la ventana.
+           El sprite tiene SPRITE_SIDE_PAD px de transparencia a cada
+           lado del cuerpo visible. Compensamos para que el cuerpo
+           toque la pared en vez de la caja invisible. */
+        if (side === 'left') {
+            /* Mascota a la IZQ de la ventana; su lado DERECHO visible
+               toca w.left. CON FLIP (facingRight=true) el cuerpo visible
+               queda en [state.x + PAD_RIGHT, state.x + SIZE_W - PAD_LEFT].
+               Para que el borde derecho visible == w.left:
+                 state.x + SIZE_W - PAD_LEFT = w.left
+                 state.x = w.left - SIZE_W + PAD_LEFT */
+            state.x = w.left - SIZE_W + CFG.SPRITE_PAD_LEFT;
+            state.facingRight = true;
+        } else {
+            /* Mascota a la DCHA de la ventana; su lado IZQUIERDO
+               visible toca w.right. SIN FLIP el cuerpo visible queda
+               en [state.x + PAD_LEFT, state.x + SIZE_W - PAD_RIGHT].
+               Para que el borde izquierdo visible == w.right:
+                 state.x + PAD_LEFT = w.right
+                 state.x = w.right - PAD_LEFT */
+            state.x = w.right - CFG.SPRITE_PAD_LEFT;
+            state.facingRight = false;
+        }
+        state.climbing       = true;
+        state.climbingWindow = { left: w.left, right: w.right, top: w.top, bottom: w.bottom };
+        state.climbingSide   = side;
+        state.moving         = false;
+        setAnim('wall');
+        applyPosition();
+        return true;
+    }
+
+    /* ── Colisión LATERAL durante caída con momentum ──
+       Detecta si moverse a `newX` (manteniendo Y actual) hace que la
+       mascota choque con:
+         a) Pared izquierda del viewport (x < 0)
+         b) Pared derecha del viewport (x > innerWidth - SIZE_W)
+         c) Lateral de una ventana abierta (AABB con cuerpo de ventana,
+            ignorando el techo donde la mascota podría aterrizar)
+       Devuelve { snapX } con la X "pegada a la pared", o null si no
+       hay impacto. La dirección del rebote se decide en moveTick según
+       el signo de state.vx. */
+    function checkWallHit(newX, curY) {
+        var SIZE_HALF = SIZE_W / 2;
+        var petL = newX, petR = newX + SIZE_W;
+        var petT = curY, petB = curY + SIZE_H;
+        /* Viewport horizontal. */
+        if (petL < 0) {
+            return { snapX: 0 };
+        }
+        if (petR > window.innerWidth) {
+            return { snapX: window.innerWidth - SIZE_W };
+        }
+        /* Ventanas. AABB normal pero ignoramos cuando estamos posándonos
+           encima (bottom de la mascota cerca del top de la ventana,
+           contando el SPRITE_FOOT_PAD). */
+        var wins = getOpenWindowRects();
+        var onTopThreshold = CFG.SPRITE_FOOT_PAD + 4;
+        for (var i = 0; i < wins.length; i++) {
+            var w = wins[i];
+            if (petB <= w.top + onTopThreshold) continue;
+            if (petB <= w.top || petT >= w.bottom) continue;
+            if (petR > w.left && petL < w.right) {
+                /* Hay solapamiento horizontal. Decidir si la pared con
+                   la que se choca es la IZQUIERDA o DERECHA de la
+                   ventana, según el lado por el que la mascota venía.
+                   Comparamos el centro de la mascota actual vs el
+                   centro de la ventana. */
+                var petCenter = state.x + SIZE_HALF;
+                var winCenter = (w.left + w.right) / 2;
+                if (petCenter < winCenter) {
+                    /* Venía por la izquierda → choca con la cara izq. */
+                    return { snapX: w.left - SIZE_W };
+                } else {
+                    return { snapX: w.right };
+                }
+            }
+        }
+        return null;
+    }
+
+    /* ── Colisión durante ARRASTRE (AABB estricto) ──
+       Distinta del muro-infinito de la caminata: aquí queremos AABB real
+       para que el usuario pueda mover la mascota POR ENCIMA o POR DEBAJO
+       de las ventanas flotantes, y solo se bloquee cuando trataría de
+       meter la mascota DENTRO del cuerpo de la ventana.
+       Ignora el margen de aterrizaje (4px del techo) — el usuario puede
+       posar la mascota sobre el techo sin problema. */
+    function checkWindowCollisionAABB(newX, newY) {
+        var petL = newX, petR = newX + SIZE_W;
+        var petT = newY, petB = newY + SIZE_H;
+        var wins = getOpenWindowRects();
+        for (var i = 0; i < wins.length; i++) {
+            var w = wins[i];
+            if (petR > w.left && petL < w.right
+                && petB > w.top && petT < w.bottom) {
+                return w;
+            }
+        }
+        return null;
     }
 
     function pickRandomTarget() {
         var margin = 10;
         var maxX   = window.innerWidth - SIZE_W - margin;
-        state.targetX = margin + Math.random() * maxX;
 
-        /* 25% de probabilidad de ir a sentarse encima de una ventana */
-        if (Math.random() < 0.25) {
-            var wins = getOpenWindowRects();
-            if (wins.length) {
-                var win = wins[Math.floor(Math.random() * wins.length)];
-                state.targetX = win.left + Math.random() * Math.max(0, win.width - SIZE_W);
-                state.y = Math.max(0, win.top - SIZE_H + 4);
-                applyPosition();
-                return;
-            }
+        /* Si la mascota está actualmente posada SOBRE UNA VENTANA, el
+           target se elige preferentemente dentro de los X de esa misma
+           ventana — así camina a lo largo de su techo sin caerse por
+           el borde a la mínima. Solo un 30% del tiempo intentamos
+           explorar fuera, para que la mascota no se quede pegada
+           eternamente. */
+        var currentSurface = getSurfaceBelow(state.x, state.y);
+        var onWindow = null;
+        if (Math.abs(state.y - currentSurface) < 4 && currentSurface < groundY() - 2) {
+            /* Estamos sobre algún techo (no en el suelo) — localizar la
+               ventana correspondiente para mantenernos en su rango X. */
+            var centerX = state.x + SIZE_W / 2;
+            getOpenWindowRects().forEach(function (w) {
+                if (centerX >= w.left && centerX <= w.right
+                    && Math.abs((w.top - SIZE_H + CFG.SPRITE_FOOT_PAD) - state.y) < 4) {
+                    onWindow = w;
+                }
+            });
         }
-        state.y = groundY();
-        applyPosition();
+
+        if (onWindow && Math.random() < 0.7) {
+            /* Caminamos a lo largo del techo de la ventana actual. */
+            var winMaxX = Math.max(onWindow.left, onWindow.right - SIZE_W);
+            state.targetX = onWindow.left + Math.random() * Math.max(0, winMaxX - onWindow.left);
+        } else {
+            state.targetX = margin + Math.random() * maxX;
+        }
+        /* NO teletransportamos state.y aquí — la mascota se queda donde
+           está y la física (caída, colisiones) decide lo demás durante
+           moveTick. Antes había `state.y = groundY()` que provocaba
+           saltos instantáneos al suelo al elegir target. */
     }
 
     function moveTick() {
         if (!state.mascota || !state.mascota.viva) return;
         if (state.dragging) return;
 
+        var isEgg = !state.mascota.eclosionado;
+
+        /* ── FASE 0: ESCALADA por una pared de ventana ─────────────
+           Sube state.y a CLIMB_SPEED hasta alcanzar el techo de la
+           ventana sobre la que está. Al llegar arriba, se "engancha"
+           encima de la ventana y vuelve al modo idle/caminata. */
+        if (state.climbing && !isEgg) {
+            var cw = state.climbingWindow;
+            if (!cw) {
+                /* Seguridad: estado inconsistente, cancelar. */
+                state.climbing = false;
+            } else {
+                state.y -= CFG.CLIMB_SPEED;
+                /* Posición final = techo de la ventana ajustado con
+                   foot pad para que los pies visibles queden sobre la
+                   ventana en lugar de "flotando" 14px arriba. */
+                var topY = cw.top - SIZE_H + CFG.SPRITE_FOOT_PAD;
+                if (state.y <= topY) {
+                    /* Alcanzó el techo — se posa encima. Ajustamos X
+                       para que el BORDE VISIBLE del cuerpo quede
+                       alineado con el borde de la ventana (no el
+                       bounding box que tiene mucho padding asimétrico).
+                       Y aseguramos que centerX caiga dentro del rango
+                       de la ventana para que getSurfaceBelow la
+                       reconozca y no caiga de nuevo. */
+                    state.y = topY;
+                    if (state.climbingSide === 'left') {
+                        /* Mantuvimos facingRight=true tras la escalada
+                           (mira hacia dentro de la ventana). Con flip,
+                           visible.left = state.x + PAD_RIGHT. Para que
+                           ese borde esté en cw.left:
+                             state.x = cw.left - PAD_RIGHT */
+                        state.x = cw.left - CFG.SPRITE_PAD_RIGHT;
+                    } else {
+                        /* facingRight=false (sin flip). visible.right =
+                           state.x + SIZE_W - PAD_RIGHT. Para que ese
+                           borde esté en cw.right:
+                             state.x = cw.right - SIZE_W + PAD_RIGHT */
+                        state.x = cw.right - SIZE_W + CFG.SPRITE_PAD_RIGHT;
+                    }
+                    /* Clamp al viewport por si la ventana toca el
+                       borde de la pantalla. */
+                    state.x = Math.max(0, Math.min(window.innerWidth - SIZE_W, state.x));
+                    state.climbing       = false;
+                    state.climbingWindow = null;
+                    state.climbingSide   = null;
+                    state.moving         = false;
+                    state.idleTimer      = 0;
+                    setAnim('idle');
+                } else {
+                    setAnim('wall');
+                }
+                applyPosition();
+            }
+            return;
+        }
+
+        /* ── FASE 1: caída con gravedad + momentum horizontal ─────
+           - state.vy se incrementa por gravedad cada frame.
+           - state.vx (lanzamiento horizontal) se desgasta con
+             AIR_FRICTION y rebota al chocar con paredes (viewport o
+             cuerpos de ventana) si la velocidad es > BOUNCE_THRESHOLD.
+           - Detectamos aterrizaje contra la superficie más cercana. */
+        if (state.falling) {
+            /* Gravedad. state.vy puede empezar NEGATIVO (lanzamiento
+               hacia arriba) → gravity lo lleva a 0 (pico) → vuelve
+               positivo (cae). Esta es la mecánica de PROYECTIL. */
+            state.vy = Math.min(state.vy + CFG.GRAVITY, CFG.MAX_FALL);
+            state.vx *= CFG.AIR_FRICTION;
+            if (Math.abs(state.vx) < 0.05) state.vx = 0;
+
+            var nextX = state.x + state.vx;
+            var nextY = state.y + state.vy;
+
+            /* Trackear el PICO (Y más alto = menor número) de la
+               trayectoria. Lo usamos al aterrizar para calcular la
+               distancia REAL de caída — incluida la fase de subida +
+               la fase de bajada — y romper el huevo si fue brutal. */
+            if (state.peakY == null || nextY < state.peakY) {
+                state.peakY = nextY;
+            }
+
+            /* Colisión LATERAL durante la caída — pared del viewport o
+               cuerpo de ventana. Si hay impacto y |vx| > umbral,
+               REBOTA con damping; si no, simplemente se queda pegado. */
+            var hit = checkWallHit(nextX, state.y);
+            if (hit) {
+                nextX = hit.snapX;
+                if (Math.abs(state.vx) > CFG.BOUNCE_THRESHOLD) {
+                    state.vx = -state.vx * CFG.BOUNCE_DAMPING;
+                } else {
+                    state.vx = 0;
+                }
+            }
+
+            var surface = getSurfaceBelow(nextX, state.y);
+            if (nextY >= surface) {
+                /* IMPACTO contra superficie. */
+                state.x        = nextX;
+                state.y        = surface;
+                var landingVy  = state.vy;       /* velocidad ANTES de procesarla */
+                applyPosition();
+
+                if (isEgg) {
+                    /* Comprueba ruptura por altura de caída desde pico.
+                       El huevo no rebota — el cascarón está rígido. */
+                    var peak     = state.peakY != null ? state.peakY : state.y;
+                    var fallDist = state.y - peak;
+                    state.peakY  = null;
+                    state.falling = false;
+                    state.vy = 0;
+                    state.vx = 0;
+                    if (fallDist > CFG.EGG_BREAK_FALL_PX) {
+                        breakEgg();
+                    }
+                    return;
+                }
+
+                /* MASCOTA: si la velocidad de impacto es alta, REBOTA
+                   (vy invertido con damping). Cada rebote pierde
+                   energía hasta caer bajo el umbral → para. La
+                   `peakY` se resetea para que cada arco mida la
+                   altura real de ese arco concreto, no del lanzamiento
+                   inicial. */
+                if (landingVy > CFG.GROUND_BOUNCE_THRESHOLD) {
+                    state.vy = -landingVy * CFG.GROUND_BOUNCE_DAMPING;
+                    state.vx *= CFG.GROUND_FRICTION;
+                    if (Math.abs(state.vx) < 0.05) state.vx = 0;
+                    state.peakY = state.y;       /* nuevo arco arranca aquí */
+                    /* state.falling sigue true — reentramos en la fase
+                       de caída en el próximo tick. */
+                    setAnim('fall');
+                    return;
+                }
+
+                /* Aterrizaje "suave": para definitivamente. */
+                state.falling = false;
+                state.vy = 0;
+                state.vx = 0;
+                state.peakY = null;
+                setAnim('bounce');
+                setTimeout(function () {
+                    if (!state.falling && !state.dragging) setAnim('idle');
+                }, 400);
+            } else {
+                state.x = nextX;
+                state.y = nextY;
+                if (!isEgg) setAnim('fall');
+                applyPosition();
+            }
+            return;
+        }
+
+        /* ── HUEVO: solo física, no caminata ───────────────────────
+           El huevo no anda ni decide targets. Solo "vive" mientras
+           está parado en una superficie. Si la superficie desaparece
+           (cierras una ventana sobre la que estaba), cae. */
+        if (isEgg) {
+            var surfBelow = getSurfaceBelow(state.x, state.y);
+            if (state.y < surfBelow - 2) {
+                state.falling = true;
+                state.vy = 0;
+                state.peakY = state.y;
+            }
+            return;
+        }
+
         var hambre = state.mascota.hambre;
+        if (!state.mascota.viva) { setAnim('dead'); return; }
+        if (hambre < 25)         { setAnim('sad');  return; }
 
-        if (!state.mascota.viva)    { setAnim('dead');  return; }
-        if (hambre < 25)            { setAnim('sad');   return; }
+        /* ── FASE 2: detectar caída espontánea ─────────────────────
+           Si la mascota está "en el aire" (la superficie de abajo se
+           movió o cerró una ventana), arranca a caer. */
+        var surfaceNow = getSurfaceBelow(state.x, state.y);
+        if (state.y < surfaceNow - 2) {
+            state.falling = true;
+            state.vy = 0;
+            state.moving = false;
+            state.peakY = state.y;
+            return;
+        }
 
+        /* ── FASE 3: movimiento horizontal hacia el target ────────── */
         if (state.moving) {
             var dx   = state.targetX - state.x;
             var dist = Math.abs(dx);
@@ -385,8 +837,71 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             }
 
             state.facingRight = dx > 0;
-            var step = Math.min(CFG.WALK_SPEED, dist);
-            state.x += state.facingRight ? step : -step;
+            var step  = Math.min(CFG.WALK_SPEED, dist);
+            var dir   = state.facingRight ? 1 : -1;
+            var prevX = state.x;            /* guardamos por si toca caer */
+            var newX  = state.x + step * dir;
+
+            /* Colisión horizontal con cuerpo de ventana.
+               Al chocar tiene 2 opciones:
+                 a) ESCALAR la pared (chance CLIMB_CHANCE, si la
+                    ventana está por encima).
+                 b) Girar y volver.
+               El lado depende de la dirección actual: si voy hacia
+               la derecha y choco, era la cara IZQUIERDA de la ventana. */
+            var hitWin = checkWindowCollision(newX, state.y);
+            if (hitWin) {
+                var side = state.facingRight ? 'left' : 'right';
+                if (maybeStartClimb(hitWin, side)) return;
+                state.moving = false;
+                state.facingRight = !state.facingRight;
+                setAnim('idle');
+                return;
+            }
+            /* Clamp a los bordes del viewport. */
+            newX = Math.max(0, Math.min(window.innerWidth - SIZE_W, newX));
+            state.x = newX;
+
+            /* Si al avanzar nos hemos quedado sin superficie debajo
+               (caminé hasta el borde de una ventana), caer. */
+            var nextSurface = getSurfaceBelow(state.x, state.y);
+            if (state.y < nextSurface - 2) {
+                /* Localizamos la ventana sobre la que ESTÁBAMOS antes
+                   del step (su techo == state.y±4). Hace falta porque
+                   tras dar el paso, centerX puede haber salido de su
+                   rango y getSurfaceBelow ya no la encuentra. */
+                var leftWin = null;
+                var prevCenterX = prevX + SIZE_W / 2;
+                getOpenWindowRects().forEach(function (w) {
+                    if (prevCenterX >= w.left && prevCenterX <= w.right
+                        && Math.abs((w.top - SIZE_H + CFG.SPRITE_FOOT_PAD) - state.y) < 4) {
+                        leftWin = w;
+                    }
+                });
+                /* Snap X completamente fuera del cuerpo horizontal de
+                   esa ventana antes de empezar a caer — si no, al
+                   descender atravesaría la ventana visualmente. */
+                if (leftWin) {
+                    if (state.facingRight) {
+                        state.x = Math.min(
+                            window.innerWidth - SIZE_W,
+                            leftWin.right            /* pet.left coincide con ventana.right */
+                        );
+                    } else {
+                        state.x = Math.max(
+                            0,
+                            leftWin.left - SIZE_W    /* pet.right coincide con ventana.left */
+                        );
+                    }
+                    applyPosition();
+                }
+                state.falling    = true;
+                state.vy         = 0;
+                state.moving     = false;
+                state.peakY = state.y;
+                return;
+            }
+
             setAnim('walk');
             applyPosition();
         } else {
@@ -410,10 +925,22 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
     function getOpenWindowRects() {
         var rects = [];
         document.querySelectorAll('.window').forEach(function (w) {
+            /* Excluimos plantillas (folder-window-template) y modales
+               (folder-create-modal, change-password-modal, etc.) que
+               son `.window` pero no representan ventanas reales. */
             if (w.hasAttribute('data-no-auto-z')) return;
-            if (!w.style.display || w.style.display === 'none') return;
+            /* Excluimos la propia ventana de la mascota. */
+            if (w.id === 'mascota-window') return;
+            /* Visibilidad: solo por bounding rect.
+               - `display:none` → getBoundingClientRect devuelve todo 0 → filtra.
+               - NO usamos `offsetParent === null` porque las ventanas del
+                 escritorio son `position: fixed` y ESO hace null su
+                 offsetParent SIEMPRE (los fixed se posicionan respecto al
+                 viewport, no a un padre). Antes excluía TODAS las ventanas
+                 visibles → wins=0 en debug. */
             var r = w.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) rects.push(r);
+            if (r.width <= 0 || r.height <= 0) return;
+            rects.push(r);
         });
         return rects;
     }
@@ -527,6 +1054,21 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
     function startDrag(cx, cy) {
         state.dragging = true;
         state.moving   = false;
+        /* Cancelar cualquier caída en curso — al estar dragging las
+           físicas se pausan, pero limpiamos por consistencia.
+           `peakY` también: la próxima caída se mide desde el pico
+           propio (parábolas), no desde un pico viejo. `dragSamples`
+           se resetea para calcular el momentum desde 0. */
+        state.falling    = false;
+        state.vy         = 0;
+        state.vx         = 0;
+        state.peakY      = null;
+        state.dragSamples = [{ x: state.x, y: state.y, t: Date.now() }];
+        /* Cualquier escalada en curso queda cancelada al agarrar a la
+           mascota. */
+        state.climbing       = false;
+        state.climbingWindow = null;
+        state.climbingSide   = null;
         setAnim('drag');
         var r = state.el.getBoundingClientRect();
         state.dragOffX = cx - r.left;
@@ -536,20 +1078,66 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             var px = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0].clientX);
             var py = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0].clientY);
             if (px === undefined) return;
-            state.x = Math.max(0, Math.min(window.innerWidth  - SIZE_W, px - state.dragOffX));
-            state.y = Math.max(0, Math.min(window.innerHeight - 42 - SIZE_H, py - state.dragOffY));
+            /* Posición candidata clampeada al viewport. */
+            var nx = Math.max(0, Math.min(window.innerWidth  - SIZE_W, px - state.dragOffX));
+            var ny = Math.max(0, Math.min(groundY(),                  py - state.dragOffY));
+
+            /* SLIDE collision: prueba movimiento completo, luego ejes
+               sueltos. */
+            if (!checkWindowCollisionAABB(nx, ny)) {
+                state.x = nx; state.y = ny;
+            } else if (!checkWindowCollisionAABB(nx, state.y)) {
+                state.x = nx;
+            } else if (!checkWindowCollisionAABB(state.x, ny)) {
+                state.y = ny;
+            }
             applyPosition();
+
+            /* Guardar la muestra para calcular velocidad al soltar.
+               Limitamos a los últimos 100ms — más ventana = inercia
+               percibida más "vaga"; menos = sensación más responsiva. */
+            var now = Date.now();
+            state.dragSamples.push({ x: state.x, y: state.y, t: now });
+            while (state.dragSamples.length > 1
+                   && now - state.dragSamples[0].t > 100) {
+                state.dragSamples.shift();
+            }
         }
         function onUp() {
             state.dragging = false;
-            setAnim('fall');
-            /* Pequeño bounce al soltar */
-            setTimeout(function () {
-                state.y = groundY();
-                applyPosition();
-                setAnim('bounce');
-                setTimeout(function () { setAnim('idle'); }, 400);
-            }, 150);
+            /* MOMENTUM: calcular velocidad del lanzamiento desde las
+               muestras recientes. Promediamos px/frame entre la primera
+               y última muestra de la ventana de 100ms.
+               IMPORTANTE: NO clampeamos vy a positivo — si el usuario
+               flickeó hacia arriba, vy es negativo y la mascota hace
+               una PARÁBOLA: sube → frena por gravedad → cae. Pura
+               física de proyectil. */
+            var samples = state.dragSamples || [];
+            var vx = 0, vy = 0;
+            if (samples.length >= 2) {
+                var last  = samples[samples.length - 1];
+                var first = samples[0];
+                var dtMs  = last.t - first.t;
+                if (dtMs > 0) {
+                    /* px/ms → px/frame (16ms ≈ 1 frame). */
+                    var perFrame = 16;
+                    vx = (last.x - first.x) / dtMs * perFrame;
+                    vy = (last.y - first.y) / dtMs * perFrame;
+                }
+            }
+            /* Topes simétricos — el flick hacia arriba también se capa
+               para que un yeet brutal no saque la mascota de la pantalla
+               permanentemente. */
+            vx = Math.max(-CFG.MAX_THROW_VX, Math.min(CFG.MAX_THROW_VX, vx));
+            vy = Math.max(-CFG.MAX_THROW_VY, Math.min(CFG.MAX_THROW_VY, vy));
+
+            state.falling    = true;
+            state.vx         = vx;
+            state.vy         = vy;
+            state.moving     = false;
+            state.peakY = state.y;
+            state.dragSamples = [];
+            if (!(state.mascota && !state.mascota.eclosionado)) setAnim('fall');
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup',   onUp);
             document.removeEventListener('touchmove', onMove);
@@ -565,6 +1153,8 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         if (state.dragging) return;
         if (!state.mascota) return;
 
+        /* Mascota muerta → confirmación de revivir (mantenido — es una
+           acción de "rescate", no el menú general). */
         if (!state.mascota.viva) {
             if (typeof window.win98Confirm === 'function') {
                 window.win98Confirm(
@@ -586,50 +1176,20 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             }
             return;
         }
-        showPetMenu();
+        /* Mascota viva: el menú (alimentar/jugar/etc.) ya NO se abre al
+           tocar la mascota — se accede únicamente desde el botón flotante
+           ☰. Aquí solo mostramos una pequeña reacción para que el tap
+           no se sienta inerte. */
+        var reacciones = ['¿Sí?', '😊', '¿Mh?', '¡Hola!', '*ronronea*'];
+        showBubble(reacciones[Math.floor(Math.random() * reacciones.length)], 1800);
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       MENÚ CONTEXTUAL
+       MENÚ — el menú contextual sobre la mascota se eliminó: ahora
+       solo se accede desde el botón flotante ☰ del escritorio. Las
+       acciones (feed/play/...) siguen disponibles vía
+       window.MascotaEngine.feed() etc. que llaman a handleMenuAction.
     ═══════════════════════════════════════════════════════════════ */
-    function showPetMenu() {
-        var existing = document.getElementById('mascota-ctx-menu');
-        if (existing) existing.remove();
-
-        var menu = document.createElement('ul');
-        menu.id = 'mascota-ctx-menu';
-        menu.className = 'desk-ctx show';
-        menu.style.cssText = 'position:fixed;z-index:99999;min-width:140px;';
-
-        [
-            { icon: '🍕', label: 'Alimentar',    action: 'feed'   },
-            { icon: '⚽', label: 'Jugar',         action: 'play'   },
-            { icon: '❓', label: 'Preguntar algo', action: 'ask'    },
-            { icon: '💬', label: '¿Cómo estás?',  action: 'status' },
-        ].forEach(function (item) {
-            var li = document.createElement('li');
-            li.textContent = item.icon + ' ' + item.label;
-            li.style.cursor = 'pointer';
-            li.addEventListener('click', function () { menu.remove(); handleMenuAction(item.action); });
-            menu.appendChild(li);
-        });
-
-        var r  = state.el.getBoundingClientRect();
-        var mx = Math.min(r.right + 4, window.innerWidth  - 160);
-        var my = Math.min(r.top,       window.innerHeight - 180);
-        menu.style.left = mx + 'px';
-        menu.style.top  = my + 'px';
-        document.body.appendChild(menu);
-
-        setTimeout(function () {
-            document.addEventListener('click', function close() {
-                var m = document.getElementById('mascota-ctx-menu');
-                if (m) m.remove();
-                document.removeEventListener('click', close);
-            });
-        }, 0);
-    }
-
     function handleMenuAction(action) {
         switch (action) {
             case 'feed':
@@ -689,6 +1249,19 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
                 else                    msg = 'Estoy bien 🙂 (hambre:' + h + ' ánimo:' + f + ')';
                 showBubble(msg, 6000);
                 break;
+
+            case 'warm':
+                /* Dar calor al huevo. Sube temperatura +30 (cap 100).
+                   Solo válido mientras estado huevo. SIN burbuja —
+                   el huevo no habla; el feedback es solo la barra HUD
+                   actualizándose. */
+                apiFetch('warm', {}, function (err, d) {
+                    if (!err && d && d.ok) {
+                        state.mascota.temperatura = d.temperatura;
+                        updateHUD();
+                    }
+                });
+                break;
         }
     }
 
@@ -705,6 +1278,28 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
     ═══════════════════════════════════════════════════════════════ */
     function updateHUD() {
         if (!state.mascota) return;
+        var isEgg     = !state.mascota.eclosionado;
+        var hambreRow = document.getElementById('mascota-bar-hambre-row');
+        var happyRow  = document.getElementById('mascota-bar-happy-row');
+        var tempRow   = document.getElementById('mascota-bar-temp-row');
+
+        if (hambreRow) hambreRow.style.display = isEgg ? 'none' : 'flex';
+        if (happyRow)  happyRow.style.display  = isEgg ? 'none' : 'flex';
+        if (tempRow)   tempRow.style.display   = isEgg ? 'flex' : 'none';
+
+        if (isEgg) {
+            var t = state.mascota.temperatura || 0;
+            var tFill = document.getElementById('mascota-bar-temp-fill');
+            if (tFill) {
+                tFill.style.width = t + '%';
+                /* Color del frío→cálido: rojo (peligro) → naranja → verde. */
+                tFill.style.background = t < 20 ? '#06f' : t < 50 ? '#f93' : '#f60';
+                /* Si está muy frío parpadea para enfatizar el peligro. */
+                tFill.style.animation = t < 20 ? 'mascota-temp-pulse 0.8s ease-in-out infinite' : 'none';
+            }
+            return;
+        }
+
         var hFill = document.getElementById('mascota-bar-hambre-fill');
         var fFill = document.getElementById('mascota-bar-happy-fill');
         if (hFill) {
@@ -721,36 +1316,146 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
     function heartbeat() {
         apiFetch('heartbeat', null, function (err, d) {
             if (!err && d && d.ok && d.mascota) {
-                state.mascota = d.mascota;
+                var wasEgg     = state.mascota && !state.mascota.eclosionado;
+                var nowMascota = !!d.mascota.eclosionado;
+                state.mascota  = d.mascota;
                 updateHUD();
+                /* Si el huevo está LISTO para eclosionar (3 días pasaron
+                   y temperatura > 0), pedimos nombre al usuario. */
+                if (wasEgg && !nowMascota
+                    && state.mascota.viva
+                    && state.mascota.segundos_para_eclosion === 0
+                    && !state.hatchPromptShown) {
+                    promptHatchName();
+                }
+                /* Si por la razón que sea (otro tab, otro dispositivo)
+                   ya está eclosionado en BD pero localmente lo
+                   teníamos como huevo, hacemos la transición visual. */
+                if (wasEgg && nowMascota) {
+                    transitionEggToMascota();
+                }
                 if (!d.mascota.viva && state.currentAnim !== 'dead') {
                     setAnim('dead');
-                    showBubble('...');
                 }
             }
         });
     }
 
+    /** Pide nombre al usuario y dispara la eclosión. Usado tanto al
+     *  detectar fin del ciclo natural (3 días) como por el botón DEV.
+     *  `opts.dev=true` salta el check del servidor de los 3 días. */
+    function promptHatchName(opts) {
+        if (state.hatchPromptShown) return;
+        state.hatchPromptShown = true;
+        opts = opts || {};
+        var ask = function () {
+            if (typeof window.win98Prompt === 'function') {
+                window.win98Prompt(
+                    '¡Tu huevo está listo para eclosionar!\n¿Qué nombre le pones a tu mascota?',
+                    '', /* default vacío */
+                    function (nombre) {
+                        nombre = (nombre || '').trim();
+                        if (!nombre) { state.hatchPromptShown = false; return; }
+                        apiFetch('hatch', { nombre: nombre, dev: !!opts.dev }, function (err, d) {
+                            if (!err && d && d.ok) {
+                                state.mascota = d.mascota;
+                                transitionEggToMascota();
+                                /* La iframe de "ver mascota" tenía SSR
+                                   del huevo → invalidar. */
+                                try { if (window.refreshMascotaWindow) window.refreshMascotaWindow(); } catch (_) {}
+                            } else {
+                                state.hatchPromptShown = false;
+                            }
+                        });
+                    },
+                    function () { state.hatchPromptShown = false; },
+                    'Eclosión'
+                );
+            } else {
+                var nombre = (prompt('¿Qué nombre le pones?') || '').trim();
+                if (!nombre) { state.hatchPromptShown = false; return; }
+                apiFetch('hatch', { nombre: nombre, dev: !!opts.dev }, function (err, d) {
+                    if (!err && d && d.ok) {
+                        state.mascota = d.mascota;
+                        transitionEggToMascota();
+                        try { if (window.refreshMascotaWindow) window.refreshMascotaWindow(); } catch (_) {}
+                    } else {
+                        state.hatchPromptShown = false;
+                    }
+                });
+            }
+        };
+        /* Pequeño delay para que cualquier UI previa (HUD, etc.) se
+           asiente antes de mostrar el modal. */
+        setTimeout(ask, 250);
+    }
+
     /* ═══════════════════════════════════════════════════════════════
-       INIT
+       INIT — solo guarda config. NO renderiza nada hasta que
+       alguien llame a spawn(). Esto permite que el escritorio cargue
+       el script sin que la mascota aparezca: la app "Mascota" del
+       launcher es quien dispara spawn().
     ═══════════════════════════════════════════════════════════════ */
     function init(opts) {
         state.userId   = opts.userId   || 0;
         state.parejaId = opts.parejaId || 0;
         state.label    = opts.label    || '';
+        state.spawned  = false;
+    }
+
+    /** Despierta la mascota: pide estado a la API, monta el DOM y arranca
+     *  loops. Si la mascota NO está eclosionada (`eclosionado=0`),
+     *  pinta un HUEVO grande clickable en lugar de la animación.
+     *  Idempotente: llamar dos veces seguidas no duplica nada. */
+    function spawn() {
+        if (state.spawned) {
+            /* Ya está en pantalla — solo refrescamos. */
+            apiFetch('get', null, function (err, d) {
+                if (err || !d || !d.ok) return;
+                state.mascota = d.mascota;
+                updateHUD();
+            });
+            return;
+        }
+        state.spawned = true;
 
         apiFetch('get', null, function (err, d) {
-            if (err || !d || !d.ok) return;
+            if (err || !d || !d.ok) { state.spawned = false; return; }
 
             state.mascota          = d.mascota;
             state.pendingPreguntas = d.pending_preguntas || [];
-            state.skin             = d.mascota.skin || 'meloncio';
+            state.skin             = d.mascota.skin || 'gabriel';
 
             buildDOM();
 
             state.x = Math.floor(window.innerWidth / 2) - SIZE_W / 2;
             state.y = groundY();
             applyPosition();
+
+            /* Mostrar botón flotante del menú (☰) y avisar al desktop. */
+            var menuBtn = document.getElementById('mascota-menu-btn');
+            if (menuBtn) menuBtn.style.display = '';
+            try { window.dispatchEvent(new CustomEvent('mascota:spawned')); } catch (_) {}
+
+            /* HUEVO vs MASCOTA. Si `eclosionado=false` renderizamos un
+               huevo. NO se eclosiona al tocarlo — eclosiona solo tras
+               3 días con temperatura > 0. Arrancamos heartbeat y
+               moveTick: el moveTick aplica gravedad al huevo igual que
+               a la mascota (sin la lógica de caminata), de modo que
+               se puede arrastrar y soltar. */
+            if (!state.mascota.eclosionado) {
+                renderEgg();
+                updateHUD();
+                state.moveTickIv  = setInterval(moveTick,  16);
+                state.heartbeatIv = setInterval(heartbeat, CFG.HEARTBEAT_MS);
+                /* Si al spawnear el huevo ya está listo (3 días pasaron
+                   mientras el usuario no abría la app), pedimos nombre
+                   directamente sin esperar al heartbeat. */
+                if (state.mascota.viva && state.mascota.segundos_para_eclosion === 0) {
+                    promptHatchName();
+                }
+                return;
+            }
 
             preloadFrames(state.skin, function () {
                 renderFrame();
@@ -762,9 +1467,9 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
             });
 
             updateHUD();
-            setInterval(moveTick,    16);
-            setInterval(scanWindows, CFG.WINDOW_SCAN_MS);
-            setInterval(heartbeat,   CFG.HEARTBEAT_MS);
+            state.moveTickIv = setInterval(moveTick,    16);
+            state.scanIv     = setInterval(scanWindows, CFG.WINDOW_SCAN_MS);
+            state.heartbeatIv = setInterval(heartbeat,  CFG.HEARTBEAT_MS);
 
             setTimeout(function () {
                 if (!state.mascota.viva) {
@@ -783,17 +1488,144 @@ cat > /mnt/user-data/outputs/engine.js << 'JSEOF'
         });
     }
 
+    /** Pinta el huevo grande encima del contenedor de la mascota.
+     *  El huevo NO se eclosiona al tocarlo — eclosiona automáticamente
+     *  cuando han pasado 3 días desde su creación Y temperatura > 0.
+     *  El usuario lo mantiene caliente con la acción "Dar calor" del
+     *  menú flotante. Tocarlo solo muestra una reacción amable.
+     *  El poll del heartbeat detecta cuando eclosiona y dispara la
+     *  transición a modo mascota. */
+    function renderEgg() {
+        if (!state.imgEl) return;
+        state.imgEl.style.display = 'none';
+        var egg = document.getElementById('mascota-egg');
+        if (egg) egg.remove();
+        egg = document.createElement('div');
+        egg.id = 'mascota-egg';
+        egg.style.cssText = [
+            'width:'  + SIZE_W + 'px',
+            'height:' + SIZE_H + 'px',
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'font-size:' + Math.floor(SIZE_H * 0.8) + 'px',
+            'line-height:1',
+            'cursor:pointer',
+            'user-select:none',
+            'animation:mascota-egg-wobble 2.4s ease-in-out infinite',
+        ].join(';');
+        egg.textContent = '🥚';
+        state.el.appendChild(egg);
+
+        /* Wobble del huevo + pulse de temperatura crítica (keyframes
+           inyectados una vez). */
+        if (!document.getElementById('mascota-egg-css')) {
+            var st = document.createElement('style');
+            st.id = 'mascota-egg-css';
+            st.textContent =
+                '@keyframes mascota-egg-wobble{' +
+                  '0%,100%{transform:rotate(-4deg)}' +
+                  '50%{transform:rotate(4deg)}' +
+                '}' +
+                '@keyframes mascota-temp-pulse{' +
+                  '0%,100%{opacity:1}' +
+                  '50%{opacity:0.4}' +
+                '}';
+            document.head.appendChild(st);
+        }
+
+        /* El huevo NO habla — sin burbujas de reacción ni mensajes
+           iniciales. Toda la comunicación es visual (wobble + barra
+           de temperatura) hasta que eclosiona. */
+    }
+
+    /** Rompe el huevo (lo mata) y se lo notifica al backend.
+     *  Visual: swap del 🥚 a 💥, después 💀. El huevo no habla. */
+    function breakEgg() {
+        if (state.mascota) state.mascota.viva = false;
+        var egg = document.getElementById('mascota-egg');
+        if (egg) {
+            egg.style.animation = 'none';
+            egg.style.transition = 'transform 0.18s';
+            egg.style.transform = 'scale(1.25)';
+            egg.textContent = '💥';
+            setTimeout(function () {
+                var e = document.getElementById('mascota-egg');
+                if (e) { e.textContent = '💀'; e.style.transform = 'scale(1)'; }
+            }, 700);
+        }
+        /* Persistir en BD — viva=0. */
+        apiFetch('break-egg', {}, function (err, d) {
+            if (!err && d && d.ok && d.mascota) {
+                state.mascota = d.mascota;
+                updateHUD();
+            }
+            /* Invalidar la ventana de gestión si está cargada para
+               que muestre el estado "muerto" al abrirla. */
+            try { if (window.refreshMascotaWindow) window.refreshMascotaWindow(); } catch (_) {}
+        });
+    }
+
+    /** Transición animada huevo → mascota cuando la API confirma la
+     *  eclosión. Limpia el huevo del DOM, muestra el sprite y arranca
+     *  los loops de física/animación si no estaban. */
+    function transitionEggToMascota() {
+        var egg = document.getElementById('mascota-egg');
+        if (egg) {
+            /* Animación de "crack" antes de borrarlo. */
+            egg.style.animation = 'none';
+            egg.style.transition = 'transform 0.4s';
+            egg.style.transform = 'scale(1.15)';
+            showBubble('¡Crack! 🐣');
+            setTimeout(function () { if (egg.parentNode) egg.remove(); }, 400);
+        }
+        if (state.imgEl) state.imgEl.style.display = '';
+        preloadFrames(state.skin, function () {
+            renderFrame();
+            if (!state.animLoopStarted) {
+                state.animLoopStarted = true;
+                requestAnimationFrame(animTick);
+            }
+        });
+        if (!state.moveTickIv)  state.moveTickIv  = setInterval(moveTick,    16);
+        if (!state.scanIv)      state.scanIv      = setInterval(scanWindows, CFG.WINDOW_SCAN_MS);
+        if (!state.heartbeatIv) state.heartbeatIv = setInterval(heartbeat,   CFG.HEARTBEAT_MS);
+        updateHUD();
+        setTimeout(function () { showBubble('¡Hola! 👋'); }, 900);
+    }
+
+    /** Saca la mascota de la pantalla y para todos los timers.
+     *  Útil si en el futuro hay que "ocultar" sin destruir. */
+    function despawn() {
+        if (!state.spawned) return;
+        state.spawned = false;
+        clearInterval(state.moveTickIv);
+        clearInterval(state.scanIv);
+        clearInterval(state.heartbeatIv);
+        var root = document.getElementById('mascota-root');
+        if (root) root.innerHTML = '';
+        var menuBtn = document.getElementById('mascota-menu-btn');
+        if (menuBtn) menuBtn.style.display = 'none';
+    }
+
     /* ═══════════════════════════════════════════════════════════════
        API PÚBLICA
     ═══════════════════════════════════════════════════════════════ */
     global.MascotaEngine = {
         init:       init,
+        spawn:      spawn,
+        despawn:    despawn,
+        isSpawned:  function () { return !!state.spawned; },
+        isEgg:      function () { return !!(state.mascota && !state.mascota.eclosionado); },
         showBubble: showBubble,
         hideBubble: hideBubble,
         feed:       function () { handleMenuAction('feed'); },
         play:       function () { handleMenuAction('play'); },
+        warm:       function () { handleMenuAction('warm'); },
+        /* DEV: fuerza la eclosión saltándose el check de 3 días. Muestra
+           el mismo prompt de nombre que el flujo normal. */
+        forceHatch: function () { state.hatchPromptShown = false; promptHatchName({ dev: true }); },
         getState:   function () { return state; },
     };
 
 })(window);
-JSEOF

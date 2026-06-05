@@ -481,7 +481,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                 <div class="pers-grid" id="pers-haros-grid"></div>
             </section>
             <section class="pers-section">
-                <h3 class="pers-section-title">🐾 Mascotas</h3>
+                <h3 class="pers-section-title"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</h3>
                 <div class="pers-grid" id="pers-mascots-grid"></div>
             </section>
         </div>

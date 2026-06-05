@@ -46,22 +46,18 @@ function ensureSchema(PDO $pdo): void {
         }
     } catch (Throwable $e) { /* sin permisos ALTER → seguimos, fallback en nombre */ }
 
-    /* Seed de haros. Convención de nombres por slug:
-         assets/vids/{slug}Haro.gif       (animación)
-         assets/vids/{slug}Haro-last.png  (último frame, icono visible)
-         assets/sound/{slug}Haro.mp3      (sonido, fallback a haro.mp3)
-
-       - Verde (slug=green, precio=0): base — todos los usuarios lo tienen,
-         NO aparece en el shop (filtramos por precio>0 en el listado).
-       - Amarillo (slug=yellow, precio=50): comprable en el shop. */
-    $seed = function(string $slug, string $nombre, string $desc, int $precio, int $orden) use ($pdo) {
+    /* Seed para una categoría arbitraria de tienda_items.
+       Convención de nombres por slug:
+         haros    → assets/vids/{slug}Haro.gif (+ -last.png + .mp3)
+         mascotas → assets/mascota/skins/{slug}/shimeN.png */
+    $seed = function(string $categoria, string $slug, string $nombre, string $desc, int $precio, int $orden) use ($pdo) {
         try {
-            $stmt = $pdo->prepare("SELECT id FROM tienda_items WHERE categoria = 'haros' AND slug = ? LIMIT 1");
-            $stmt->execute([$slug]);
+            $stmt = $pdo->prepare("SELECT id FROM tienda_items WHERE categoria = ? AND slug = ? LIMIT 1");
+            $stmt->execute([$categoria, $slug]);
             if ($stmt->fetchColumn()) return;
             $ins = $pdo->prepare("INSERT INTO tienda_items (nombre, slug, descripcion, precio, icono, activo, orden, categoria)
-                                  VALUES (?, ?, ?, ?, '', 1, ?, 'haros')");
-            $ins->execute([$nombre, $slug, $desc, $precio, $orden]);
+                                  VALUES (?, ?, ?, ?, '', 1, ?, ?)");
+            $ins->execute([$nombre, $slug, $desc, $precio, $orden, $categoria]);
         } catch (Throwable $e) { /* slug column quizá no existe — ignoramos */ }
     };
 
@@ -73,8 +69,12 @@ function ensureSchema(PDO $pdo): void {
         $pdo->exec("UPDATE tienda_items SET icono = '' WHERE categoria = 'haros' AND icono <> ''");
     } catch (Throwable $e) {}
 
-    $seed('green',  'Verde',    'Haro verde clásico. Lo tienes por defecto.', 0,  1);
-    $seed('yellow', 'Amarillo', 'Haro amarillo',                              50, 2);
+    /* Haros */
+    $seed('haros', 'green',  'Verde',    'Haro verde clásico. Lo tienes por defecto.', 0,  1);
+    $seed('haros', 'yellow', 'Amarillo', 'Haro amarillo',                              50, 2);
+    /* Mascotas — la skin se aplica a la PRÓXIMA mascota que crees
+       (la actual mantiene su skin original). */
+    $seed('mascotas', 'gabriel', 'Gabriel', 'Mascota Gabriel — angel shimeji con 46 frames.', 0, 1);
 
     $done = true;
 }

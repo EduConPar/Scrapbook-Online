@@ -401,6 +401,17 @@ window.DesktopState.whenReady = function(cb){
         ?></div>
         <span>Tienda</span>
     </div>
+    <!-- App MASCOTA: doble-click → spawnea la mascota (o el huevo si no
+         está eclosionada) en pantalla via MascotaEngine.spawn(). -->
+    <div class="desktop-icon" id="mascota-icon">
+        <div class="desktop-icon-img"><?php
+            $_mascotaIcon = 'assets/img/appIcons/mascotaIcon.png';
+            echo file_exists(__DIR__ . '/' . $_mascotaIcon)
+                ? '<img src="' . $_mascotaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : '<div style="font-size:48px;line-height:1;">🐾</div>';
+        ?></div>
+        <span>Mascota</span>
+    </div>
 </div>
 
 <!-- CALENDAR WINDOW -->
@@ -420,7 +431,7 @@ window.DesktopState.whenReady = function(cb){
 <div class="window" id="mascota-window"
      style="display:none; position:fixed; left:15vw; top:8vh; width:380px; height:480px; z-index:550; flex-direction:column;">
     <div class="title-bar" id="mascota-titlebar">
-        <div class="title-bar-text">🐾 Mascota</div>
+        <div class="title-bar-text"><?php echo appTitleIcon('mascotaIcon', '🐾'); ?>Mascota</div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -554,8 +565,11 @@ window.DesktopState.whenReady = function(cb){
 <!-- MASCOTA -->
  <div id="mascota-root"></div>
 
- <!-- MASCOTA MENU BTN — esquina inferior derecha encima del taskbar -->
-<button id="mascota-menu-btn" title="Mascota" aria-label="Menú mascota">⋯</button>
+ <!-- MASCOTA MENU BTN — botón flotante cuadrado con icono ☰ (tres barras).
+      Esquina inferior derecha encima del taskbar. Se mantiene OCULTO
+      hasta que el engine dispara `spawn()` (al pulsar el icono de la app
+      en el escritorio). -->
+<button id="mascota-menu-btn" title="Mascota" aria-label="Menú mascota" style="display:none;">☰</button>
 
 <!-- TASKBAR -->
 <div id="taskbar">
@@ -1247,13 +1261,30 @@ window.notifSystem = (function() {
     window.applyHaroSlug = function(slug) {
         slug = String(slug || 'green').toLowerCase().replace(/[^a-z0-9_-]/g, '');
         if (!slug) slug = 'green';
+        var specificAudio = 'assets/sound/' + slug + 'Haro.mp3';
+        var fallbackAudio = 'assets/sound/haro.mp3';
+        /* Asignamos primero todo lo "no auditivo" — el audio se fija
+           sincronamente al fallback y se intenta upgradear de forma
+           async si existe la versión específica. Si lo asignáramos
+           directamente al específico, cualquier `playHaroSound` que
+           ocurriera ANTES de la confirmación del 404 fallaría. */
         window.ACTIVE_HARO = {
             slug:  slug,
             gif:   'assets/vids/' + slug + 'Haro.gif',
             last:  'assets/vids/' + slug + 'Haro-last.png',
-            audio: 'assets/sound/' + slug + 'Haro.mp3'
+            audio: fallbackAudio
         };
-        try { haroAudio = new Audio(haroAudioUrl()); haroAudio.preload = 'auto'; } catch (_) {}
+        try { haroAudio = new Audio(fallbackAudio); haroAudio.preload = 'auto'; } catch (_) {}
+        /* HEAD probe: si {slug}Haro.mp3 SÍ existe en el servidor, hacemos
+           upgrade silencioso al audio específico. Si no existe (404 o
+           bloqueo CORS), nos quedamos con `haro.mp3` ya cargado. */
+        try {
+            fetch(specificAudio, { method: 'HEAD' }).then(function (r) {
+                if (!r.ok) return;
+                if (window.ACTIVE_HARO) window.ACTIVE_HARO.audio = specificAudio;
+                try { haroAudio = new Audio(specificAudio); haroAudio.preload = 'auto'; } catch (_) {}
+            }).catch(function () { /* sin red / CORS → fallback */ });
+        } catch (_) {}
         try { (new Image()).src = haroLastUrl(); } catch (_) {}
         /* Si hay un Haro vivo en pantalla, swap inmediato a su nuevo gif. */
         if (activeHaro) {
@@ -2705,6 +2736,109 @@ window.notifSystem = (function() {
     var mascotaLoaded = false;
     var menuBtn       = document.getElementById('mascota-menu-btn');
 
+    /* ─── DRAG del botón flotante ────────────────────────────────────
+       El botón arranca arriba-derecha (CSS). Si el usuario lo arrastra,
+       cambiamos left/top inline y persistimos en localStorage. Para no
+       confundir drag con click: solo entramos en modo drag tras
+       desplazarse > DRAG_THRESHOLD px. Si no hubo drag, el click se
+       deja pasar normal y abre el menú. */
+    (function setupDrag(){
+        if (!menuBtn) return;
+        var DRAG_THRESHOLD = 4;
+        var STORAGE_KEY    = 'mascota-menu-btn-pos';
+        var startX = 0, startY = 0, baseLeft = 0, baseTop = 0;
+        var dragging = false, dragged = false, pointerId = null;
+
+        /* Restaurar última posición guardada (si existe). */
+        try {
+            var saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                var p = JSON.parse(saved);
+                if (typeof p.left === 'number' && typeof p.top === 'number') {
+                    /* Clamp al viewport por si la pantalla ahora es más pequeña. */
+                    var w = window.innerWidth, h = window.innerHeight;
+                    menuBtn.style.left  = Math.max(0, Math.min(w - 36, p.left)) + 'px';
+                    menuBtn.style.top   = Math.max(0, Math.min(h - 36, p.top))  + 'px';
+                    menuBtn.style.right = 'auto';
+                }
+            }
+        } catch (_) {}
+
+        function ptXY(e){
+            if (e.touches && e.touches[0])         return { x: e.touches[0].clientX,        y: e.touches[0].clientY        };
+            if (e.changedTouches && e.changedTouches[0]) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        function onDown(e){
+            if (e.type === 'mousedown' && e.button !== 0) return;
+            var p = ptXY(e);
+            startX = p.x; startY = p.y;
+            var r = menuBtn.getBoundingClientRect();
+            baseLeft = r.left; baseTop = r.top;
+            dragging = true; dragged = false;
+            if (e.type === 'pointerdown' && menuBtn.setPointerCapture) {
+                try { pointerId = e.pointerId; menuBtn.setPointerCapture(pointerId); } catch(_){}
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup',   onUp);
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend',  onUp);
+            document.addEventListener('touchcancel', onUp);
+        }
+        function onMove(e){
+            if (!dragging) return;
+            var p = ptXY(e);
+            var dx = p.x - startX, dy = p.y - startY;
+            if (!dragged) {
+                if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+                dragged = true;
+                menuBtn.classList.add('dragging');
+                /* Una vez en drag, convertimos a coordenadas left/top y
+                   eliminamos right para que el botón se ancore a la
+                   esquina superior izquierda. */
+                menuBtn.style.right = 'auto';
+                menuBtn.style.left  = baseLeft + 'px';
+                menuBtn.style.top   = baseTop  + 'px';
+            }
+            if (e.cancelable) e.preventDefault();
+            var nx = baseLeft + dx, ny = baseTop + dy;
+            /* Clamp al viewport. */
+            nx = Math.max(0, Math.min(window.innerWidth  - menuBtn.offsetWidth,  nx));
+            ny = Math.max(0, Math.min(window.innerHeight - menuBtn.offsetHeight, ny));
+            menuBtn.style.left = nx + 'px';
+            menuBtn.style.top  = ny + 'px';
+        }
+        function onUp(e){
+            if (!dragging) return;
+            dragging = false;
+            menuBtn.classList.remove('dragging');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup',   onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend',  onUp);
+            document.removeEventListener('touchcancel', onUp);
+            if (dragged) {
+                /* Guardar nueva posición. */
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                        left: parseFloat(menuBtn.style.left) || 0,
+                        top:  parseFloat(menuBtn.style.top)  || 0,
+                    }));
+                } catch(_){}
+                /* Si fue un drag real, "comernos" el siguiente click
+                   sintético para que no abra el menú al soltar. */
+                var swallow = function(ev){
+                    ev.stopPropagation(); ev.preventDefault();
+                    menuBtn.removeEventListener('click', swallow, true);
+                };
+                menuBtn.addEventListener('click', swallow, true);
+            }
+        }
+        menuBtn.addEventListener('mousedown',  onDown);
+        menuBtn.addEventListener('touchstart', onDown, { passive: false });
+    })();
+
     /* Abre la ventana de gestión */
     function openMascotaWindow() {
         if (!mascotaLoaded) {
@@ -2714,9 +2848,25 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('mascota-window')) {
             taskbarManager.restore('mascota-window');
         } else {
-            taskbarManager.register('mascota-window', 'Mascota', '🐾', 'flex');
+            taskbarManager.register('mascota-window', 'Mascota', '<img src="assets/img/appIcons/mascotaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     }
+
+    /** Invalida el iframe de la ventana de gestión para que la
+     *  próxima apertura cargue datos frescos. Si la ventana está
+     *  abierta ahora mismo, recarga al vuelo. Útil tras delete,
+     *  hatch dev, break-egg — cualquier cambio que invalide el SSR. */
+    function refreshMascotaWindow() {
+        mascotaLoaded = false;
+        var win = document.getElementById('mascota-window');
+        if (win && win.style.display && win.style.display !== 'none') {
+            mascotaFrame.src = 'apps/mascota.php?_=' + Date.now();
+            mascotaLoaded = true;
+        }
+    }
+    /* Exponer global para que la pueda llamar el propio iframe (tras
+       acciones internas como hatch dev) y el resto del desktop. */
+    window.refreshMascotaWindow = refreshMascotaWindow;
 
     document.getElementById('mascota-close').addEventListener('click', function () {
         taskbarManager.unregister('mascota-window');
@@ -2732,27 +2882,73 @@ window.notifSystem = (function() {
 
         var menu = document.createElement('ul');
         menu.id        = 'mascota-ctx-inline';
-        menu.className = 'desk-ctx show';
+        /* OJO: NO añadimos `desk-ctx` para que use SOLO los estilos de
+           #mascota-ctx-inline (Win98 + tokens del tema). La clase
+           `show` tampoco hace falta — el display es por id. */
 
-        var items = [
-            { icon: '🐾', label: 'Ver mascota',   action: 'open'   },
-            { icon: '🍕', label: 'Alimentar',      action: 'feed'   },
-            { icon: '⚽', label: 'Jugar',           action: 'play'   },
-            { icon: '💬', label: '¿Cómo estás?',   action: 'status' },
-        ];
+        /* Las opciones del menú cambian según el estado actual:
+           - HUEVO  → "Ver mascota" + "Dar calor" + eliminar
+           - MASCOTA → "Ver mascota" + Alimentar/Jugar/Estado + eliminar
+           Esto evita acciones inválidas (alimentar un huevo etc). */
+        var isEgg = window.MascotaEngine && window.MascotaEngine.isEgg && window.MascotaEngine.isEgg();
+        var mascotaImg = '<img src="assets/img/appIcons/mascotaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        var items;
+        if (isEgg) {
+            items = [
+                { icon: mascotaImg, label: 'Ver huevo',     action: 'open' },
+                { icon: '🔥',        label: 'Dar calor',     action: 'warm' },
+                { sep: true },
+                { icon: '🐣',        label: 'Eclosionar (DEV)', action: 'force-hatch' },
+                { icon: '🗑',         label: 'Eliminar (testeo)', action: 'delete', danger: true },
+            ];
+        } else {
+            items = [
+                { icon: mascotaImg, label: 'Ver mascota',   action: 'open'   },
+                { icon: '🍕',        label: 'Alimentar',      action: 'feed'   },
+                { icon: '⚽',        label: 'Jugar',           action: 'play'   },
+                { icon: '💬',        label: '¿Cómo estás?',   action: 'status' },
+                { sep: true },
+                { icon: '🗑',         label: 'Eliminar (testeo)', action: 'delete', danger: true },
+            ];
+        }
 
         items.forEach(function (item) {
             var li = document.createElement('li');
-            li.textContent = item.icon + ' ' + item.label;
-            li.style.cursor = 'pointer';
-            li.addEventListener('click', function () {
-                menu.remove();
-                handleMascotaMenuAction(item.action);
-            });
+            if (item.sep) {
+                li.className = 'sep';
+            } else {
+                /* innerHTML porque algunos `item.icon` son <img> inline
+                   (PNG appIcon) en vez de un emoji string. El label es
+                   data nuestra (no input usuario) → seguro. */
+                li.innerHTML = item.icon + ' ' + item.label;
+                if (item.danger) li.className = 'danger';
+                li.addEventListener('click', function () {
+                    menu.remove();
+                    handleMascotaMenuAction(item.action);
+                });
+            }
             menu.appendChild(li);
         });
 
+        /* Posicionar el menú cerca del botón flotante (puede haberse
+           movido por el usuario). Ajustamos top/left tras montar — si
+           se saldría por la derecha lo flipeamos a la izquierda del
+           botón; si se saldría por abajo, hacia arriba. */
         document.body.appendChild(menu);
+        var btnRect = menuBtn.getBoundingClientRect();
+        var menuRect = menu.getBoundingClientRect();
+        var top  = btnRect.bottom + 4;
+        var left = btnRect.left;
+        if (top + menuRect.height > window.innerHeight) {
+            top = btnRect.top - menuRect.height - 4;
+        }
+        if (left + menuRect.width > window.innerWidth) {
+            left = btnRect.right - menuRect.width;
+        }
+        menu.style.top  = Math.max(4, top) + 'px';
+        menu.style.left = Math.max(4, left) + 'px';
+        menu.style.right = 'auto';
+        menu.style.bottom = 'auto';
 
         /* Cerrar al hacer click fuera */
         setTimeout(function () {
@@ -2786,6 +2982,23 @@ window.notifSystem = (function() {
                 }
                 break;
 
+            case 'warm':
+                /* Acción exclusiva del estado HUEVO. */
+                if (typeof window.MascotaEngine !== 'undefined' && window.MascotaEngine.warm) {
+                    window.MascotaEngine.warm();
+                } else {
+                    openMascotaWindow();
+                }
+                break;
+
+            case 'force-hatch':
+                /* DEV: dispara el prompt de nombre + eclosión inmediata. */
+                if (typeof window.MascotaEngine !== 'undefined'
+                    && window.MascotaEngine.forceHatch) {
+                    window.MascotaEngine.forceHatch();
+                }
+                break;
+
             case 'status':
                 if (typeof window.MascotaEngine !== 'undefined') {
                     var s = window.MascotaEngine.getState();
@@ -2812,6 +3025,55 @@ window.notifSystem = (function() {
                     openMascotaWindow();
                 }
                 break;
+
+            case 'delete':
+                /* TESTEO: borra mascota + memoria con confirmación.
+                   Tras éxito, despawnea (limpia el DOM, oculta el
+                   botón, para los loops). Próximo doble-click en el
+                   icono creará un huevo nuevo. */
+                var ok = window.win98Confirm
+                    ? null  // wait for callback
+                    : window.confirm('¿Eliminar la mascota PARA SIEMPRE?\nSe borrarán todos sus datos. Solo para testeo.');
+                var doDelete = function () {
+                    fetch('assets/mascota/api.php?action=delete', { method: 'POST' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (d && d.ok) {
+                                if (window.MascotaEngine && window.MascotaEngine.despawn) {
+                                    window.MascotaEngine.despawn();
+                                }
+                                /* La iframe de la ventana de gestión
+                                   tenía SSR con la mascota anterior →
+                                   invalidar para que la próxima
+                                   apertura (o el reload inmediato si
+                                   está abierta) traiga el estado nuevo
+                                   (huevo recién creado). */
+                                refreshMascotaWindow();
+                                if (window.notifSystem) {
+                                    window.notifSystem.show({
+                                        id: 'mascota-deleted-' + Date.now(),
+                                        type: 'info',
+                                        title: '🗑 Mascota eliminada',
+                                        message: 'Toda su data ha sido borrada. Doble-click en el icono para crear una nueva.',
+                                        autoDismissAfter: 4000,
+                                    });
+                                }
+                            } else {
+                                alert('Error al eliminar: ' + (d && d.error || 'desconocido'));
+                            }
+                        })
+                        .catch(function (e) { alert('Error de red: ' + e.message); });
+                };
+                if (window.win98Confirm) {
+                    window.win98Confirm(
+                        '¿Eliminar la mascota PARA SIEMPRE?\nSe borrarán todos sus datos.\n(Esta opción es solo para testeo.)',
+                        'Eliminar mascota',
+                        doDelete
+                    );
+                } else if (ok) {
+                    doDelete();
+                }
+                break;
         }
     }
 
@@ -2821,19 +3083,50 @@ window.notifSystem = (function() {
 
 /* =========================
    MASCOTA — engine (carga dinámica)
+   ─────────────────────────────────────────────
+   Antes el engine se inicializaba Y spawneaba la mascota en cada carga
+   del escritorio. Ahora solo se INICIALIZA (config + listo) — el
+   `spawn()` se dispara al hacer doble-click en el icono "Mascota" del
+   escritorio. Esto convierte la mascota en una "app" más en lugar de
+   un widget global. El botón flotante ☰ aparece junto con el spawn.
 ========================= */
 (function () {
+    /* Wire del icono ANTES de que el script async termine — el HTML del
+       icono ya está en el DOM (lo hemos puesto en la sección de iconos
+       más arriba en este mismo archivo PHP). Si el engine aún no se ha
+       cargado en el momento del doble-click, mostramos un fallback. */
+    var icon = document.getElementById('mascota-icon');
+    if (icon) {
+        icon.addEventListener('dblclick', function () {
+            if (window.MascotaEngine && window.MascotaEngine.spawn) {
+                window.MascotaEngine.spawn();
+            } else {
+                console.warn('[Mascota] engine aún no cargado, reintentando…');
+                /* Reintento tardío: si el script estaba aún cargando,
+                   esperamos 500ms y volvemos a intentar. */
+                setTimeout(function () {
+                    if (window.MascotaEngine && window.MascotaEngine.spawn) {
+                        window.MascotaEngine.spawn();
+                    }
+                }, 500);
+            }
+        });
+    }
+
     var script  = document.createElement('script');
     script.src  = 'assets/mascota/engine.js';
     script.onload = function () {
-        window.DesktopState.whenReady(function () {
-            if (typeof window.MascotaEngine === 'undefined') return;
-            window.MascotaEngine.init({
-                userId:   <?php echo (int)userIdByKey($desktopUserKey); ?>,
-                parejaId: <?php echo (int)$parejaId; ?>,
-                label:    <?php echo json_encode($desktopLabel); ?>
-            });
+        if (typeof window.MascotaEngine === 'undefined') return;
+        /* init() es ligero — solo guarda config. Lo llamamos ya, sin
+           esperar a DesktopState. */
+        window.MascotaEngine.init({
+            userId:   <?php echo (int)userIdByKey($desktopUserKey); ?>,
+            parejaId: <?php echo (int)$parejaId; ?>,
+            label:    <?php echo json_encode($desktopLabel); ?>
         });
+    };
+    script.onerror = function () {
+        console.error('[Mascota] No se pudo cargar engine.js');
     };
     document.head.appendChild(script);
 })();

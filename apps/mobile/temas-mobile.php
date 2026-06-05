@@ -667,7 +667,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <div class="pers-grid" id="pers-haros-grid"></div>
         </section>
         <section class="tm-section">
-            <h3 class="tm-section-title">🐾 Mascotas</h3>
+            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</h3>
             <div class="pers-grid" id="pers-mascots-grid"></div>
         </section>
     </div>
