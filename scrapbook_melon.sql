@@ -261,6 +261,18 @@ CREATE TABLE `mascota_memoria` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `mascota_gustos`
+--
+
+CREATE TABLE `mascota_gustos` (
+  `user_id` int(11) NOT NULL,
+  `alimento` varchar(40) NOT NULL,
+  `valor` tinyint(3) UNSIGNED NOT NULL DEFAULT 50
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `messages`
 --
 
@@ -1004,6 +1016,12 @@ ALTER TABLE `mascotas`
 --
 ALTER TABLE `mascota_memoria`
   ADD PRIMARY KEY (`user_id`,`clave`);
+
+--
+-- Indexes for table `mascota_gustos`
+--
+ALTER TABLE `mascota_gustos`
+  ADD PRIMARY KEY (`user_id`,`alimento`);
 
 --
 -- Indexes for table `messages`

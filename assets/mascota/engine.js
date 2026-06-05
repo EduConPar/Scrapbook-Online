@@ -48,8 +48,16 @@
            shimeji. Medidos del shime13/shime14 de gabriel: el
            contenido va de la col 32 a la 120 dentro del PNG 128×.
            Si añades skins con padding distinto, ajusta aquí. */
-        SPRITE_PAD_LEFT:  32,        /* pad a la IZQ del cuerpo en frame natural */
-        SPRITE_PAD_RIGHT: 8,         /* pad a la DCHA del cuerpo en frame natural (~7) */
+        /* PAD a los lados del cuerpo SÓLIDO (alpha=255) del shimeji.
+           Medidos del cuerpo opaco real (no de los efectos semi-
+           transparentes que extienden el contenido):
+             shime13: l=40, r=20
+             shime14: l=51, r=5
+           Usamos valores medios/agresivos para que el cuerpo (no los
+           efectos) toque la pared en lugar de quedarse alejado por
+           la transparencia de los crystal effects. */
+        SPRITE_PAD_LEFT:  60,
+        SPRITE_PAD_RIGHT: 15,
         /* Físicas de caída — ajustadas para 60fps (moveTick cada 16ms). */
         GRAVITY:        1.2,         /* px/frame² aceleración */
         MAX_FALL:       16,          /* terminal velocity */
@@ -77,7 +85,8 @@
            lugar de siempre dar la vuelta, hay una probabilidad de
            empezar a escalar verticalmente hasta el techo de la ventana. */
         CLIMB_SPEED:  1.5,           /* px/frame hacia arriba (lento, sensación de esfuerzo) */
-        CLIMB_CHANCE: 0.5,           /* prob. de escalar al chocar (vs. girar) */
+        CLIMB_CHANCE: 0.5
+        ,           /* prob. de escalar al chocar (vs. girar) */
         /* Si un HUEVO cae más de esta distancia (px) antes de aterrizar,
            se rompe y la mascota muere. Soltar al suelo desde poca altura
            es seguro; lanzar desde la mitad/arriba de la pantalla lo
@@ -136,6 +145,7 @@
            decide subir en lugar de girarse. */
         climbing:        false,
         climbingWindow:  null,       /* DOMRect snapshot — { left, right, top, bottom } */
+        climbingEl:      null,       /* referencia al elemento DOM — para detectar movimiento */
         climbingSide:    null,       /* 'left' o 'right' — qué lado de la ventana toca */
 
         currentAnim: 'idle',
@@ -477,6 +487,12 @@
         for (var i = 0; i < wins.length; i++) {
             var w = wins[i];
             if (petB <= w.top + onTopThreshold) continue;
+            /* Si la ventana está FLOTANTE (su bottom no llega a tocar
+               el cuerpo de la mascota), pasamos por debajo en lugar de
+               chocar. La mascota anda al nivel `newY` con bottom en
+               `petB`. Si w.bottom < newY, la ventana entera está
+               por encima → no es muro para nosotros. */
+            if (w.bottom < newY) continue;
             if (petR > w.left && petL < w.right) {
                 if (window.MascotaDebug) console.log('[Mascota] HIT', w);
                 return w;
@@ -502,26 +518,43 @@
            lado del cuerpo visible. Compensamos para que el cuerpo
            toque la pared en vez de la caja invisible. */
         if (side === 'left') {
-            /* Mascota a la IZQ de la ventana; su lado DERECHO visible
-               toca w.left. CON FLIP (facingRight=true) el cuerpo visible
-               queda en [state.x + PAD_RIGHT, state.x + SIZE_W - PAD_LEFT].
-               Para que el borde derecho visible == w.left:
-                 state.x + SIZE_W - PAD_LEFT = w.left
+            /* Mascota a la IZQ de la ventana; mira hacia la pared (a
+               la derecha) → facingRight=true (con flip).
+               Post-flip, el contenido visible está en
+               [state.x + PAD_RIGHT, state.x + SIZE_W - PAD_LEFT].
+               El borde derecho post-flip está en state.x + SIZE_W - PAD_LEFT.
+               Para que toque w.left:
                  state.x = w.left - SIZE_W + PAD_LEFT */
             state.x = w.left - SIZE_W + CFG.SPRITE_PAD_LEFT;
             state.facingRight = true;
         } else {
-            /* Mascota a la DCHA de la ventana; su lado IZQUIERDO
-               visible toca w.right. SIN FLIP el cuerpo visible queda
-               en [state.x + PAD_LEFT, state.x + SIZE_W - PAD_RIGHT].
-               Para que el borde izquierdo visible == w.right:
-                 state.x + PAD_LEFT = w.right
+            /* Mascota a la DCHA de la ventana; mira hacia la pared (a
+               la izquierda) → facingRight=false (sin flip, natural).
+               Contenido visible: [state.x + PAD_LEFT, state.x + SIZE_W - PAD_RIGHT].
+               El borde izquierdo está en state.x + PAD_LEFT.
+               Para que toque w.right:
                  state.x = w.right - PAD_LEFT */
             state.x = w.right - CFG.SPRITE_PAD_LEFT;
             state.facingRight = false;
         }
+        /* Busca el ELEMENTO DOM de la ventana con la que estamos
+           colisionando — necesario para detectar si se mueve durante
+           la escalada y entonces caer. */
+        var winEl = null;
+        var nodes = document.querySelectorAll('.window');
+        for (var i = 0; i < nodes.length; i++) {
+            var r = nodes[i].getBoundingClientRect();
+            if (Math.abs(r.left - w.left) < 2 && Math.abs(r.top - w.top) < 2
+                && Math.abs(r.right - w.right) < 2 && Math.abs(r.bottom - w.bottom) < 2) {
+                winEl = nodes[i];
+                break;
+            }
+        }
+        if (!winEl) return false;  /* sin DOM no podemos detectar movimiento */
+
         state.climbing       = true;
         state.climbingWindow = { left: w.left, right: w.right, top: w.top, bottom: w.bottom };
+        state.climbingEl     = winEl;
         state.climbingSide   = side;
         state.moving         = false;
         setAnim('wall');
@@ -586,7 +619,18 @@
        Ignora el margen de aterrizaje (4px del techo) — el usuario puede
        posar la mascota sobre el techo sin problema. */
     function checkWindowCollisionAABB(newX, newY) {
-        var petL = newX, petR = newX + SIZE_W;
+        /* Usar bordes del CUERPO VISIBLE (no del bounding box) para
+           que el sliding del drag pegue el cuerpo del personaje
+           contra la ventana.
+           IMPORTANTE: pad SIMÉTRICO (no depende de facingRight).
+           Antes usaba pad asimétrico según flip → la posición de
+           snap cambiaba entre arrastres consecutivos según hacia
+           dónde mirara la mascota. Promediando PAD_LEFT/PAD_RIGHT
+           obtenemos un cuerpo "centrado" en el bounding box y el
+           snap queda en el mismo sitio siempre. */
+        var pad  = (CFG.SPRITE_PAD_LEFT + CFG.SPRITE_PAD_RIGHT) >> 1;  /* (60+15)/2 = 37 */
+        var petL = newX + pad;
+        var petR = newX + SIZE_W - pad;
         var petT = newY, petB = newY + SIZE_H;
         var wins = getOpenWindowRects();
         for (var i = 0; i < wins.length; i++) {
@@ -642,6 +686,18 @@
 
         var isEgg = !state.mascota.eclosionado;
 
+        /* ── EYECCIÓN: si una ventana acaba de aparecer encima de la
+           mascota, sale disparada. Solo aplica cuando NO está cayendo
+           ni escalando — durante una caída la mascota puede atravesar
+           ventanas brevemente y no queremos disparos espurios. */
+        if (!state.falling && !state.climbing) {
+            var intruder = windowContainingPet();
+            if (intruder) {
+                ejectFromWindow(intruder);
+                return;
+            }
+        }
+
         /* ── FASE 0: ESCALADA por una pared de ventana ─────────────
            Sube state.y a CLIMB_SPEED hasta alcanzar el techo de la
            ventana sobre la que está. Al llegar arriba, se "engancha"
@@ -652,6 +708,38 @@
                 /* Seguridad: estado inconsistente, cancelar. */
                 state.climbing = false;
             } else {
+                /* La ventana se ha MOVIDO o se ha cerrado mientras
+                   escalábamos → ya no hay pared a la que agarrarse,
+                   caemos. Comparamos la rect actual del elemento DOM
+                   con el snapshot de cuando empezó la escalada. */
+                var winEl = state.climbingEl;
+                var moved = !winEl || !document.body.contains(winEl);
+                if (winEl && !moved) {
+                    var liveRect = winEl.getBoundingClientRect();
+                    /* >2px de desplazamiento o cambio de tamaño = "se ha
+                       movido". Tolerancia para fluctuaciones por
+                       sub-pixel rendering / animaciones. */
+                    if (Math.abs(liveRect.left   - cw.left  ) > 2
+                     || Math.abs(liveRect.top    - cw.top   ) > 2
+                     || Math.abs(liveRect.right  - cw.right ) > 2
+                     || Math.abs(liveRect.bottom - cw.bottom) > 2) {
+                        moved = true;
+                    }
+                }
+                if (moved) {
+                    state.climbing       = false;
+                    state.climbingWindow = null;
+                    state.climbingEl     = null;
+                    state.climbingSide   = null;
+                    /* Disparar caída — la fase de caída de moveTick
+                       hará el resto desde el próximo tick. */
+                    state.falling = true;
+                    state.vy      = 0;
+                    state.vx      = 0;
+                    state.peakY   = state.y;
+                    setAnim('fall');
+                    return;
+                }
                 state.y -= CFG.CLIMB_SPEED;
                 /* Posición final = techo de la ventana ajustado con
                    foot pad para que los pies visibles queden sobre la
@@ -667,16 +755,15 @@
                        reconozca y no caiga de nuevo. */
                     state.y = topY;
                     if (state.climbingSide === 'left') {
-                        /* Mantuvimos facingRight=true tras la escalada
-                           (mira hacia dentro de la ventana). Con flip,
-                           visible.left = state.x + PAD_RIGHT. Para que
-                           ese borde esté en cw.left:
+                        /* facingRight=true (con flip) tras la escalada.
+                           Post-flip, visible.left = state.x + PAD_RIGHT.
+                           Para alinear con cw.left:
                              state.x = cw.left - PAD_RIGHT */
                         state.x = cw.left - CFG.SPRITE_PAD_RIGHT;
                     } else {
                         /* facingRight=false (sin flip). visible.right =
-                           state.x + SIZE_W - PAD_RIGHT. Para que ese
-                           borde esté en cw.right:
+                           state.x + SIZE_W - PAD_RIGHT. Para alinear
+                           con cw.right:
                              state.x = cw.right - SIZE_W + PAD_RIGHT */
                         state.x = cw.right - SIZE_W + CFG.SPRITE_PAD_RIGHT;
                     }
@@ -685,6 +772,7 @@
                     state.x = Math.max(0, Math.min(window.innerWidth - SIZE_W, state.x));
                     state.climbing       = false;
                     state.climbingWindow = null;
+                    state.climbingEl     = null;
                     state.climbingSide   = null;
                     state.moving         = false;
                     state.idleTimer      = 0;
@@ -945,6 +1033,74 @@
         return rects;
     }
 
+    /** ¿El centro de la mascota está dentro del CUERPO de alguna
+     *  ventana? Útil para detectar que el usuario acaba de abrir una
+     *  ventana ENCIMA suya y debe ser eyectada. */
+    function windowContainingPet() {
+        var cx = state.x + SIZE_W / 2;
+        var cy = state.y + SIZE_H / 2;
+        var wins = getOpenWindowRects();
+        for (var i = 0; i < wins.length; i++) {
+            var w = wins[i];
+            if (cx > w.left && cx < w.right && cy > w.top && cy < w.bottom) {
+                return w;
+            }
+        }
+        return null;
+    }
+
+    /** Busca una posición X "segura" en el suelo donde la mascota no
+     *  esté solapada con ninguna ventana. Prueba varios candidatos
+     *  (esquinas, cuartos del viewport). Si ninguno queda libre,
+     *  devuelve la primera (esquina izq). */
+    function findSafeLandingX() {
+        var SAFE_MARGIN = 40;
+        var candidates = [
+            SAFE_MARGIN,
+            window.innerWidth - SIZE_W - SAFE_MARGIN,
+            Math.floor(window.innerWidth * 0.20) - SIZE_W / 2,
+            Math.floor(window.innerWidth * 0.80) - SIZE_W / 2,
+            Math.floor(window.innerWidth * 0.50) - SIZE_W / 2,
+        ];
+        var floorY = groundY();
+        var wins = getOpenWindowRects();
+        for (var i = 0; i < candidates.length; i++) {
+            var x = Math.max(0, Math.min(window.innerWidth - SIZE_W, candidates[i]));
+            var cx = x + SIZE_W / 2;
+            var cy = floorY + SIZE_H / 2;
+            var ok = true;
+            for (var j = 0; j < wins.length; j++) {
+                var w = wins[j];
+                if (cx > w.left && cx < w.right && cy > w.top && cy < w.bottom) {
+                    ok = false; break;
+                }
+            }
+            if (ok) return x;
+        }
+        return candidates[0];
+    }
+
+    /** Sale disparada hacia la posición segura más cercana lejos del
+     *  centro de la ventana intrusa. Aplica vx + vy de impulso y deja
+     *  que las físicas (gravedad, paredes, rebote) hagan el resto. */
+    function ejectFromWindow(w) {
+        var winCenterX = (w.left + w.right) / 2;
+        var safeX      = findSafeLandingX();
+        /* Dirección: hacia donde está la zona segura respecto al centro
+           de la ventana invasora. */
+        var dir = safeX < winCenterX ? -1 : 1;
+        /* Velocidades fijas para el "disparo" — fuerte horizontal +
+           pequeño impulso hacia arriba para arco. */
+        state.vx = 22 * dir;
+        state.vy = -6;
+        state.falling    = true;
+        state.peakY      = state.y;
+        state.moving     = false;
+        state.dragSamples = [];
+        setAnim('fall');
+        applyPosition();
+    }
+
     function scanWindows() {
         if (!state.mascota || !state.mascota.viva) return;
         var apps = [
@@ -1068,6 +1224,7 @@
            mascota. */
         state.climbing       = false;
         state.climbingWindow = null;
+        state.climbingEl     = null;
         state.climbingSide   = null;
         setAnim('drag');
         var r = state.el.getBoundingClientRect();
@@ -1082,14 +1239,40 @@
             var nx = Math.max(0, Math.min(window.innerWidth  - SIZE_W, px - state.dragOffX));
             var ny = Math.max(0, Math.min(groundY(),                  py - state.dragOffY));
 
-            /* SLIDE collision: prueba movimiento completo, luego ejes
-               sueltos. */
+            /* SLIDE collision con SNAP-A-PARED para consistencia.
+               Antes la mascota se quedaba "donde le pillara" según el
+               último frame válido → el punto de impacto variaba con
+               cada arrastre. Ahora, cuando el X queda bloqueado,
+               snapeamos explícitamente al borde de la ventana
+               correspondiente (pegando el cuerpo) → el snap es
+               siempre el mismo, no depende de la velocidad/path
+               del cursor. */
+            var pad = (CFG.SPRITE_PAD_LEFT + CFG.SPRITE_PAD_RIGHT) >> 1;
             if (!checkWindowCollisionAABB(nx, ny)) {
                 state.x = nx; state.y = ny;
             } else if (!checkWindowCollisionAABB(nx, state.y)) {
+                /* Y bloqueado, X libre: aplica X normal. */
                 state.x = nx;
-            } else if (!checkWindowCollisionAABB(state.x, ny)) {
-                state.y = ny;
+            } else {
+                /* X bloqueado: snap explícito al borde de la ventana
+                   con la que se colisiona en X. */
+                var blockerX = checkWindowCollisionAABB(nx, state.y);
+                if (blockerX) {
+                    if (nx > state.x) {
+                        /* Movía a la derecha → cuerpo derecho pega a
+                           blockerX.left → bbox right en w.left+pad. */
+                        state.x = blockerX.left - SIZE_W + pad;
+                    } else if (nx < state.x) {
+                        /* Movía a la izquierda → cuerpo izquierdo
+                           pega a blockerX.right. */
+                        state.x = blockerX.right - pad;
+                    }
+                    state.x = Math.max(0, Math.min(window.innerWidth - SIZE_W, state.x));
+                }
+                /* Y por separado — puede estar libre aunque X no. */
+                if (!checkWindowCollisionAABB(state.x, ny)) {
+                    state.y = ny;
+                }
             }
             applyPosition();
 
@@ -1193,27 +1376,12 @@
     function handleMenuAction(action) {
         switch (action) {
             case 'feed':
-                if (typeof window.win98Prompt === 'function') {
-                    window.win98Prompt(
-                        '¿Qué le das de comer a ' + state.mascota.nombre + '?',
-                        state.memoria.comida_favorita || '',
-                        function (val) {
-                            val = (val || '').trim() || 'algo rico';
-                            apiFetch('feed', { comida: val }, function (err, d) {
-                                if (!err && d && d.ok) {
-                                    state.mascota.hambre    = d.hambre;
-                                    state.mascota.felicidad = d.felicidad;
-                                    updateHUD();
-                                    setAnim('eat');
-                                    var msg = d.bonus_fav ? '¡' + val + '! ¡Mi favorita! 😍' : '¡Mmm, gracias! 😋';
-                                    setTimeout(function () { showBubble(msg); }, 300);
-                                    /* Volver a idle cuando termine la anim eat */
-                                    waitAnimDone(function () { setAnim('idle'); });
-                                }
-                            });
-                        }
-                    );
-                }
+                /* La selección concreta del alimento se hace ahora en
+                   el picker (ventana #alimentar-window del escritorio).
+                   Aquí solo lanzamos la animación de comer; las
+                   actualizaciones de stats las hace ese handler. */
+                setAnim('eat');
+                waitAnimDone(function () { setAnim('idle'); });
                 break;
 
             case 'play':

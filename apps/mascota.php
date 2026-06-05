@@ -80,6 +80,32 @@ if ($hasMascota) {
     $memoria = $stmtM->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
+/* Gustos: catálogo + valores del usuario, ordenados de mayor a menor. */
+require_once dirname(__DIR__) . '/assets/mascota/foods.php';
+$gustos = [];
+if ($hasMascota && $mascota['eclosionado']) {
+    $stmtG = $pdo->prepare("SELECT alimento, valor, revelado FROM mascota_gustos WHERE user_id = ?");
+    $stmtG->execute([$userId]);
+    $byAlim = [];
+    foreach ($stmtG->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $byAlim[$r['alimento']] = [
+            'valor'    => (int)$r['valor'],
+            'revelado' => (bool)$r['revelado'],
+        ];
+    }
+    foreach (MASCOTA_FOODS as $slug => $meta) {
+        $g = $byAlim[$slug] ?? ['valor' => 50, 'revelado' => false];
+        $gustos[] = [
+            'slug'     => $slug,
+            'nombre'   => $meta['nombre'],
+            'emoji'    => $meta['emoji'],
+            'valor'    => $g['valor'],
+            'revelado' => $g['revelado'],
+        ];
+    }
+    usort($gustos, fn($a,$b) => $b['valor'] <=> $a['valor']);
+}
+
 /* La skin ACTUAL de la mascota se lee directamente de la fila. Queda
    fijada en el INSERT y no cambia aunque el usuario elija otra skin en
    Temas → Personalización. Para "cambiar" hay que eliminar la mascota
@@ -353,6 +379,9 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
     <!-- ── Tab bar ─────────────────────────────────────────────── -->
     <div class="tab-bar">
         <button class="tab-btn active" data-tab="estado">🐾 Estado</button>
+        <?php if ($hasMascota && $mascota['eclosionado']): ?>
+        <button class="tab-btn"        data-tab="gustos">💕 Gustos</button>
+        <?php endif; ?>
         <button class="tab-btn"        data-tab="memoria">💬 Memoria</button>
     </div>
 
@@ -438,8 +467,7 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
                 </p>
                 <?php else: ?>
                 <div class="estado-sub">
-                    Skin: <strong><?= htmlspecialchars($currentSkin) ?></strong>
-                    &nbsp;·&nbsp; Edad: <strong id="display-edad"><?= (int)$mascota['edad'] ?></strong> día<?= $mascota['edad'] !== 1 ? 's' : '' ?>
+                    Edad: <strong id="display-edad"><?= (int)$mascota['edad'] ?></strong> día<?= $mascota['edad'] !== 1 ? 's' : '' ?>
                 </div>
 
                 <!-- Hambre -->
@@ -483,8 +511,7 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
             <?php elseif ($isEgg): ?>
             <button class="button default" id="btn-warm">🔥 Dar calor</button>
             <?php else: ?>
-            <button class="button default" id="btn-feed">🍕 Alimentar</button>
-            <button class="button" id="btn-play"
+            <button class="button default" id="btn-play"
                 <?= $mascota['hambre'] < 15 ? 'disabled title="Demasiada hambre para jugar"' : '' ?>>
                 ⚽ Jugar
             </button>
@@ -512,6 +539,60 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
          La skin de la mascota actual queda FIJA en el momento de su
          creación; cambiar la preferencia solo afecta a la próxima
          mascota (tras "Eliminar mascota"). -->
+
+    <!-- ══════════════════════════════════════════════════════════
+         TAB: GUSTOS
+    ═══════════════════════════════════════════════════════════ -->
+    <?php if ($hasMascota && $mascota['eclosionado']):
+        /* 3 SLOTS POR LISTA — fijos, siempre visibles, con placeholder
+           "???" cuando aún no se han descubierto. Al alimentar, los
+           slots se rellenan dinámicamente:
+           - Solo se consideran alimentos REVELADOS.
+           - Umbral fijo: valor >= 40 → favoritos; valor < 40 → odiados.
+           - Favoritos = top 3 con MAYOR valor.
+           - Odiados   = top 3 con MENOR valor (los más detestados).
+           - Ambos se muestran ordenados DESC (mejor dentro de su grupo
+             primero — para odiados eso = menos malo primero). */
+        $UMBRAL_FAVORITO = 40;
+        $SLOTS           = 3;
+        $revelados = array_filter($gustos, fn($g) => !empty($g['revelado']));
+        $favoritos = array_filter($revelados, fn($g) => $g['valor'] >= $UMBRAL_FAVORITO);
+        $odiados   = array_filter($revelados, fn($g) => $g['valor'] <  $UMBRAL_FAVORITO);
+        usort($favoritos, fn($a,$b) => $b['valor'] <=> $a['valor']);
+        usort($odiados,   fn($a,$b) => $b['valor'] <=> $a['valor']);
+        /* Limitar a 3 slots: favoritos top 3 MAYORES, odiados top 3 MENORES. */
+        $favoritos = array_slice(array_values($favoritos), 0, $SLOTS);
+        $odiados   = array_slice(array_values($odiados),   -$SLOTS);
+
+        $renderSlot = function(?array $g, int $rank): void {
+            $filled = $g !== null;
+            ?>
+            <div class="mem-card" style="display:flex;align-items:center;gap:10px;<?= $filled ? '' : 'opacity:0.55;' ?>">
+                <span style="width:24px;text-align:center;font-weight:bold;color:var(--text-muted,#666);">#<?= $rank ?></span>
+                <span style="font-size:28px;line-height:1;<?= $filled ? '' : 'filter:grayscale(1);' ?>"><?= $filled ? $g['emoji'] : '❓' ?></span>
+                <span style="flex:1;font-weight:bold;font-size:12px;<?= $filled ? '' : 'color:var(--text-muted,#666);' ?>"><?= $filled ? htmlspecialchars($g['nombre']) : '???' ?></span>
+            </div>
+            <?php
+        };
+    ?>
+    <div id="tab-gustos" class="tab-panel">
+        <p style="margin:0 0 12px;color:var(--text-muted,#666);font-size:11px;">
+            Descubre los gustos de tu mascota dándole de comer. Cada
+            alimento que pruebe rellenará uno de los slots. Si pruebas
+            algo mejor/peor, los slots se reorganizan automáticamente.
+        </p>
+
+        <h4 style="margin:0 0 6px;color:var(--accent,#080);font-size:11px;">★ Lo que más le ha gustado</h4>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+            <?php for ($i = 0; $i < $SLOTS; $i++) $renderSlot($favoritos[$i] ?? null, $i + 1); ?>
+        </div>
+
+        <h4 style="margin:0 0 6px;color:var(--error-text,#c00);font-size:11px;">✗ Lo que peor le sienta</h4>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+            <?php for ($i = 0; $i < $SLOTS; $i++) $renderSlot($odiados[$i] ?? null, $i + 1); ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- ══════════════════════════════════════════════════════════
          TAB: MEMORIA
@@ -707,27 +788,8 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
         });
     }
 
-    /* Alimentar */
-    var btnFeed = document.getElementById('btn-feed');
-    if (btnFeed) {
-        btnFeed.addEventListener('click', function() {
-            var comida = (prompt('¿Qué le das de comer?') || '').trim() || 'comida';
-            apiFetch('feed', { comida: comida }, function(err, d) {
-                if (!err && d && d.ok) {
-                    setBarValue('fill-hambre',    'val-hambre',    d.hambre);
-                    setBarValue('fill-felicidad', 'val-felicidad', d.felicidad);
-                    var msg = d.bonus_fav ? '¡Le encantó! +bonus ★' : '¡Comida entregada!';
-                    showMsg('msg-accion', msg, 'ok');
-                    /* Notificar al engine.js del escritorio si está activo */
-                    if (window.parent && window.parent.MascotaEngine) {
-                        window.parent.MascotaEngine.showBubble('¡Mmm! 😋');
-                    }
-                } else {
-                    showMsg('msg-accion', (d && d.error) ? d.error : 'Error', 'error');
-                }
-            });
-        });
-    }
+    /* Alimentar: el botón se eliminó de esta ventana — la alimentación
+       se hace desde el picker del escritorio (☰ → Alimentar). */
 
     /* Jugar */
     var btnPlay = document.getElementById('btn-play');

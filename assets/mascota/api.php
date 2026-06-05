@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../db.php';
    El api.php es standalone (no se carga desde un wrapper que ya tenga
    este helper en scope). */
 require_once __DIR__ . '/../../assets/themes/theme-helpers.php';
+require_once __DIR__ . '/foods.php';
 
 /* ── Sesión y autenticación ─────────────────────────────────────── */
 session_start();
@@ -68,6 +69,23 @@ try {
             PRIMARY KEY (`user_id`, `clave`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    /* Tabla de gustos: cada mascota tiene un valor 0-100 por cada
+       alimento del catálogo. Se generan aleatoriamente al crear la
+       mascota y NO cambian durante su vida. */
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `mascota_gustos` (
+            `user_id`   INT NOT NULL,
+            `alimento`  VARCHAR(40) NOT NULL,
+            `valor`     TINYINT UNSIGNED NOT NULL DEFAULT 50,
+            `revelado`  TINYINT(1) NOT NULL DEFAULT 0,
+            PRIMARY KEY (`user_id`, `alimento`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    /* Migración: columna `revelado` para BD que no la tenían. */
+    $col = $pdo->query("SHOW COLUMNS FROM `mascota_gustos` LIKE 'revelado'")->fetch();
+    if (!$col) {
+        $pdo->exec("ALTER TABLE `mascota_gustos` ADD COLUMN `revelado` TINYINT(1) NOT NULL DEFAULT 0 AFTER `valor`");
+    }
     /* Migraciones: añadir columnas nuevas a instalaciones viejas. */
     $col = $pdo->query("SHOW COLUMNS FROM `mascotas` LIKE 'eclosionado'")->fetch();
     if (!$col) {
@@ -114,6 +132,7 @@ try {
         case 'hatch':        actionHatch();      break;
         case 'warm':         actionWarm();       break;
         case 'break-egg':    actionBreakEgg();   break;
+        case 'get-foods':    actionGetFoods();   break;
         case 'save-memoria': actionSaveMemoria();break;
         case 'get-memoria':  actionGetMemoria(); break;
         case 'heartbeat':    actionHeartbeat();  break;
@@ -182,6 +201,30 @@ function resolvePreferredMascotSlug(PDO $pdo, int $userId): string {
 }
 
 /**
+ * Genera valores aleatorios 0-100 para cada alimento del catálogo
+ * y los inserta en mascota_gustos. Reemplaza cualquier valor previo
+ * (REPLACE INTO) para no duplicar al regenerar.
+ */
+function generarGustosAleatorios(PDO $pdo, int $userId): void {
+    $stmt = $pdo->prepare("REPLACE INTO mascota_gustos (user_id, alimento, valor) VALUES (?, ?, ?)");
+    foreach (MASCOTA_FOODS as $slug => $_meta) {
+        /* Uniforme 0-100 — distribuye toda la escala. */
+        $stmt->execute([$userId, $slug, random_int(0, 100)]);
+    }
+}
+
+/**
+ * Si la mascota no tiene gustos en BD (compatibilidad con datos
+ * antiguos), los genera. Idempotente. */
+function asegurarGustos(PDO $pdo, int $userId): void {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM mascota_gustos WHERE user_id = ?");
+    $stmt->execute([$userId]);
+    if ((int)$stmt->fetchColumn() === 0) {
+        generarGustosAleatorios($pdo, $userId);
+    }
+}
+
+/**
  * Crea la mascota con valores por defecto si no existe.
  * Devuelve el array con todos sus campos, con hambre/felicidad
  * recalculados según el tiempo transcurrido desde ultima_vez.
@@ -210,9 +253,16 @@ function getMascota(): array {
               (user_id, nombre, skin, hambre, felicidad, temperatura, edad, viva, eclosionado, eclosion_at)
             VALUES (?, '', ?, 80, 80, 80, 0, 1, 0, DATE_ADD(NOW(), INTERVAL 3 DAY))
         ")->execute([$userId, $preferredSlug]);
+        /* Generar gustos aleatorios uniformes 0-100 para cada alimento.
+           Quedarán FIJADOS para toda la vida de esta mascota; al
+           eliminar+crear nueva mascota se regeneran de cero. */
+        generarGustosAleatorios($pdo, $userId);
         $stmt->execute([$userId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
     }
+    /* Backfill defensivo: si por algún motivo (mascota vieja anterior a
+       este sistema, fila huérfana) no hay gustos, los generamos ahora. */
+    asegurarGustos($pdo, $userId);
 
     /* ── Calcular decay por tiempo offline ──────────────────────── */
     $now        = time();
@@ -360,33 +410,51 @@ function actionFeed(): void {
         echo json_encode(['ok' => false, 'error' => 'Tu mascota ha muerto.']);
         return;
     }
+    if (!$mascota['eclosionado']) {
+        echo json_encode(['ok' => false, 'error' => 'Es un huevo — todavía no come.']);
+        return;
+    }
 
-    /* Solo `trim`. NO `htmlspecialchars`: el valor no se imprime en HTML
-       aquí, solo se compara con `mb_stripos` contra la comida favorita.
-       Codificar `&` `<` `>` etc. rompía la coincidencia (p.ej. "Mac &
-       cheese" → "Mac &amp; cheese" no matcheaba). La protección XSS
-       se aplica al ECHO, no al INPUT — los prepared statements ya
-       evitan SQL injection. */
-    $comida = mb_substr(trim($body['comida'] ?? 'comida'), 0, 200);
+    /* Slug del alimento (validar contra catálogo). */
+    $alimento = (string)($body['alimento'] ?? '');
+    if (!isset(MASCOTA_FOODS[$alimento])) {
+        echo json_encode(['ok' => false, 'error' => 'Alimento no reconocido.']);
+        return;
+    }
 
-    /* Comidas favoritas dan +5 extra de felicidad */
-    $stmt = $pdo->prepare("SELECT valor FROM mascota_memoria WHERE user_id=? AND clave='comida_favorita'");
-    $stmt->execute([$userId]);
-    $fav = $stmt->fetchColumn();
-    $bonus = ($fav && mb_stripos($comida, $fav) !== false) ? 5 : 0;
+    /* Recoger valor de gusto (0-100). */
+    $stmt = $pdo->prepare("SELECT valor FROM mascota_gustos WHERE user_id=? AND alimento=?");
+    $stmt->execute([$userId, $alimento]);
+    $gusto = (int)($stmt->fetchColumn() ?: 50);
 
-    $newHambre    = min(100, $mascota['hambre']    + 20);
-    $newFelicidad = min(100, $mascota['felicidad'] + 5 + $bonus);
+    /* Decidir cambios según el gusto. */
+    if      ($gusto >= 80) { $deltaHappy =  20; $reaccion = 'love';    }
+    else if ($gusto >= 60) { $deltaHappy =  10; $reaccion = 'like';    }
+    else if ($gusto >= 40) { $deltaHappy =   3; $reaccion = 'neutral'; }
+    else if ($gusto >= 20) { $deltaHappy =  -3; $reaccion = 'dislike'; }
+    else                   { $deltaHappy = -10; $reaccion = 'hate';    }
+
+    $newHambre    = min(100, $mascota['hambre']    + 25);
+    $newFelicidad = max(0, min(100, $mascota['felicidad'] + $deltaHappy));
 
     $pdo->prepare("
         UPDATE mascotas SET hambre=?, felicidad=?, ultima_vez=NOW() WHERE user_id=?
     ")->execute([$newHambre, $newFelicidad, $userId]);
 
+    /* Marca el gusto como REVELADO — el usuario ya sabe la reacción
+       de esta comida, así que se descubre en la pestaña Gustos. */
+    $pdo->prepare("UPDATE mascota_gustos SET revelado=1 WHERE user_id=? AND alimento=?")
+        ->execute([$userId, $alimento]);
+
     echo json_encode([
         'ok'        => true,
         'hambre'    => $newHambre,
         'felicidad' => $newFelicidad,
-        'bonus_fav' => $bonus > 0,
+        'alimento'  => $alimento,
+        'gusto'     => $gusto,
+        'reaccion'  => $reaccion,
+        'nombre'    => MASCOTA_FOODS[$alimento]['nombre'],
+        'emoji'     => MASCOTA_FOODS[$alimento]['emoji'],
     ]);
 }
 
@@ -537,7 +605,8 @@ function actionDelete(): void {
     try {
         $pdo->beginTransaction();
         $pdo->prepare("DELETE FROM mascota_memoria WHERE user_id = ?")->execute([$userId]);
-        $pdo->prepare("DELETE FROM mascotas WHERE user_id = ?")->execute([$userId]);
+        $pdo->prepare("DELETE FROM mascota_gustos  WHERE user_id = ?")->execute([$userId]);
+        $pdo->prepare("DELETE FROM mascotas        WHERE user_id = ?")->execute([$userId]);
         $pdo->commit();
         echo json_encode(['ok' => true, 'mensaje' => 'Mascota eliminada.']);
     } catch (Throwable $e) {
@@ -601,6 +670,37 @@ function actionHatch(): void {
     $mascota['segundos_para_eclosion'] = null;
 
     echo json_encode(['ok' => true, 'mascota' => $mascota]);
+}
+
+/** GET-FOODS — catálogo de alimentos + gustos del usuario.
+ *  Devuelve `foods` como array ordenado por slug con cada item
+ *  `{slug, nombre, emoji, valor}`. Útil para renderizar el picker
+ *  y la pestaña de Gustos. */
+function actionGetFoods(): void {
+    global $pdo, $userId;
+    getMascota(); /* asegura que existan gustos (asegurarGustos dentro). */
+
+    $stmt = $pdo->prepare("SELECT alimento, valor, revelado FROM mascota_gustos WHERE user_id=?");
+    $stmt->execute([$userId]);
+    $byAlim = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $byAlim[$r['alimento']] = [
+            'valor'    => (int)$r['valor'],
+            'revelado' => (bool)$r['revelado'],
+        ];
+    }
+    $list = [];
+    foreach (MASCOTA_FOODS as $slug => $meta) {
+        $g = $byAlim[$slug] ?? ['valor' => 50, 'revelado' => false];
+        $list[] = [
+            'slug'     => $slug,
+            'nombre'   => $meta['nombre'],
+            'emoji'    => $meta['emoji'],
+            'valor'    => $g['valor'],
+            'revelado' => $g['revelado'],
+        ];
+    }
+    echo json_encode(['ok' => true, 'foods' => $list]);
 }
 
 /** BREAK-EGG — el huevo se rompió por caída desde mucha altura.

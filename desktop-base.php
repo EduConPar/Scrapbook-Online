@@ -442,6 +442,34 @@ window.DesktopState.whenReady = function(cb){
             style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
+<!-- VENTANA "Alimentar" — picker de comidas. Se monta con el catálogo
+     de assets/mascota/foods.php (no se duplica). Al click → POST feed
+     con el slug → cierra ventana → muestra reacción. -->
+<?php require_once __DIR__ . '/assets/mascota/foods.php'; ?>
+<div class="window" id="alimentar-window"
+     style="display:none; position:fixed; left:30vw; top:18vh; width:320px; z-index:560; flex-direction:column;">
+    <div class="title-bar" id="alimentar-titlebar">
+        <div class="title-bar-text">🍴 Alimentar</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="alimentar-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:8px;">
+        <p style="margin:0 0 8px;font-size:11px;">¿Qué le das?</p>
+        <div id="alimentar-grid"
+             style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+            <?php foreach (MASCOTA_FOODS as $slug => $meta): ?>
+            <button type="button" class="alimentar-btn" data-slug="<?= htmlspecialchars($slug) ?>"
+                    title="<?= htmlspecialchars($meta['nombre']) ?>"
+                    style="min-width:0;min-height:60px;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;">
+                <span style="font-size:24px;line-height:1;"><?= $meta['emoji'] ?></span>
+                <span style="font-size:9px;line-height:1.1;text-align:center;color:transparent;text-shadow:0 0 var(--text,#000);"><?= htmlspecialchars($meta['nombre']) ?></span>
+            </button>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+
 <!-- ARCHIVE WINDOW -->
 <div class="window" id="archive-window">
     <div class="title-bar" id="archive-titlebar">
@@ -2872,6 +2900,75 @@ window.notifSystem = (function() {
         taskbarManager.unregister('mascota-window');
     });
 
+    /* ─── Picker "Alimentar" ────────────────────────────────────── */
+    /* Hacer arrastrable la ventana del picker (solo drag, sin
+       redimensionar — la ventana tiene tamaño fijo por su grid). */
+    if (window.WindowManager) window.WindowManager.setup('alimentar-window', true);
+
+    function openAlimentarWindow() {
+        if (taskbarManager.isRegistered('alimentar-window')) {
+            taskbarManager.restore('alimentar-window');
+        } else {
+            taskbarManager.register('alimentar-window', 'Alimentar', '🍴', 'flex');
+        }
+    }
+    document.getElementById('alimentar-close').addEventListener('click', function () {
+        taskbarManager.unregister('alimentar-window');
+    });
+    /* Click sobre cualquier botón de alimento → POST feed con su slug. */
+    document.querySelectorAll('.alimentar-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var slug = btn.dataset.slug;
+            fetch('assets/mascota/api.php?action=feed', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ alimento: slug }),
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d || !d.ok) {
+                        if (window.notifSystem) {
+                            window.notifSystem.show({
+                                id: 'feed-err-' + Date.now(),
+                                type: 'error',
+                                title: '🍴 Error',
+                                message: (d && d.error) || 'No se pudo alimentar.',
+                                autoDismissAfter: 3500,
+                            });
+                        }
+                        return;
+                    }
+                    /* Sync stats locales del engine + animación de comer. */
+                    if (window.MascotaEngine && window.MascotaEngine.getState) {
+                        var st = window.MascotaEngine.getState();
+                        if (st && st.mascota) {
+                            st.mascota.hambre    = d.hambre;
+                            st.mascota.felicidad = d.felicidad;
+                        }
+                        if (window.MascotaEngine.feed) window.MascotaEngine.feed();
+                    }
+                    /* Burbuja de reacción según gusto. */
+                    var msgs = {
+                        love:    [d.emoji + ' ¡Adoro ' + d.nombre + '! 😍', '¡Mi favorito! ❤'],
+                        like:    ['¡Mmm, gracias! 😋',     '¡' + d.nombre + ' está rica!'],
+                        neutral: ['Gracias.',              '...mh, vale.'],
+                        dislike: ['Esto no me gusta 🙁',   '¿Otra vez ' + d.nombre + '?'],
+                        hate:    ['¡Puaj! 🤢 odio ' + d.nombre, '¡Eso es asqueroso!'],
+                    };
+                    var arr = msgs[d.reaccion] || msgs.neutral;
+                    var msg = arr[Math.floor(Math.random() * arr.length)];
+                    if (window.MascotaEngine && window.MascotaEngine.showBubble) {
+                        window.MascotaEngine.showBubble(msg, 3000);
+                    }
+                    /* Cerrar picker tras alimentar. */
+                    taskbarManager.unregister('alimentar-window');
+                    /* Refrescar ventana de gestión si está abierta. */
+                    if (window.refreshMascotaWindow) window.refreshMascotaWindow();
+                })
+                .catch(function (e) { console.error('feed:', e); });
+        });
+    });
+
     /* Menú contextual del botón ⋯ */
     menuBtn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -2967,11 +3064,10 @@ window.notifSystem = (function() {
                 break;
 
             case 'feed':
-                if (typeof window.MascotaEngine !== 'undefined') {
-                    window.MascotaEngine.feed();
-                } else {
-                    openMascotaWindow();
-                }
+                /* Abrir ventana picker — la elección concreta del
+                   alimento se delega al usuario. El handler de los
+                   botones llama a la API y notifica al engine. */
+                openAlimentarWindow();
                 break;
 
             case 'play':
