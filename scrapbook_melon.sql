@@ -353,6 +353,47 @@ CREATE TABLE `music_extras` (
   `added_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `music_plays` (tracking para Spotify Wrapped)
+--
+
+CREATE TABLE `music_plays` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `video_id` varchar(11) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `artist` varchar(200) NOT NULL DEFAULT '',
+  `playlist_id` bigint(20) DEFAULT NULL,
+  `duration_s` int(11) NOT NULL DEFAULT 0,
+  `played_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_year` (`user_id`, `played_at`),
+  KEY `idx_user_video` (`user_id`, `video_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `music_album_actions` (eventos play/import de álbum)
+--
+
+CREATE TABLE `music_album_actions` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `album_title` varchar(200) NOT NULL,
+  `artist` varchar(200) NOT NULL DEFAULT '',
+  `action_type` varchar(20) NOT NULL DEFAULT 'play',
+  `yt_playlist_id` varchar(40) DEFAULT NULL,
+  `spotify_album_id` varchar(40) DEFAULT NULL,
+  `cover_url` varchar(500) DEFAULT NULL,
+  `played_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_year` (`user_id`, `played_at`),
+  KEY `idx_user_album` (`user_id`, `album_title`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 --
 -- Dumping data for table `music_extras`
 --

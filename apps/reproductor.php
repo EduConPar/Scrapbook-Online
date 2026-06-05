@@ -345,6 +345,71 @@ let ytPlayer = null;
 let progressInterval  = null;
 let autoplayRandom    = false;
 
+/* Estado del WRAPPED tracking: guardamos referencia a la última canción
+   que se EMPEZÓ a reproducir. Cuando cambia (skip / natural end / cierre
+   de la ventana) la logueamos con el tiempo ESCUCHADO real (la
+   `currentTime` del player en el momento de cambio) en lugar de su
+   duración total. Si el usuario salta una canción en el segundo 30, se
+   loguean 30s, no los 4 minutos completos. */
+let _wrappedLastTrack       = null;
+let _wrappedLastPlaylistId  = null;
+
+function sendWrappedLog(track, listenedS, playlistId) {
+    if (!track || !track.videoId || !track.title) return;
+    listenedS = Math.max(0, Math.floor(listenedS || 0));
+    /* Si escuchó menos de 3s no lo contamos como play — evita inflar
+       counts por taps accidentales que cambian de track al instante. */
+    if (listenedS < 3) return;
+    var body = JSON.stringify({
+        videoId:    track.videoId,
+        title:      track.title,
+        artist:     track.artist || '',
+        playlistId: playlistId,
+        durationS:  listenedS,
+    });
+    /* sendBeacon: garantiza que la petición se envíe incluso si la
+       página se está cerrando (pagehide). Si no está disponible o
+       falla, fallback a fetch. */
+    try {
+        if (navigator.sendBeacon) {
+            var blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon('assets/music/wrapped-api.php?action=log', blob)) return;
+        }
+    } catch (_) {}
+    try {
+        fetch('assets/music/wrapped-api.php?action=log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
+            /* keepalive: lo mismo que sendBeacon, sobrevive al cierre. */
+            keepalive: true,
+        }).catch(function(){});
+    } catch (_) {}
+}
+
+/* Al cerrar el escritorio (o cambiar a otra pestaña sin volver), logueamos
+   la última canción con el tiempo escuchado. Sin esto, la PRIMERA canción
+   nunca quedaría registrada porque solo se loguea al CAMBIAR de track. */
+(function setupWrappedFlush() {
+    function flush() {
+        if (!_wrappedLastTrack) return;
+        var listened = 0;
+        try {
+            if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+                listened = ytPlayer.getCurrentTime() || 0;
+            }
+        } catch (_) {}
+        sendWrappedLog(_wrappedLastTrack, listened, _wrappedLastPlaylistId);
+    }
+    /* `pagehide` es más fiable que beforeunload (también dispara en BFCache). */
+    window.addEventListener('pagehide', flush);
+    /* `visibilitychange` para cuando el usuario cambia de tab o
+       minimiza — guardamos lo escuchado HASTA AHORA por si no vuelve. */
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flush();
+    });
+})();
+
 /* win98Confirm vive ahora en assets/js/win98-dialogs.js (compartido).
    La firma (message, title, onOk) se mantiene compatible con los callers. */
 let stopTitleMarquee  = null;
@@ -550,6 +615,23 @@ function updateTrackUI(index)
     if (typeof window.updatePlaylistPlayingHighlight === 'function') {
         window.updatePlaylistPlayingHighlight(currentPlaylistId, index);
     }
+
+    /* WRAPPED tracking: ANTES de cambiar el track activo, logueamos
+       el ANTERIOR con el tiempo que el usuario realmente escuchó
+       (ytPlayer.getCurrentTime() en el momento del cambio).
+       Se llama tanto en skip (switchTrack → updateTrackUI) como en
+       fin natural (ENDED → updateTrackUI), así que cubre ambos casos. */
+    if (_wrappedLastTrack && _wrappedLastTrack.videoId !== track.videoId) {
+        var listened = 0;
+        try {
+            if (ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+                listened = ytPlayer.getCurrentTime() || 0;
+            }
+        } catch (_) {}
+        sendWrappedLog(_wrappedLastTrack, listened, _wrappedLastPlaylistId);
+    }
+    _wrappedLastTrack      = track;
+    _wrappedLastPlaylistId = currentPlaylistId;
 }
 
 function startProgress()

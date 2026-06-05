@@ -3162,6 +3162,26 @@ var PROFILE_USERS = <?php
 
     function playMusicItem(item) {
         updatePlayerTitle('⏳ Cargando…');
+        /* WRAPPED tracking: si es un ÁLBUM, lo registramos como evento
+           de álbum reproducido. Fire-and-forget; los tracks
+           individuales también se loguean via el reproductor más
+           abajo, esto solo afecta al ranking de álbumes en Wrapped. */
+        if (item && item.type === 'album') {
+            try {
+                fetch('assets/music/wrapped-api.php?action=log-album', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        albumTitle:     item.title          || '',
+                        artist:         item.artist         || '',
+                        actionType:     'play',
+                        ytPlaylistId:   item.ytPlaylistId   || '',
+                        spotifyAlbumId: item.spotifyAlbumId || '',
+                        coverUrl:       item.image          || '',
+                    }),
+                }).catch(function(){});
+            } catch (_) {}
+        }
         fetch('assets/profile/api.php?action=play-music-item', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3515,6 +3535,26 @@ var PROFILE_USERS = <?php
             lists.music.push(entry);
             saveCategory('music');
             if (withReview && reviewRating > 0) notifyReviewToFollowers('music', entry.title, entry.type);
+            /* WRAPPED tracking: si el item añadido es un ÁLBUM, lo
+               registramos como evento 'import' (lo importó a su
+               colección/playlist). Suma puntos en el ranking del
+               wrapped, distinto de 'play' que viene de Reproducir. */
+            if (currentType === 'album') {
+                try {
+                    fetch('assets/music/wrapped-api.php?action=log-album', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            albumTitle:     entry.title,
+                            artist:         entry.artist,
+                            actionType:     'import',
+                            ytPlaylistId:   entry.ytPlaylistId   || '',
+                            spotifyAlbumId: entry.spotifyAlbumId || '',
+                            coverUrl:       entry.image          || '',
+                        }),
+                    }).catch(function(){});
+                } catch (_) {}
+            }
             updateCounts();
             renderMusicView(currentMusicTab);
             renderMusicDestacados();

@@ -442,6 +442,31 @@ window.DesktopState.whenReady = function(cb){
             style="flex:1; width:100%; border:none; display:block;"></iframe>
 </div>
 
+<!-- VENTANA "Wrapped" — Spotify Wrapped del usuario.
+     Embed del slide deck en iframe full-screen. Se abre por dos vías:
+       1. Notificación automática cada 22 de diciembre.
+       2. Botón DEV (configurable). -->
+<div class="window" id="wrapped-window"
+     style="display:none; position:fixed; left:5vw; top:4vh; width:90vw; height:88vh; z-index:9500; flex-direction:column;">
+    <div class="title-bar" id="wrapped-titlebar">
+        <div class="title-bar-text">🎁 Wrapped</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="wrapped-close-window"></button>
+        </div>
+    </div>
+    <iframe id="wrapped-frame" src="" frameborder="0"
+            style="flex:1; width:100%; border:none; display:block; background:#000;"></iframe>
+</div>
+
+<!-- BOTÓN DEV — abre el wrapped con el flag ?dev=1 (todas las plays
+     sin filtro de año). Posición fija arriba-derecha del escritorio
+     para acceso fácil mientras se desarrolla. -->
+<button id="wrapped-dev-btn" type="button"
+        style="position:fixed;top:46px;right:8px;z-index:9001;background:linear-gradient(135deg,#1db954,#191414);color:#fff;border:1px solid #0d0d0d;padding:4px 10px;font-size:11px;font-weight:bold;cursor:pointer;border-radius:0;box-shadow:2px 2px 0 #0a0a0a;font-family:inherit;"
+        title="Spotify Wrapped (modo DEV — todas las plays)">
+    🎁 Wrapped (DEV)
+</button>
+
 <!-- VENTANA "Alimentar" — picker de comidas. Se monta con el catálogo
      de assets/mascota/foods.php (no se duplica). Al click → POST feed
      con el slug → cierra ventana → muestra reacción. -->
@@ -2915,6 +2940,66 @@ window.notifSystem = (function() {
     document.getElementById('alimentar-close').addEventListener('click', function () {
         taskbarManager.unregister('alimentar-window');
     });
+
+    /* ─── Wrapped (Spotify Wrapped clone) ──────────────────────── */
+    var wrappedFrame   = document.getElementById('wrapped-frame');
+    var wrappedDevBtn  = document.getElementById('wrapped-dev-btn');
+    var wrappedCloseEl = document.getElementById('wrapped-close-window');
+
+    /** Abre la ventana del Wrapped cargando el iframe.
+     *  @param {boolean} dev - si true, carga con ?dev=1 (todas las plays). */
+    function openWrappedWindow(dev) {
+        wrappedFrame.src = 'apps/wrapped.php?_=' + Date.now() + (dev ? '&dev=1' : '');
+        if (taskbarManager.isRegistered('wrapped-window')) {
+            taskbarManager.restore('wrapped-window');
+        } else {
+            taskbarManager.register('wrapped-window', 'Wrapped', '🎁', 'flex');
+        }
+    }
+    function closeWrappedWindow() {
+        taskbarManager.unregister('wrapped-window');
+        wrappedFrame.src = '';
+    }
+
+    wrappedCloseEl.addEventListener('click', closeWrappedWindow);
+    if (wrappedDevBtn) {
+        wrappedDevBtn.addEventListener('click', function () {
+            openWrappedWindow(true);
+        });
+    }
+    /* El iframe del wrapped puede pedir cerrarse vía postMessage. */
+    window.addEventListener('message', function (ev) {
+        if (ev && ev.data && ev.data.type === 'wrapped-close') {
+            closeWrappedWindow();
+        }
+    });
+
+    /* Notificación del 22 de diciembre — solo se muestra una vez por
+       año (flag en localStorage). Click → abre wrapped (NO dev). */
+    (function autoNotifyWrapped() {
+        var now = new Date();
+        var month = now.getMonth(); /* 0-11 */
+        var day   = now.getDate();
+        var year  = now.getFullYear();
+        if (month !== 11 || day !== 22) return; /* Solo 22 de diciembre */
+        var key = 'wrapped-notified-' + year;
+        try { if (localStorage.getItem(key)) return; } catch (_) {}
+        if (!window.notifSystem) return;
+        setTimeout(function () {
+            window.notifSystem.show({
+                id:      'wrapped-' + year,
+                type:    'info',
+                title:   '🎁 Tu Wrapped ' + year + ' está aquí',
+                message: 'Repasa tu año en música. Tap para abrir.',
+                autoDismissAfter: 0,
+                onClick: function () {
+                    openWrappedWindow(false);
+                    try { localStorage.setItem(key, '1'); } catch (_) {}
+                },
+            });
+        }, 2000);
+    })();
+
     /* Click sobre cualquier botón de alimento → POST feed con su slug. */
     document.querySelectorAll('.alimentar-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
