@@ -19,7 +19,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
             <div class="profile-sidebar-heading" id="profile-listas-heading"><span id="profile-listas-heading-text">Mis Listas</span></div>
             <div id="profile-listas-nav">
                 <div class="profile-nav-item" data-cat="movies">
-                    <span class="profile-nav-icon">🎬</span>
+                    <span class="profile-nav-icon"><img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                     <span class="profile-nav-label">Películas</span>
                     <span class="profile-nav-count" id="profile-count-movies">—</span>
                 </div>
@@ -108,7 +108,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     <div id="profile-posts-header">
                         <span>Posts</span>
                         <button type="button" id="profile-notif-btn" title="Notificaciones">
-                            <span class="profile-notif-icon">🔔</span>
+                            <span class="profile-notif-icon"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;display:block;margin:auto;"></span>
                             <span class="profile-notif-badge" id="profile-notif-badge" style="display:none;">0</span>
                         </button>
                     </div>
@@ -141,7 +141,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     </div>
                 </div>
                 <div class="profile-cat-toolbar">
-                    <span id="profile-catview-title">🎬 Películas</span>
+                    <span id="profile-catview-title"><img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas</span>
                     <button class="button" id="profile-catview-add-btn">+ Añadir</button>
                 </div>
                 <div id="profile-catview-sections">
@@ -202,7 +202,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
             <div id="profile-view-melon" style="display:none;">
                 <div class="profile-social-head" id="profile-melon-title">⭐ Melon reviews</div>
                 <div id="profile-melon-cats">
-                    <button class="button melon-cat-btn" data-mcat="movies">🎬 Películas</button>
+                    <button class="button melon-cat-btn" data-mcat="movies"><img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas</button>
                     <button class="button melon-cat-btn" data-mcat="series"><img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series</button>
                     <button class="button melon-cat-btn" data-mcat="books">📚 Libros</button>
                     <button class="button melon-cat-btn" data-mcat="games">🎮 Videojuegos</button>
@@ -252,7 +252,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
 <!-- PROFILE NOTIFICATIONS WINDOW -->
 <div class="window" id="profile-notifs-window" style="display:none;position:fixed;z-index:10002;width:320px;max-height:60vh;">
     <div class="title-bar">
-        <div class="title-bar-text">🔔 Notificaciones</div>
+        <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
@@ -336,7 +336,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
             <textarea id="profile-review-comment" rows="4" style="resize:vertical;width:100%;box-sizing:border-box;" placeholder="Escribe tu opinión..."></textarea>
         </div>
         <div class="field-row" style="justify-content:flex-end;gap:4px;">
-            <button class="button" id="profile-review-window-delete" style="margin-right:auto;display:none;">🗑 Eliminar</button>
+            <button class="button" id="profile-review-window-delete" style="margin-right:auto;display:none;"><img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</button>
             <button class="button" id="profile-review-window-cancel">Cancelar</button>
             <button class="button" id="profile-review-window-submit">Guardar</button>
         </div>
@@ -505,7 +505,7 @@ var PROFILE_USERS = <?php
     var currentMusicTab = 'albums';
 
     var CATS = {
-        movies: { label: 'Películas',   icon: '🎬' },
+        movies: { label: 'Películas',   icon: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
         series: { label: 'Series',      icon: '📺' },
         books:  { label: 'Libros',      icon: '📚' },
         games:  { label: 'Videojuegos', icon: '🎮' },
@@ -1168,7 +1168,8 @@ var PROFILE_USERS = <?php
         if (titleEl) {
             var CAT_PNG = {
                 series: 'assets/img/appIcons/melonArchiveIcon.png',
-                music:  'assets/img/appIcons/musicaIcon.png'
+                music:  'assets/img/appIcons/musicaIcon.png',
+                movies: 'assets/img/appIcons/pelisIcon.png'
             };
             if (CAT_PNG[cat]) {
                 titleEl.innerHTML = '<img src="' + CAT_PNG[cat] + '" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">' + CATS[cat].label;
@@ -1443,7 +1444,7 @@ var PROFILE_USERS = <?php
         if (ADD_PNG[cat]) {
             addDlgTitle.innerHTML = '+ Añadir · <img src="' + ADD_PNG[cat] + '" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
         } else {
-            addDlgTitle.textContent = '+ Añadir · ' + CATS[cat].icon;
+            addDlgTitle.innerHTML = '+ Añadir · ' + CATS[cat].icon;
         }
         addNameInput.value = '';
         addImgInput.value  = '';
@@ -1699,7 +1700,7 @@ var PROFILE_USERS = <?php
                 if (!bell) {
                     bell = document.createElement('span');
                     bell.className = 'taskbar-notif-bell';
-                    bell.textContent = '🔔';
+                    bell.innerHTML = '<img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;display:block;margin:auto;">';
                     tbBtn.appendChild(bell);
                 }
             } else if (bell) {
@@ -2298,7 +2299,7 @@ var PROFILE_USERS = <?php
                 : '<div class="profile-avatar-placeholder">👤</div>';
         }
         if (nameEl) nameEl.textContent = label;
-        if (titleEl) titleEl.textContent = icon + ' ' + ownLabel;
+        if (titleEl) titleEl.innerHTML = icon + ' ' + ownLabel;
     }
 
     function showSocialView() {
@@ -2319,7 +2320,7 @@ var PROFILE_USERS = <?php
 
     /* ──── Melon reviews ──── */
     var MELON_LABELS = { year: 'Mejor del año', recent: 'Reciente', alltime: 'Todo el tiempo' };
-    var MELON_ICONS  = { movies: '🎬', series: '📺', books: '📚', games: '🎮', music: '🎵' };
+    var MELON_ICONS  = { movies: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', series: '📺', books: '📚', games: '🎮', music: '🎵' };
     var MELON_MUST_VERBS = { movies: 'watch', series: 'watch', books: 'read', games: 'play', music: 'listen' };
     var melonPeriod = null;
     var melonCat    = null;
@@ -2508,10 +2509,10 @@ var PROFILE_USERS = <?php
             if (item.image) {
                 var img = document.createElement('img');
                 img.src = item.image; img.alt = item.title;
-                (function(b, fb) { img.onerror = function() { b.textContent = fb; }; })(body, fallback);
+                (function(b, fb) { img.onerror = function() { b.innerHTML = fb; }; })(body, fallback);
                 body.appendChild(img);
             } else {
-                body.textContent = fallback;
+                body.innerHTML = fallback;
             }
             slot.appendChild(body);
 

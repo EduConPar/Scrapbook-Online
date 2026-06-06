@@ -882,43 +882,30 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         text-align: center;
     }
 
-    /* Controles — botones Win98 fijos abajo. */
-    #wrapped-controls {
+    /* Zonas tap invisibles que ocupan media ventana cada una. Cubren la
+       altura útil bajo el progress bar (6px). z-index 50: por debajo del
+       now-playing / glitch (100+) pero encima del slide content (1-10),
+       de modo que un tap en cualquier sitio del slide avanza o retrocede.
+       Los enlaces/botones interactivos dentro del slide deben tener
+       z-index > 50 y `pointer-events:auto` para seguir funcionando. */
+    .wrapped-nav-zone {
         position: fixed;
-        bottom: 16px; right: 16px;
-        display: flex; gap: 4px;
-        z-index: 100;
-    }
-    .ctrl-btn {
-        background: var(--btn-bg, silver);
-        color: var(--text, #000);
-        padding: 4px 14px;
-        font-size: 12px;
-        font-weight: normal;
-        font-family: inherit;
-        border: 0;
-        border-radius: 0;
+        top: 6px;            /* deja libre la progress bar */
+        bottom: 0;
+        width: 50vw;
+        z-index: 50;
         cursor: pointer;
-        min-width: 80px;
-        min-height: 26px;
-        box-shadow:
-            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
-            inset  1px  1px var(--bezel-light-1, #fff),
-            inset -2px -2px var(--bezel-dark-2, grey),
-            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+        background: transparent;
     }
-    .ctrl-btn:active {
-        box-shadow:
-            inset -1px -1px var(--bezel-light-1, #fff),
-            inset  1px  1px var(--bezel-dark-1, #0a0a0a),
-            inset -2px -2px var(--bezel-light-2, #dfdfdf),
-            inset  2px  2px var(--bezel-dark-2, grey);
-    }
+    #wrapped-nav-left  { left: 0;  }
+    #wrapped-nav-right { right: 0; }
 
-    /* Progress segments — barras de mini-Win98. */
+    /* Progress segments — barras de mini-Win98. Ahora ocupan todo el
+       ancho porque el botón close se ha movido al header de la window
+       padre. */
     #wrapped-progress {
         position: fixed;
-        top: 12px; left: 12px; right: 60px;
+        top: 12px; left: 12px; right: 12px;
         display: flex; gap: 3px;
         z-index: 100;
     }
@@ -960,7 +947,14 @@ $year  = (int)($_GET['year'] ?? date('Y'));
     .wrapped-card {
         background: var(--win-bg, silver);
         color: var(--text, #000);
-        width: min(420px, 92vw);
+        /* Ancho responsivo al iframe:
+            - Mínimo 420px (o el 92% del ancho si no cabe).
+            - Crece con la altura (60vh) cuando hay espacio.
+            - Cap 800px en ultrawides.
+           Esto garantiza que en ventanas pequeñas se vea igual que
+           antes, y en una ventana maximizada (mucho alto disponible)
+           el card crezca proporcionalmente. */
+        width: min(92vw, max(420px, 60vh), 800px);
         padding: 3px;
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
@@ -1288,6 +1282,8 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         border-radius: 0;
         cursor: pointer;
         font-weight: bold;
+        position: relative;
+        z-index: 60;  /* > .wrapped-nav-zone (50) para que reciba el click. */
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
             inset  1px  1px var(--bezel-light-1, #fff),
@@ -1352,33 +1348,6 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    #wrapped-close {
-        position: fixed;
-        top: 8px; right: 8px;
-        background: var(--btn-bg, silver);
-        color: var(--text, #000);
-        font-size: 14px;
-        font-weight: bold;
-        font-family: inherit;
-        width: 28px; height: 28px;
-        cursor: pointer;
-        border: 0;
-        border-radius: 0;
-        z-index: 101;
-        box-shadow:
-            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
-            inset  1px  1px var(--bezel-light-1, #fff),
-            inset -2px -2px var(--bezel-dark-2, grey),
-            inset  2px  2px var(--bezel-light-2, #dfdfdf);
-    }
-    #wrapped-close:active {
-        box-shadow:
-            inset -1px -1px var(--bezel-light-1, #fff),
-            inset  1px  1px var(--bezel-dark-1, #0a0a0a),
-            inset -2px -2px var(--bezel-light-2, #dfdfdf),
-            inset  2px  2px var(--bezel-dark-2, grey);
     }
 
     .empty-state {
@@ -1476,7 +1445,13 @@ $year  = (int)($_GET['year'] ?? date('Y'));
 <body class="<?= htmlspecialchars($themeClass) ?>">
 
 <div id="wrapped-progress"></div>
-<button id="wrapped-close" title="Cerrar">✕</button>
+
+<!-- Zonas tap invisibles: mitad izquierda = anterior, mitad derecha = siguiente.
+     Cubren toda la altura útil debajo del progress bar (top:6px) y se sitúan
+     debajo del contenido del slide (pointer-events: auto pero z-index bajo
+     respecto a botones interactivos). -->
+<div id="wrapped-nav-left"  class="wrapped-nav-zone" aria-label="Slide anterior"></div>
+<div id="wrapped-nav-right" class="wrapped-nav-zone" aria-label="Siguiente slide"></div>
 
 <!-- Now playing — esquina superior izquierda, debajo del progress bar.
      Muestra título + artista de la canción que suena de fondo. -->
@@ -1494,11 +1469,9 @@ $year  = (int)($_GET['year'] ?? date('Y'));
      loop como banda sonora del wrapped. -->
 <div id="yt-player-holder" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;"></div>
 
-<div id="wrapped-controls">
-    <button class="ctrl-btn" id="wrapped-mute" title="Silenciar música">🔊</button>
-    <button class="ctrl-btn" id="wrapped-prev">‹ Atrás</button>
-    <button class="ctrl-btn" id="wrapped-next">Siguiente ›</button>
-</div>
+<!-- Controles inferiores eliminados: avanzar/retroceder con tap en las
+     mitades izquierda/derecha de la ventana (zonas .wrapped-nav-zone). -->
+
 
 <script>
 const IS_DEV = <?= $isDev ? 'true' : 'false' ?>;
@@ -2298,32 +2271,29 @@ function showSlide(i) {
     }
 }
 
-document.getElementById('wrapped-next').addEventListener('click', () => {
+/* Navegación: tap en mitad izquierda = anterior, mitad derecha =
+   siguiente. Misma lógica para keyboard (←/→/Space). Escape cierra
+   el iframe via postMessage al padre. */
+function goNext() {
     const total = document.querySelectorAll('.slide').length;
     if (currentSlide < total - 1) showSlide(currentSlide + 1);
-});
-document.getElementById('wrapped-prev').addEventListener('click', () => {
+}
+function goPrev() {
     if (currentSlide > 0) showSlide(currentSlide - 1);
-});
-document.addEventListener('keydown', e => {
-    if (e.key === 'ArrowRight' || e.key === ' ') document.getElementById('wrapped-next').click();
-    if (e.key === 'ArrowLeft') document.getElementById('wrapped-prev').click();
-    if (e.key === 'Escape')    document.getElementById('wrapped-close').click();
-});
-document.getElementById('wrapped-close').addEventListener('click', () => {
-    /* Si está dentro de un iframe, cierra cerrando la ventana padre.
-       Si no, vuelve al desktop. */
+}
+function closeWrapped() {
     if (window.parent && window.parent !== window) {
         try { window.parent.postMessage({ type: 'wrapped-close' }, '*'); } catch(_) {}
     } else {
         window.location.href = '../desktop-base.php';
     }
-});
-
-/* Click anywhere para avanzar. */
-document.addEventListener('click', e => {
-    if (e.target.closest('.ctrl-btn') || e.target.closest('#wrapped-close')) return;
-    document.getElementById('wrapped-next').click();
+}
+document.getElementById('wrapped-nav-right').addEventListener('click', goNext);
+document.getElementById('wrapped-nav-left').addEventListener('click',  goPrev);
+document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') goNext();
+    if (e.key === 'ArrowLeft')                    goPrev();
+    if (e.key === 'Escape')                       closeWrapped();
 });
 
 /* ════════════════════════════════════════════════════════════════
@@ -2470,17 +2440,6 @@ function wrappedPlayVideo(videoId, title, artist) {
     try { ytWrappedPlayer.loadVideoById(videoId); } catch (_) {}
 }
 
-/* Botón mute/unmute. */
-document.getElementById('wrapped-mute').addEventListener('click', () => {
-    if (!ytWrappedPlayer) return;
-    wrappedMuted = !wrappedMuted;
-    try {
-        if (wrappedMuted) ytWrappedPlayer.mute();
-        else              ytWrappedPlayer.unMute();
-    } catch (_) {}
-    document.getElementById('wrapped-mute').textContent = wrappedMuted ? '🔇' : '🔊';
-});
-
 /* Pausar al cerrar la pestaña/ventana. */
 window.addEventListener('pagehide', () => {
     try { if (ytWrappedPlayer) ytWrappedPlayer.stopVideo(); } catch (_) {}
@@ -2620,10 +2579,17 @@ async function renderCardManually(card) {
         heroImgEl: card.querySelector('.wc-hero-img'),
     };
 
-    /* Layout — coordinadas en CSS pixels, luego escalamos x2. */
+    /* Layout — coordinadas en CSS pixels, luego escalamos.
+       W permanece como 420 (constante de diseño: todos los offsets
+       internos están calibrados para este ancho).
+       outputScale escala el BITMAP final según el ancho real que tiene
+       el card en pantalla → la imagen compartida/descargada conserva
+       la proporción interna pero crece con la ventana. */
     const W = 420;
     const PAD = 14;
     const HERO_SIZE = W - 20; /* margin 10px cada lado */
+    const displayedW = Math.max(280, card.getBoundingClientRect().width || W);
+    const outputScale = displayedW / W;
     let y = 0;
 
     /* Pre-cargar la imagen del hero antes de empezar a dibujar. */
@@ -2647,9 +2613,12 @@ async function renderCardManually(card) {
     const bodyH = 14 + colsH + sepH + statsH + 14 + footerH;
     const H = bodyTop + bodyH;
 
-    const scale = 2;
+    /* scale = 2 → super-sampling para texto nítido.
+       outputScale → multiplicador para que el bitmap resultante
+       coincida con el ancho del card en pantalla. */
+    const scale = 2 * outputScale;
     const cv = document.createElement('canvas');
-    cv.width = W * scale; cv.height = H * scale;
+    cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
     const ctx = cv.getContext('2d');
     ctx.scale(scale, scale);
     ctx.textBaseline = 'top';

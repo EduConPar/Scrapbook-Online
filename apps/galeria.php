@@ -284,7 +284,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <div class="gal-ctx-opt" data-act="download">📥 Descargar</div>
     <div class="gal-ctx-opt" data-act="publish">📤 Publicar</div>
     <div class="gal-ctx-opt" data-act="edit">✏ Renombrar / etiquetas</div>
-    <div class="gal-ctx-opt gal-ctx-danger" data-act="delete">🗑 Eliminar</div>
+    <div class="gal-ctx-opt gal-ctx-danger" data-act="delete"><img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</div>
 </div>
 
 <!-- Preview a pantalla completa -->
@@ -1968,7 +1968,7 @@ window.addEventListener('load', tryAutoConnectDrive);
 
     <p id="ocs-form-status" style="font-size:11px;margin:4px 0;min-height:14px;"></p>
     <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:6px;">
-      <button class="button" id="ocs-form-delete" style="margin-right:auto;color:var(--error-text);display:none;">🗑 Eliminar</button>
+      <button class="button" id="ocs-form-delete" style="margin-right:auto;color:var(--error-text);display:none;"><img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</button>
       <button class="button" id="ocs-form-cancel">Cancelar</button>
       <button class="button default" id="ocs-form-submit">Guardar</button>
     </div>

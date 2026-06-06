@@ -451,6 +451,8 @@ window.DesktopState.whenReady = function(cb){
     <div class="title-bar" id="wrapped-titlebar">
         <div class="title-bar-text">🎁 Wrapped</div>
         <div class="title-bar-controls">
+            <button aria-label="Minimize"></button>
+            <button aria-label="Maximize"></button>
             <button aria-label="Close" id="wrapped-close-window"></button>
         </div>
     </div>
@@ -1227,7 +1229,8 @@ window.notifSystem = (function() {
 
         var tb = document.createElement('div'); tb.className = 'title-bar';
         var tbText = document.createElement('div'); tbText.className = 'title-bar-text';
-        tbText.textContent = opts.title || 'Notificación';
+        /* innerHTML para permitir <img> en el título (icons de papelera, etc.). */
+        tbText.innerHTML = opts.title || 'Notificación';
         tb.appendChild(tbText);
         card.appendChild(tb);
 
@@ -1648,6 +1651,7 @@ window.notifSystem = (function() {
 
     playerMain.addEventListener('contextmenu', function(e) {
         e.preventDefault();
+        e.stopPropagation();   /* evita que el handler de #music-player también dispare → 2 menús superpuestos */
         closeAll();
         var track = (typeof playlist !== 'undefined' && typeof currentTrack !== 'undefined')
             ? playlist[currentTrack] : null;
@@ -1671,6 +1675,32 @@ window.notifSystem = (function() {
             if (typeof window.profileAddTrackAndReview === 'function') window.profileAddTrackAndReview(track);
         });
         ctxMenu.appendChild(listItem);
+
+        /* Item Listen Together — añadido aquí también para que aparezca
+           al click derecho en el reproductor (este handler captura
+           antes de que llegue al #music-player listener). */
+        var ltItem = document.createElement('div');
+        ltItem.className = 'pl-menu-item';
+        var ltRole = (typeof LT_ROLE !== 'undefined') ? LT_ROLE : null;
+        if (ltRole === 'host')       ltItem.textContent = '🎧 Invitar a más usuarios…';
+        else if (ltRole === 'guest') ltItem.textContent = '🎧 Ver sesión actual';
+        else                          ltItem.textContent = '🎧 Escuchar juntos…';
+        ltItem.addEventListener('click', function() {
+            ctxMenu.style.display = 'none';
+            if (typeof window.ltOpenModal === 'function') window.ltOpenModal();
+        });
+        ctxMenu.appendChild(ltItem);
+
+        if (ltRole) {
+            var ltLeaveItem = document.createElement('div');
+            ltLeaveItem.className = 'pl-menu-item';
+            ltLeaveItem.textContent = '✕ Salir de la sesión';
+            ltLeaveItem.addEventListener('click', function() {
+                ctxMenu.style.display = 'none';
+                if (typeof window.ltLeave === 'function') window.ltLeave();
+            });
+            ctxMenu.appendChild(ltLeaveItem);
+        }
 
         var mx = Math.min(e.clientX, window.innerWidth  - 170);
         var my = Math.min(e.clientY, window.innerHeight - 60);
@@ -1850,7 +1880,8 @@ window.notifSystem = (function() {
         'calendar-window', 'archive-window', 'temas-window', 'dnd-window',
         'galeria-window', 'create-playlist-dialog', 'profile-window',
         'companion-window', 'dibujo-window',
-        'tienda-window', 'kofi-window', 'mascota-window'
+        'tienda-window', 'kofi-window', 'mascota-window',
+        'wrapped-window'
     ];
     ids.forEach(function(id) {
         var win = document.getElementById(id);
@@ -3085,7 +3116,7 @@ window.notifSystem = (function() {
                 { icon: '🔥',        label: 'Dar calor',     action: 'warm' },
                 { sep: true },
                 { icon: '🐣',        label: 'Eclosionar (DEV)', action: 'force-hatch' },
-                { icon: '🗑',         label: 'Eliminar (testeo)', action: 'delete', danger: true },
+                { icon: '<img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">', label: 'Eliminar (testeo)', action: 'delete', danger: true },
             ];
         } else {
             items = [
@@ -3094,7 +3125,7 @@ window.notifSystem = (function() {
                 { icon: '⚽',        label: 'Jugar',           action: 'play'   },
                 { icon: '💬',        label: '¿Cómo estás?',   action: 'status' },
                 { sep: true },
-                { icon: '🗑',         label: 'Eliminar (testeo)', action: 'delete', danger: true },
+                { icon: '<img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">', label: 'Eliminar (testeo)', action: 'delete', danger: true },
             ];
         }
 
@@ -3238,7 +3269,7 @@ window.notifSystem = (function() {
                                     window.notifSystem.show({
                                         id: 'mascota-deleted-' + Date.now(),
                                         type: 'info',
-                                        title: '🗑 Mascota eliminada',
+                                        title: '<img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Mascota eliminada',
                                         message: 'Toda su data ha sido borrada. Doble-click en el icono para crear una nueva.',
                                         autoDismissAfter: 4000,
                                     });

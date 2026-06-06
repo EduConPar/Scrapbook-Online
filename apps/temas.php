@@ -745,11 +745,11 @@ function showThemeCtxMenu(x, y, name){
                     action: function(){ setThemePublic(name, !isPub); } });
     }
     opts.push({ label: '📋 Crear copia', action: function(){ duplicateTheme(name); } });
-    opts.push({ label: '🗑 Eliminar', danger: true, action: function(){ deleteTheme(name); } });
+    opts.push({ label: '<img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar', danger: true, action: function(){ deleteTheme(name); } });
     opts.forEach(function(o){
         var el = document.createElement('div');
         el.className = 'temas-ctx-opt' + (o.danger ? ' danger' : '');
-        el.textContent = o.label;
+        el.innerHTML = o.label;
         el.addEventListener('click', function(){ hideThemeCtxMenu(); o.action(); });
         menu.appendChild(el);
     });
@@ -1389,7 +1389,7 @@ function showLibraryCtxMenu(x, y, it){
     menu.className = 'temas-ctx-menu';
     var el = document.createElement('div');
     el.className = 'temas-ctx-opt danger';
-    el.textContent = '🗑 Quitar de la biblioteca';
+    el.innerHTML = '<img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la biblioteca';
     el.addEventListener('click', function(){
         hideThemeCtxMenu();
         fetch('../assets/themes/api.php?action=set-public', {

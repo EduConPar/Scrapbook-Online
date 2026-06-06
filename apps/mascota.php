@@ -527,7 +527,7 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
             <button class="button" id="btn-force-hatch" style="margin-bottom:8px;">🐣 Eclosionar (DEV)</button>
             <?php endif; ?>
             <p>Esta opción borra TODA la mascota y su memoria de forma permanente. Solo úsala para reiniciar pruebas.</p>
-            <button class="button btn-danger" id="btn-eliminar">🗑 Eliminar mascota</button>
+            <button class="button btn-danger" id="btn-eliminar"><img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar mascota</button>
             <div class="inline-msg" id="msg-eliminar"></div>
         </div>
 

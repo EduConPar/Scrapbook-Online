@@ -519,7 +519,7 @@ body{
     <div class="tb-sep"></div>
     <span id="sheet-tools" style="display:flex;gap:4px;align-items:center;">
         <button class="tb-btn has-tip" onclick="undoLast()" id="btn-undo" data-tip="Deshacer último cambio (Ctrl+Z)">↩ Deshacer</button>
-        <button class="tb-btn has-tip" onclick="clearAll()" data-tip="Borrar todos los campos de la ficha actual">🗑 Limpiar</button>
+        <button class="tb-btn has-tip" onclick="clearAll()" data-tip="Borrar todos los campos de la ficha actual"><img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Limpiar</button>
     </span>
     <div class="tb-spacer"></div>
     <span id="status-msg"></span>
@@ -578,7 +578,7 @@ body{
         </div>
         <div id="dice-actions">
             <button class="tb-btn" id="dice-reroll" onclick="rerollAll()"><img src="../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Tirar dados</button>
-            <button class="tb-btn" id="dice-clear" onclick="clearDice()">🗑 Limpiar</button>
+            <button class="tb-btn" id="dice-clear" onclick="clearDice()"><img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Limpiar</button>
             <button id="dice-mod-btn" onclick="openModifierDialog()" title="Añadir modificador">
                 <span class="dmod-plus">＋</span><span class="dmod-minus">−</span>
             </button>
@@ -1299,7 +1299,7 @@ function clearAll(){
         });
         runCalcs();
         saveLocal(true);
-        showToast('🗑 Ficha limpiada');
+        showToast('<img src="../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Ficha limpiada');
     });
 }
 window.addEventListener('beforeunload', function(){ saveLocal(true); });
@@ -1549,7 +1549,7 @@ function setStatus(msg){
 var _toastTimer = null;
 function showToast(msg){
     var t = document.getElementById('toast');
-    t.textContent = msg; t.classList.add('show');
+    t.innerHTML = msg; t.classList.add('show');
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2000);
 }

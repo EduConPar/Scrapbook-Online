@@ -734,7 +734,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 </div>
                 <div id="dice-actions-row">
                     <button class="button" id="dice-reroll-m"><img src="../../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Tirar</button>
-                    <button class="button" id="dice-clear-m">🗑 Limpiar</button>
+                    <button class="button" id="dice-clear-m"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Limpiar</button>
                     <button class="button" id="dice-mod-btn-m" title="Modificador">＋/−</button>
                 </div>
                 <div id="dice-result-m">Elige un dado</div>

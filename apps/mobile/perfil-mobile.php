@@ -1142,7 +1142,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="pf-view" id="pf-view-lists" hidden>
             <!-- Pestañas categoría (scroll horizontal) -->
             <nav class="pf-tabs" id="pf-tabs">
-                <button class="pf-tab active" data-cat="movies">🎬 Películas <span class="pf-tab-count" id="cnt-movies">·</span></button>
+                <button class="pf-tab active" data-cat="movies"><img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas <span class="pf-tab-count" id="cnt-movies">·</span></button>
                 <button class="pf-tab" data-cat="series"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series <span class="pf-tab-count" id="cnt-series">·</span></button>
                 <button class="pf-tab" data-cat="books">📖 Libros <span class="pf-tab-count" id="cnt-books">·</span></button>
                 <button class="pf-tab" data-cat="games">🎮 Juegos <span class="pf-tab-count" id="cnt-games">·</span></button>
@@ -1424,7 +1424,7 @@ function renderActiveList() {
     }
     var html = '';
     if (!entries.length) {
-        var emoji = STATE.current === 'movies' ? '🎬'
+        var emoji = STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
                   : STATE.current === 'series' ? '📺'
                   : STATE.current === 'books'  ? '📖'
                   : STATE.current === 'games'  ? '🎮'
@@ -1453,7 +1453,7 @@ function renderActiveList() {
         var posterHtml = it.image
             ? '<img class="pf-item-poster" src="' + esc(it.image) + '" alt="" loading="lazy">'
             : '<div class="pf-item-poster placeholder">' +
-              (isMusic ? '🎵' : STATE.current === 'movies' ? '🎬'
+              (isMusic ? '🎵' : STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
                 : STATE.current === 'series' ? '📺'
                 : STATE.current === 'books'  ? '📖' : '🎮') +
               '</div>';
@@ -1968,7 +1968,7 @@ function openReviewEditor(item, origIdx, cat) {
                 '<div class="pf-rev-edit-label">Comentario</div>' +
                 '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>' +
                 '<div class="modal-actions">' +
-                    (hadReview ? '<button class="button danger" data-act="delete" type="button">🗑 Borrar</button>' : '') +
+                    (hadReview ? '<button class="button danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Borrar</button>' : '') +
                     '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
                     '<button class="button default" data-act="save" type="button">Guardar</button>' +
                 '</div>' +
@@ -2461,7 +2461,7 @@ function openEditProfileDialog() {
    Modal con title + image opcional + status. Reusa save-lists. */
 function openAddItemDialog(cat) {
     var labels = {
-        movies: { title: '🎬 Añadir película', titleField: 'Título' },
+        movies: { title: '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir película', titleField: 'Título' },
         series: { title: '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir serie',    titleField: 'Título' },
         books:  { title: '📖 Añadir libro',    titleField: 'Título' },
         games:  { title: '🎮 Añadir juego',    titleField: 'Título' }
@@ -2952,7 +2952,7 @@ function renderPosts(posts) {
                         (liked ? '❤' : '♡') + ' ' + likeCount +
                     '</button>' +
                     '<button class="button pf-post-btn" data-act="comments" type="button">💬 ' + commentCount + '</button>' +
-                    (canDel ? '<button class="button pf-post-btn danger" data-act="delete" type="button">🗑</button>' : '') +
+                    (canDel ? '<button class="button pf-post-btn danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;"></button>' : '') +
                 '</div>' +
                 '<div class="pf-post-comments" data-comments-for="' + p.id + '" hidden></div>' +
             '</div>';

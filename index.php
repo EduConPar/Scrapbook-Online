@@ -330,7 +330,7 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                 <div class="login-actions">
                     <button class="button" type="button" id="changeUser">Cambiar usuario</button>
                     <?php $_showDel = $showLogin && $selectedUser !== '' && $selectedUser !== 'user1' && $selectedUser !== 'user2'; ?>
-                    <button class="button" type="button" id="deleteUser" style="display:<?php echo $_showDel ? 'inline-block' : 'none'; ?>;">🗑 Eliminar</button>
+                    <button class="button" type="button" id="deleteUser" style="display:<?php echo $_showDel ? 'inline-block' : 'none'; ?>;"><img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;"> Eliminar</button>
                     <button class="button default" type="submit">Ingresar</button>
                 </div>
             </form>

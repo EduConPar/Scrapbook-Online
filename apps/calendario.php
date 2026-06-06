@@ -183,7 +183,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
         <!-- AÑADIR RECORDATORIO -->
         <div class="window" style="overflow: auto;">
-            <div class="title-bar"><div class="title-bar-text">🔔 Añadir recordatorio</div></div>
+            <div class="title-bar"><div class="title-bar-text"><img src="../assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Añadir recordatorio</div></div>
             <div class="window-body" style="padding: 10px;">
                 <div class="field-row-stacked" style="margin-bottom: 6px;">
                     <label style="font-size: 11px;">Título</label>
@@ -234,7 +234,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     <div style="display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
 
         <div class="window" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-            <div class="title-bar"><div class="title-bar-text">🔔 Recordatorios</div></div>
+            <div class="title-bar"><div class="title-bar-text"><img src="../assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Recordatorios</div></div>
             <div class="window-body" style="padding: 10px; flex: 1; overflow-y: auto;">
                 <div id="recordatorios-lista"><p style="font-size:11px;color:#808080;">Cargando...</p></div>
             </div>

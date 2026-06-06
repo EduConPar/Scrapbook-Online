@@ -37,8 +37,10 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     <div class="window-body" id="player-body">
         <div id="player-content">
             <div id="player-main">
-                <div id="player-cover-wrap">
+                <div id="player-cover-wrap" style="position:relative;">
                     <img id="player-cover" src="" alt="">
+                    <!-- Indicador LIVE (host/guest). Oculto por defecto. -->
+                    <span id="lt-live-dot" title="" style="display:none;position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:var(--accent, #1db954);box-shadow:0 0 5px var(--accent, #1db954),0 0 1px rgba(0,0,0,0.5);animation:ltLivePulse 1.2s ease-in-out infinite;z-index:5;"></span>
                 </div>
                 <div id="player-info">
                     <p id="player-title">Sin título</p>
@@ -283,6 +285,143 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     LISTEN TOGETHER — banner de estado + modal de invitar.
+     ═══════════════════════════════════════════════════════════════ -->
+<style>
+    /* Indicador LIVE — punto pulsante con el accent del tema. Aparece
+       sobre el cover cuando estás hosteando o eres guest. */
+    @keyframes ltLivePulse {
+        0%, 100% { opacity: 1;   transform: scale(1); }
+        50%      { opacity: 0.3; transform: scale(0.75); }
+    }
+    #lt-banner {
+        position: fixed;
+        top: 4px; left: 50%;
+        transform: translateX(-50%);
+        background: var(--win-bg, silver);
+        color: var(--text, #000);
+        padding: 4px 10px;
+        font-size: 11px;
+        display: none;
+        align-items: center;
+        gap: 8px;
+        z-index: 9000;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+        max-width: 90vw;
+    }
+    #lt-banner.visible { display: flex; }
+    #lt-banner .lt-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--accent, #1db954);
+        animation: ltBlink 1.4s ease-in-out infinite;
+        flex-shrink: 0;
+    }
+    @keyframes ltBlink { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    /* Reset minimal — solo quita outlines/borders al click sin tocar
+       altura ni line-height (esos vienen del CSS original y deben
+       ser idénticos para los 3 items). */
+    .pl-menu-item,
+    .pl-menu-item:active,
+    .pl-menu-item:focus,
+    .pl-menu-item:focus-visible {
+        outline: none !important;
+        border: none !important;
+        margin: 0 !important;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+    #lt-banner .lt-leave {
+        background: var(--btn-bg, silver);
+        color: var(--text, #000);
+        border: 0; cursor: pointer;
+        padding: 2px 8px; font-size: 11px;
+        font-family: inherit;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+    #lt-modal { width: 320px; max-width: 92vw; }
+    #lt-modal .window-body { padding: 8px 10px; }
+    #lt-modal .lt-section-title {
+        font-size: 11px;
+        font-weight: bold;
+        margin: 4px 0 6px;
+        opacity: 0.85;
+    }
+    #lt-user-list {
+        max-height: 200px;
+        overflow-y: auto;
+        background: var(--input-bg, #fff);
+        color: var(--input-text, #000);
+        padding: 2px;
+        box-shadow:
+            inset  1px  1px var(--bezel-dark-2, grey),
+            inset -1px -1px var(--bezel-light-1, #fff);
+        margin-bottom: 8px;
+    }
+    .lt-user-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 4px 6px;
+        font-size: 12px;
+        cursor: default;
+    }
+    .lt-user-row + .lt-user-row {
+        border-top: 1px dotted rgba(0,0,0,0.15);
+    }
+    .lt-user-row button {
+        font-size: 11px; padding: 2px 8px;
+        font-family: inherit;
+        background: var(--btn-bg, silver);
+        color: var(--text, #000);
+        border: 0; cursor: pointer;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+    .lt-user-row button.invited { opacity: 0.6; }
+    .lt-status {
+        font-size: 11px; opacity: 0.75; padding: 4px 0;
+    }
+</style>
+
+<div id="lt-banner">
+    <span class="lt-dot"></span>
+    <span id="lt-banner-text"></span>
+    <button class="lt-leave" id="lt-leave-btn">Salir</button>
+</div>
+
+
+<div class="window" id="lt-modal" style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9100;">
+    <div class="title-bar">
+        <div class="title-bar-text">🎧 Escuchar juntos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="lt-modal-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div class="lt-section-title">Estado</div>
+        <div class="lt-status" id="lt-status-text">No estás en ninguna sesión.</div>
+
+        <div class="lt-section-title">Invitar a:</div>
+        <div id="lt-user-list">
+            <div class="lt-status" style="text-align:center;">Cargando usuarios…</div>
+        </div>
+
+        <div class="field-row" style="justify-content:flex-end;gap:4px;">
+            <button class="button" id="lt-end-btn" style="display:none;">Cerrar sesión</button>
+        </div>
+    </div>
+</div>
+
 <script>
 <?php if ($hasPlayer): ?>
 const playlist = <?php echo json_encode($youtubePlaylist); ?>;
@@ -408,6 +547,359 @@ function sendWrappedLog(track, listenedS, playlistId) {
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'hidden') flush();
     });
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   LISTEN TOGETHER — sesiones de escucha conjunta.
+
+   Modelo: el HOST tiene el player real; postea estado a la API cada
+   vez que cambia (track switch, play/pause, drift > 5s) — debounced
+   ~600ms. El GUEST poll-ea cada 2s y aplica: loadVideoById si cambia
+   videoId, seekTo si su currentTime difiere > 3s, play/pause para
+   coincidir. Controles deshabilitados como guest (avisa que va a
+   salir si los pulsa).
+
+   Endpoints: assets/listen/api.php?action=<...>
+═════════════════════════════════════════════════════════════════════ */
+const LT_URL = 'assets/listen/api.php';
+let LT_ROLE         = null;     /* 'host' | 'guest' | null */
+let LT_SESSION_ID   = null;
+let LT_GUEST_POLL_T = null;
+let LT_HOST_BCAST_T = null;
+let LT_INVITES_POLL_T = null;
+let LT_LAST_HOST_VID = null;    /* host: último videoId enviado */
+let LT_SHOWN_INVITES = new Set(); /* IDs de invites ya mostrados como notif */
+
+function ltFetch(action, opts) {
+    opts = opts || {};
+    const isGet = !opts.body;
+    const url = LT_URL + '?action=' + encodeURIComponent(action);
+    return fetch(url, {
+        method: isGet ? 'GET' : 'POST',
+        credentials: 'same-origin',
+        headers: isGet ? {} : { 'Content-Type': 'application/json' },
+        body:    opts.body ? JSON.stringify(opts.body) : undefined,
+    }).then(function(r){ return r.json(); }).catch(function(){ return { ok: false }; });
+}
+
+function ltBanner(text) {
+    const b = document.getElementById('lt-banner');
+    const t = document.getElementById('lt-banner-text');
+    if (!b || !t) return;
+    if (!text) { b.classList.remove('visible'); return; }
+    t.textContent = text;
+    b.classList.add('visible');
+}
+
+/* Indicador LIVE — muestra/oculta el punto pulsante sobre el cover del
+   player. `mode`: 'host' / 'guest' / null (oculta). */
+function ltUpdateLiveDot(mode, hostLabel) {
+    const el = document.getElementById('lt-live-dot');
+    if (!el) return;
+    if (!mode) {
+        el.style.display = 'none';
+        el.title = '';
+        return;
+    }
+    el.style.display = 'block';
+    if (mode === 'host') {
+        el.title = 'En directo · estás hosteando una sesión';
+    } else if (mode === 'guest') {
+        el.title = 'En directo · escuchando con ' + (hostLabel || 'el host');
+    }
+}
+
+/* ── HOST: broadcast del estado ──────────────────────────────────── */
+/* Set de user_keys de participantes que el host ya ha notificado, para
+   evitar mostrar el toast "X se unió" repetidamente en cada poll. */
+let LT_KNOWN_PARTICIPANTS = new Set();
+
+async function ltHostBroadcast() {
+    if (LT_ROLE !== 'host' || !ytPlayer) return;
+    const track = playlist[currentTrack];
+    if (!track) return;
+    let ct = 0, dur = 0;
+    try {
+        ct  = Math.floor(ytPlayer.getCurrentTime() || 0);
+        dur = Math.floor(ytPlayer.getDuration()    || 0);
+    } catch (_) {}
+    let isPlaying = false;
+    try { isPlaying = ytPlayer.getPlayerState && ytPlayer.getPlayerState() === 1; } catch (_) {}
+    const r = await ltFetch('update-state', { body: {
+        videoId:      track.videoId,
+        title:        track.title  || '',
+        artist:       track.artist || '',
+        coverUrl:     'https://i.ytimg.com/vi/' + track.videoId + '/mqdefault.jpg',
+        currentTimeS: ct,
+        durationS:    dur,
+        isPlaying:    isPlaying,
+    }});
+    /* Detección de joiners nuevos. */
+    if (r && r.ok && Array.isArray(r.participants_list)) {
+        r.participants_list.forEach(p => {
+            if (p.user_key && !LT_KNOWN_PARTICIPANTS.has(p.user_key)) {
+                LT_KNOWN_PARTICIPANTS.add(p.user_key);
+                if (window.notifSystem) {
+                    const joinerName = p.label || '?';
+                    window.notifSystem.show({
+                        id:    'lt-joiner-' + p.user_key,
+                        type:  'info',
+                        title: '🎧 ' + joinerName + ' se unió',
+                        message: joinerName + ' está escuchando contigo en tiempo real.',
+                        autoDismissAfter: 4500,
+                    });
+                }
+            }
+        });
+    }
+}
+function ltHostBroadcastDebounced() {
+    if (LT_HOST_BCAST_T) clearTimeout(LT_HOST_BCAST_T);
+    LT_HOST_BCAST_T = setTimeout(ltHostBroadcast, 600);
+}
+
+/* ── GUEST: poll + sync ──────────────────────────────────────────── */
+async function ltGuestPoll() {
+    if (LT_ROLE !== 'guest') return;
+    const r = await ltFetch('poll');
+    if (!r || !r.ok) return;
+    if (r.closed || !r.session) {
+        /* Host cerró → salimos. */
+        ltLeaveLocal('El host cerró la sesión.');
+        return;
+    }
+    const s = r.session;
+    /* Banner del guest eliminado — solo notif al unirse. */
+    /* Aplicar estado al player. */
+    if (!ytPlayer || !s.video_id) return;
+    let curVid = '';
+    try {
+        const d = ytPlayer.getVideoData && ytPlayer.getVideoData();
+        if (d) curVid = d.video_id || '';
+    } catch (_) {}
+    if (curVid !== s.video_id) {
+        try { ytPlayer.loadVideoById(s.video_id, parseInt(s.current_time_s, 10) || 0); } catch (_) {}
+        /* Actualizamos el mini-player UI manualmente (cover + texto). */
+        try {
+            const coverEl = document.getElementById('player-cover');
+            if (coverEl) {
+                /* Usamos el cover_url del host si lo tiene, si no fallback
+                   al thumbnail genérico de YouTube. */
+                coverEl.src = s.cover_url
+                    || 'https://i.ytimg.com/vi/' + s.video_id + '/mqdefault.jpg';
+            }
+            document.getElementById('player-info').innerHTML =
+                '<div id="player-title">' + (s.track_title || '') + '</div>' +
+                '<div id="player-artist">' + (s.track_artist || '') + '</div>' +
+                '<div id="player-addedby">🎧 Sesión conjunta</div>';
+        } catch (_) {}
+        return;
+    }
+    /* Drift correction. */
+    let myT = 0;
+    try { myT = ytPlayer.getCurrentTime() || 0; } catch (_) {}
+    const hostT = parseInt(s.current_time_s, 10) || 0;
+    if (Math.abs(myT - hostT) > 3) {
+        try { ytPlayer.seekTo(hostT, true); } catch (_) {}
+    }
+    /* Play/pause sync. */
+    try {
+        const ps = ytPlayer.getPlayerState();
+        if (parseInt(s.is_playing, 10) === 1 && ps !== 1) ytPlayer.playVideo();
+        if (parseInt(s.is_playing, 10) === 0 && ps === 1) ytPlayer.pauseVideo();
+    } catch (_) {}
+}
+
+/* ── INICIAR como HOST ───────────────────────────────────────────── */
+async function ltStartAsHost() {
+    const r = await ltFetch('create', { body: {} });
+    if (!r || !r.ok) {
+        if (window.notifSystem) window.notifSystem.show({ type: 'error', title: 'Error', message: 'No se pudo crear sesión.' });
+        return;
+    }
+    LT_ROLE       = 'host';
+    LT_SESSION_ID = r.session_id;
+    ltHostBroadcast();   /* primer push inmediato */
+    ltUpdateLiveDot('host');
+    ltRefreshModalState();
+}
+
+/* ── INICIAR como GUEST (al aceptar invite) ──────────────────────── */
+async function ltJoinAsGuest(inviteId) {
+    const r = await ltFetch('accept', { body: { inviteId: inviteId } });
+    if (!r || !r.ok) {
+        if (window.notifSystem) window.notifSystem.show({ type: 'error', title: 'Error', message: r.error || 'No se pudo unir.' });
+        return;
+    }
+    LT_ROLE       = 'guest';
+    LT_SESSION_ID = r.session_id;
+    if (LT_GUEST_POLL_T) clearInterval(LT_GUEST_POLL_T);
+    ltGuestPoll();
+    LT_GUEST_POLL_T = setInterval(ltGuestPoll, 2000);
+    ltUpdateLiveDot('guest', r.host_label);
+    ltRefreshModalState();
+    /* Notif de confirmación al guest — incluye el nombre del host. */
+    if (window.notifSystem) {
+        const hostName = r.host_label || 'el host';
+        window.notifSystem.show({
+            id:    'lt-joined-' + r.session_id,
+            type:  'info',
+            title: '🎧 Te has unido a la sesión de ' + hostName,
+            message: 'Ahora escuchas en tiempo real con ' + hostName + '.',
+            autoDismissAfter: 4500,
+        });
+    }
+}
+
+/* ── SALIR de la sesión ──────────────────────────────────────────── */
+async function ltLeave() {
+    await ltFetch('leave', { body: {} });
+    ltLeaveLocal();
+}
+function ltLeaveLocal(msg) {
+    LT_ROLE       = null;
+    LT_SESSION_ID = null;
+    if (LT_GUEST_POLL_T) { clearInterval(LT_GUEST_POLL_T); LT_GUEST_POLL_T = null; }
+    if (LT_HOST_BCAST_T) { clearTimeout(LT_HOST_BCAST_T); LT_HOST_BCAST_T = null; }
+    ltBanner(null);
+    ltUpdateLiveDot(null);   /* oculta el punto LIVE */
+    LT_KNOWN_PARTICIPANTS = new Set();
+    ltRefreshModalState();
+    if (msg && window.notifSystem) window.notifSystem.show({ type: 'info', title: 'Sesión cerrada', message: msg });
+}
+
+/* ── MODAL: poblar y refrescar ───────────────────────────────────── */
+async function ltOpenModal() {
+    document.getElementById('lt-modal').style.display = 'block';
+    ltRefreshModalState();
+    /* Cargar lista de usuarios. */
+    const r = await ltFetch('users');
+    const list = document.getElementById('lt-user-list');
+    if (!r || !r.ok || !r.users || r.users.length === 0) {
+        list.innerHTML = '<div class="lt-status" style="text-align:center;">No hay otros usuarios.</div>';
+        return;
+    }
+    list.innerHTML = r.users.map(function(u){
+        return '<div class="lt-user-row">' +
+            '<span>' + (u.label || u.user_key) + '</span>' +
+            '<button data-userkey="' + u.user_key + '">Invitar</button>' +
+            '</div>';
+    }).join('');
+    list.querySelectorAll('button[data-userkey]').forEach(function(b){
+        b.addEventListener('click', async function(){
+            /* Si no soy host aún, crearme como host primero. */
+            if (LT_ROLE !== 'host') await ltStartAsHost();
+            const k = b.getAttribute('data-userkey');
+            const inv = await ltFetch('invite', { body: { toUser: k } });
+            if (inv && inv.ok) {
+                b.textContent = '✓ Invitado';
+                b.classList.add('invited');
+                b.disabled = true;
+            } else {
+                if (window.notifSystem) window.notifSystem.show({ type: 'error', title: 'Error', message: inv.error || 'No se pudo invitar.' });
+            }
+        });
+    });
+}
+function ltCloseModal() {
+    document.getElementById('lt-modal').style.display = 'none';
+}
+function ltRefreshModalState() {
+    const t = document.getElementById('lt-status-text');
+    const endBtn = document.getElementById('lt-end-btn');
+    if (!t) return;
+    if (LT_ROLE === 'host') {
+        t.innerHTML = '🎤 <strong>Hosteando</strong> una sesión. Invita usuarios para que se unan.';
+        endBtn.style.display = '';
+    } else if (LT_ROLE === 'guest') {
+        t.innerHTML = '🎧 Estás escuchando como invitado.';
+        endBtn.style.display = '';
+    } else {
+        t.innerHTML = 'No estás en ninguna sesión. Invita a alguien para empezar una.';
+        endBtn.style.display = 'none';
+    }
+}
+
+/* ── POLL de invites para guests potenciales ─────────────────────── */
+async function ltPollInvites() {
+    if (LT_ROLE) return; /* ya en sesión, no procesa nuevos invites */
+    const r = await ltFetch('invites');
+    if (!r || !r.ok || !r.invites) return;
+    r.invites.forEach(function(inv){
+        if (LT_SHOWN_INVITES.has(inv.id)) return;
+        LT_SHOWN_INVITES.add(inv.id);
+        if (!window.notifSystem) return;
+        /* type: 'action' añade botones Aceptar/Rechazar y NO auto-dismissa
+           — el usuario decide. */
+        window.notifSystem.show({
+            id:      'lt-invite-' + inv.id,
+            type:    'action',
+            title:   '🎧 ' + (inv.from_label || '?') + ' te invita',
+            message: 'Escuchar juntos: ' + (inv.track_title || 'una canción'),
+            onAccept: function(){ ltJoinAsGuest(inv.id); },
+            onReject: function(){
+                /* Marcar el invite como declinado en el backend. */
+                ltFetch('decline', { body: { inviteId: inv.id } });
+            },
+        });
+    });
+}
+
+/* ── HOOKS al player ─────────────────────────────────────────────── */
+/* Cada cambio de track del HOST → broadcast. updateTrackUI es donde el
+   desktop ya rastrea para wrapped; hooks el broadcast ahí también. */
+(function(){
+    const origUpdateTrackUI = (typeof updateTrackUI === 'function') ? updateTrackUI : null;
+    if (origUpdateTrackUI) {
+        window.updateTrackUI = function(track) {
+            origUpdateTrackUI(track);
+            if (LT_ROLE === 'host') ltHostBroadcastDebounced();
+        };
+    }
+})();
+/* Periódico: si soy host, mando state cada 5s para mantener participantes. */
+setInterval(function(){
+    if (LT_ROLE === 'host') ltHostBroadcast();
+}, 5000);
+
+/* Listeners UI del modal Listen Together. El item del context menu
+   se inyecta en showTrackCtxMenu (más abajo) junto a "Añadir a otra
+   playlist" y "Añadir a mi perfil". */
+document.addEventListener('DOMContentLoaded', function(){
+    const close = document.getElementById('lt-modal-close');
+    if (close) close.addEventListener('click', ltCloseModal);
+    const leave = document.getElementById('lt-leave-btn');
+    if (leave) leave.addEventListener('click', ltLeave);
+    const endBtn = document.getElementById('lt-end-btn');
+    if (endBtn) endBtn.addEventListener('click', function(){ ltLeave(); ltCloseModal(); });
+});
+/* Exposición global para que showTrackCtxMenu pueda llamarlos. */
+window.ltOpenModal = ltOpenModal;
+window.ltLeave     = ltLeave;
+
+/* (Click derecho sobre el reproductor lo maneja desktop-base.php sobre
+   #player-main, que ahora incluye la opción "Escuchar juntos". Aquí no
+   duplicamos el listener — duplicarlo provocaba 2 menús superpuestos.) */
+
+/* Al cargar, checkear si ya estoy en sesión (refresh de pestaña). */
+(async function ltBootstrap(){
+    const r = await ltFetch('current');
+    if (!r || !r.ok || !r.role) {
+        /* Iniciar poll de invites. */
+        LT_INVITES_POLL_T = setInterval(ltPollInvites, 5000);
+        return;
+    }
+    LT_ROLE       = r.role;
+    LT_SESSION_ID = r.session ? r.session.id : null;
+    if (LT_ROLE === 'guest') {
+        if (LT_GUEST_POLL_T) clearInterval(LT_GUEST_POLL_T);
+        LT_GUEST_POLL_T = setInterval(ltGuestPoll, 2000);
+        ltGuestPoll();
+        ltUpdateLiveDot('guest', r.host_label);
+        /* Guest sin banner — solo notif al unirse (que ya pasó). */
+    } else if (LT_ROLE === 'host') {
+        ltUpdateLiveDot('host');
+    }
 })();
 
 /* win98Confirm vive ahora en assets/js/win98-dialogs.js (compartido).
@@ -1436,11 +1928,43 @@ var addTrackCallback = null;
         });
         ctxMenu.appendChild(addProfile);
 
+        /* Item Listen Together — abre el modal de invitar (o gestiona
+           la sesión actual si ya estás en una). */
+        var ltItem = document.createElement('div');
+        ltItem.className = 'pl-menu-item';
+        if (typeof LT_ROLE !== 'undefined' && LT_ROLE === 'host') {
+            ltItem.textContent = '🎧 Invitar a más usuarios…';
+        } else if (typeof LT_ROLE !== 'undefined' && LT_ROLE === 'guest') {
+            ltItem.textContent = '🎧 Ver sesión actual';
+        } else {
+            ltItem.textContent = '🎧 Escuchar juntos…';
+        }
+        ltItem.addEventListener('click', function() {
+            ctxMenu.style.display = 'none';
+            if (typeof ltOpenModal === 'function') ltOpenModal();
+        });
+        ctxMenu.appendChild(ltItem);
+
+        /* Item de salir, solo si estás en una sesión. */
+        if (typeof LT_ROLE !== 'undefined' && LT_ROLE) {
+            var ltLeave = document.createElement('div');
+            ltLeave.className = 'pl-menu-item';
+            ltLeave.textContent = '✕ Salir de la sesión';
+            ltLeave.addEventListener('click', function() {
+                ctxMenu.style.display = 'none';
+                if (typeof window.ltLeave === 'function') window.ltLeave();
+            });
+            ctxMenu.appendChild(ltLeave);
+        }
+
         ctxMenu.style.display = 'block';
         var cw = ctxMenu.offsetWidth, ch = ctxMenu.offsetHeight;
         ctxMenu.style.left = Math.min(ex, window.innerWidth  - cw - 8) + 'px';
         ctxMenu.style.top  = Math.min(ey, window.innerHeight - ch - 8) + 'px';
     }
+    /* Exposición global → permite triggear el mismo menú desde el
+       mini-player (no solo desde los rows de la lista). */
+    window.openTrackCtxMenu = showTrackCtxMenu;
 
     function startEdit(row, infoDiv, btnsDiv, i) {
         var track = editList[i];

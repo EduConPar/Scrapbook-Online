@@ -573,7 +573,7 @@ function renderVideos(list) {
     list.forEach(function(v, i){
         var thumbHtml = v.thumb
             ? '<img src="' + esc(v.thumb) + '" alt="" loading="lazy">'
-            : '<span class="ma-card-thumb-ph">🎬</span>';
+            : '<span class="ma-card-thumb-ph"><img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;"></span>';
         var dur = v.duration ? '⏱ ' + esc(v.duration) : '';
         html +=
             '<div class="ma-card" data-act="play-v" data-idx="' + i + '" role="button" tabindex="0">' +

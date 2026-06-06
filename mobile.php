@@ -1147,6 +1147,105 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
 </div>
 
+<!-- Listen-Together: modal de invitar usuarios + toast inferior. -->
+<style>
+    @keyframes ltLivePulseM {
+        0%, 100% { opacity: 1;   transform: scale(1); }
+        50%      { opacity: 0.3; transform: scale(0.75); }
+    }
+    #mu-lt-modal {
+        display:none; position:fixed; left:50%; top:50%;
+        transform:translate(-50%, -50%);
+        width: min(320px, 90vw); max-height: 80vh; overflow-y:auto;
+        z-index: 9100;
+    }
+    #mu-lt-modal .window-body { padding: 8px 10px; }
+    #mu-lt-modal .lt-section-title {
+        font-size: 11px; font-weight: bold; margin: 4px 0 6px; opacity: 0.85;
+    }
+    #mu-lt-user-list {
+        max-height: 50vh; overflow-y: auto;
+        background: var(--input-bg, #fff); color: var(--input-text, #000);
+        padding: 2px; margin-bottom: 8px;
+        box-shadow:
+            inset  1px  1px var(--bezel-dark-2, grey),
+            inset -1px -1px var(--bezel-light-1, #fff);
+    }
+    .mu-lt-user-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 8px; font-size: 12px; cursor: default;
+    }
+    .mu-lt-user-row + .mu-lt-user-row {
+        border-top: 1px dotted rgba(0,0,0,0.15);
+    }
+    .mu-lt-user-row button {
+        font-size: 11px; padding: 4px 10px;
+        font-family: inherit;
+        background: var(--btn-bg, silver); color: var(--text, #000);
+        border: 0; cursor: pointer;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+    .mu-lt-user-row button.invited { opacity: 0.6; }
+    #mu-lt-status { font-size: 11px; opacity: 0.75; padding: 4px 0; }
+    /* Toast Win98 inferior */
+    .mu-lt-toast {
+        position: fixed; left: 50%; bottom: 12vh;
+        transform: translateX(-50%);
+        background: var(--win-bg, silver);
+        color: var(--text, #000);
+        padding: 8px 14px; max-width: 92vw;
+        font-size: 12px;
+        z-index: 9300;
+        animation: muLtToastIn 0.28s ease;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf),
+            3px 3px 8px rgba(0,0,0,0.35);
+    }
+    .mu-lt-toast .toast-title { font-weight: bold; margin-bottom: 2px; }
+    .mu-lt-toast .toast-msg   { opacity: 0.85; font-size: 11px; }
+    .mu-lt-toast .toast-actions { margin-top: 8px; display: flex; gap: 6px; justify-content: flex-end; }
+    .mu-lt-toast .toast-actions button {
+        background: var(--btn-bg, silver); color: var(--text, #000);
+        border: 0; padding: 3px 12px; font-size: 11px; font-family: inherit;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+    @keyframes muLtToastIn {
+        from { opacity: 0; transform: translate(-50%, 16px); }
+        to   { opacity: 1; transform: translate(-50%,  0); }
+    }
+</style>
+
+<div class="window" id="mu-lt-modal">
+    <div class="title-bar">
+        <div class="title-bar-text">🎧 Escuchar juntos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="mu-lt-modal-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div class="lt-section-title">Estado</div>
+        <div id="mu-lt-status">No estás en ninguna sesión.</div>
+        <div class="lt-section-title">Invitar a:</div>
+        <div id="mu-lt-user-list">
+            <div style="font-size:11px;text-align:center;padding:8px;">Cargando…</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:4px;">
+            <button class="button" id="mu-lt-end-btn" style="display:none;">Cerrar sesión</button>
+        </div>
+    </div>
+</div>
+
 <!-- FULLSCREEN PLAYER (shell) — versión completa: title-bar con
      playlist name, display sunken con vinilo, info LCD con marker
      blink + marquee, progress + tiempos LCD, 3 botones primarios,
@@ -1162,13 +1261,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         </div>
         <div class="window-body mu-full-body">
 
-            <div class="mu-full-display">
+            <div class="mu-full-display" style="position:relative;">
                 <div class="mu-vinyl-wrap">
                     <div class="mu-vinyl" id="mu-vinyl">
                         <div class="mu-vinyl-label empty" id="mu-vinyl-label">🎵</div>
                         <div class="mu-vinyl-hole"></div>
                     </div>
                 </div>
+                <!-- Indicador LIVE — pulsa cuando estás en sesión de escucha conjunta. -->
+                <span id="lt-live-dot-m" title="" style="display:none;position:absolute;top:10px;right:10px;width:12px;height:12px;border-radius:50%;background:var(--accent, #1db954);box-shadow:0 0 7px var(--accent, #1db954),0 0 1px rgba(0,0,0,0.5);animation:ltLivePulseM 1.2s ease-in-out infinite;z-index:5;"></span>
             </div>
 
             <div class="mu-full-info">
@@ -1212,12 +1313,6 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                         <polyline points="21 16 21 21 16 21"/>
                         <line x1="15" y1="15" x2="21" y2="21"/>
                         <line x1="4" y1="4" x2="9" y2="9"/>
-                    </svg>
-                </button>
-                <button class="button mu-full-extra" id="mu-full-add" type="button" aria-label="Añadir a playlist">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-                        <line x1="12" y1="5"  x2="12" y2="19"/>
-                        <line x1="5"  y1="12" x2="19" y2="12"/>
                     </svg>
                 </button>
                 <button class="button mu-full-extra" id="mu-full-lock" type="button" aria-label="Bloquear pantalla">
@@ -1641,11 +1736,391 @@ window.MuShell = (function(){
         });
     }
 
+    /* ── WRAPPED tracking — logea cada cambio de track con el tiempo
+       real escuchado para que las escuchas DESDE EL MÓVIL cuenten en
+       las stats anuales del usuario. Replica el patrón de
+       reproductor.php. */
+    var _wrappedLastTrack      = null;
+    var _wrappedLastPlaylistId = null;
+    var WRAPPED_URL = 'assets/music/wrapped-api.php?action=log';
+
+    function sendWrappedLog(track, listenedS, playlistId) {
+        if (!track || !track.videoId || !track.title) return;
+        listenedS = Math.max(0, Math.floor(listenedS || 0));
+        if (listenedS < 3) return;
+        var body = JSON.stringify({
+            videoId:    track.videoId,
+            title:      track.title,
+            artist:     track.artist || '',
+            playlistId: playlistId,
+            durationS:  listenedS,
+        });
+        try {
+            if (navigator.sendBeacon) {
+                var blob = new Blob([body], { type: 'application/json' });
+                if (navigator.sendBeacon(WRAPPED_URL, blob)) return;
+            }
+        } catch (_) {}
+        try {
+            fetch(WRAPPED_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
+                keepalive: true,
+            }).catch(function(){});
+        } catch (_) {}
+    }
+    (function setupWrappedFlush() {
+        function flush() {
+            if (!_wrappedLastTrack) return;
+            var listened = 0;
+            try {
+                if (YT_PLAYER && typeof YT_PLAYER.getCurrentTime === 'function') {
+                    listened = YT_PLAYER.getCurrentTime() || 0;
+                }
+            } catch (_) {}
+            sendWrappedLog(_wrappedLastTrack, listened, _wrappedLastPlaylistId);
+        }
+        window.addEventListener('pagehide', flush);
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'hidden') flush();
+        });
+    })();
+
+    /* ════════════════════════════════════════════════════════════════
+       LISTEN TOGETHER — móvil. Mismo modelo que reproductor.php desktop:
+       polling cada 2s para guest, broadcast en cada track change para
+       host. Backend compartido en assets/listen/api.php.
+       ════════════════════════════════════════════════════════════════ */
+    var LT_URL = 'assets/listen/api.php';
+    var LT_ROLE = null;
+    var LT_SESSION_ID = null;
+    var LT_GUEST_POLL_T = null;
+    var LT_HOST_BCAST_T = null;
+    var LT_INVITES_POLL_T = null;
+    var LT_HOST_BCAST_INTERVAL = null;
+    var LT_KNOWN_PARTICIPANTS = {};
+    var LT_SHOWN_INVITES = {};
+
+    function ltFetch(action, opts) {
+        opts = opts || {};
+        var isGet = !opts.body;
+        return fetch(LT_URL + '?action=' + encodeURIComponent(action), {
+            method: isGet ? 'GET' : 'POST',
+            credentials: 'same-origin',
+            headers: isGet ? {} : { 'Content-Type': 'application/json' },
+            body:    opts.body ? JSON.stringify(opts.body) : undefined,
+        }).then(function(r){ return r.json(); }).catch(function(){ return { ok: false }; });
+    }
+
+    function ltToast(opts) {
+        /* Toast Win98 inferior. opts: {title, message, actions: [{label, fn}], duration} */
+        var existing = document.getElementById('mu-lt-toast-' + (opts.id || ''));
+        if (existing) existing.remove();
+        var t = document.createElement('div');
+        t.id = 'mu-lt-toast-' + (opts.id || Date.now());
+        t.className = 'mu-lt-toast';
+        var html = '';
+        if (opts.title)   html += '<div class="toast-title">' + opts.title + '</div>';
+        if (opts.message) html += '<div class="toast-msg">' + opts.message + '</div>';
+        if (opts.actions && opts.actions.length) {
+            html += '<div class="toast-actions">';
+            opts.actions.forEach(function(a, i){
+                html += '<button data-act-i="' + i + '">' + a.label + '</button>';
+            });
+            html += '</div>';
+        }
+        t.innerHTML = html;
+        document.body.appendChild(t);
+        if (opts.actions && opts.actions.length) {
+            t.querySelectorAll('button[data-act-i]').forEach(function(b){
+                b.addEventListener('click', function(){
+                    var i = +b.getAttribute('data-act-i');
+                    if (opts.actions[i] && opts.actions[i].fn) opts.actions[i].fn();
+                    t.remove();
+                });
+            });
+        }
+        if (!opts.actions || !opts.actions.length) {
+            setTimeout(function(){ if (t.parentNode) t.remove(); }, opts.duration || 4500);
+        }
+    }
+
+    function ltUpdateLiveDot(mode, hostLabel) {
+        var el = document.getElementById('lt-live-dot-m');
+        if (!el) return;
+        if (!mode) { el.style.display = 'none'; el.title = ''; return; }
+        el.style.display = 'block';
+        el.title = mode === 'host'
+            ? 'En directo · estás hosteando una sesión'
+            : 'En directo · escuchando con ' + (hostLabel || 'el host');
+    }
+
+    /* ── HOST: broadcast del estado ──────────────────────── */
+    async function ltHostBroadcast() {
+        if (LT_ROLE !== 'host' || !YT_PLAYER) return;
+        if (CUR_IDX < 0 || CUR_IDX >= QUEUE.length) return;
+        var tr = QUEUE[CUR_IDX];
+        if (!tr) return;
+        var ct = 0, dur = 0;
+        try {
+            ct  = Math.floor(YT_PLAYER.getCurrentTime() || 0);
+            dur = Math.floor(YT_PLAYER.getDuration()    || 0);
+        } catch (_) {}
+        var isPlaying = false;
+        try { isPlaying = YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1; } catch (_) {}
+        var r = await ltFetch('update-state', { body: {
+            videoId:      tr.videoId,
+            title:        tr.title  || '',
+            artist:       tr.artist || '',
+            coverUrl:     'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg',
+            currentTimeS: ct,
+            durationS:    dur,
+            isPlaying:    isPlaying,
+        }});
+        if (r && r.ok && r.participants_list) {
+            r.participants_list.forEach(function(p){
+                if (p.user_key && !LT_KNOWN_PARTICIPANTS[p.user_key]) {
+                    LT_KNOWN_PARTICIPANTS[p.user_key] = true;
+                    var name = p.label || '?';
+                    ltToast({
+                        id:      'joiner-' + p.user_key,
+                        title:   '🎧 ' + name + ' se unió',
+                        message: name + ' está escuchando contigo en tiempo real.',
+                        duration: 4500,
+                    });
+                }
+            });
+        }
+    }
+    function ltHostBroadcastDebounced() {
+        if (LT_HOST_BCAST_T) clearTimeout(LT_HOST_BCAST_T);
+        LT_HOST_BCAST_T = setTimeout(ltHostBroadcast, 600);
+    }
+
+    /* ── GUEST: poll + sync ──────────────────────────────── */
+    async function ltGuestPoll() {
+        if (LT_ROLE !== 'guest') return;
+        var r = await ltFetch('poll');
+        if (!r || !r.ok) return;
+        if (r.closed || !r.session) {
+            ltLeaveLocal('El host cerró la sesión.');
+            return;
+        }
+        var s = r.session;
+        if (!YT_PLAYER || !s.video_id) return;
+        var curVid = '';
+        try {
+            var d = YT_PLAYER.getVideoData && YT_PLAYER.getVideoData();
+            if (d) curVid = d.video_id || '';
+        } catch (_) {}
+        if (curVid !== s.video_id) {
+            try { YT_PLAYER.loadVideoById(s.video_id, parseInt(s.current_time_s, 10) || 0); } catch (_) {}
+            /* Actualiza UI del widget: label + título visible cuando se abre fullscreen. */
+            try {
+                var fa = document.getElementById('mu-full-title');
+                if (fa) fa.textContent = s.track_title || '';
+                var ar = document.getElementById('mu-full-artist');
+                if (ar) ar.textContent = s.track_artist || '';
+            } catch (_) {}
+            return;
+        }
+        var myT = 0;
+        try { myT = YT_PLAYER.getCurrentTime() || 0; } catch (_) {}
+        var hostT = parseInt(s.current_time_s, 10) || 0;
+        if (Math.abs(myT - hostT) > 3) {
+            try { YT_PLAYER.seekTo(hostT, true); } catch (_) {}
+        }
+        try {
+            var ps = YT_PLAYER.getPlayerState();
+            if (parseInt(s.is_playing, 10) === 1 && ps !== 1) YT_PLAYER.playVideo();
+            if (parseInt(s.is_playing, 10) === 0 && ps === 1) YT_PLAYER.pauseVideo();
+        } catch (_) {}
+    }
+
+    /* ── Entrada/salida de sesión ────────────────────────── */
+    async function ltStartAsHost() {
+        var r = await ltFetch('create', { body: {} });
+        if (!r || !r.ok) {
+            ltToast({ title: 'Error', message: 'No se pudo crear sesión.', duration: 3500 });
+            return null;
+        }
+        LT_ROLE = 'host';
+        LT_SESSION_ID = r.session_id;
+        ltHostBroadcast();
+        if (LT_HOST_BCAST_INTERVAL) clearInterval(LT_HOST_BCAST_INTERVAL);
+        LT_HOST_BCAST_INTERVAL = setInterval(ltHostBroadcast, 5000);
+        ltUpdateLiveDot('host');
+        return r;
+    }
+
+    async function ltJoinAsGuest(inviteId) {
+        var r = await ltFetch('accept', { body: { inviteId: inviteId } });
+        if (!r || !r.ok) {
+            ltToast({ title: 'Error', message: r.error || 'No se pudo unir.', duration: 3500 });
+            return;
+        }
+        LT_ROLE = 'guest';
+        LT_SESSION_ID = r.session_id;
+        if (LT_GUEST_POLL_T) clearInterval(LT_GUEST_POLL_T);
+        ltGuestPoll();
+        LT_GUEST_POLL_T = setInterval(ltGuestPoll, 2000);
+        ltUpdateLiveDot('guest', r.host_label);
+        var name = r.host_label || 'el host';
+        ltToast({
+            id: 'joined-' + r.session_id,
+            title: '🎧 Te has unido a la sesión de ' + name,
+            message: 'Ahora escuchas en tiempo real con ' + name + '.',
+            duration: 4500,
+        });
+    }
+
+    async function ltLeave() {
+        await ltFetch('leave', { body: {} });
+        ltLeaveLocal();
+    }
+    function ltLeaveLocal(msg) {
+        LT_ROLE = null;
+        LT_SESSION_ID = null;
+        if (LT_GUEST_POLL_T)       { clearInterval(LT_GUEST_POLL_T);       LT_GUEST_POLL_T = null; }
+        if (LT_HOST_BCAST_INTERVAL){ clearInterval(LT_HOST_BCAST_INTERVAL); LT_HOST_BCAST_INTERVAL = null; }
+        if (LT_HOST_BCAST_T)       { clearTimeout(LT_HOST_BCAST_T); LT_HOST_BCAST_T = null; }
+        LT_KNOWN_PARTICIPANTS = {};
+        ltUpdateLiveDot(null);
+        if (msg) ltToast({ title: 'Sesión cerrada', message: msg, duration: 3500 });
+        ltRefreshModalStatus();
+    }
+
+    /* ── Modal de invitar ────────────────────────────────── */
+    async function ltOpenModal() {
+        var modal = document.getElementById('mu-lt-modal');
+        if (!modal) return;
+        modal.style.display = 'block';
+        ltRefreshModalStatus();
+        var list = document.getElementById('mu-lt-user-list');
+        var r = await ltFetch('users');
+        if (!r || !r.ok || !r.users || !r.users.length) {
+            list.innerHTML = '<div style="font-size:11px;text-align:center;padding:8px;">No hay otros usuarios.</div>';
+            return;
+        }
+        list.innerHTML = r.users.map(function(u){
+            return '<div class="mu-lt-user-row">' +
+                '<span>' + (u.label || u.user_key) + '</span>' +
+                '<button data-userkey="' + u.user_key + '">Invitar</button>' +
+                '</div>';
+        }).join('');
+        list.querySelectorAll('button[data-userkey]').forEach(function(b){
+            b.addEventListener('click', async function(){
+                if (LT_ROLE !== 'host') {
+                    var res = await ltStartAsHost();
+                    if (!res) return;
+                }
+                var k = b.getAttribute('data-userkey');
+                var inv = await ltFetch('invite', { body: { toUser: k } });
+                if (inv && inv.ok) {
+                    b.textContent = '✓ Invitado';
+                    b.classList.add('invited');
+                    b.disabled = true;
+                    ltRefreshModalStatus();
+                } else {
+                    ltToast({ title: 'Error', message: inv.error || 'No se pudo invitar.', duration: 3500 });
+                }
+            });
+        });
+    }
+    function ltCloseModal() {
+        var modal = document.getElementById('mu-lt-modal');
+        if (modal) modal.style.display = 'none';
+    }
+    function ltRefreshModalStatus() {
+        var s = document.getElementById('mu-lt-status');
+        var endBtn = document.getElementById('mu-lt-end-btn');
+        if (!s) return;
+        if (LT_ROLE === 'host') {
+            s.innerHTML = '🎤 <strong>Hosteando</strong> una sesión. Invita usuarios para que se unan.';
+            if (endBtn) endBtn.style.display = '';
+        } else if (LT_ROLE === 'guest') {
+            s.innerHTML = '🎧 Estás escuchando como invitado.';
+            if (endBtn) endBtn.style.display = '';
+        } else {
+            s.innerHTML = 'No estás en ninguna sesión. Invita a alguien para empezar.';
+            if (endBtn) endBtn.style.display = 'none';
+        }
+    }
+
+    /* ── Polling de invites entrantes ────────────────────── */
+    async function ltPollInvites() {
+        if (LT_ROLE) return;
+        var r = await ltFetch('invites');
+        if (!r || !r.ok || !r.invites) return;
+        r.invites.forEach(function(inv){
+            if (LT_SHOWN_INVITES[inv.id]) return;
+            LT_SHOWN_INVITES[inv.id] = true;
+            ltToast({
+                id: 'invite-' + inv.id,
+                title:   '🎧 ' + (inv.from_label || '?') + ' te invita',
+                message: 'Escuchar juntos: ' + (inv.track_title || 'una canción'),
+                actions: [
+                    { label: 'Rechazar', fn: function(){ ltFetch('decline', { body: { inviteId: inv.id } }); } },
+                    { label: 'Aceptar',  fn: function(){ ltJoinAsGuest(inv.id); } },
+                ],
+            });
+        });
+    }
+
+    /* Wire UI buttons — el botón mu-full-lt ya no existe; la entrada
+       a Listen Together se hace desde el menú long-press del vinilo. */
+    document.addEventListener('DOMContentLoaded', function(){
+        var close = document.getElementById('mu-lt-modal-close');
+        if (close) close.addEventListener('click', ltCloseModal);
+        var end = document.getElementById('mu-lt-end-btn');
+        if (end) end.addEventListener('click', function(){ ltLeave(); ltCloseModal(); });
+    });
+    /* Exposición global para que openVinylMenu (en otro scope) pueda
+       abrir el modal de Listen Together. */
+    window.ltOpenModal = ltOpenModal;
+
+    /* Bootstrap: recuperar sesión existente al cargar. */
+    (async function ltBootstrap(){
+        var r = await ltFetch('current');
+        if (!r || !r.ok || !r.role) {
+            LT_INVITES_POLL_T = setInterval(ltPollInvites, 5000);
+            return;
+        }
+        LT_ROLE = r.role;
+        LT_SESSION_ID = r.session ? r.session.id : null;
+        if (LT_ROLE === 'guest') {
+            if (LT_GUEST_POLL_T) clearInterval(LT_GUEST_POLL_T);
+            LT_GUEST_POLL_T = setInterval(ltGuestPoll, 2000);
+            ltGuestPoll();
+            ltUpdateLiveDot('guest', r.host_label);
+        } else if (LT_ROLE === 'host') {
+            if (LT_HOST_BCAST_INTERVAL) clearInterval(LT_HOST_BCAST_INTERVAL);
+            LT_HOST_BCAST_INTERVAL = setInterval(ltHostBroadcast, 5000);
+            ltUpdateLiveDot('host');
+        }
+    })();
+
     /* ── Playback control ── */
     function playCurrent() {
         if (CUR_IDX < 0 || CUR_IDX >= QUEUE.length) return;
         var tr = QUEUE[CUR_IDX];
         if (!tr || !tr.videoId) { next(); return; }
+
+        /* WRAPPED tracking: logea el track ANTERIOR antes de cargar el
+           nuevo, con el tiempo escuchado real. Cubre next/prev/end. */
+        if (_wrappedLastTrack && _wrappedLastTrack.videoId !== tr.videoId) {
+            var listenedPrev = 0;
+            try {
+                if (YT_PLAYER && typeof YT_PLAYER.getCurrentTime === 'function') {
+                    listenedPrev = YT_PLAYER.getCurrentTime() || 0;
+                }
+            } catch (_) {}
+            sendWrappedLog(_wrappedLastTrack, listenedPrev, _wrappedLastPlaylistId);
+        }
+        _wrappedLastTrack      = tr;
+        _wrappedLastPlaylistId = (typeof CUR_PL_ID !== 'undefined' && CUR_PL_ID) ? CUR_PL_ID : null;
+
         renderTrack(tr);
         document.getElementById('mu-widget').classList.add('visible');
         updateMediaSession(tr);
@@ -1654,6 +2129,8 @@ window.MuShell = (function(){
         YT_PLAYER.loadVideoById(tr.videoId);
         broadcast({ type: 'mushell:track', idx: CUR_IDX, total: QUEUE.length, track: tr, plName: CUR_PL_NAME });
         publishNowPlaying(true, true);
+        /* Listen-Together: si soy host, broadcast estado al backend (debounced). */
+        if (LT_ROLE === 'host') ltHostBroadcastDebounced();
     }
     function pickRandomIdx() {
         if (QUEUE.length <= 1) return CUR_IDX;
@@ -1760,12 +2237,8 @@ window.MuShell = (function(){
         this.setAttribute('aria-pressed', SHUFFLE_ON ? 'true' : 'false');
     });
 
-    /* Añadir a playlist: muestra picker de playlists directamente sobre
-       el fullscreen (sin cambiar de app). El modal se monta encima vía
-       z-index 300 > .mu-full 200. */
-    document.getElementById('mu-full-add').addEventListener('click', function(){
-        openShellPlaylistPicker();
-    });
+    /* (mu-full-add eliminado — la opción "Añadir a playlist" ahora vive
+       solo en el menú long-press del vinilo, evitando duplicidad.) */
 
     /* "Conectar TV": modal con URL del companion + QR para que el
        usuario lo abra en el navegador del Smart TV. Una vez la TV está
@@ -2056,6 +2529,12 @@ window.MuShell = (function(){
     /* Menú vinilo: 2 acciones (perfil + playlist). */
     function openVinylMenu(){
         var tr = getCurrentTrack(); if (!tr) return;
+        /* Etiqueta de Listen Together según rol actual. */
+        var ltLabel = 'Escuchar juntos…';
+        if (typeof LT_ROLE !== 'undefined') {
+            if (LT_ROLE === 'host')  ltLabel = 'Invitar a más usuarios…';
+            if (LT_ROLE === 'guest') ltLabel = 'Ver sesión actual';
+        }
         var m = shellOpenModal({
             title: tr.title || tr.videoId || 'Canción',
             body:
@@ -2068,6 +2547,10 @@ window.MuShell = (function(){
                         '<span class="shell-modal-icon">📋</span>' +
                         '<span>Añadir a una playlist</span>' +
                     '</button>' +
+                    '<button class="button shell-modal-item" data-act="listen-together" type="button">' +
+                        '<span class="shell-modal-icon">🎧</span>' +
+                        '<span>' + ltLabel + '</span>' +
+                    '</button>' +
                 '</div>'
         });
         m.body.querySelector('[data-act="profile"]').addEventListener('click', function(){
@@ -2075,6 +2558,10 @@ window.MuShell = (function(){
         });
         m.body.querySelector('[data-act="playlist"]').addEventListener('click', function(){
             m.close(); openShellPlaylistPicker(tr);
+        });
+        m.body.querySelector('[data-act="listen-together"]').addEventListener('click', function(){
+            m.close();
+            if (typeof window.ltOpenModal === 'function') window.ltOpenModal();
         });
     }
 
@@ -2479,7 +2966,7 @@ window.MuShell = (function(){
             'box-shadow:0 2px 6px rgba(0,0,0,0.4)'
         ].join(';');
         bd.innerHTML =
-            '<span style="flex:1;">🔔 Activa las notificaciones para no perderte mensajes.</span>' +
+            '<span style="flex:1;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Activa las notificaciones para no perderte mensajes.</span>' +
             '<button class="button" id="push-perm-ok"    type="button" style="min-height:26px;font-size:11px;">Activar</button>' +
             '<button class="button" id="push-perm-skip"  type="button" style="min-height:26px;font-size:11px;">Luego</button>';
         document.body.appendChild(bd);

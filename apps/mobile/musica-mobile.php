@@ -2608,10 +2608,81 @@ function applyPlayingHighlight(pi, ti) {
     if (sel) sel.classList.add('playing');
 }
 
+/* ════════════════════════════════════════════════════════════════
+   WRAPPED tracking — replica el patrón del reproductor de escritorio
+   ([apps/reproductor.php]) para que las escuchas DESDE EL MÓVIL
+   también cuenten en las stats anuales. Se logea CADA cambio de
+   track + flush en pagehide/visibilitychange.
+   ════════════════════════════════════════════════════════════════ */
+var _wrappedLastTrack      = null;
+var _wrappedLastPlaylistId = null;
+var WRAPPED_URL = '../../assets/music/wrapped-api.php?action=log';
+
+function sendWrappedLog(track, listenedS, playlistId) {
+    if (!track || !track.videoId || !track.title) return;
+    listenedS = Math.max(0, Math.floor(listenedS || 0));
+    /* < 3s no cuenta — evita inflar el conteo con saltos rápidos. */
+    if (listenedS < 3) return;
+    var body = JSON.stringify({
+        videoId:    track.videoId,
+        title:      track.title,
+        artist:     track.artist || '',
+        playlistId: playlistId,
+        durationS:  listenedS,
+    });
+    try {
+        if (navigator.sendBeacon) {
+            var blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon(WRAPPED_URL, blob)) return;
+        }
+    } catch (_) {}
+    try {
+        fetch(WRAPPED_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
+            keepalive: true,
+        }).catch(function(){});
+    } catch (_) {}
+}
+
+(function setupWrappedFlush() {
+    function flush() {
+        if (!_wrappedLastTrack) return;
+        var listened = 0;
+        try {
+            if (YT_PLAYER && typeof YT_PLAYER.getCurrentTime === 'function') {
+                listened = YT_PLAYER.getCurrentTime() || 0;
+            }
+        } catch (_) {}
+        sendWrappedLog(_wrappedLastTrack, listened, _wrappedLastPlaylistId);
+    }
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') flush();
+    });
+})();
+
 function playCurrent() {
     if (CUR_IDX < 0 || CUR_IDX >= QUEUE.length) return;
     var tr = QUEUE[CUR_IDX];
     if (!tr || !tr.videoId) { nextTrack(); return; }
+
+    /* WRAPPED tracking: antes de cargar el nuevo videoId, logea el
+       track ANTERIOR con el tiempo real escuchado (getCurrentTime del
+       momento del cambio). Cubre tanto skip como fin natural. */
+    if (_wrappedLastTrack && _wrappedLastTrack.videoId !== tr.videoId) {
+        var listened = 0;
+        try {
+            if (YT_PLAYER && typeof YT_PLAYER.getCurrentTime === 'function') {
+                listened = YT_PLAYER.getCurrentTime() || 0;
+            }
+        } catch (_) {}
+        sendWrappedLog(_wrappedLastTrack, listened, _wrappedLastPlaylistId);
+    }
+    _wrappedLastTrack      = tr;
+    _wrappedLastPlaylistId = (PLAYLISTS[CUR_PL_IDX] || {}).id || null;
+
     /* Marca visualmente el track activo en la lista. Usa pl-idx + tr-idx
        para no pintar tracks homónimos de otras playlists. */
     applyPlayingHighlight(CUR_PL_IDX, CUR_IDX);
@@ -2807,7 +2878,7 @@ function muOpenPlaylistMenu(idx) {
     ];
     if (isOwn) {
         items.push({ act: 'collab', label: '👥 Colaboradores' });
-        items.push({ act: 'delete', label: '🗑 Eliminar playlist', danger: true });
+        items.push({ act: 'delete', label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar playlist', danger: true });
     } else {
         items.push({ act: 'leave',  label: '🚪 Abandonar (dejar de colaborar)', danger: true });
     }
@@ -2875,7 +2946,7 @@ function muOpenTrackMenu(pi, ti) {
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
         { act: 'addPl',      label: '📋 Añadir a otra playlist' },
-        { act: 'remove',     label: '🗑 Quitar de la playlist', danger: true }
+        { act: 'remove',     label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la playlist', danger: true }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
                      esc(tr.title || tr.videoId || 'Canción') +
@@ -3076,7 +3147,7 @@ function muOpenReviewEditor(musicId, title, ytId) {
         '<label for="re-comment">Comentario (opcional)</label>' +
         '<textarea id="re-comment" rows="3" style="width:100%;box-sizing:border-box;resize:vertical;font-family:inherit;font-size:13px;" placeholder="Tu opinión..."></textarea>' +
         '<div class="modal-actions">' +
-            (current ? '<button class="button" data-act="delete" type="button" style="margin-right:auto;color:var(--error-text, #c00);">🗑 Eliminar</button>' : '') +
+            (current ? '<button class="button" data-act="delete" type="button" style="margin-right:auto;color:var(--error-text, #c00);"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</button>' : '') +
             '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
             '<button class="button default" data-act="save" type="button">Guardar</button>' +
         '</div>';
