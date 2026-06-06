@@ -115,7 +115,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
       display: flex; align-items: center; justify-content: center; gap: 6px;
       line-height: 1.1;
     }
-    #tienda-wallet-amount .ic { font-size: 22px; }
+    #tienda-wallet-amount .ic { font-size: 48px; display: inline-flex; align-items: center; }
+    #tienda-wallet-amount .ic img { width: 48px; height: 48px; object-fit: contain; image-rendering: pixelated; vertical-align: middle; }
+    .punto-autismo-ic { width: 14px; height: 14px; object-fit: contain; image-rendering: pixelated; vertical-align: middle; }
     #tienda-wallet-unit {
       font-size: 9px; color: var(--text-muted);
       margin-top: 2px; letter-spacing: 0.05em;
@@ -409,7 +411,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="tienda-wallet">
             <div id="tienda-wallet-label">Tu balance</div>
             <div id="tienda-wallet-amount">
-                <span class="ic">🧠</span>
+                <span class="ic"><img src="../assets/img/appIcons/puntosAutismo.png" alt=""></span>
                 <span id="tienda-balance-v">—</span>
             </div>
             <div id="tienda-wallet-unit">puntos de Autismo</div>
@@ -575,7 +577,7 @@ function renderItems(){
         return '<div class="tienda-card' + (owned ? ' is-owned' : '') + '">' +
             '<div class="tienda-card-icon">' +
                 iconHtml +
-                '<span class="tienda-card-price">' + it.precio + ' 🧠</span>' +
+                '<span class="tienda-card-price">' + it.precio + ' <img src="../assets/img/appIcons/puntosAutismo.png" class="punto-autismo-ic" alt=""></span>' +
             '</div>' +
             '<div class="tienda-card-name"' + nameStyle + '>' + esc(displayName) + '</div>' +
             '<div class="tienda-card-desc">' + esc(desc) + '</div>' +
@@ -597,7 +599,7 @@ async function buy(itemId, btn){
         _balance = r.autismo|0;
         _owned[itemId|0] = true;     /* marcar como propio inmediatamente */
         renderItems();               /* repinta para que la card pase a is-owned */
-        var msg = 'Compra realizada: ' + r.item.nombre + ' (-' + r.item.precio + ' 🧠)';
+        var msg = 'Compra realizada: ' + r.item.nombre + ' (-' + r.item.precio + ' puntos)';
         if (r.discord && r.discord.attempted) {
             msg += r.discord.ok
                 ? ' · 🎉 rol de Discord asignado'

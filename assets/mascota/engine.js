@@ -1682,7 +1682,7 @@
             'user-select:none',
             'animation:mascota-egg-wobble 2.4s ease-in-out infinite',
         ].join(';');
-        egg.textContent = '🥚';
+        egg.innerHTML = '<img src="/scrapbookOnline/assets/mascota/huevo/huevo1.png" alt="huevo" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;pointer-events:none;" draggable="false">';
         state.el.appendChild(egg);
 
         /* Wobble del huevo + pulse de temperatura crítica (keyframes

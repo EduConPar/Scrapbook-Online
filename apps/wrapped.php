@@ -49,7 +49,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
 <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($themeCssRel) ?>">
 <?php endif; ?>
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Bungee&family=Bowlby+One+SC&display=swap');
 
     html, body {
         margin: 0; padding: 0;
@@ -61,9 +61,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         user-select: none;
     }
 
-    /* Cada slide es un layer full-screen — el backdrop colorido se
-       mantiene como ambiente, pero el contenido va dentro de un
-       PANEL WIN98 con tokens del tema (chrome raised + bezel inset). */
+    /* ── SLIDE LAYER ─────────────────────────────────────────────── */
     .slide {
         position: absolute; inset: 0;
         display: flex; flex-direction: column;
@@ -72,7 +70,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         pointer-events: none;
         padding: 6vh 4vw;
         box-sizing: border-box;
-        transform: scale(0.95);
+        transform: scale(0.92);
         transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.34, 1.4, 0.64, 1);
     }
     .slide.active {
@@ -81,66 +79,460 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         transform: scale(1);
         z-index: 2;
     }
-    /* Slide saliente — mientras dura la animación, se aleja con un
-       leve fade y zoom-out para que la entrada de la siguiente sea
-       más visible. */
     .slide.exiting {
         opacity: 0;
-        transform: scale(1.06);
         z-index: 1;
     }
-    /* Variantes direccionales según el sentido del slide change. */
-    .slide.exiting.exit-left  { transform: translateX(-12%) scale(0.95); }
-    .slide.exiting.exit-right { transform: translateX( 12%) scale(0.95); }
-    .slide.entering.enter-left  { transform: translateX(-12%) scale(0.95); }
-    .slide.entering.enter-right { transform: translateX( 12%) scale(0.95); }
-    /* DRIFT del backdrop — el gradient se desplaza muy lentamente
-       para evitar que el fondo se sienta estático. */
+    /* Transiciones direccionales más interesantes: la salida hace un
+       leve giro 3D y zoom-out al lateral; la entrada viene desde el
+       lado opuesto también con tilt 3D. Da sensación de "carrusel de
+       ventanas Win98". */
+    .slide.exiting.exit-left  { transform: translateX(-25%) scale(0.85) rotateY(15deg); }
+    .slide.exiting.exit-right { transform: translateX( 25%) scale(0.85) rotateY(-15deg); }
+    .slide.entering.enter-left  { transform: translateX(-25%) scale(0.85) rotateY(15deg); }
+    .slide.entering.enter-right { transform: translateX( 25%) scale(0.85) rotateY(-15deg); }
+
+    /* DRIFT del gradient base. */
     .slide.active {
-        background-size: 200% 200% !important;
-        animation: bgDrift 12s ease-in-out infinite alternate;
+        background-size: 250% 250% !important;
+        animation: bgDrift 16s ease-in-out infinite alternate;
     }
     @keyframes bgDrift {
         0%   { background-position:   0%   0%; }
         100% { background-position: 100% 100%; }
     }
-    /* Capa de "spotlight" que orbita lentamente — copia el truco de
-       Spotify Wrapped real (un círculo radial blanco semi-transparente
-       que da sensación de luz pulsante). */
+
+    /* PINSTRIPE animado: capa de líneas diagonales semi-transparentes
+       que se desplazan lentamente en todas las slides. Da textura
+       Win98 sin tapar el contenido. */
     .slide::before {
         content: '';
-        position: absolute; inset: -50%;
-        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.18), transparent 50%);
+        position: absolute; inset: 0;
+        background-image: repeating-linear-gradient(
+            45deg,
+            rgba(255,255,255,0.06) 0px,
+            rgba(255,255,255,0.06) 2px,
+            transparent 2px,
+            transparent 16px
+        );
         pointer-events: none;
-        animation: spotlight 14s linear infinite;
+        animation: stripeScroll 24s linear infinite;
         z-index: 0;
     }
-    .slide-panel { position: relative; z-index: 1; }
-    @keyframes spotlight {
-        0%   { transform: rotate(0deg)   translateX(0); }
-        50%  { transform: rotate(180deg) translateX(15%); }
-        100% { transform: rotate(360deg) translateX(0); }
+    @keyframes stripeScroll {
+        from { background-position:   0   0; }
+        to   { background-position: 256px 256px; }
     }
 
-    /* Panel Win98 centrado dentro del slide. Background + bezel del
-       tema del usuario. */
+    /* GRID retro: puntos blancos diminutos en cuadrícula. */
+    .slide::after {
+        content: '';
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.15) 1px, transparent 1.5px);
+        background-size: 28px 28px;
+        pointer-events: none;
+        animation: gridFloat 40s linear infinite;
+        opacity: 0.5;
+        z-index: 0;
+    }
+    @keyframes gridFloat {
+        from { background-position:   0   0; }
+        to   { background-position: 28px 56px; }
+    }
+
+    /* BLOBS flotantes — efecto "lava lamp" en el fondo. 3 blobs con
+       trayectorias y tamaños distintos, blur intenso, mix-blend para
+       fundirse con el gradient base. */
+    .bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(70px);
+        opacity: 0.45;
+    }
+    .bg-blob-1 {
+        width: 55vw; height: 55vw;
+        background: var(--accent, #1db954);
+        top: -15vw; left: -15vw;
+        animation: blobMove1 28s ease-in-out infinite;
+    }
+    .bg-blob-2 {
+        width: 40vw; height: 40vw;
+        background: rgba(255,255,255,0.6);
+        bottom: -15vw; right: -15vw;
+        animation: blobMove2 22s ease-in-out infinite;
+    }
+    .bg-blob-3 {
+        width: 35vw; height: 35vw;
+        background: var(--accent, #1db954);
+        top: 25vh; right: 20vw;
+        animation: blobMove3 19s ease-in-out infinite alternate;
+    }
+    @keyframes blobMove1 {
+        0%   { transform: translate(0, 0) scale(1); }
+        33%  { transform: translate(30vw, 25vh) scale(1.3); }
+        66%  { transform: translate(15vw, 50vh) scale(0.85); }
+        100% { transform: translate(0, 0) scale(1); }
+    }
+    @keyframes blobMove2 {
+        0%   { transform: translate(0, 0) scale(1); }
+        50%  { transform: translate(-25vw, -25vh) scale(1.4); }
+        100% { transform: translate(0, 0) scale(1); }
+    }
+    @keyframes blobMove3 {
+        0%   { transform: translate(0, 0) scale(0.7); }
+        100% { transform: translate(-40vw, -25vh) scale(1.5); }
+    }
+
+    /* ICONOS Win98 flotantes — caracteres unicode que suben lentamente
+       desde abajo, con delays escalonados. */
+    .bg-icons {
+        position: absolute; inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+    }
+    .bg-icons span {
+        position: absolute;
+        bottom: -50px;
+        font-size: clamp(20px, 3vw, 36px);
+        color: rgba(255,255,255,0.35);
+        text-shadow: 1px 1px 0 rgba(0,0,0,0.25);
+        animation: iconFloat 18s linear infinite;
+        animation-delay: calc(var(--bg-i, 0) * -2.2s);
+        left: calc(var(--bg-i, 0) * 12.5% + 2vw);
+    }
+    @keyframes iconFloat {
+        0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+        10%  { opacity: 0.5; }
+        50%  { transform: translateY(-50vh) rotate(180deg); opacity: 0.35; }
+        90%  { opacity: 0.2; }
+        100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
+    }
+
+    /* === TRANSITION VARIANTS — random por cada slide change === */
+    /* tx-slide: el default (slide + rotate Y leve), ya está. */
+
+    /* tx-flip: voltea la slide saliente en 3D y la entrante desde
+       el lado opuesto. */
+    .slide.tx-flip.exiting.exit-left  { transform: perspective(1200px) rotateY(-80deg) translateX(-15%); transform-origin: left center; }
+    .slide.tx-flip.exiting.exit-right { transform: perspective(1200px) rotateY( 80deg) translateX( 15%); transform-origin: right center; }
+    .slide.tx-flip.entering.enter-left  { transform: perspective(1200px) rotateY( 80deg) translateX(-15%); transform-origin: left center; }
+    .slide.tx-flip.entering.enter-right { transform: perspective(1200px) rotateY(-80deg) translateX( 15%); transform-origin: right center; }
+
+    /* tx-zoom: la saliente "explota" hacia fuera, la entrante viene
+       desde un punto pequeño. */
+    .slide.tx-zoom.exiting  { transform: scale(2.4); opacity: 0; }
+    .slide.tx-zoom.entering { transform: scale(0.4); opacity: 0; }
+
+    /* tx-iris: clip-path circular que se cierra/abre desde el centro. */
+    .slide.tx-iris.exiting {
+        clip-path: circle(0% at 50% 50%);
+        transition: clip-path 0.55s cubic-bezier(0.4, 0, 0.6, 1), opacity 0.5s;
+    }
+    .slide.tx-iris.entering {
+        clip-path: circle(0% at 50% 50%);
+    }
+    .slide.tx-iris.active {
+        clip-path: circle(150% at 50% 50%);
+        transition: clip-path 0.55s cubic-bezier(0.4, 0, 0.6, 1) 0.05s, opacity 0.5s, transform 0.55s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TRANSICIONES SUTILES — mecánicas evocativas de la era 90s con
+       movimientos contenidos. Las exageraciones (rotaciones 900°,
+       translates 110vw, blur 20px) están fuera. Cada transición se
+       SUGIERE más que se grita.
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* tx-vinyl: media vuelta con leve blur — sugiere el spin. */
+    .slide.tx-vinyl.exiting {
+        animation: vinylOut 0.5s cubic-bezier(0.5, 0, 0.7, 1) forwards;
+    }
+    @keyframes vinylOut {
+        0%   { transform: rotate(0) scale(1); opacity: 1; filter: none; }
+        100% { transform: rotate(-180deg) scale(0.85); opacity: 0; filter: blur(2px); }
+    }
+    .slide.tx-vinyl.entering,
+    .slide.tx-vinyl.active {
+        animation: vinylIn 0.6s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+    }
+    @keyframes vinylIn {
+        0%   { transform: rotate(180deg) scale(0.85); opacity: 0; filter: blur(2px); }
+        100% { transform: rotate(0) scale(1); opacity: 1; filter: none; }
+    }
+
+    /* tx-crt-on: scaleY rápido y un toque de brillo. */
+    .slide.tx-crt-on.exiting {
+        animation: crtPowerOff 0.4s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+    }
+    @keyframes crtPowerOff {
+        0%   { transform: scale(1); filter: brightness(1); opacity: 1; }
+        70%  { transform: scaleY(0.05) scaleX(1.05); filter: brightness(1.8); }
+        100% { transform: scaleY(0.05) scaleX(0.9); filter: brightness(2); opacity: 0; }
+    }
+    .slide.tx-crt-on.entering,
+    .slide.tx-crt-on.active {
+        animation: crtPowerOn 0.55s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+    }
+    @keyframes crtPowerOn {
+        0%   { transform: scaleY(0.05) scaleX(0.9); filter: brightness(2); opacity: 0; }
+        25%  { transform: scaleY(0.05) scaleX(1.05); filter: brightness(1.8); opacity: 1; }
+        100% { transform: scale(1); filter: none; opacity: 1; }
+    }
+
+    /* tx-vhs-tracking: skew sutil con flicker breve. */
+    .slide.tx-vhs-tracking.entering,
+    .slide.tx-vhs-tracking.active {
+        animation: vhsTrackingIn 0.55s steps(10) forwards;
+    }
+    @keyframes vhsTrackingIn {
+        0%   { transform: skewY(2deg) translateY(-8px); filter: brightness(1.2) contrast(1.2); opacity: 0; }
+        20%  { transform: skewY(-1.5deg) translateY(6px); filter: brightness(1.1) contrast(1.15); opacity: 0.8; }
+        40%  { transform: skewY(1deg) translateY(-3px); filter: brightness(1.05); }
+        60%  { transform: skewY(-0.5deg) translateY(1px); }
+        100% { transform: none; filter: none; opacity: 1; }
+    }
+    .slide.tx-vhs-tracking.exiting {
+        animation: vhsTrackingOut 0.35s steps(7) forwards;
+    }
+    @keyframes vhsTrackingOut {
+        0%   { transform: none; filter: none; opacity: 1; }
+        40%  { transform: skewY(-1deg) translateY(4px); filter: brightness(1.1); opacity: 0.7; }
+        100% { transform: skewY(2.5deg) translateY(10px); filter: brightness(1.4); opacity: 0; }
+    }
+
+    /* tx-floppy: vertical leve con tilt 3D mínimo. */
+    .slide.tx-floppy.exiting {
+        animation: floppyEject 0.45s cubic-bezier(0.5, 0, 0.85, 0.4) forwards;
+    }
+    @keyframes floppyEject {
+        0%   { transform: translateY(0) rotateX(0); opacity: 1; }
+        100% { transform: translateY(-12vh) rotateX(-10deg); opacity: 0; }
+    }
+    .slide.tx-floppy.entering,
+    .slide.tx-floppy.active {
+        animation: floppyInsert 0.55s cubic-bezier(0.34, 1.3, 0.6, 1) forwards;
+    }
+    @keyframes floppyInsert {
+        0%   { transform: translateY(12vh) rotateX(10deg); opacity: 0; }
+        70%  { transform: translateY(-1vh) rotateX(-2deg); opacity: 1; }
+        100% { transform: translateY(0) rotateX(0); opacity: 1; }
+    }
+
+    /* tx-defrag: clip-path con bloques menos extremos + skew sutil. */
+    .slide.tx-defrag.entering,
+    .slide.tx-defrag.active {
+        animation: defragIn 0.6s steps(5) forwards;
+    }
+    @keyframes defragIn {
+        0%   { clip-path: polygon(0 0, 60% 0, 55% 100%, 0 100%); transform: skewX(2deg); opacity: 0; }
+        30%  { clip-path: polygon(40% 0, 100% 0, 95% 100%, 45% 100%); transform: skewX(-1.5deg); opacity: 0.7; }
+        60%  { clip-path: polygon(0 20%, 100% 15%, 100% 85%, 0 90%); transform: skewX(0.5deg); opacity: 0.9; }
+        100% { clip-path: inset(0); transform: none; opacity: 1; }
+    }
+    .slide.tx-defrag.exiting {
+        animation: defragOut 0.4s steps(4) forwards;
+    }
+    @keyframes defragOut {
+        0%   { clip-path: inset(0); transform: none; opacity: 1; }
+        50%  { clip-path: polygon(10% 5%, 90% 0%, 95% 95%, 5% 100%); transform: skewX(-1deg); opacity: 0.7; }
+        100% { clip-path: polygon(0 20%, 50% 15%, 45% 80%, 0 85%); transform: skewX(2deg) translateX(-6vw); opacity: 0; }
+    }
+
+    /* tx-page-tear: rasgado suave por el centro. */
+    .slide.tx-page-tear.exiting {
+        animation: pageTearOut 0.5s cubic-bezier(0.6, 0, 0.85, 0.3) forwards;
+    }
+    @keyframes pageTearOut {
+        0%   { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); transform: none; opacity: 1; }
+        100% { clip-path: polygon(0 0, 40% 0, 35% 50%, 45% 100%, 0 100%); transform: translateX(-12vw) rotate(-3deg); opacity: 0; }
+    }
+    .slide.tx-page-tear.entering,
+    .slide.tx-page-tear.active {
+        animation: pageTearIn 0.6s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+    }
+    @keyframes pageTearIn {
+        0%   { clip-path: polygon(60% 0, 100% 0, 100% 100%, 55% 100%, 65% 50%); transform: translateX(12vw) rotate(3deg); opacity: 0; }
+        100% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); transform: none; opacity: 1; }
+    }
+
+    /* tx-cascade: deriva diagonal mínima — sugiere apilar ventanas. */
+    .slide.tx-cascade.exiting {
+        animation: cascadeOut 0.4s cubic-bezier(0.6, 0, 0.85, 0.3) forwards;
+    }
+    @keyframes cascadeOut {
+        0%   { transform: none; opacity: 1; }
+        100% { transform: translate(6vw, 4vh) scale(0.85); opacity: 0; }
+    }
+    .slide.tx-cascade.entering,
+    .slide.tx-cascade.active {
+        animation: cascadeIn 0.5s cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
+    }
+    @keyframes cascadeIn {
+        0%   { transform: translate(-6vw, -4vh) scale(0.85); opacity: 0; }
+        100% { transform: none; opacity: 1; }
+    }
+
+    /* tx-rewind: leve compresión horizontal con blur mínimo. */
+    .slide.tx-rewind.exiting {
+        animation: rewindOut 0.4s steps(5) forwards;
+    }
+    @keyframes rewindOut {
+        0%   { transform: none; filter: none; opacity: 1; }
+        100% { transform: scaleX(0.5) translateX(15vw); filter: blur(3px); opacity: 0; }
+    }
+    .slide.tx-rewind.entering,
+    .slide.tx-rewind.active {
+        animation: rewindIn 0.5s cubic-bezier(0.34, 1.2, 0.5, 1) forwards;
+    }
+    @keyframes rewindIn {
+        0%   { transform: scaleX(0.5) translateX(-15vw); filter: blur(3px); opacity: 0; }
+        100% { transform: none; filter: none; opacity: 1; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       tx-FINAL-GLITCH — SOLO para la transición a la última slide.
+       Combina chromatic aberration EXAGERADA (RGB split rojo/cyan vía
+       drop-shadow), saltos VHS de gran amplitud, hue-rotate intenso,
+       motion blur y flash. Es el "drop" del wrapped — efecto memorable.
+       ═══════════════════════════════════════════════════════════════ */
+    .slide.tx-final-glitch.exiting {
+        animation: finalGlitchOut 0.9s steps(14) forwards;
+    }
+    @keyframes finalGlitchOut {
+        0%   { transform: none; filter: none; opacity: 1; }
+        10%  { transform: translate(-25px, 3px); filter: hue-rotate(60deg) saturate(2)
+                drop-shadow(-12px 0 0 #ff0080) drop-shadow(12px 0 0 #00ffff); }
+        20%  { transform: translate(25px, -5px); filter: hue-rotate(-120deg) saturate(3)
+                drop-shadow(18px 0 0 #00ffff) drop-shadow(-18px 0 0 #ff0080); }
+        30%  { transform: translate(-15px, 4px); filter: hue-rotate(180deg)
+                drop-shadow(-22px 0 0 #ff0080) drop-shadow(22px 0 0 #00ffff); }
+        45%  { transform: translate(10px, 0); filter: hue-rotate(-90deg)
+                drop-shadow(10px 0 0 #00ffff) drop-shadow(-10px 0 0 #ff0080); }
+        60%  { transform: scale(1.1); filter: blur(4px) hue-rotate(45deg)
+                drop-shadow(6px 0 0 #ff0080); opacity: 0.6; }
+        80%  { transform: scale(1.4); filter: blur(18px) brightness(2); opacity: 0.25; }
+        100% { transform: scale(1.9); filter: blur(50px); opacity: 0; }
+    }
+    .slide.tx-final-glitch.entering,
+    .slide.tx-final-glitch.active {
+        animation: finalGlitchIn 1.6s steps(24) forwards;
+    }
+    @keyframes finalGlitchIn {
+        0%   {
+            transform: scale(0.4) translate(0);
+            filter: hue-rotate(0) saturate(1) blur(20px);
+            opacity: 0;
+        }
+        4%   {
+            transform: translate(-60px, 15px) scale(0.55);
+            filter: hue-rotate(240deg) saturate(5) blur(6px)
+                drop-shadow(25px 0 0 #ff0080) drop-shadow(-25px 0 0 #00ffff);
+            opacity: 0.35;
+        }
+        8%   {
+            transform: translate(45px, -12px) scale(1.18);
+            filter: hue-rotate(-180deg) saturate(6) blur(2px)
+                drop-shadow(-30px 0 0 #ff0080) drop-shadow(30px 0 0 #00ffff);
+            opacity: 0.65;
+        }
+        12%  {
+            transform: translate(-30px, 6px) scale(0.9);
+            filter: hue-rotate(150deg) saturate(4)
+                drop-shadow(20px 0 0 #ff0080) drop-shadow(-20px 0 0 #00ffff);
+            opacity: 0.8;
+        }
+        16%  {
+            transform: translate(22px, -4px) scale(1.06);
+            filter: hue-rotate(-90deg) saturate(3)
+                drop-shadow(-15px 0 0 #ff0080) drop-shadow(15px 0 0 #00ffff);
+        }
+        20%  {
+            transform: translate(-12px, 3px);
+            filter: hue-rotate(60deg) saturate(2)
+                drop-shadow(10px 0 0 #ff0080) drop-shadow(-10px 0 0 #00ffff);
+        }
+        25%  {
+            transform: translate(8px, -1px);
+            filter: hue-rotate(-45deg)
+                drop-shadow(-7px 0 0 #ff0080) drop-shadow(7px 0 0 #00ffff);
+        }
+        30%  {
+            transform: translate(-4px, 1px);
+            filter: drop-shadow(-4px 0 0 #ff0080) drop-shadow(4px 0 0 #00ffff);
+        }
+        40%  {
+            transform: translate(0);
+            filter: drop-shadow(-2px 0 0 #ff0080) drop-shadow(2px 0 0 #00ffff);
+        }
+        60%  {
+            transform: none;
+            filter: drop-shadow(-1px 0 0 #ff0080) drop-shadow(1px 0 0 #00ffff);
+        }
+        80%  {
+            transform: none;
+            filter: none;
+        }
+        100% {
+            transform: none;
+            filter: none;
+            opacity: 1;
+        }
+    }
+
+    /* tx-flash: pantalla blanca brevísima al cambiar. Overlay global. */
+    #tx-flash-overlay {
+        position: fixed; inset: 0;
+        background: var(--accent, #fff);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 9999;
+        mix-blend-mode: screen;
+    }
+    #tx-flash-overlay.fire {
+        animation: flashFire 0.5s ease;
+    }
+    @keyframes flashFire {
+        0%   { opacity: 0; }
+        30%  { opacity: 0.6; }
+        100% { opacity: 0; }
+    }
+    /* Flash múltiple e intenso para el tx-final-glitch — pulsa varias
+       veces durante la entrada al closure. */
+    #tx-flash-overlay.fire-final {
+        animation: flashFireFinal 1.4s ease;
+    }
+    @keyframes flashFireFinal {
+        0%   { opacity: 0; background: #fff; }
+        5%   { opacity: 0.95; }
+        12%  { opacity: 0; }
+        18%  { opacity: 0.7; background: #ff0080; }
+        25%  { opacity: 0; }
+        32%  { opacity: 0.6; background: #00ffff; }
+        40%  { opacity: 0; }
+        50%  { opacity: 0.3; background: #fff; }
+        100% { opacity: 0; }
+    }
+
+    /* ── PANEL Win98 (con title bar tipo wrapped.exe) ──────────────── */
     .slide-panel {
+        position: relative;
+        z-index: 1;
         background: var(--win-bg, silver);
         color: var(--text, #000);
-        padding: 32px 28px;
+        padding: 3px;
         max-width: min(720px, 92vw);
         max-height: 86vh;
-        overflow-y: auto;
+        display: flex; flex-direction: column;
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
             inset  1px  1px var(--bezel-light-1, #fff),
             inset -2px -2px var(--bezel-dark-2, grey),
             inset  2px  2px var(--bezel-light-2, #dfdfdf),
-            8px 8px 24px rgba(0,0,0,0.4),
-            0 0 60px rgba(0,0,0,0.25);
-        display: flex; flex-direction: column;
-        align-items: center;
-        gap: 14px;
+            6px 6px 0 rgba(0,0,0,0.45),
+            0 0 60px rgba(0,0,0,0.35);
         opacity: 0;
         transform: translateY(40px) scale(0.92);
     }
@@ -148,20 +540,103 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         animation: panelIn 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     }
     @keyframes panelIn {
-        from { opacity: 0; transform: translateY(40px) scale(0.92); }
+        from { opacity: 0; transform: translateY(40px) scale(0.88); }
         to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    /* Hijos del panel: animación staggered (entran de uno en uno con
-       delay creciente — se aplica via --i en cada elemento). */
-    .slide.active .slide-panel > * {
+    /* Title bar del panel — idéntico al wc-titlebar de la summary card */
+    .slide-panel-titlebar {
+        background: linear-gradient(90deg,
+            var(--titlebar-start, #000080) 0%,
+            var(--titlebar-end,   #1084d0) 100%);
+        color: var(--titlebar-text, #fff);
+        padding: 3px 4px 3px 6px;
+        font-size: 12px;
+        font-weight: bold;
+        font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .slide-panel-title-text {
+        display: flex; align-items: center; gap: 6px;
+    }
+    .slide-panel-icon {
+        display: inline-block; width: 14px; height: 14px;
+        background: var(--titlebar-icon-bg, var(--accent, #1db954));
+        color: var(--titlebar-icon-color, #fff);
+        font-size: 10px;
+        text-align: center; line-height: 14px;
+        box-shadow:
+            inset -1px -1px var(--titlebar-icon-bezel-dark, rgba(0,0,0,0.5)),
+            inset  1px  1px var(--titlebar-icon-bezel-light, rgba(255,255,255,0.5));
+    }
+    .slide-panel-ctrls {
+        display: flex; gap: 2px;
+    }
+    .slide-panel-ctrl {
+        display: inline-block;
+        width: 16px; height: 14px;
+        background: var(--btn-bg, silver);
+        color: var(--text, #000);
+        font-size: 10px;
+        text-align: center; line-height: 12px;
+        font-weight: bold;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+
+    /* Cuerpo del panel — donde va el contenido real de la slide. */
+    .slide-panel-body {
+        padding: 28px 24px;
+        flex: 1; min-height: 0;
+        overflow-y: auto;
+        display: flex; flex-direction: column;
+        align-items: center;
+        gap: 14px;
+    }
+
+    /* Hijos del body: animación staggered. */
+    .slide.active .slide-panel-body > * {
         opacity: 0;
         animation: childUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        animation-delay: calc(0.25s + var(--i, 0) * 0.08s);
+        animation-delay: calc(0.35s + var(--i, 0) * 0.08s);
     }
     @keyframes childUp {
         from { opacity: 0; transform: translateY(20px); }
         to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Status bar al fondo del panel — un pixel de bezel con texto
+       de estado tipo "Ready" o el progress de la slide actual. */
+    .slide-panel-statusbar {
+        padding: 3px 8px;
+        font-size: 10px;
+        color: var(--text-muted, var(--text, #444));
+        background: var(--win-bg, silver);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+        box-shadow:
+            inset  1px  1px var(--bezel-dark-2, grey),
+            inset -1px -1px var(--bezel-light-1, #fff);
+    }
+    .slide-panel-statusbar span:first-child::before {
+        content: '●';
+        color: var(--accent, #1db954);
+        margin-right: 4px;
+        animation: statusBlink 1.6s ease-in-out infinite;
+    }
+    @keyframes statusBlink {
+        0%, 100% { opacity: 0.4; }
+        50%      { opacity: 1; }
     }
 
     /* Items dentro de top-list — entran ZIG-ZAG, alternando lados.
@@ -224,13 +699,21 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         to   { opacity: 1; transform: translateY(0)    rotate(0); }
     }
 
+    /* Slide title — ahora estilo "header chip" Win98 con bg accent +
+       texto blanco y bezel (replica los headers de la summary card). */
     .slide-title {
-        font-size: clamp(24px, 4vw, 44px);
+        font-size: clamp(20px, 3.6vw, 38px);
         font-weight: bold;
         margin: 0 0 8px;
         text-align: center;
         line-height: 1.1;
-        color: var(--text, #000);
+        color: var(--accent-text, #fff);
+        background: var(--accent, #1db954);
+        padding: 6px 18px;
+        letter-spacing: 0.5px;
+        box-shadow:
+            inset -1px -1px rgba(0,0,0,0.3),
+            inset  1px  1px rgba(255,255,255,0.4);
     }
     .slide-subtitle {
         font-size: clamp(13px, 1.6vw, 18px);
@@ -239,12 +722,23 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         text-align: center;
         color: var(--text-muted, var(--text, #444));
     }
+    /* Big number en panel sunken Win98 — efecto LCD/display digital. */
     .big-number {
         font-size: clamp(80px, 14vw, 180px);
         font-weight: bold;
         line-height: 1;
         color: var(--accent, var(--text, #000));
         text-align: center;
+        background: var(--input-bg, #fff);
+        padding: 12px 28px 8px;
+        box-shadow:
+            inset  1px  1px var(--bezel-dark-2, grey),
+            inset -1px -1px var(--bezel-light-1, #fff),
+            inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+            inset -2px -2px var(--bezel-light-2, #dfdfdf);
+        font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', monospace;
+        letter-spacing: 2px;
+        max-width: min(560px, 88vw);
     }
     .big-number-text {
         font-size: clamp(36px, 6vw, 76px);
@@ -308,23 +802,39 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         white-space: nowrap;
     }
 
-    /* Hero card para "top 1". */
+    /* Hero card para "top 1" — ahora envuelto en marco Win98 con
+       pinstripes encima y debajo, igual que la summary card. */
     .hero {
         display: flex; flex-direction: column;
         align-items: center;
         gap: 14px;
+        position: relative;
+    }
+    /* Pinstripe arriba/abajo del cover (decorativo). */
+    .hero::before, .hero::after {
+        content: '';
+        width: clamp(140px, 26vw, 240px);
+        height: 6px;
+        background: repeating-linear-gradient(
+            45deg,
+            var(--accent, #1db954) 0px,
+            var(--accent, #1db954) 4px,
+            var(--text, #000) 4px,
+            var(--text, #000) 8px
+        );
     }
     .hero-cover {
         width: clamp(120px, 24vw, 220px);
         height: clamp(120px, 24vw, 220px);
         object-fit: cover;
-        background: var(--input-bg, #fff);
+        background: var(--inset-bg, var(--input-bg, #fff));
+        /* OUTSET bezel — mismo que la profile-avatar-frame. */
         box-shadow:
-            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
-            inset  1px  1px var(--bezel-light-1, #fff),
-            inset -2px -2px var(--bezel-dark-2, grey),
-            inset  2px  2px var(--bezel-light-2, #dfdfdf),
-            4px 4px 12px rgba(0,0,0,0.3);
+            -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+             1px  1px 0 var(--bezel-light-1, #fff),
+            -2px -2px 0 var(--bezel-dark-2, grey),
+             2px  2px 0 var(--bezel-light-2, #dfdfdf),
+             6px 6px 0 rgba(0,0,0,0.4);
         animation: heroPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s both;
     }
     @keyframes heroPop {
@@ -351,11 +861,11 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         display: flex; align-items: center; justify-content: center;
         font-size: clamp(54px, 10vw, 110px);
         box-shadow:
-            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
-            inset  1px  1px var(--bezel-light-1, #fff),
-            inset -2px -2px var(--bezel-dark-2, grey),
-            inset  2px  2px var(--bezel-light-2, #dfdfdf),
-            4px 4px 12px rgba(0,0,0,0.3);
+            -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+             1px  1px 0 var(--bezel-light-1, #fff),
+            -2px -2px 0 var(--bezel-dark-2, grey),
+             2px  2px 0 var(--bezel-light-2, #dfdfdf),
+             6px 6px 0 rgba(0,0,0,0.4);
         animation: heroPop 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s both;
     }
     .hero-title {
@@ -428,118 +938,253 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         content: ''; display: block;
         height: 100%; width: 0;
         background: var(--accent, #1db954);
-        animation: fillProgress 6s linear forwards;
+        animation: fillProgress 9s linear forwards;
     }
     @keyframes fillProgress { to { width: 100%; } }
 
     /* ── TARJETA DE RESUMEN (última slide) ─────────────────────────
-       Layout estilo Spotify Wrapped: foto del top artist arriba, dos
-       columnas con top artists/songs, minutos y género abajo. Toda la
-       tarjeta tiene chrome Win98 y se exporta como PNG. */
+       Layout estilo Win98 dialog: title bar + body con foto del top
+       artist enmarcada en bezel + tira decorativa de checker + dos
+       columnas (top artists / top songs) + stats grandes + footer.
+       Exportable a PNG vía html2canvas. */
     .wrapped-card-wrapper {
         display: flex; flex-direction: column;
         align-items: center;
-        gap: 16px;
+        gap: 14px;
+        /* z-index alto + position: relative para que la card resumen
+           NUNCA quede debajo de los blobs/iconos animados del fondo
+           (que están en z-index: 0). */
+        position: relative;
+        z-index: 10;
     }
     .wrapped-card {
         background: var(--win-bg, silver);
         color: var(--text, #000);
-        width: min(400px, 92vw);
-        padding: 0;
+        width: min(420px, 92vw);
+        padding: 3px;
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
             inset  1px  1px var(--bezel-light-1, #fff),
             inset -2px -2px var(--bezel-dark-2, grey),
             inset  2px  2px var(--bezel-light-2, #dfdfdf),
-            6px 6px 0 var(--bezel-dark-1, #0a0a0a);
+            6px 6px 0 rgba(0,0,0,0.45);
     }
+
+    /* ── Title bar Win98 ─────────────────────────────────────────── */
+    .wc-titlebar {
+        background: linear-gradient(90deg,
+            var(--titlebar-start, #000080) 0%,
+            var(--titlebar-end,   #1084d0) 100%);
+        color: var(--titlebar-text, #fff);
+        padding: 3px 4px 3px 6px;
+        font-size: 12px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+    }
+    .wc-titlebar-text {
+        display: flex; align-items: center; gap: 6px;
+    }
+    .wc-titlebar-text .wc-titlebar-icon {
+        display: inline-block; width: 14px; height: 14px;
+        background: var(--titlebar-icon-bg, var(--accent, #1db954));
+        color: var(--titlebar-icon-color, #fff);
+        font-size: 10px;
+        text-align: center; line-height: 14px;
+        box-shadow:
+            inset -1px -1px var(--titlebar-icon-bezel-dark, rgba(0,0,0,0.5)),
+            inset  1px  1px var(--titlebar-icon-bezel-light, rgba(255,255,255,0.5));
+    }
+    .wc-titlebar-controls {
+        display: flex; gap: 2px;
+    }
+    .wc-titlebar-ctrl {
+        display: inline-block;
+        width: 16px; height: 14px;
+        background: var(--btn-bg, silver);
+        color: var(--text, #000);
+        font-size: 10px;
+        text-align: center; line-height: 12px;
+        font-weight: bold;
+        box-shadow:
+            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px var(--bezel-light-1, #fff),
+            inset -2px -2px var(--bezel-dark-2, grey),
+            inset  2px  2px var(--bezel-light-2, #dfdfdf);
+    }
+
+    /* ── Hero photo ──────────────────────────────────────────────── */
+    /* Marco del mismo estilo que la foto de perfil del usuario:
+       OUTSET 4-layer bezel → la foto se ve "metida" dentro del bezel. */
+    .wc-hero-frame {
+        margin: 14px 10px 10px;
+        position: relative;
+        background: var(--inset-bg, var(--input-bg, #fff));
+        box-shadow:
+            -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+             1px  1px 0 var(--bezel-light-1, #fff),
+            -2px -2px 0 var(--bezel-dark-2, grey),
+             2px  2px 0 var(--bezel-light-2, #dfdfdf);
+        overflow: visible;
+    }
+    /* Tira decorativa pinstripe — ahora como <div> reales (no pseudo)
+       para que html2canvas las capture sin problemas. */
+    .wc-hero-stripe {
+        position: absolute;
+        left: -2px; right: -2px;
+        height: 6px;
+        background: repeating-linear-gradient(
+            45deg,
+            var(--accent, #1db954) 0px,
+            var(--accent, #1db954) 4px,
+            var(--text, #000) 4px,
+            var(--text, #000) 8px
+        );
+        z-index: 4;
+        pointer-events: none;
+    }
+    .wc-hero-stripe-top    { top: -8px; }
+    .wc-hero-stripe-bottom { bottom: -8px; }
+
+    /* Marco cuadrado 1:1 — usamos padding-bottom: 100% para forzar
+       aspect-ratio sin depender de aspect-ratio CSS (más fiable en
+       html2canvas v1.4.1). El hijo va en absolute :inset 0. */
     .wc-hero {
         position: relative;
         width: 100%;
-        aspect-ratio: 1 / 0.95;
+        height: 0;
+        padding-bottom: 100%;
         overflow: hidden;
-        background: var(--input-bg, #fff);
-        box-shadow:
-            inset -1px -1px var(--bezel-dark-1, #0a0a0a),
-            inset  1px  1px var(--bezel-light-1, #fff);
+        background: var(--inset-bg, #fff);
+    }
+    .wc-hero-img,
+    .wc-hero-fallback {
+        position: absolute;
+        inset: 0;
+        width: 100%; height: 100%;
+        display: block;
     }
     .wc-hero-img {
-        width: 100%; height: 100%;
         object-fit: cover;
     }
     .wc-hero-fallback {
-        width: 100%; height: 100%;
         display: flex; align-items: center; justify-content: center;
         font-size: 80px;
         background: var(--accent, #1db954);
         color: var(--accent-text, #fff);
     }
-    /* "2026" decorativo lateral. Texto con outline negro + glow para
-       que sea SIEMPRE legible sobre cualquier foto de artista
-       (independientemente de colores claros u oscuros del fondo). */
-    .wc-hero-year {
+
+    /* "2026" como BADGE plano en esquina superior izquierda — sin
+       rotaciones raras. Cuadrado con bezel raised, sombras y un acento.
+       Reemplaza el rotate(-90deg) buggy que mostraba digits stacked. */
+    /* Badge del año — estilo title bar Win98 (gradient del tema +
+       texto blanco con shadow sutil) + 4-layer raised bezel auténtico.
+       Tipografía Inter Black (chunky pero MÁS LEGIBLE que Bungee
+       cuando va con outline). */
+    .wc-hero-badge {
         position: absolute;
-        left: 6px; top: 50%;
-        transform: translateY(-50%) rotate(-90deg);
-        transform-origin: left center;
-        font-size: 56px;
+        top: 10px; left: 10px;
+        z-index: 3;
+        background: linear-gradient(180deg,
+            var(--titlebar-start, #000080) 0%,
+            var(--titlebar-end,   #1084d0) 100%);
+        color: var(--titlebar-text, #fff);
+        font-family: 'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif;
+        font-size: 22px;
         font-weight: bold;
-        color: #fff;
-        letter-spacing: -2px;
-        pointer-events: none;
-        -webkit-text-stroke: 2px #000;
-        text-shadow:
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000,
-             0 0 10px rgba(0,0,0,0.65);
-        z-index: 2;
+        padding: 4px 12px 3px;
+        letter-spacing: 3px;
+        line-height: 1;
+        transform: rotate(-3deg);
+        transform-origin: top left;
+        text-shadow: 1px 1px 0 rgba(0,0,0,0.55);
+        /* 4-layer raised bezel Win98 + drop shadow */
+        box-shadow:
+            inset -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+            inset  1px  1px 0 var(--bezel-light-1, #fff),
+            inset -2px -2px 0 var(--bezel-dark-2, grey),
+            inset  2px  2px 0 var(--bezel-light-2, #dfdfdf),
+            3px 3px 0 var(--bezel-dark-1, #0a0a0a);
     }
-    /* Banda oscura semi-transparente detrás del año — refuerza
-       contraste cuando la foto es muy clara o ruidosa. */
-    .wc-hero::before {
-        content: '';
+    /* Highlight stripe del badge — ahora <div> real (no ::before). */
+    .wc-badge-highlight {
         position: absolute;
-        left: 0; top: 0;
-        width: 70px; height: 100%;
-        background: linear-gradient(90deg, rgba(0,0,0,0.45), rgba(0,0,0,0));
+        top: 3px; left: 6px; right: 6px;
+        height: 2px;
+        background: repeating-linear-gradient(
+            90deg,
+            rgba(255,255,255,0.7) 0px,
+            rgba(255,255,255,0.7) 3px,
+            transparent 3px,
+            transparent 6px
+        );
         pointer-events: none;
-        z-index: 1;
     }
+    /* Estrella decorativa — pequeña y dorada estilo "premio Win98". */
+    .wc-badge-star {
+        position: absolute;
+        top: -8px; right: -10px;
+        font-size: 18px;
+        line-height: 1;
+        color: var(--accent, #1db954);
+        text-shadow:
+            -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+             1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+            -1px  1px 0 var(--bezel-dark-1, #0a0a0a),
+             1px  1px 0 var(--bezel-dark-1, #0a0a0a);
+        transform: rotate(15deg);
+        pointer-events: none;
+        z-index: 10;
+    }
+
+    /* ── Body / contenido ────────────────────────────────────────── */
     .wc-body {
-        padding: 16px 18px 14px;
+        padding: 14px 14px 12px;
     }
+    /* Flexbox en vez de grid — html2canvas v1.4.1 tiene bugs con
+       grid-template-columns que producen colores/dimensiones distintas
+       en cada columna al capturar. Flex es 100% fiable. */
     .wc-cols {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 18px;
-        margin-bottom: 14px;
+        display: flex;
+        gap: 14px;
+        margin-bottom: 10px;
+    }
+    .wc-col {
+        flex: 1 1 0;
+        min-width: 0;
     }
     .wc-col h4 {
         font-size: 10px;
         font-weight: bold;
-        margin: 0 0 4px;
-        color: var(--text-muted, var(--text, #555));
+        margin: 0 0 6px;
+        padding: 2px 4px;
+        background: var(--accent, #1db954);
+        color: var(--accent-text, #fff);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        box-shadow:
+            inset -1px -1px rgba(0,0,0,0.3),
+            inset  1px  1px rgba(255,255,255,0.4);
     }
     .wc-col ol {
         margin: 0; padding: 0;
         list-style: none;
         font-size: 12px;
-        line-height: 1.35;
+        line-height: 1.3;
     }
-    /* WRAP a 2 líneas (line-clamp) en vez de cortar con ellipsis a 1
-       línea — ahora nombres largos como "The Smashing Pumpkins" o
-       "Don't Look Back in Anger" se ven enteros. */
     .wc-col ol li {
         display: flex;
         align-items: flex-start;
-        gap: 4px;
-        margin-bottom: 3px;
+        gap: 5px;
+        padding: 2px 3px;
+        margin-bottom: 1px;
         overflow: hidden;
         word-break: break-word;
+    }
+    .wc-col ol li:nth-child(odd) {
+        background: rgba(0,0,0,0.06);
     }
     .wc-col ol li > span:not(.rank) {
         flex: 1;
@@ -554,46 +1199,79 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         width: 14px;
         color: var(--accent, var(--text, #000));
         font-weight: bold;
+        text-align: right;
     }
+
+    /* ── Etched separator (Win98 groove de 2px) ──────────────────── */
+    .wc-sep {
+        height: 2px;
+        margin: 10px 0;
+        border-top: 1px solid var(--bezel-dark-2, grey);
+        border-bottom: 1px solid var(--bezel-light-1, #fff);
+    }
+
+    /* ── Stats ──────────────────────────────────────────────────── */
+    /* Flex en vez de grid — mismo motivo que .wc-cols. */
     .wc-stats {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 18px;
-        padding-top: 10px;
-        border-top: 1px solid var(--bezel-dark-2, #888);
+        display: flex;
+        gap: 12px;
+    }
+    .wc-stat {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 6px 8px;
+        background: var(--input-bg, #fff);
+        box-shadow:
+            inset  1px  1px var(--bezel-dark-2, grey),
+            inset -1px -1px var(--bezel-light-1, #fff),
+            inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+            inset -2px -2px var(--bezel-light-2, #dfdfdf);
     }
     .wc-stat-label {
-        font-size: 10px;
+        font-size: 9px;
         color: var(--text-muted, var(--text, #555));
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 2px;
+        font-weight: bold;
     }
     .wc-stat-val {
-        font-size: 26px;
+        font-size: 24px;
         font-weight: bold;
         color: var(--accent, var(--text, #000));
         line-height: 1;
+        text-shadow: 1px 1px 0 rgba(0,0,0,0.12);
     }
+    .wc-stat-val.smaller { font-size: 18px; }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
     .wc-footer {
-        margin-top: 14px;
-        padding-top: 8px;
-        border-top: 1px solid var(--bezel-dark-2, #888);
+        margin-top: 10px;
+        padding: 5px 6px;
+        background: linear-gradient(90deg,
+            var(--titlebar-start, #000080) 0%,
+            var(--titlebar-end,   #1084d0) 100%);
+        color: var(--titlebar-text, #fff);
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 6px;
-        font-size: 10px;
+        font-size: 9px;
         font-weight: bold;
-        letter-spacing: 1.5px;
+        letter-spacing: 1px;
         text-transform: uppercase;
-        color: var(--text-muted, var(--text, #444));
     }
     .wc-footer .wc-logo {
-        font-size: 14px;
-        color: var(--accent, #1db954);
+        font-size: 13px;
+        color: var(--titlebar-icon-bg, var(--accent, #1db954));
+        margin-right: 4px;
+    }
+    .wc-footer .wc-footer-right {
+        opacity: 0.85;
+        font-size: 8px;
     }
 
-    /* Botones de share — Win98 row. */
+    /* ── Share buttons (FUERA de la card capturada) ─────────────── */
     .wc-share-row {
         display: flex; gap: 6px;
         flex-wrap: wrap;
@@ -604,11 +1282,12 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         color: var(--text, #000);
         font-family: inherit;
         font-size: 11px;
-        padding: 4px 14px;
-        min-height: 28px;
+        padding: 5px 16px;
+        min-height: 30px;
         border: 0;
         border-radius: 0;
         cursor: pointer;
+        font-weight: bold;
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
             inset  1px  1px var(--bezel-light-1, #fff),
@@ -732,6 +1411,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
+        position: relative;
     }
     .month-bar {
         width: 100%;
@@ -740,10 +1420,39 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         min-height: 2px;
         position: relative;
         transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        z-index: 2;
     }
     .month-bar.top-month {
         background: linear-gradient(180deg, #fff, #ffd166);
         box-shadow: 0 0 30px rgba(255,209,102,0.6);
+    }
+    .month-bar.current-month {
+        background: linear-gradient(180deg, var(--accent, #1db954), var(--accent-deep, var(--accent, #1db954)));
+        box-shadow: 0 0 20px var(--accent, #1db954);
+    }
+    /* Proyección: barra "fantasma" detrás de la real, con borde
+       discontinuo y patrón rayado diagonal. Sólo visible para el
+       MES EN CURSO si la proyección > actual. */
+    .month-bar-proj {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        background:
+            repeating-linear-gradient(
+                45deg,
+                rgba(255,255,255,0.2) 0px,
+                rgba(255,255,255,0.2) 3px,
+                transparent 3px,
+                transparent 6px
+            ),
+            rgba(255,255,255,0.1);
+        border: 1.5px dashed rgba(255,255,255,0.7);
+        border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        min-height: 2px;
+        transition: height 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
+        z-index: 1;
+        pointer-events: none;
     }
     .month-bar-val {
         position: absolute;
@@ -1027,23 +1736,59 @@ function buildSlides(data) {
     const root = document.getElementById('wrapped-root');
     const slides = [];
     let i = 0;
-    function makeSlide(bgKey, inner, extraAttrs) {
-        /* Envoltorio Win98: backdrop con el gradient del catálogo +
-           panel central con estilo de ventana Win98 (theme tokens).
-           `extraAttrs` permite adjuntar data-* (ej. data-song-id para
-           sincronizar la música de fondo con la slide activa). */
+    function makeSlide(bgKey, inner, extraAttrs, opts) {
         const attrs = extraAttrs ? ' ' + extraAttrs : '';
-        return `<div class="slide" id="slide-${i++}" style="background:${SLIDE_BG[bgKey]};"${attrs}>
-                  <div class="slide-panel">${inner}</div>
-                </div>`;
+        opts = opts || {};
+        const slideIdx = i++;
+        /* Background blobs — divs flotantes con animaciones independientes.
+           Se inyectan en cada slide para tener layers extras de fondo. */
+        const bgFx = `
+            <div class="bg-blob bg-blob-1"></div>
+            <div class="bg-blob bg-blob-2"></div>
+            <div class="bg-blob bg-blob-3"></div>
+            <div class="bg-icons">
+                <span style="--bg-i:0">♪</span>
+                <span style="--bg-i:1">▮</span>
+                <span style="--bg-i:2">★</span>
+                <span style="--bg-i:3">▣</span>
+                <span style="--bg-i:4">♫</span>
+                <span style="--bg-i:5">◆</span>
+                <span style="--bg-i:6">♥</span>
+                <span style="--bg-i:7">▲</span>
+            </div>`;
+        if (opts.bare) {
+            return `<div class="slide" id="slide-${slideIdx}" style="background:${SLIDE_BG[bgKey]};"${attrs}>${bgFx}${inner}</div>`;
+        }
+        const status = opts.status || 'Ready';
+        return `<div class="slide" id="slide-${slideIdx}" style="background:${SLIDE_BG[bgKey]};"${attrs}>
+            ${bgFx}
+            <div class="slide-panel">
+                <div class="slide-panel-titlebar">
+                    <span class="slide-panel-title-text">
+                        <span class="slide-panel-icon">♪</span>
+                        wrapped.exe
+                    </span>
+                    <span class="slide-panel-ctrls">
+                        <span class="slide-panel-ctrl">_</span>
+                        <span class="slide-panel-ctrl">□</span>
+                        <span class="slide-panel-ctrl">×</span>
+                    </span>
+                </div>
+                <div class="slide-panel-body">${inner}</div>
+                <div class="slide-panel-statusbar">
+                    <span>${escapeHtml(status)}</span>
+                    <span>${slideIdx + 1} / __TOTAL__</span>
+                </div>
+            </div>
+        </div>`;
     }
 
     /* Welcome — grupo "opening" (4 primeras slides comparten canción). */
     slides.push(makeSlide('welcome', `
-        <div class="slide-subtitle" style="opacity:0.85;letter-spacing:4px;">SCRAPBOOK</div>
+        <div class="slide-subtitle" style="opacity:0.85;letter-spacing:4px;">MELON HUB</div>
         <h1 class="slide-title" style="font-size:clamp(48px,10vw,140px);">Wrapped<br><span style="font-weight:400;">${YEAR}</span></h1>
         <p class="slide-subtitle">Tu año en música</p>
-    `, groupSong('opening')));
+    `, groupSong('opening'), { title: 'wrapped.exe', status: 'Loading...' }));
 
     /* Total minutos — count-up animado. data-countup → el handler de
        showSlide lo dispara con animateCountUp al activar la slide. */
@@ -1054,7 +1799,7 @@ function buildSlides(data) {
         <div class="big-number" data-countup="${totalMin}">0</div>
         <p class="slide-subtitle">minutos de música<br>(${totalPlays.toLocaleString('es-ES')} reproducciones)</p>
         ${totalPlays === 0 ? '<p class="empty-state" style="margin-top:20px;">Empieza a reproducir música para acumular minutos.</p>' : ''}
-    `, groupSong('opening')));
+    `, groupSong('opening'), { title: 'minutos.exe', status: 'Computing total...' }));
 
     /* Mes con MÁS escuchas. Va justo después del total para construir
        narrativa "escuchaste X minutos, y el mes más fuerte fue...". */
@@ -1062,16 +1807,41 @@ function buildSlides(data) {
     if (topMonth && topMonth.minutes > 0) {
         slides.push(makeSlide('topMonth', `
             <p class="slide-subtitle">Tu mes top fue</p>
-            <div class="big-number" style="color:#a83254;text-shadow:0 6px 30px rgba(168,50,84,0.3);">${escapeHtml(topMonth.name)}</div>
+            <div class="big-number" style="color:var(--accent);">${escapeHtml(topMonth.name)}</div>
             <p class="slide-subtitle">Escuchaste <strong>${topMonth.minutes.toLocaleString('es-ES')}</strong> minutos<br>(${topMonth.plays.toLocaleString('es-ES')} reproducciones)</p>
-        `, groupSong('opening')));
+        `, groupSong('opening'), { title: 'calendario.exe', status: 'Analyzing month...' }));
     }
 
     /* Gráfica anual: 12 barras (Ene-Dic). La barra del top month
        destaca en dorado. Las alturas se calculan en % del máximo
        para que la columna mayor llegue al 100% del contenedor. */
     const months = data.months_breakdown || [];
-    const maxMin = months.reduce((mx, m) => Math.max(mx, m.minutes), 0);
+    /* PROYECCIÓN: para el mes en curso (si estamos viendo el año
+       actual o all=1), calculamos cuánto escucharía el usuario si
+       mantuviera el ritmo actual hasta fin de mes. La proyección se
+       muestra como una extensión "fantasma" arriba de la barra real. */
+    const __now = new Date();
+    const __curYear  = __now.getFullYear();
+    const __curMonth = __now.getMonth() + 1;
+    const __curDay   = __now.getDate();
+    const __daysInCurMonth = new Date(__curYear, __curMonth, 0).getDate();
+    const __isCurYear = data.all || data.year === __curYear;
+
+    months.forEach(m => {
+        m.projection = 0;
+        if (__isCurYear && m.m === __curMonth && m.minutes > 0 && __curDay > 0) {
+            /* projected = actual / (currentDay / daysInMonth). */
+            m.projection = Math.round(m.minutes * __daysInCurMonth / __curDay);
+        }
+    });
+
+    /* Max para normalizar: incluye proyección si es mayor que actual.
+       Así la barra TOP del chart siempre llega al 100% del contenedor,
+       independiente de si el usuario tiene 100 o 1000 min. */
+    const maxMin = months.reduce(
+        (mx, m) => Math.max(mx, m.minutes, m.projection || 0),
+        0
+    );
     if (maxMin > 0) {
         const topMonthNum = topMonth ? topMonth.month_num : -1;
         slides.push(makeSlide('monthsChart', `
@@ -1079,15 +1849,15 @@ function buildSlides(data) {
             <p class="slide-subtitle" style="margin-top:-8px;">Minutos escuchados</p>
             <div class="months-chart">
                 ${months.map(m => {
-                    const pct = (m.minutes / maxMin) * 100;
+                    const pct  = (m.minutes / maxMin) * 100;
+                    const projPct = m.projection ? (m.projection / maxMin) * 100 : 0;
                     const isTop = m.m === topMonthNum;
-                    /* data-h: altura final en %. CSS arranca con 0 y el
-                       handler de showSlide lo eleva escalonadamente al
-                       activarse la slide. */
+                    const isCur = __isCurYear && m.m === __curMonth;
                     return `
                         <div class="month-col">
                             <div class="month-bar-wrap">
-                                <div class="month-bar ${isTop ? 'top-month' : ''}" data-h="${pct}" style="height:0%;">
+                                ${projPct > pct ? `<div class="month-bar-proj" data-h="${projPct}" style="height:0%;" title="Proyección: ${m.projection.toLocaleString('es-ES')} min"></div>` : ''}
+                                <div class="month-bar ${isTop ? 'top-month' : ''} ${isCur ? 'current-month' : ''}" data-h="${pct}" style="height:0%;">
                                     ${m.minutes > 0 ? `<span class="month-bar-val">${m.minutes.toLocaleString('es-ES')}</span>` : ''}
                                 </div>
                             </div>
@@ -1096,7 +1866,8 @@ function buildSlides(data) {
                     `;
                 }).join('')}
             </div>
-        `, groupSong('opening')));
+            ${__isCurYear ? `<p class="slide-subtitle" style="font-size:11px;opacity:0.75;margin-top:4px;">Línea punteada = proyección a fin de mes</p>` : ''}
+        `, groupSong('opening'), { title: 'chart.exe', status: 'Rendering chart...' }));
     }
 
     /* (songAttrs y songPoolAttrs declarados arriba, antes de groupSong) */
@@ -1113,7 +1884,7 @@ function buildSlides(data) {
                     <div class="hero-sub" style="text-align:center;margin-top:8px;">${escapeHtml(topSong.artist || 'Artista desconocido')} · ${topSong.plays} plays</div>
                 </div>
             </div>
-        `, groupSong('topSong')));
+        `, groupSong('topSong'), { title: 'cancion.exe', status: 'Now playing...' }));
     }
 
     /* Top 5 canciones — misma canción #1 que el HERO. */
@@ -1133,7 +1904,7 @@ function buildSlides(data) {
                     </div>
                 `).join('')}
             </div>
-        `, groupSong('topSong')));
+        `, groupSong('topSong'), { title: 'top-tracks.exe', status: 'Sorting tracks...' }));
     }
 
     /* Top artist HERO — foto de Spotify si está disponible, fallback 🎤. */
@@ -1151,7 +1922,7 @@ function buildSlides(data) {
                     <div class="hero-sub" style="text-align:center;margin-top:8px;">${topArtist.plays} reproducciones</div>
                 </div>
             </div>
-        `, groupSong('artist')));
+        `, groupSong('artist'), { title: 'artista.exe', status: 'Loading artist...' }));
     }
 
     /* Top 5 artistas — cada uno con su foto de perfil (Spotify) o
@@ -1178,7 +1949,7 @@ function buildSlides(data) {
                     `;
                 }).join('')}
             </div>
-        `, groupSong('artist')));
+        `, groupSong('artist'), { title: 'top-artists.exe', status: 'Ranking artists...' }));
     }
 
     /* Top álbum HERO (del melon archive — reproducciones + imports) */
@@ -1195,7 +1966,7 @@ function buildSlides(data) {
                     <div class="hero-sub" style="text-align:center;margin-top:8px;">${escapeHtml(topAlbum.artist || 'Artista desconocido')} · ${topAlbum.plays} interacciones</div>
                 </div>
             </div>
-        `, groupSong('album')));
+        `, groupSong('album'), { title: 'album.exe', status: 'Loading album...' }));
     }
 
     /* Top 5 álbumes */
@@ -1218,7 +1989,7 @@ function buildSlides(data) {
                     </div>
                 `).join('')}
             </div>
-        `, groupSong('album')));
+        `, groupSong('album'), { title: 'top-albums.exe', status: 'Sorting albums...' }));
     }
 
     /* Top género HERO — usa una canción RANDOM de las top que cumplen
@@ -1233,7 +2004,7 @@ function buildSlides(data) {
             <div class="hero">
                 <div class="hero-title" style="font-size:clamp(36px,8vw,96px);">${letterSplit(topGenre.name)}</div>
             </div>
-        `, groupSong('genre')));
+        `, groupSong('genre'), { title: 'genero.exe', status: 'Analyzing tags...' }));
     }
 
     /* Top 5 géneros — mantiene la música del slide anterior (HERO del
@@ -1252,7 +2023,7 @@ function buildSlides(data) {
                     </div>
                 `).join('')}
             </div>
-        `, groupSong('genre')));
+        `, groupSong('genre'), { title: 'top-genres.exe', status: 'Ranking genres...' }));
     }
 
     /* Cierre */
@@ -1267,11 +2038,28 @@ function buildSlides(data) {
     slides.push(makeSlide('closure', `
         <div class="wrapped-card-wrapper">
             <div class="wrapped-card" id="wrapped-summary-card">
-                <div class="wc-hero">
-                    ${heroSrc
-                        ? `<img class="wc-hero-img" crossorigin="anonymous" src="${escapeHtml(heroSrc)}" alt="" onerror="this.outerHTML='<div class=\\'wc-hero-fallback\\'>🎤</div>'">`
-                        : `<div class="wc-hero-fallback">🎤</div>`}
-                    <div class="wc-hero-year">${YEAR}</div>
+                <div class="wc-titlebar">
+                    <span class="wc-titlebar-text">
+                        <span class="wc-titlebar-icon">♪</span>
+                        wrapped.exe
+                    </span>
+                    <span class="wc-titlebar-controls">
+                        <span class="wc-titlebar-ctrl">_</span>
+                        <span class="wc-titlebar-ctrl">□</span>
+                        <span class="wc-titlebar-ctrl">×</span>
+                    </span>
+                </div>
+                <div class="wc-hero-frame">
+                    <div class="wc-hero-stripe wc-hero-stripe-top"></div>
+                    <div class="wc-hero">
+                        ${heroSrc
+                            ? `<img class="wc-hero-img" crossorigin="anonymous" src="${escapeHtml(heroSrc)}" alt="" onerror="this.outerHTML='<div class=\\'wc-hero-fallback\\'>🎤</div>'">`
+                            : `<div class="wc-hero-fallback">🎤</div>`}
+                    </div>
+                    <div class="wc-hero-stripe wc-hero-stripe-bottom"></div>
+                    <div class="wc-hero-badge">
+                        ${YEAR}<div class="wc-badge-star">★</div>
+                    </div>
                 </div>
                 <div class="wc-body">
                     <div class="wc-cols">
@@ -1290,19 +2078,20 @@ function buildSlides(data) {
                             </ol>
                         </div>
                     </div>
+                    <div class="wc-sep"></div>
                     <div class="wc-stats">
-                        <div>
+                        <div class="wc-stat">
                             <div class="wc-stat-label">Minutes Listened</div>
                             <div class="wc-stat-val">${totalMin.toLocaleString('es-ES')}</div>
                         </div>
-                        <div>
+                        <div class="wc-stat">
                             <div class="wc-stat-label">Top Genre</div>
-                            <div class="wc-stat-val" style="font-size:18px;">${escapeHtml(sumGenre)}</div>
+                            <div class="wc-stat-val smaller">${escapeHtml(sumGenre)}</div>
                         </div>
                     </div>
                     <div class="wc-footer">
-                        <span class="wc-logo">♪</span>
-                        <span>SCRAPBOOK / WRAPPED ${YEAR}</span>
+                        <span><span class="wc-logo">♪</span> MELON HUB / WRAPPED ${YEAR}</span>
+                        <span class="wc-footer-right">www.melonhub.com</span>
                     </div>
                 </div>
             </div>
@@ -1312,15 +2101,21 @@ function buildSlides(data) {
                 <button type="button" class="wc-share-btn" id="wc-btn-copy">📋 Copiar</button>
             </div>
         </div>
-    `, groupSong('genre')));
+    `, groupSong('genre'), { bare: true }));
 
-    root.innerHTML = slides.join('');
+    /* Reemplazar __TOTAL__ por el número final de slides en el status bar. */
+    root.innerHTML = slides.join('').replace(/__TOTAL__/g, String(slides.length));
 
     /* Progress bar segmentos. */
     const progress = document.getElementById('wrapped-progress');
     progress.innerHTML = slides.map(_ => '<div class="progress-segment"></div>').join('');
 
     showSlide(0);
+
+    /* Pre-renderizar el patrón de pinstripes de la tarjeta resumen en
+       un canvas → data URL. html2canvas no captura bien repeating-
+       linear-gradient pero SÍ captura PNG data-URLs perfectamente. */
+    applyStripePatterns();
 
     /* Init del player AHORA — DOM ya tiene el slide activo, así
        initWrappedPlayer puede leer su data-song-id y arrancar con la
@@ -1330,31 +2125,119 @@ function buildSlides(data) {
     }
 }
 
+/** Reemplaza el background CSS de los `.wc-hero-stripe` por un PNG
+ *  data-URL generado con canvas — usando los colores del tema
+ *  resueltos en runtime. html2canvas v1.4.1 NO renderiza correctamente
+ *  `repeating-linear-gradient`, por eso convertimos el patrón a una
+ *  imagen tile-able real antes de capturar. */
+function applyStripePatterns() {
+    const stripes = document.querySelectorAll('.wc-hero-stripe');
+    if (!stripes.length) return;
+    const cs = getComputedStyle(document.body);
+    const accent = (cs.getPropertyValue('--accent') || '#EDC001').trim();
+    const text   = (cs.getPropertyValue('--text')   || '#000000').trim();
+
+    /* Canvas tile 16×6 con pinstripes diagonales. Se repetirá X. */
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 6;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = text;
+    ctx.fillRect(0, 0, 16, 6);
+    /* Dos barras diagonales accent. */
+    ctx.fillStyle = accent;
+    /* Primera barra. */
+    ctx.beginPath();
+    ctx.moveTo(0, 6); ctx.lineTo(4, 0); ctx.lineTo(8, 0); ctx.lineTo(4, 6);
+    ctx.closePath(); ctx.fill();
+    /* Segunda barra. */
+    ctx.beginPath();
+    ctx.moveTo(8, 6); ctx.lineTo(12, 0); ctx.lineTo(16, 0); ctx.lineTo(12, 6);
+    ctx.closePath(); ctx.fill();
+
+    const url = c.toDataURL('image/png');
+    stripes.forEach(s => {
+        s.style.setProperty('background-image', `url(${url})`, 'important');
+        s.style.setProperty('background-repeat', 'repeat', 'important');
+        s.style.setProperty('background-size', '16px 6px', 'important');
+        s.style.setProperty('background-color', text, 'important');
+    });
+}
+
 let currentSlide = 0;
 let autoTimer    = null;
+
+/* Pool de transiciones REGULARES — todas creativas Win98, ninguna con
+   chromatic aberration. El chromatic aberration se reserva para la
+   transición especial a la última slide. */
+const TX_TYPES = ['tx-vinyl', 'tx-crt-on', 'tx-vhs-tracking', 'tx-floppy', 'tx-defrag', 'tx-page-tear', 'tx-cascade', 'tx-rewind'];
+const TX_FINAL = 'tx-final-glitch';
+let __lastTx = '';
+
+function pickWrappedTransition(targetIndex, total) {
+    /* Entrando a la ÚLTIMA slide (closure) → tx exagerada con
+       chromatic aberration + glitch + flash múltiple. */
+    if (targetIndex === total - 1) return TX_FINAL;
+    let tx, attempts = 0;
+    do {
+        tx = TX_TYPES[Math.floor(Math.random() * TX_TYPES.length)];
+        attempts++;
+    } while (tx === __lastTx && attempts < 6);
+    __lastTx = tx;
+    return tx;
+}
+
+/* Overlay para el flash entre slides. `intense` → multi-color final. */
+function fireFlashOverlay(intense) {
+    let ov = document.getElementById('tx-flash-overlay');
+    if (!ov) {
+        ov = document.createElement('div');
+        ov.id = 'tx-flash-overlay';
+        document.body.appendChild(ov);
+    }
+    ov.classList.remove('fire', 'fire-final');
+    void ov.offsetWidth;
+    ov.classList.add(intense ? 'fire-final' : 'fire');
+}
 
 function showSlide(i) {
     const all = document.querySelectorAll('.slide');
     if (i < 0 || i >= all.length) return;
     const prev = document.querySelector('.slide.active');
     const goingForward = i > currentSlide;
-    all.forEach(s => s.classList.remove('active', 'exiting', 'entering', 'exit-left', 'exit-right', 'enter-left', 'enter-right'));
-    /* Marcar la previa como saliente en la dirección correcta. */
+    const tx = pickWrappedTransition(i, all.length);
+    const isFinal = tx === TX_FINAL;
+    /* tx-final-glitch tarda más → tenemos que esperar más. */
+    const txDuration = isFinal ? 1600 : 700;
+
+    all.forEach(s => {
+        s.classList.remove('active', 'exiting', 'entering', 'exit-left', 'exit-right', 'enter-left', 'enter-right');
+        TX_TYPES.forEach(t => s.classList.remove(t));
+        s.classList.remove(TX_FINAL);
+    });
     if (prev && prev !== all[i]) {
-        prev.classList.add('exiting');
+        prev.classList.add('exiting', tx);
         prev.classList.add(goingForward ? 'exit-left' : 'exit-right');
-        /* Limpiar el flag cuando termine la transición. */
-        setTimeout(() => prev.classList.remove('exiting', 'exit-left', 'exit-right'), 600);
+        setTimeout(() => {
+            prev.classList.remove('exiting', 'exit-left', 'exit-right', tx);
+        }, txDuration);
     }
-    /* La nueva entra desde el lado opuesto y aterriza al centro. */
-    all[i].classList.add('entering', goingForward ? 'enter-right' : 'enter-left');
-    /* Force reflow para que la clase entering se aplique antes de active. */
+    /* Flash:
+       - tx-zoom: flash blanco corto.
+       - tx-final-glitch: flash MULTI-COLOR (blanco → magenta → cyan)
+         largo, sincronizado con el glitch. */
+    if (tx === 'tx-zoom') {
+        fireFlashOverlay(false);
+    } else if (isFinal) {
+        fireFlashOverlay(true);
+    }
+    all[i].classList.add('entering', tx, goingForward ? 'enter-right' : 'enter-left');
     void all[i].offsetWidth;
     requestAnimationFrame(() => {
         all[i].classList.remove('enter-right', 'enter-left');
         all[i].classList.add('active');
-        /* Quitar entering tras la transición. */
-        setTimeout(() => all[i].classList.remove('entering'), 600);
+        setTimeout(() => {
+            all[i].classList.remove('entering');
+        }, txDuration);
     });
     currentSlide = i;
 
@@ -1392,9 +2275,9 @@ function showSlide(i) {
         all[i].querySelectorAll('[data-countup]').forEach(el => {
             animateCountUp(el, +el.getAttribute('data-countup'), 1800);
         });
-        /* Bars de la gráfica de meses — recalculamos el height tras
-           layout para que el transition CSS ya tenga 0 → valor real. */
-        all[i].querySelectorAll('.month-bar[data-h]').forEach((bar, idx) => {
+        /* Bars de la gráfica de meses (real + proyección) — animadas
+           con stagger por mes. */
+        all[i].querySelectorAll('.month-bar[data-h], .month-bar-proj[data-h]').forEach((bar, idx) => {
             const targetH = bar.getAttribute('data-h');
             setTimeout(() => { bar.style.height = targetH + '%'; }, idx * 60);
         });
@@ -1411,7 +2294,7 @@ function showSlide(i) {
     /* Auto-advance cada 6s (sincronizado con la animación de progreso). */
     if (autoTimer) clearTimeout(autoTimer);
     if (i < all.length - 1) {
-        autoTimer = setTimeout(() => showSlide(i + 1), 6000);
+        autoTimer = setTimeout(() => showSlide(i + 1), 9000);
     }
 }
 
@@ -1611,22 +2494,428 @@ window.addEventListener('pagehide', () => {
      - Descargar: link <a download>.
      - Copiar:    navigator.clipboard.write con ClipboardItem.
 ═════════════════════════════════════════════════════════════════ */
+/** html2canvas v1.4.1 no resuelve siempre bien CSS variables (var(...))
+ *  en background-image/box-shadow. Para evitar que la PNG salga con
+ *  colores fallback (azul Win98 en lugar del oro del tema) hacemos
+ *  un walk del DOM y resolvemos los var() a valores computados antes
+ *  de capturar. Tras la captura, revertimos los estilos inline. */
+function inlineComputedColors(root) {
+    const original = new WeakMap();
+    const props = [
+        'background-image', 'background-color',
+        'color', 'box-shadow',
+        'border-color', 'border-top-color', 'border-right-color',
+        'border-bottom-color', 'border-left-color',
+    ];
+    const all = [root, ...root.querySelectorAll('*')];
+    all.forEach(el => {
+        const cs = getComputedStyle(el);
+        const saved = {};
+        props.forEach(p => {
+            const v = cs.getPropertyValue(p);
+            if (v && v !== 'none' && v !== 'rgba(0, 0, 0, 0)') {
+                saved[p] = el.style.getPropertyValue(p);
+                el.style.setProperty(p, v, 'important');
+            }
+        });
+        original.set(el, saved);
+    });
+    return () => {
+        all.forEach(el => {
+            const saved = original.get(el);
+            if (!saved) return;
+            Object.keys(saved).forEach(p => {
+                if (saved[p]) el.style.setProperty(p, saved[p]);
+                else          el.style.removeProperty(p);
+            });
+        });
+    };
+}
+
 async function captureWrappedCard() {
     const card = document.getElementById('wrapped-summary-card');
-    if (!card || typeof html2canvas !== 'function') return null;
-    const canvas = await html2canvas(card, {
-        useCORS:      true,    /* permite img.youtube.com / i.scdn.co */
-        allowTaint:   false,
-        backgroundColor: null,
-        scale:        2,       /* render @2x para una imagen nítida */
-        logging:      false,
+    if (!card) return null;
+
+    if (document.fonts && document.fonts.ready) {
+        try { await document.fonts.ready; } catch (_) {}
+    }
+
+    /* PRIMARIO: render manual del card con Canvas API. Es el único
+       camino 100% fiable — html2canvas v1.4.1 producía un split de
+       colores a la mitad de la imagen que era imposible de eliminar
+       (incluso con foreignObjectRendering, inlineComputedColors,
+       freeze de animaciones, etc.). Dibujamos cada elemento con
+       fillRect/fillText/drawImage usando los colores resueltos del
+       tema activo. */
+    try {
+        const blob = await renderCardManually(card);
+        if (blob) return blob;
+    } catch (e) {
+        console.warn('[wrapped] manual render failed, falling back to html2canvas', e);
+    }
+
+    /* FALLBACK: html2canvas básico. */
+    if (typeof html2canvas !== 'function') return null;
+    const htmlEl = document.documentElement;
+    const hadLcdOn  = htmlEl.classList.contains('lcd-filter-on');
+    const hadLcdTop = htmlEl.classList.contains('lcd-filter-top');
+    htmlEl.classList.remove('lcd-filter-on', 'lcd-filter-top');
+    const winBg = (getComputedStyle(document.body).getPropertyValue('--win-bg') || '#c0c0c0').trim();
+    try {
+        const canvas = await html2canvas(card, {
+            useCORS: true,
+            backgroundColor: winBg,
+            scale: 2,
+            logging: false,
+            onclone: (clonedDoc) => {
+                try { clonedDoc.body.className = document.body.className; } catch (_) {}
+            },
+        });
+        return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    } finally {
+        if (hadLcdOn)  htmlEl.classList.add('lcd-filter-on');
+        if (hadLcdTop) htmlEl.classList.add('lcd-filter-top');
+    }
+}
+
+/** Lee la paleta del tema activo + medidas + datos del card y los
+ *  dibuja a mano en un canvas. Esto evita TODOS los bugs de
+ *  html2canvas. */
+async function renderCardManually(card) {
+    const cs = getComputedStyle(document.body);
+    const COLORS = {
+        winBg:         (cs.getPropertyValue('--win-bg')         || '#c0c0c0').trim(),
+        text:          (cs.getPropertyValue('--text')           || '#000000').trim(),
+        textMuted:     (cs.getPropertyValue('--text-muted')     || '#555555').trim(),
+        accent:        (cs.getPropertyValue('--accent')         || '#1db954').trim(),
+        accentText:    (cs.getPropertyValue('--accent-text')    || '#ffffff').trim(),
+        insetBg:       (cs.getPropertyValue('--inset-bg')       || '#ffffff').trim(),
+        inputBg:       (cs.getPropertyValue('--input-bg')       || '#ffffff').trim(),
+        bezelLight1:   (cs.getPropertyValue('--bezel-light-1')  || '#ffffff').trim(),
+        bezelLight2:   (cs.getPropertyValue('--bezel-light-2')  || '#dfdfdf').trim(),
+        bezelDark1:    (cs.getPropertyValue('--bezel-dark-1')   || '#0a0a0a').trim(),
+        bezelDark2:    (cs.getPropertyValue('--bezel-dark-2')   || '#808080').trim(),
+        titlebarStart: (cs.getPropertyValue('--titlebar-start') || '#000080').trim(),
+        titlebarEnd:   (cs.getPropertyValue('--titlebar-end')   || '#1084d0').trim(),
+        titlebarText:  (cs.getPropertyValue('--titlebar-text')  || '#ffffff').trim(),
+        btnBg:         (cs.getPropertyValue('--btn-bg')         || '#c0c0c0').trim(),
+    };
+
+    /* Datos del card (textos + img src). */
+    const getText = sel => (card.querySelector(sel)?.textContent || '').trim();
+    const data = {
+        year: getText('.wc-hero-badge')?.replace(/[★]/g, '').trim() || '2026',
+        artists: [...card.querySelectorAll('.wc-cols .wc-col:nth-child(1) ol li')].map(li => ({
+            rank: (li.querySelector('.rank')?.textContent || '').trim(),
+            name: (li.querySelector('span:not(.rank)')?.textContent || '').trim(),
+        })),
+        songs: [...card.querySelectorAll('.wc-cols .wc-col:nth-child(2) ol li')].map(li => ({
+            rank: (li.querySelector('.rank')?.textContent || '').trim(),
+            name: (li.querySelector('span:not(.rank)')?.textContent || '').trim(),
+        })),
+        minutes: getText('.wc-stats .wc-stat:nth-child(1) .wc-stat-val'),
+        genre:   getText('.wc-stats .wc-stat:nth-child(2) .wc-stat-val'),
+        footerL: getText('.wc-footer span:nth-child(1)'),
+        footerR: getText('.wc-footer .wc-footer-right'),
+        heroImgEl: card.querySelector('.wc-hero-img'),
+    };
+
+    /* Layout — coordinadas en CSS pixels, luego escalamos x2. */
+    const W = 420;
+    const PAD = 14;
+    const HERO_SIZE = W - 20; /* margin 10px cada lado */
+    let y = 0;
+
+    /* Pre-cargar la imagen del hero antes de empezar a dibujar. */
+    let heroImg = null;
+    if (data.heroImgEl?.src) {
+        try {
+            heroImg = await loadImage(data.heroImgEl.src);
+        } catch (_) { heroImg = null; }
+    }
+
+    /* Calcular altura total dinámicamente. */
+    const titleH = 22;
+    const heroFrameTop = titleH + 14;
+    const heroFrameH = HERO_SIZE + 8;
+    const bodyTop = heroFrameTop + heroFrameH + 10;
+    /* Header (16) + 5 items @ 18 + sep (10) + stat (50) + footer (24) + paddings */
+    const colsH = 16 + 5 * 18 + 6;
+    const sepH = 10;
+    const statsH = 50;
+    const footerH = 22;
+    const bodyH = 14 + colsH + sepH + statsH + 14 + footerH;
+    const H = bodyTop + bodyH;
+
+    const scale = 2;
+    const cv = document.createElement('canvas');
+    cv.width = W * scale; cv.height = H * scale;
+    const ctx = cv.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.textBaseline = 'top';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    /* Helpers. */
+    const fillRect = (color, x, yy, w, h) => { ctx.fillStyle = color; ctx.fillRect(x, yy, w, h); };
+    const drawBezelOutset = (x, yy, w, h) => {
+        /* 4-layer outset bezel: dark1 -1/-1, light1 1/1, dark2 -2/-2, light2 2/2 */
+        fillRect(COLORS.bezelDark1, x-1, yy-1, w+1, 1);
+        fillRect(COLORS.bezelDark1, x-1, yy-1, 1, h+1);
+        fillRect(COLORS.bezelLight1, x, yy+h, w+1, 1);
+        fillRect(COLORS.bezelLight1, x+w, yy, 1, h+1);
+        fillRect(COLORS.bezelDark2, x-2, yy-2, w+2, 1);
+        fillRect(COLORS.bezelDark2, x-2, yy-2, 1, h+2);
+        fillRect(COLORS.bezelLight2, x-1, yy+h+1, w+3, 1);
+        fillRect(COLORS.bezelLight2, x+w+1, yy-1, 1, h+2);
+    };
+    const drawBezelRaised = (x, yy, w, h) => {
+        /* Win98 raised: light top-left, dark bottom-right. 4 capas inset. */
+        fillRect(COLORS.bezelLight1, x, yy, w, 1);
+        fillRect(COLORS.bezelLight1, x, yy, 1, h);
+        fillRect(COLORS.bezelDark1, x, yy+h-1, w, 1);
+        fillRect(COLORS.bezelDark1, x+w-1, yy, 1, h);
+        fillRect(COLORS.bezelLight2, x+1, yy+1, w-2, 1);
+        fillRect(COLORS.bezelLight2, x+1, yy+1, 1, h-2);
+        fillRect(COLORS.bezelDark2, x+1, yy+h-2, w-2, 1);
+        fillRect(COLORS.bezelDark2, x+w-2, yy+1, 1, h-2);
+    };
+    const drawBezelSunken = (x, yy, w, h) => {
+        /* Inverso del raised. */
+        fillRect(COLORS.bezelDark2, x, yy, w, 1);
+        fillRect(COLORS.bezelDark2, x, yy, 1, h);
+        fillRect(COLORS.bezelLight1, x, yy+h-1, w, 1);
+        fillRect(COLORS.bezelLight1, x+w-1, yy, 1, h);
+        fillRect(COLORS.bezelDark1, x+1, yy+1, w-2, 1);
+        fillRect(COLORS.bezelDark1, x+1, yy+1, 1, h-2);
+        fillRect(COLORS.bezelLight2, x+1, yy+h-2, w-2, 1);
+        fillRect(COLORS.bezelLight2, x+w-2, yy+1, 1, h-2);
+    };
+    const drawText = (text, x, yy, opts = {}) => {
+        ctx.font = (opts.weight || 'normal') + ' ' + (opts.size || 12) + 'px ' + (opts.family || "'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif");
+        ctx.fillStyle = opts.color || COLORS.text;
+        if (opts.shadow) {
+            ctx.fillStyle = opts.shadow;
+            ctx.fillText(text, x + 1, yy + 1);
+            ctx.fillStyle = opts.color || COLORS.text;
+        }
+        ctx.fillText(text, x, yy);
+    };
+    const drawTextEllipsis = (text, x, yy, maxW, opts) => {
+        ctx.font = (opts.weight || 'normal') + ' ' + (opts.size || 12) + 'px ' + (opts.family || "'Pixelated MS Sans Serif', 'ms_sans_serif', Tahoma, sans-serif");
+        if (ctx.measureText(text).width <= maxW) return drawText(text, x, yy, opts);
+        let truncated = text;
+        while (truncated.length > 1 && ctx.measureText(truncated + '…').width > maxW) {
+            truncated = truncated.slice(0, -1);
+        }
+        drawText(truncated + '…', x, yy, opts);
+    };
+
+    /* === 1. Fondo del card === */
+    fillRect(COLORS.winBg, 0, 0, W, H);
+    drawBezelRaised(0, 0, W, H);
+
+    /* === 2. Title bar con gradient horizontal === */
+    const tbY = 3;
+    const tbH = titleH - 3;
+    const tbGrad = ctx.createLinearGradient(0, 0, W, 0);
+    tbGrad.addColorStop(0, COLORS.titlebarStart);
+    tbGrad.addColorStop(1, COLORS.titlebarEnd);
+    ctx.fillStyle = tbGrad;
+    ctx.fillRect(3, tbY, W - 6, tbH);
+    /* Icono ♪ */
+    fillRect(COLORS.accent, 6, tbY + 3, 14, 14);
+    drawBezelRaised(6, tbY + 3, 14, 14);
+    drawText('♪', 9, tbY + 4, { color: COLORS.accentText, size: 10, weight: 'bold' });
+    /* "wrapped.exe" */
+    drawText('wrapped.exe', 24, tbY + 4, { color: COLORS.titlebarText, size: 12, weight: 'bold' });
+    /* Botones _ □ × */
+    for (let i = 0; i < 3; i++) {
+        const bx = W - 6 - (16 + 2) * (3 - i);
+        fillRect(COLORS.btnBg, bx, tbY + 3, 16, 14);
+        drawBezelRaised(bx, tbY + 3, 16, 14);
+        const labels = ['_', '□', '×'];
+        drawText(labels[i], bx + 5, tbY + 4, { color: COLORS.text, size: 10, weight: 'bold' });
+    }
+
+    /* === 3. Hero frame con bezel outset === */
+    const hfX = 10, hfY = heroFrameTop;
+    const hfW = HERO_SIZE, hfH = heroFrameH;
+    fillRect(COLORS.insetBg, hfX, hfY, hfW, hfH);
+    drawBezelOutset(hfX, hfY, hfW, hfH);
+
+    /* === 4. Pinstripe top (diagonal yellow/black) === */
+    const stripeH = 6;
+    drawPinstripe(ctx, hfX - 2, hfY - 8, hfW + 4, stripeH, COLORS.accent, COLORS.text);
+
+    /* === 5. Hero photo === */
+    const phX = hfX + 4, phY = hfY + 4;
+    const phSize = hfW - 8;
+    fillRect(COLORS.insetBg, phX, phY, phSize, phSize);
+    if (heroImg) {
+        ctx.drawImage(heroImg, phX, phY, phSize, phSize);
+    } else {
+        fillRect(COLORS.accent, phX, phY, phSize, phSize);
+        drawText('🎤', phX + phSize/2 - 30, phY + phSize/2 - 30, { color: COLORS.accentText, size: 60 });
+    }
+
+    /* === 6. Pinstripe bottom === */
+    drawPinstripe(ctx, hfX - 2, hfY + hfH + 2, hfW + 4, stripeH, COLORS.accent, COLORS.text);
+
+    /* === 7. Badge 2026 con rotación === */
+    ctx.save();
+    ctx.translate(hfX + 10, hfY + 10);
+    ctx.rotate(-3 * Math.PI / 180);
+    const badgeW = 70, badgeH = 26;
+    const bgrad = ctx.createLinearGradient(0, 0, 0, badgeH);
+    bgrad.addColorStop(0, COLORS.titlebarStart);
+    bgrad.addColorStop(1, COLORS.titlebarEnd);
+    /* Drop shadow */
+    fillRect(COLORS.bezelDark1, 3, 3, badgeW, badgeH);
+    ctx.fillStyle = bgrad;
+    ctx.fillRect(0, 0, badgeW, badgeH);
+    drawBezelRaised(0, 0, badgeW, badgeH);
+    drawText(data.year, 11, 5, { color: COLORS.titlebarText, size: 18, weight: 'bold', shadow: 'rgba(0,0,0,0.55)' });
+    ctx.restore();
+    /* Estrella ★ */
+    drawText('★', hfX + 78, hfY + 8, { color: COLORS.accent, size: 16, weight: 'bold', shadow: COLORS.bezelDark1 });
+
+    /* === 8. Body — Top Artists + Top Songs columns === */
+    y = bodyTop + 14;
+    const bodyX = PAD;
+    const bodyW = W - PAD * 2;
+    const gap = 14;
+    const colW = (bodyW - gap) / 2;
+
+    /* Headers */
+    drawListHeader(ctx, bodyX, y, colW, 'TOP ARTISTS', COLORS, drawBezelRaised, drawText);
+    drawListHeader(ctx, bodyX + colW + gap, y, colW, 'TOP SONGS', COLORS, drawBezelRaised, drawText);
+    y += 18;
+
+    /* Items */
+    const itemH = 18;
+    for (let i = 0; i < 5; i++) {
+        const a = data.artists[i] || { rank: String(i+1), name: '—' };
+        const s = data.songs[i] || { rank: String(i+1), name: '—' };
+        /* Alternating bg */
+        if (i % 2 === 0) {
+            fillRect('rgba(0,0,0,0.06)', bodyX, y, colW, itemH);
+            fillRect('rgba(0,0,0,0.06)', bodyX + colW + gap, y, colW, itemH);
+        }
+        drawText(a.rank, bodyX + 4, y + 3, { color: COLORS.accent, size: 12, weight: 'bold' });
+        drawTextEllipsis(a.name, bodyX + 22, y + 3, colW - 26, { color: COLORS.text, size: 12 });
+        drawText(s.rank, bodyX + colW + gap + 4, y + 3, { color: COLORS.accent, size: 12, weight: 'bold' });
+        drawTextEllipsis(s.name, bodyX + colW + gap + 22, y + 3, colW - 26, { color: COLORS.text, size: 12 });
+        y += itemH;
+    }
+
+    /* === 9. Etched separator === */
+    y += 6;
+    fillRect(COLORS.bezelDark2, bodyX, y, bodyW, 1);
+    fillRect(COLORS.bezelLight1, bodyX, y + 1, bodyW, 1);
+    y += 8;
+
+    /* === 10. Stats sunken boxes === */
+    const statH = 44;
+    drawStatBox(ctx, bodyX, y, colW, statH, 'MINUTES LISTENED', data.minutes, COLORS, drawBezelSunken, drawText);
+    drawStatBox(ctx, bodyX + colW + gap, y, colW, statH, 'TOP GENRE', data.genre, COLORS, drawBezelSunken, drawText);
+    y += statH + 10;
+
+    /* === 11. Footer === */
+    const fgrad = ctx.createLinearGradient(0, 0, W, 0);
+    fgrad.addColorStop(0, COLORS.titlebarStart);
+    fgrad.addColorStop(1, COLORS.titlebarEnd);
+    ctx.fillStyle = fgrad;
+    ctx.fillRect(bodyX, y, bodyW, footerH);
+    drawText(data.footerL || '♪ MELON HUB / WRAPPED 2026', bodyX + 5, y + 6, { color: COLORS.titlebarText, size: 9, weight: 'bold' });
+    const rightW = ctx.measureText(data.footerR || 'www.melonhub.com').width;
+    drawText(data.footerR || 'www.melonhub.com', bodyX + bodyW - rightW - 5, y + 6, { color: COLORS.titlebarText, size: 9, weight: 'bold' });
+
+    /* === 12. Filtro LCD (scanlines + vignette) — replica
+       body::before/::after del tema. Sólo si el usuario lo tiene
+       activado (html.lcd-filter-on). */
+    if (document.documentElement.classList.contains('lcd-filter-on')) {
+        applyLcdFilter(ctx, W, H);
+    }
+
+    return new Promise(resolve => cv.toBlob(resolve, 'image/png'));
+}
+
+/** Reproduce el filtro LCD VHS sobre el canvas del card:
+ *  - Scanlines: barras horizontales de 1px alternando oscuras y
+ *    claras con offsets de 1px (cada 3px se repite).
+ *  - Vignette: radial gradient desde el centro hacia las esquinas. */
+function applyLcdFilter(ctx, W, H) {
+    /* SCANLINES — patrón cada 3px:
+       y%3==0 → oscura, y%3==1 → clara, y%3==2 → transparente. */
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.10)';
+    for (let yy = 0; yy < H; yy += 3) {
+        ctx.fillRect(0, yy, W, 1);
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    for (let yy = 1; yy < H; yy += 3) {
+        ctx.fillRect(0, yy, W, 1);
+    }
+
+    /* VIGNETTE radial: claro en el centro, oscuro en esquinas. */
+    const cx = W / 2, cy = H / 2;
+    const inner = Math.min(W, H) * 0.30;
+    const outer = Math.max(W, H) * 0.70;
+    const vg = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+    vg.addColorStop(0,    'rgba(0, 0, 0, 0)');
+    vg.addColorStop(0.6,  'rgba(0, 0, 0, 0)');
+    vg.addColorStop(0.85, 'rgba(0, 0, 0, 0.10)');
+    vg.addColorStop(1,    'rgba(0, 0, 0, 0.20)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
     });
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+function drawPinstripe(ctx, x, y, w, h, accent, bg) {
+    ctx.fillStyle = bg;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = accent;
+    const tile = 8;
+    for (let i = 0; i < Math.ceil(w / tile); i++) {
+        ctx.beginPath();
+        const tx = x + i * tile;
+        ctx.moveTo(tx, y + h);
+        ctx.lineTo(tx + h, y);
+        ctx.lineTo(tx + h + 4, y);
+        ctx.lineTo(tx + 4, y + h);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+function drawListHeader(ctx, x, y, w, text, C, raisedFn, drawTextFn) {
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(x, y, w, 14);
+    raisedFn(x, y, w, 14);
+    drawTextFn(text, x + 4, y + 2, { color: C.accentText, size: 10, weight: 'bold' });
+}
+
+function drawStatBox(ctx, x, y, w, h, label, val, C, sunkenFn, drawTextFn) {
+    ctx.fillStyle = C.inputBg;
+    ctx.fillRect(x, y, w, h);
+    sunkenFn(x, y, w, h);
+    drawTextFn(label, x + 6, y + 4, { color: C.textMuted, size: 9, weight: 'bold' });
+    const isLong = (val || '').length > 6;
+    drawTextFn(val || '—', x + 6, y + 16, { color: C.accent, size: isLong ? 18 : 22, weight: 'bold' });
 }
 
 function wrappedFilename() {
     const year = (new Date()).getFullYear();
-    return 'scrapbook-wrapped-' + year + '.png';
+    return 'melonhub-wrapped-' + year + '.png';
 }
 
 document.addEventListener('click', async (e) => {
@@ -1639,7 +2928,7 @@ document.addEventListener('click', async (e) => {
         const file = new File([blob], wrappedFilename(), { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
             try {
-                await navigator.share({ files: [file], title: 'Mi Scrapbook Wrapped' });
+                await navigator.share({ files: [file], title: 'Mi Melon Hub Wrapped' });
             } catch (_) {/* user canceled */}
         } else {
             /* Fallback a download si Web Share no disponible. */

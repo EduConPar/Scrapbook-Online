@@ -1677,9 +1677,24 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
     function get(){ try { return localStorage.getItem(KEY) !== '0'; } catch(_) { return true; } }
     function apply(on){
         document.documentElement.classList.toggle('lcd-filter-on', on);
-        if (window.top !== window) {
-            try { window.top.document.documentElement.classList.toggle('lcd-filter-on', on); } catch(_) {}
+        /* Propagar al window TOP. */
+        var topWin = window.top;
+        if (topWin !== window) {
+            try { topWin.document.documentElement.classList.toggle('lcd-filter-on', on); } catch(_) {}
         }
+        /* Propagar a TODOS los iframes hijos del top (mismo origen,
+           acceso directo OK). Sin esto, apps abiertas previamente como
+           Tienda, Perfil, etc. siguen mostrando el filtro aunque se
+           desactive — su boot script solo lee localStorage al cargar. */
+        try {
+            var frames = topWin.document.querySelectorAll('iframe');
+            for (var i = 0; i < frames.length; i++) {
+                try {
+                    var d = frames[i].contentDocument;
+                    if (d) d.documentElement.classList.toggle('lcd-filter-on', on);
+                } catch(_) {}
+            }
+        } catch(_) {}
     }
     cb.checked = get();
     apply(cb.checked);

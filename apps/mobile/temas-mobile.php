@@ -1975,9 +1975,20 @@ document.getElementById('temas-lib-refresh').addEventListener('click', loadLibra
     function get(){ try { return localStorage.getItem(KEY) !== '0'; } catch(_) { return true; } }
     function apply(on){
         document.documentElement.classList.toggle('lcd-filter-on', on);
-        if (window.top !== window) {
-            try { window.top.document.documentElement.classList.toggle('lcd-filter-on', on); } catch(_) {}
+        var topWin = window.top;
+        if (topWin !== window) {
+            try { topWin.document.documentElement.classList.toggle('lcd-filter-on', on); } catch(_) {}
         }
+        /* Propagar a todos los iframes del top (apps abiertas previamente). */
+        try {
+            var frames = topWin.document.querySelectorAll('iframe');
+            for (var i = 0; i < frames.length; i++) {
+                try {
+                    var d = frames[i].contentDocument;
+                    if (d) d.documentElement.classList.toggle('lcd-filter-on', on);
+                } catch(_) {}
+            }
+        } catch(_) {}
     }
     cb.checked = get();
     apply(cb.checked);

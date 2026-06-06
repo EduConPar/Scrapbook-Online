@@ -513,7 +513,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <div class="ti-wallet">
         <div class="ti-wallet-label">Tu balance</div>
         <div class="ti-wallet-amount">
-            <span class="ic">🧠</span>
+            <span class="ic"><img src="../../assets/img/appIcons/puntosAutismo.png" alt="" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
             <span id="tienda-balance-v">—</span>
         </div>
         <div class="ti-wallet-unit">puntos de Autismo</div>
@@ -736,7 +736,7 @@ function renderItems(){
         return '<div class="tienda-card' + (owned ? ' is-owned' : '') + '">' +
             '<div class="tienda-card-icon">' +
                 iconHtml +
-                '<span class="tienda-card-price">' + it.precio + ' 🧠</span>' +
+                '<span class="tienda-card-price">' + it.precio + ' <img src="../../assets/img/appIcons/puntosAutismo.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>' +
             '</div>' +
             '<div class="tienda-card-name"' + nameStyle + '>' + esc(displayName) + '</div>' +
             '<div class="tienda-card-desc">' + esc(desc) + '</div>' +
@@ -758,7 +758,7 @@ async function buy(itemId, btn){
         _balance = r.autismo|0;
         _owned[itemId|0] = true;     /* marcar como propio inmediatamente */
         renderItems();               /* repinta para que la card pase a is-owned */
-        var msg = 'Compra realizada: ' + r.item.nombre + ' (-' + r.item.precio + ' 🧠)';
+        var msg = 'Compra realizada: ' + r.item.nombre + ' (-' + r.item.precio + ' puntos)';
         if (r.discord && r.discord.attempted) {
             msg += r.discord.ok
                 ? ' · 🎉 rol de Discord asignado'

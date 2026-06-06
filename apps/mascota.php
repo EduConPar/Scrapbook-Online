@@ -420,7 +420,7 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
             <!-- Preview: huevo si no ha eclosionado; sprite si sí -->
             <div class="sprite-preview" id="sprite-preview">
                 <?php if ($isEgg): ?>
-                <span id="egg-preview" style="font-size:80px;line-height:1;">🥚</span>
+                <span id="egg-preview" style="display:inline-flex;width:80px;height:80px;line-height:1;align-items:center;justify-content:center;"><img src="../assets/mascota/huevo/huevo1.png" alt="huevo" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;" draggable="false"></span>
                 <?php else: ?>
                 <img id="sprite-img"
                      src="../assets/mascota/skins/<?= htmlspecialchars($currentSkin) ?>/shime1.png"
