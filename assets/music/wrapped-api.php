@@ -10,6 +10,8 @@
 require_once dirname(__DIR__) . '/config.php';
 require_once dirname(__DIR__, 2) . '/db.php';
 require_once dirname(__DIR__) . '/themes/theme-helpers.php';
+require_once __DIR__ . '/spotify-helpers.php';
+require_once __DIR__ . '/lastfm-helpers.php';
 
 session_start();
 header('Content-Type: application/json; charset=utf-8');
@@ -176,6 +178,64 @@ function actionStats(): void {
         $params[] = $year;
     }
 
+    /* Mes con MÁS tiempo escuchado — agrupa por YEAR+MONTH y suma
+       duration (mismo fallback que el total: plays sin duración cuentan
+       como 180s). Devuelve el "top mes" con su número (1-12) y los
+       minutos acumulados. Si no hay plays, queda null. */
+    $stmt = $pdo->prepare("
+        SELECT YEAR(played_at)  AS y,
+               MONTH(played_at) AS m,
+               SUM(IF(duration_s > 0, duration_s, 180)) AS secs,
+               COUNT(*) AS plays
+        FROM music_plays WHERE $where
+        GROUP BY YEAR(played_at), MONTH(played_at)
+        ORDER BY secs DESC
+        LIMIT 1
+    ");
+    $stmt->execute($params);
+    $topMonthRow = $stmt->fetch(PDO::FETCH_ASSOC);
+    $monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    $monthShort = ['Ene','Feb','Mar','Abr','May','Jun',
+                   'Jul','Ago','Sep','Oct','Nov','Dic'];
+    $topMonth = null;
+    if ($topMonthRow) {
+        $mIdx = ((int)$topMonthRow['m']) - 1;
+        $topMonth = [
+            'month_num' => (int)$topMonthRow['m'],
+            'year'      => (int)$topMonthRow['y'],
+            'name'      => $monthNames[$mIdx] ?? '?',
+            'minutes'   => (int)round(((int)$topMonthRow['secs']) / 60),
+            'plays'     => (int)$topMonthRow['plays'],
+        ];
+    }
+
+    /* Breakdown por MES (1-12) para la gráfica de barras. Si el wrapped
+       filtra por año, los meses son del año actual; si es DEV (`all=1`)
+       agregamos todos los años por número de mes (Ene de 2025 + Ene de
+       2026, etc.). Devolvemos siempre los 12 meses con 0 si no hay
+       datos — el cliente dibuja 12 barras fijas. */
+    $stmt = $pdo->prepare("
+        SELECT MONTH(played_at) AS m,
+               SUM(IF(duration_s > 0, duration_s, 180)) AS secs
+        FROM music_plays WHERE $where
+        GROUP BY MONTH(played_at)
+        ORDER BY m
+    ");
+    $stmt->execute($params);
+    $byMonth = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $byMonth[(int)$r['m']] = (int)$r['secs'];
+    }
+    $monthsBreakdown = [];
+    for ($mi = 1; $mi <= 12; $mi++) {
+        $monthsBreakdown[] = [
+            'm'       => $mi,
+            'short'   => $monthShort[$mi - 1],
+            'minutes' => (int)round(($byMonth[$mi] ?? 0) / 60),
+        ];
+    }
+
     /* Total minutos. Cada play sin duration (caso típico de plays
        de álbum desde perfil, donde el endpoint play-music-item no
        devuelve duration en sus tracks) cuenta como 180s (3 min)
@@ -191,6 +251,42 @@ function actionStats(): void {
     $totalPlays = (int)$totals['plays'];
     $totalSecs  = (int)$totals['secs'];
     $totalMin = (int)round($totalSecs / 60);
+
+    /* Canciones "considerables" — top 20 con al menos 3 plays. El
+       wrapped las usa como pool para las primeras slides (welcome,
+       minutos, mes, gráfica) → "una canción que has escuchado un
+       número considerable de veces". */
+    $stmt = $pdo->prepare("
+        SELECT video_id, MAX(title) AS title, MAX(artist) AS artist, COUNT(*) AS plays
+        FROM music_plays WHERE $where AND artist <> ''
+        GROUP BY video_id
+        HAVING plays >= 3
+        ORDER BY plays DESC
+        LIMIT 20
+    ");
+    $stmt->execute($params);
+    $considerableSongs = array_map(fn($r) => [
+        'video_id' => $r['video_id'],
+        'title'    => $r['title'],
+        'artist'   => $r['artist'],
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    /* Si el usuario no tiene ninguna con >= 3 plays, usamos top sin
+       filtro como fallback. */
+    if (empty($considerableSongs)) {
+        $stmt = $pdo->prepare("
+            SELECT video_id, MAX(title) AS title, MAX(artist) AS artist
+            FROM music_plays WHERE $where AND artist <> ''
+            GROUP BY video_id
+            ORDER BY COUNT(*) DESC
+            LIMIT 10
+        ");
+        $stmt->execute($params);
+        $considerableSongs = array_map(fn($r) => [
+            'video_id' => $r['video_id'],
+            'title'    => $r['title'],
+            'artist'   => $r['artist'],
+        ], $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    }
 
     /* Top canciones (5) — agrupadas por video_id. */
     $stmt = $pdo->prepare("
@@ -218,26 +314,140 @@ function actionStats(): void {
     ");
     $stmt->execute($params);
     $artists = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($artists as &$a) $a['plays'] = (int)$a['plays'];
-    unset($a);
-
-    /* Top playlists (5) — joinea con playlists para el nombre. */
-    $stmt = $pdo->prepare("
-        SELECT p.playlist_id, pl.name, COUNT(*) AS plays
-        FROM music_plays p
-        LEFT JOIN playlists pl ON pl.id = p.playlist_id
-        WHERE $where AND p.playlist_id IS NOT NULL
-        GROUP BY p.playlist_id, pl.name
+    /* Pool de hasta 5 canciones por artista. Cada entrada lleva su
+       PROPIO artist (mismo string del row, garantizado por el filtro
+       WHERE artist = ?) — el cliente usa eso para el Now Playing. */
+    $stmtTopSongsByArtist = $pdo->prepare("
+        SELECT video_id, MAX(title) AS title, MAX(artist) AS artist, COUNT(*) AS plays
+        FROM music_plays
+        WHERE user_id = ? AND artist = ?" . ($all ? "" : " AND YEAR(played_at) = ?") . "
+        GROUP BY video_id
         ORDER BY plays DESC
         LIMIT 5
     ");
-    $stmt->execute($params);
-    $playlists = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($playlists as &$pl) {
-        $pl['plays'] = (int)$pl['plays'];
-        $pl['name']  = $pl['name'] ?: 'Playlist sin nombre';
+    foreach ($artists as &$a) {
+        $a['plays']     = (int)$a['plays'];
+        $a['image_url'] = getSpotifyArtistImage($a['artist']);
+        $bind = $all ? [$userId, $a['artist']] : [$userId, $a['artist'], $year];
+        $stmtTopSongsByArtist->execute($bind);
+        $rows = $stmtTopSongsByArtist->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $a['top_songs'] = array_map(fn($r) => [
+            'video_id' => $r['video_id'],
+            'title'    => $r['title'],
+            'artist'   => $r['artist'],
+        ], $rows);
+        $a['top_video_id'] = $rows[0]['video_id'] ?? null;
+        $a['top_title']    = $rows[0]['title']    ?? '';
     }
-    unset($pl);
+    unset($a);
+
+    /* Top GÉNEROS — primario: Last.fm tags POR CANCIÓN (top 50
+       canciones más escuchadas). Fallback: Spotify géneros por
+       artista (top 20 artistas). Ambos cachean 7 días. */
+    $genreCounts = [];
+    /* genre slug → array de canciones que contribuyeron a ese género.
+       Lo usamos al final para adjuntar candidatos al pool de cada
+       slide de género — así el slide del género suena UNA canción que
+       efectivamente tiene ese tag. */
+    $genreSongs = [];
+
+    /* PRIMARIO: Last.fm por canción. */
+    if (LASTFM_API_KEY !== '') {
+        $stmtTopSongs = $pdo->prepare("
+            SELECT video_id, MAX(title) AS title, MAX(artist) AS artist, COUNT(*) AS plays
+            FROM music_plays WHERE $where AND artist <> ''
+            GROUP BY video_id
+            ORDER BY plays DESC
+            LIMIT 50
+        ");
+        $stmtTopSongs->execute($params);
+        foreach ($stmtTopSongs->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $tags = getLastFmTrackGenres((string)$row['artist'], (string)$row['title'], 5);
+            if (empty($tags)) continue;
+            $weight = (int)$row['plays'];
+            $songRef = [
+                'video_id' => $row['video_id'],
+                'title'    => $row['title'],
+                'artist'   => $row['artist'],
+                'plays'    => $weight,
+            ];
+            foreach ($tags as $g) {
+                $genreCounts[$g] = ($genreCounts[$g] ?? 0) + $weight;
+                $genreSongs[$g][] = $songRef;
+            }
+        }
+    }
+
+    /* FALLBACK: Spotify por artista. También trackeamos canciones del
+       artista que aportan a cada género (todas las del top de ese
+       artista, no solo una). */
+    if (empty($genreCounts)) {
+        $stmtAllArtists = $pdo->prepare("
+            SELECT artist, COUNT(*) AS plays
+            FROM music_plays WHERE $where AND artist <> ''
+            GROUP BY artist
+            ORDER BY plays DESC
+            LIMIT 20
+        ");
+        $stmtAllArtists->execute($params);
+        $stmtSongsOfArtist = $pdo->prepare("
+            SELECT video_id, MAX(title) AS title, COUNT(*) AS plays
+            FROM music_plays WHERE $where AND artist = ?
+            GROUP BY video_id
+            ORDER BY plays DESC
+            LIMIT 3
+        ");
+        foreach ($stmtAllArtists->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $sp = getSpotifyArtistData($row['artist']);
+            if (!$sp || empty($sp['genres'])) continue;
+            $weight = (int)$row['plays'];
+            /* Top canciones del artista para mapear a sus géneros. */
+            $bind = array_merge($params, [$row['artist']]);
+            $stmtSongsOfArtist->execute($bind);
+            $artistSongs = array_map(fn($r) => [
+                'video_id' => $r['video_id'],
+                'title'    => $r['title'],
+                'artist'   => $row['artist'],
+                'plays'    => (int)$r['plays'],
+            ], $stmtSongsOfArtist->fetchAll(PDO::FETCH_ASSOC));
+            foreach ($sp['genres'] as $g) {
+                $g = trim((string)$g);
+                if ($g === '') continue;
+                $genreCounts[$g] = ($genreCounts[$g] ?? 0) + $weight;
+                foreach ($artistSongs as $sf) {
+                    $genreSongs[$g][] = $sf;
+                }
+            }
+        }
+    }
+
+    arsort($genreCounts);
+    $genres = [];
+    foreach (array_slice($genreCounts, 0, 5, true) as $name => $score) {
+        $pretty = mb_convert_case($name, MB_CASE_TITLE, 'UTF-8');
+        /* Top canciones del género ordenadas por plays DESC, dedupe por
+           video_id. El cliente elige una random (de las top 5 con más
+           plays para evitar tracks marginales). */
+        $songsOfGenre = $genreSongs[$name] ?? [];
+        usort($songsOfGenre, fn($a, $b) => $b['plays'] - $a['plays']);
+        $seen = [];
+        $unique = [];
+        foreach ($songsOfGenre as $sg) {
+            if (isset($seen[$sg['video_id']])) continue;
+            $seen[$sg['video_id']] = true;
+            $unique[] = [
+                'video_id' => $sg['video_id'],
+                'title'    => $sg['title'],
+                'artist'   => $sg['artist'] ?? '',
+            ];
+            if (count($unique) >= 5) break;
+        }
+        $genres[] = [
+            'name'      => $pretty,
+            'plays'     => $score,
+            'top_songs' => $unique,
+        ];
+    }
 
     /* Top álbumes — desde music_album_actions (eventos play + import).
        Agrupa por título del álbum (case-insensitive vía LOWER en SQL). */
@@ -261,9 +471,46 @@ function actionStats(): void {
     ");
     $stmt->execute($paramsAlb);
     $albums = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    /* Query case-insensitive + trim — normaliza diferencias de
+       capitalización/espacios entre el artist del álbum (escrito a
+       mano en el review) y el artist del reproductor (meta YouTube). */
+    $stmtTopSongsByArtistLoose = $pdo->prepare("
+        SELECT video_id, MAX(title) AS title, MAX(artist) AS artist, COUNT(*) AS plays
+        FROM music_plays
+        WHERE user_id = ?
+          AND LOWER(TRIM(artist)) = LOWER(TRIM(?))" . ($all ? "" : " AND YEAR(played_at) = ?") . "
+        GROUP BY video_id
+        ORDER BY plays DESC
+        LIMIT 5
+    ");
     foreach ($albums as &$al) {
         $al['plays']   = (int)$al['plays'];
         $al['imports'] = (int)$al['imports'];
+        $al['top_songs']    = [];
+        $al['top_video_id'] = null;
+        $al['top_title']    = '';
+        if (!empty($al['artist'])) {
+            $bind = $all ? [$userId, $al['artist']] : [$userId, $al['artist'], $year];
+            $stmtTopSongsByArtistLoose->execute($bind);
+            $rows = $stmtTopSongsByArtistLoose->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            /* Cada canción lleva su artist REAL (el de music_plays, no
+               el del álbum). Antes el fallback usaba canciones del
+               usuario por otros artistas pero las etiquetaba como del
+               artista del álbum → labels incorrectos. Ahora el cliente
+               ve la asociación real. */
+            $al['top_songs'] = array_map(fn($r) => [
+                'video_id' => $r['video_id'],
+                'title'    => $r['title'],
+                'artist'   => $r['artist'],
+            ], $rows);
+        }
+        /* SIN fallback genérico: si el artista del álbum no tiene
+           tracks en music_plays, dejamos top_songs vacío y la slide no
+           cambia la música — sigue sonando la del slide anterior. Es
+           mejor que poner canciones de otros artistas etiquetadas
+           incorrectamente. */
+        $al['top_video_id'] = $al['top_songs'][0]['video_id'] ?? null;
+        $al['top_title']    = $al['top_songs'][0]['title']    ?? '';
     }
     unset($al);
 
@@ -274,9 +521,12 @@ function actionStats(): void {
         'total_plays'=> $totalPlays,
         'total_secs' => $totalSecs,
         'total_min'  => $totalMin,
+        'top_month'  => $topMonth,
+        'months_breakdown' => $monthsBreakdown,
+        'considerable_songs' => $considerableSongs,
         'songs'      => $songs,
         'artists'    => $artists,
         'albums'     => $albums,
-        'playlists'  => $playlists,
+        'genres'     => $genres,
     ]);
 }

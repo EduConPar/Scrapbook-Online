@@ -2942,6 +2942,10 @@ window.notifSystem = (function() {
     });
 
     /* ─── Wrapped (Spotify Wrapped clone) ──────────────────────── */
+    /* Drag-only setup para la ventana Wrapped (sin resize — la slide
+       deck no se redimensiona). */
+    if (window.WindowManager) window.WindowManager.setup('wrapped-window', true);
+
     var wrappedFrame   = document.getElementById('wrapped-frame');
     var wrappedDevBtn  = document.getElementById('wrapped-dev-btn');
     var wrappedCloseEl = document.getElementById('wrapped-close-window');

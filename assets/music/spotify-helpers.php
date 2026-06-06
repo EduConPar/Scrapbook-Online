@@ -78,3 +78,56 @@ function searchYouTubeVideoId($query) {
     $result = searchYouTubeVideo($query);
     return $result ? $result['videoId'] : null;
 }
+
+/** Devuelve datos del artista buscado en Spotify: imagen + géneros.
+ *  Cachea el resultado como JSON (positivo Y negativo) 7 días.
+ *  Estructura: ['image' => ?string, 'genres' => string[]] o null. */
+function getSpotifyArtistData(string $name): ?array {
+    $name = trim($name);
+    if ($name === '') return null;
+
+    /* Cache key normalizado (lowercase). Almacenamos JSON con shape
+       `{image, genres}` o sentinel 'NULL' para misses confirmados. */
+    $key = 'spotify_artist_data_' . md5(mb_strtolower($name));
+    $cached = cacheGet($key);
+    if ($cached !== null) {
+        if ($cached === 'NULL') return null;
+        $decoded = json_decode($cached, true);
+        if (is_array($decoded)) return $decoded;
+    }
+
+    $token = getSpotifyToken();
+    if (!$token) return null;
+
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 8,
+        'ignore_errors' => true,
+        'header'        => "Authorization: Bearer {$token}",
+    ]]);
+    $url = 'https://api.spotify.com/v1/search?type=artist&limit=1&q=' . rawurlencode($name);
+    $raw = @file_get_contents($url, false, $ctx);
+    if (!$raw) {
+        /* Fallos transitorios — no cacheamos, reintentamos próxima vez. */
+        return null;
+    }
+    $data = json_decode($raw, true);
+    $items = $data['artists']['items'] ?? [];
+    if (empty($items[0])) {
+        /* Confirmed miss → cacheamos como NULL para no buscar más. */
+        cacheSet($key, 'NULL', 7 * 24 * 3600);
+        return null;
+    }
+    $artist = $items[0];
+    $result = [
+        'image'  => $artist['images'][0]['url'] ?? null,
+        'genres' => $artist['genres'] ?? [],
+    ];
+    cacheSet($key, json_encode($result), 7 * 24 * 3600);
+    return $result;
+}
+
+/** Wrapper de compatibilidad — solo la imagen. */
+function getSpotifyArtistImage(string $name): ?string {
+    $d = getSpotifyArtistData($name);
+    return $d ? ($d['image'] ?? null) : null;
+}

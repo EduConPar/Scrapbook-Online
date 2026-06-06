@@ -51,6 +51,11 @@ define('GOOGLE_CLIENT_ID',      env('GOOGLE_CLIENT_ID',      ''));
 define('TIDAL_CLIENT_ID',     env('TIDAL_CLIENT_ID',     ''));
 define('TIDAL_CLIENT_SECRET', env('TIDAL_CLIENT_SECRET', ''));
 define('TIDAL_COUNTRY',       env('TIDAL_COUNTRY',       'US'));
+/* Last.fm — necesario para extraer géneros A NIVEL DE CANCIÓN (tags
+   crowdsourced). Si no se configura, el wrapped cae al fallback de
+   géneros por artista vía Spotify. Crear key gratis en
+   https://www.last.fm/api/account/create */
+define('LASTFM_API_KEY',      env('LASTFM_API_KEY',      ''));
 
 /* ─── Conexión a BD (la usa db.php) ─── */
 define('DB_HOST', env('DB_HOST', 'localhost'));
