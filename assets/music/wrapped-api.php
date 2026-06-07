@@ -326,8 +326,10 @@ function actionStats(): void {
         LIMIT 5
     ");
     foreach ($artists as &$a) {
-        $a['plays']     = (int)$a['plays'];
-        $a['image_url'] = getSpotifyArtistImage($a['artist']);
+        $a['plays'] = (int)$a['plays'];
+        /* Primero recogemos las top_songs del usuario para ESTE artista
+           — sus títulos sirven para verificar que la imagen de Spotify
+           corresponde al artista correcto (no a un homónimo). */
         $bind = $all ? [$userId, $a['artist']] : [$userId, $a['artist'], $year];
         $stmtTopSongsByArtist->execute($bind);
         $rows = $stmtTopSongsByArtist->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -338,6 +340,12 @@ function actionStats(): void {
         ], $rows);
         $a['top_video_id'] = $rows[0]['video_id'] ?? null;
         $a['top_title']    = $rows[0]['title']    ?? '';
+        /* Imagen del artista verificada con los títulos que el usuario
+           ha escuchado: filtra match exacto de nombre y, si quedan
+           varios candidatos, elige el que más canciones del usuario
+           tenga en su top-tracks de Spotify. */
+        $verifyTitles = array_column($a['top_songs'], 'title');
+        $a['image_url'] = getSpotifyArtistImage($a['artist'], $verifyTitles);
     }
     unset($a);
 
