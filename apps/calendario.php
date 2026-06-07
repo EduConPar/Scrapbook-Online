@@ -158,16 +158,6 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
                     <label style="font-size: 11px;">Descripción</label>
                     <textarea id="momento-desc" style="width: 100%; height: 50px;"></textarea>
                 </div>
-                <div class="field-row-stacked" style="margin-bottom: 6px;">
-                    <label style="font-size: 11px;">Emoción</label>
-                    <select id="momento-emocion" style="width: 100%;">
-                        <option value="😊">😊 Feliz</option>
-                        <option value="😍">😍 Enamorado/a</option>
-                        <option value="😂">😂 Divertido</option>
-                        <option value="😢">😢 Nostálgico</option>
-                        <option value="😌">😌 En paz</option>
-                    </select>
-                </div>
                 <div class="field-row-stacked" style="margin-bottom: 8px;">
                     <label style="font-size: 11px;">Foto (opcional)</label>
                     <div class="field-row" style="gap:4px;">
@@ -194,17 +184,17 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
                     <input type="date" id="rec-fecha" style="width: 100%;">
                 </div>
                 <div class="field-row-stacked" style="margin-bottom: 6px;">
-                    <label style="font-size: 11px;">Tipo</label>
-                    <select id="rec-tipo" style="width: 100%;">
-                        <option value="cita">🏥 Cita médica</option>
-                        <option value="examen">📝 Examen</option>
-                        <option value="aniversario">💑 Aniversario</option>
-                        <option value="otro">📌 Otro</option>
-                    </select>
-                </div>
-                <div class="field-row-stacked" style="margin-bottom: 8px;">
                     <label style="font-size: 11px;">Descripción</label>
                     <textarea id="rec-desc" style="width: 100%; height: 40px;"></textarea>
+                </div>
+                <div class="field-row-stacked" style="margin-bottom: 8px;">
+                    <label style="font-size: 11px;">Periodicidad</label>
+                    <select id="rec-periodicidad" style="width: 100%;">
+                        <option value="ninguna">— Sin repetición —</option>
+                        <option value="anual">📅 Anual (cada año)</option>
+                        <option value="mensual">🗓️ Mensual (cada mes)</option>
+                        <option value="semanal">📆 Semanal (cada semana)</option>
+                    </select>
                 </div>
                 <button class="button" id="btn-guardar-rec" style="width: 100%;">Guardar</button>
                 <p id="rec-status" style="font-size: 11px; margin-top: 6px;"></p>
@@ -252,7 +242,6 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 </div>
 
 <script>
-// Base URL dinámica — funciona en localhost y en producción sin cambios
 const API_BASE = '<?php echo htmlspecialchars($projectBaseUrl); ?>/assets/couple/api.php';
 
 const parejaId = <?php echo $parejaId; ?>;
@@ -273,6 +262,37 @@ let todosMomentos = [];
 const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
 
+function expandirRecordatorios(lista) {
+    const expandidos = [];
+    const desde = new Date(hoy); desde.setFullYear(desde.getFullYear() - 1);
+    const hasta = new Date(hoy); hasta.setFullYear(hasta.getFullYear() + 2);
+
+    lista.forEach(r => {
+        const p = r.periodicidad || 'ninguna';
+        if (p === 'ninguna') {
+            expandidos.push(r);
+            return;
+        }
+        const base = new Date(r.fecha);
+        let cursor = new Date(base);
+
+        while (cursor > desde) {
+            if (p === 'anual')        cursor.setFullYear(cursor.getFullYear() - 1);
+            else if (p === 'mensual') cursor.setMonth(cursor.getMonth() - 1);
+            else if (p === 'semanal') cursor.setDate(cursor.getDate() - 7);
+        }
+
+        while (cursor <= hasta) {
+            const fechaOcurrencia = cursor.toISOString().split('T')[0];
+            expandidos.push({ ...r, fecha: fechaOcurrencia, _periodico: true });
+            if (p === 'anual')        cursor.setFullYear(cursor.getFullYear() + 1);
+            else if (p === 'mensual') cursor.setMonth(cursor.getMonth() + 1);
+            else if (p === 'semanal') cursor.setDate(cursor.getDate() + 7);
+        }
+    });
+    return expandidos;
+}
+
 function cargarTodo() {
     Promise.all([
         fetch(API_BASE + '?action=get-momentos&pareja_id=' + parejaId).then(r => r.json()),
@@ -285,14 +305,15 @@ function cargarTodo() {
             momentosPorFecha[m.fecha].push(m);
         });
 
+        const recordatoriosExpandidos = expandirRecordatorios(recordatorios);
         recordatoriosPorFecha = {};
-        recordatorios.forEach(r => {
+        recordatoriosExpandidos.forEach(r => {
             if (!recordatoriosPorFecha[r.fecha]) recordatoriosPorFecha[r.fecha] = [];
             recordatoriosPorFecha[r.fecha].push(r);
         });
 
         renderCalendario();
-        renderRecordatorios(recordatorios);
+        renderRecordatorios(recordatoriosExpandidos);
         renderMomentos(momentos);
     }).catch(() => renderCalendario());
 }
@@ -301,7 +322,6 @@ function renderRecordatorios(lista) {
     const div = document.getElementById('recordatorios-lista');
     if (!lista.length) { div.innerHTML = '<p style="font-size:11px;color:#808080;">No hay recordatorios.</p>'; return; }
 
-    const tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
     const hoyStr = hoy.toISOString().split('T')[0];
 
     lista.sort((a,b) => a.fecha.localeCompare(b.fecha));
@@ -312,10 +332,11 @@ function renderRecordatorios(lista) {
         item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;' + (pasado ? 'opacity:0.5;' : '');
         const diasRestantes = Math.ceil((new Date(r.fecha) - hoy) / (1000*60*60*24));
         const cuandoStr = pasado ? 'Pasado' : diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' días';
+        const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' · 🔁 ' + r.periodicidad : '';
         const texto = document.createElement('div');
         texto.style.cssText = 'flex: 1;';
-        texto.innerHTML = '<strong>' + (tiposIcono[r.tipo] || '📌') + ' ' + r.titulo + '</strong><br>' +
-            '<span style="color:#808080;">' + r.fecha + ' · ' + cuandoStr + (r.autor ? ' · ' + r.autor : '') + '</span>' +
+        texto.innerHTML = '<strong>' + r.titulo + '</strong><br>' +
+            '<span style="color:#808080;">' + r.fecha + ' · ' + cuandoStr + periodicoLabel + (r.autor ? ' · ' + r.autor : '') + '</span>' +
             (r.descripcion ? '<br>' + r.descripcion : '');
         const btnDel = document.createElement('button');
         btnDel.className = 'button';
@@ -339,7 +360,7 @@ function renderMomentos(lista) {
         item.style.cssText = 'border: 1px solid #ff69b4; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
         const texto = document.createElement('div');
         texto.style.cssText = 'flex: 1; cursor: pointer;';
-        texto.innerHTML = '<strong>' + m.emocion + ' ' + m.titulo + '</strong>' +
+        texto.innerHTML = '<strong>' + m.titulo + '</strong>' +
             '<br><span style="color:#808080;">' + m.fecha + (m.autor ? ' · ' + m.autor : '') + '</span>' +
             (m.descripcion ? '<br>' + m.descripcion : '');
         texto.addEventListener('click', () => abrirPopupDia(m.fecha));
@@ -454,7 +475,7 @@ function abrirPopupDia(fecha) {
                html += '<img src="' + (m.foto.startsWith('http') ? m.foto : '../uploads/momentos/' + m.foto) + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
             }
             html += '<div style="display:flex; justify-content:space-between; align-items:flex-start;">';
-            html += '<div><strong>' + m.emocion + ' ' + m.titulo + '</strong>';
+            html += '<div><strong>' + m.titulo + '</strong>';
             if (m.autor) html += ' <span style="color:#808080;">(' + m.autor + ')</span>';
             if (m.descripcion) html += '<br>' + m.descripcion;
             html += '</div>';
@@ -466,16 +487,16 @@ function abrirPopupDia(fecha) {
     }
 
     if (recordatorios.length) {
-        const tiposIcono = { cita: '🏥', examen: '📝', aniversario: '💑', otro: '📌' };
         const h = document.createElement('p');
         h.style.cssText = 'font-size:11px; font-weight:bold; color:#4a90d9; margin-bottom:6px; margin-top:8px;';
-        h.textContent = '❓ Recordatorios';
+        h.textContent = '🔔 Recordatorios';
         contenido.appendChild(h);
         recordatorios.forEach(r => {
             const div = document.createElement('div');
             div.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display:flex; justify-content:space-between; align-items:flex-start;';
+            const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' <span style="color:#808080;">· 🔁 ' + r.periodicidad + '</span>' : '';
             const texto = document.createElement('div');
-            texto.innerHTML = '<strong>' + (tiposIcono[r.tipo] || '📌') + ' ' + r.titulo + '</strong>' +
+            texto.innerHTML = '<strong>' + r.titulo + '</strong>' + periodicoLabel +
                 (r.descripcion ? '<br>' + r.descripcion : '');
             const btnDel = document.createElement('button');
             btnDel.className = 'button';
@@ -516,7 +537,6 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
     const titulo = document.getElementById('momento-titulo').value.trim();
     const fecha = document.getElementById('momento-fecha').value;
     const desc = document.getElementById('momento-desc').value.trim();
-    const emocion = document.getElementById('momento-emocion').value;
     const fotoInput = document.getElementById('momento-foto');
     const status = document.getElementById('momento-status');
 
@@ -528,7 +548,7 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
     fetch(API_BASE + '?action=save-momento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, emocion })
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc })
     })
     .then(r => r.json())
     .then(data => {
@@ -567,8 +587,8 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
 document.getElementById('btn-guardar-rec').addEventListener('click', function() {
     const titulo = document.getElementById('rec-titulo').value.trim();
     const fecha = document.getElementById('rec-fecha').value;
-    const tipo = document.getElementById('rec-tipo').value;
     const desc = document.getElementById('rec-desc').value.trim();
+    const periodicidad = document.getElementById('rec-periodicidad').value;
     const status = document.getElementById('rec-status');
 
     if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
@@ -576,7 +596,7 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
     fetch(API_BASE + '?action=save-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, tipo, descripcion: desc })
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, periodicidad })
     })
     .then(r => r.json())
     .then(data => {
@@ -584,6 +604,7 @@ document.getElementById('btn-guardar-rec').addEventListener('click', function() 
         status.style.color = 'green'; status.textContent = '✅ Guardado';
         document.getElementById('rec-titulo').value = '';
         document.getElementById('rec-desc').value = '';
+        document.getElementById('rec-periodicidad').value = 'ninguna';
         cargarTodo();
     });
 });

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 30, 2026 at 10:13 PM
+-- Generation Time: Jun 07, 2026 at 06:16 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -125,12 +125,16 @@ INSERT INTO `desktop_icons` (`user_id`, `icon_id`, `pos_left`, `pos_top`, `updat
 (1, 'fld-mpn16xu7ekn', 0, 96, '2026-05-28 18:36:35'),
 (1, 'profile-icon', 192, 0, '2026-05-28 18:38:17'),
 (1, 'temas-icon', 288, 0, '2026-05-29 19:35:10'),
+(2, 'archive-icon', 0, 0, '2026-06-06 12:22:53'),
+(2, 'calendar-icon', 96, 0, '2026-06-04 22:50:17'),
 (2, 'companion-icon', 0, 288, '2026-05-30 16:32:44'),
 (2, 'dibujo-icon', 96, 288, '2026-05-30 16:32:50'),
-(2, 'dnd-icon', 96, 96, '2026-05-30 16:32:46'),
+(2, 'dnd-icon', 96, 96, '2026-06-06 12:23:01'),
 (2, 'galeria-icon', 96, 192, '2026-05-30 16:32:48'),
+(2, 'mascota-icon', 192, 0, '2026-06-06 12:22:56'),
 (2, 'profile-icon', 0, 96, '2026-05-28 18:37:39'),
-(2, 'temas-icon', 0, 192, '2026-05-30 16:32:43');
+(2, 'temas-icon', 0, 192, '2026-06-06 12:22:58'),
+(2, 'tienda-icon', 0, 384, '2026-06-04 21:52:21');
 
 -- --------------------------------------------------------
 
@@ -171,6 +175,57 @@ CREATE TABLE `item_invites` (
   `item_music_type` enum('song','album') DEFAULT NULL,
   `item_artist` varchar(200) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `listening_invites`
+--
+
+CREATE TABLE `listening_invites` (
+  `id` int(11) NOT NULL,
+  `session_id` int(11) NOT NULL,
+  `from_user_id` int(11) NOT NULL,
+  `to_user_id` int(11) NOT NULL,
+  `status` enum('pending','accepted','declined','expired') DEFAULT 'pending',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `responded_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `listening_participants`
+--
+
+CREATE TABLE `listening_participants` (
+  `session_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `joined_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `last_seen_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `left_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `listening_sessions`
+--
+
+CREATE TABLE `listening_sessions` (
+  `id` int(11) NOT NULL,
+  `host_user_id` int(11) NOT NULL,
+  `video_id` varchar(20) DEFAULT NULL,
+  `track_title` varchar(255) DEFAULT NULL,
+  `track_artist` varchar(255) DEFAULT NULL,
+  `cover_url` varchar(500) DEFAULT NULL,
+  `current_time_s` int(11) NOT NULL DEFAULT 0,
+  `duration_s` int(11) NOT NULL DEFAULT 0,
+  `is_playing` tinyint(4) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `closed_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -232,17 +287,16 @@ CREATE TABLE `list_item_collaborators` (
 --
 
 CREATE TABLE `mascotas` (
+  `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
-  `nombre` varchar(60) NOT NULL DEFAULT 'Gabriel',
-  `skin` varchar(40) NOT NULL DEFAULT 'gabriel',
+  `nombre` varchar(60) NOT NULL DEFAULT 'Meloncio',
+  `skin` enum('meloncio','helldiver','v1') NOT NULL DEFAULT 'meloncio',
   `hambre` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
   `felicidad` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
-  `temperatura` tinyint(3) UNSIGNED NOT NULL DEFAULT 80,
-  `edad` int(11) NOT NULL DEFAULT 0,
+  `edad` smallint(5) UNSIGNED NOT NULL DEFAULT 0,
   `viva` tinyint(1) NOT NULL DEFAULT 1,
-  `eclosionado` tinyint(1) NOT NULL DEFAULT 0,
-  `ultima_vez` datetime NOT NULL DEFAULT current_timestamp(),
-  `eclosion_at` datetime DEFAULT NULL
+  `ultima_vez` timestamp NOT NULL DEFAULT current_timestamp(),
+  `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -252,22 +306,37 @@ CREATE TABLE `mascotas` (
 --
 
 CREATE TABLE `mascota_memoria` (
+  `id` bigint(20) NOT NULL,
   `user_id` int(11) NOT NULL,
-  `clave` varchar(40) NOT NULL,
-  `valor` varchar(255) NOT NULL,
-  `guardado_en` datetime NOT NULL DEFAULT current_timestamp()
+  `clave` varchar(60) NOT NULL,
+  `valor` varchar(200) NOT NULL,
+  `guardado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `mascota_gustos`
+-- Table structure for table `mascota_objetos`
 --
 
-CREATE TABLE `mascota_gustos` (
+CREATE TABLE `mascota_objetos` (
+  `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
-  `alimento` varchar(40) NOT NULL,
-  `valor` tinyint(3) UNSIGNED NOT NULL DEFAULT 50
+  `pelota` tinyint(1) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `mascota_vinculos`
+--
+
+CREATE TABLE `mascota_vinculos` (
+  `id` int(11) NOT NULL,
+  `mascota_id_a` int(11) NOT NULL,
+  `mascota_id_b` int(11) NOT NULL,
+  `tipo` enum('amigos','pareja','enemigos') DEFAULT 'amigos',
+  `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -341,6 +410,24 @@ INSERT INTO `momentos` (`id`, `pareja_id`, `usuario_id`, `titulo`, `descripcion`
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `music_album_actions`
+--
+
+CREATE TABLE `music_album_actions` (
+  `id` bigint(20) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `album_title` varchar(200) NOT NULL,
+  `artist` varchar(200) NOT NULL DEFAULT '',
+  `action_type` varchar(20) NOT NULL DEFAULT 'play',
+  `yt_playlist_id` varchar(40) DEFAULT NULL,
+  `spotify_album_id` varchar(40) DEFAULT NULL,
+  `cover_url` varchar(500) DEFAULT NULL,
+  `played_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `music_extras`
 --
 
@@ -353,53 +440,74 @@ CREATE TABLE `music_extras` (
   `added_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- --------------------------------------------------------
-
---
--- Table structure for table `music_plays` (tracking para Spotify Wrapped)
---
-
-CREATE TABLE `music_plays` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL,
-  `video_id` varchar(11) NOT NULL,
-  `title` varchar(200) NOT NULL,
-  `artist` varchar(200) NOT NULL DEFAULT '',
-  `playlist_id` bigint(20) DEFAULT NULL,
-  `duration_s` int(11) NOT NULL DEFAULT 0,
-  `played_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_user_year` (`user_id`, `played_at`),
-  KEY `idx_user_video` (`user_id`, `video_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `music_album_actions` (eventos play/import de álbum)
---
-
-CREATE TABLE `music_album_actions` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL,
-  `album_title` varchar(200) NOT NULL,
-  `artist` varchar(200) NOT NULL DEFAULT '',
-  `action_type` varchar(20) NOT NULL DEFAULT 'play',
-  `yt_playlist_id` varchar(40) DEFAULT NULL,
-  `spotify_album_id` varchar(40) DEFAULT NULL,
-  `cover_url` varchar(500) DEFAULT NULL,
-  `played_at` datetime NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_user_year` (`user_id`, `played_at`),
-  KEY `idx_user_album` (`user_id`, `album_title`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
 --
 -- Dumping data for table `music_extras`
 --
 
 INSERT INTO `music_extras` (`id`, `user_id`, `video_id`, `title`, `artist`, `added_at`) VALUES
 (1, 1, 'NVqXG3QNav0', 'The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum', '', '2026-05-26 18:26:08');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `music_plays`
+--
+
+CREATE TABLE `music_plays` (
+  `id` bigint(20) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `video_id` varchar(11) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `artist` varchar(200) NOT NULL DEFAULT '',
+  `playlist_id` bigint(20) DEFAULT NULL,
+  `duration_s` int(11) NOT NULL DEFAULT 0,
+  `played_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `music_plays`
+--
+
+INSERT INTO `music_plays` (`id`, `user_id`, `video_id`, `title`, `artist`, `playlist_id`, `duration_s`, `played_at`) VALUES
+(1, 2, 'hbuNxmAXdNk', 'Human', 'FLAVOR FOLEY', 13, 3, '2026-06-06 14:25:19'),
+(2, 2, 'aHUVqV5CO6w', 'Children of the City', 'Mili', 13, 14, '2026-06-06 14:25:33'),
+(3, 2, 'aHUVqV5CO6w', 'Children of the City', 'Mili', 13, 233, '2026-06-06 14:29:13'),
+(4, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 144, '2026-06-06 14:31:39'),
+(5, 2, 'RBhZieVCMPM', 'Between Two Worlds - Realm of Light', 'Mili', 13, 128, '2026-06-06 14:33:50'),
+(6, 2, 'mAN5O-S3_6I', 'Between Two Worlds - Acapella', 'Mili', 13, 296, '2026-06-06 14:38:48'),
+(7, 2, 'wVz13x2wC-E', 'Mortal With You - Japanese ver.', 'Mili', 13, 235, '2026-06-06 14:42:45'),
+(8, 2, '-hEM_jVzWxM', 'Mortal With You - Instrumental', 'Mili', 13, 235, '2026-06-06 14:46:41'),
+(9, 2, 'KSZp1gwcqtM', 'Bento Box Bivouac', 'Mili', 13, 252, '2026-06-06 14:50:56'),
+(10, 2, 'XfTWgMgknpY', 'In Hell We Live, Lament (feat. KIHOW)', 'Mili;KIHOW', 13, 225, '2026-06-06 14:54:42'),
+(11, 2, 't2mQxEtNgA0', 'Bulbel', 'Mili;ENDER LILIES', 13, 208, '2026-06-06 14:58:12'),
+(12, 2, 'nN-FAKV2Zls', '雨と体液と匂い', 'Mili', 13, 296, '2026-06-06 15:03:09'),
+(13, 2, 'ei7Kb6DoD_s', '雨と体液と匂い（instrumental）', 'Mili', 13, 299, '2026-06-06 15:08:09'),
+(14, 2, '-UeABxedQhc', 'Static（instrumental）', 'Mili', 13, 210, '2026-06-06 15:11:41'),
+(15, 2, '0cvCwHXgyeI', 'Space Colony', 'Mili', 13, 193, '2026-06-06 15:14:57'),
+(16, 2, 'ESx_hy1n7HA', 'world.execute (me) ;', 'Mili', 13, 212, '2026-06-06 15:18:31'),
+(17, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 24, '2026-06-07 17:30:44'),
+(18, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 69, '2026-06-07 17:31:28'),
+(19, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 144, '2026-06-07 17:32:45'),
+(20, 2, 'RBhZieVCMPM', 'Between Two Worlds - Realm of Light', 'Mili', 13, 128, '2026-06-07 17:34:55'),
+(21, 2, 'mAN5O-S3_6I', 'Between Two Worlds - Acapella', 'Mili', 13, 9, '2026-06-07 17:35:05'),
+(22, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 61, '2026-06-07 17:36:25'),
+(23, 2, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 13, 144, '2026-06-07 17:37:50'),
+(24, 2, 'N5-h77JYOhE', 'Milk', 'Mili', 13, 197, '2026-06-07 17:41:09'),
+(25, 2, '_UqGrwCbxVI', 'JUST BE COMPETENT', 'r u s s e l b u c k', 13, 42, '2026-06-07 17:41:52'),
+(26, 2, 'ZuifkacZ0TA', 'Hero', 'Mili', 13, 214, '2026-06-07 17:45:27'),
+(27, 2, 'yebNIHKAC4A', 'Golden', 'HUNTR/X;EJAE;AUDREY NUNA;REI AMI;KPop Demon Hunters Cast', 13, 138, '2026-06-07 17:47:45'),
+(28, 2, '5-I1lT6Jbdo', 'Harpy Hare', 'Yaelokre', 13, 10, '2026-06-07 17:47:56'),
+(29, 2, '5-I1lT6Jbdo', 'Harpy Hare', 'Yaelokre', 13, 179, '2026-06-07 17:50:46'),
+(30, 2, 'k5mX3NkA7jM', 'Mary On A Cross', 'Ghost', 13, 244, '2026-06-07 17:54:53'),
+(31, 2, '4o0WYiK52Dg', 'Body', 'Mother Mother', 13, 213, '2026-06-07 17:58:27'),
+(32, 2, 'ukEE6OPltQA', 'A Complete and Utter Destruction of the Senses', 'Heaven Pierce Her', 13, 128, '2026-06-07 18:00:37'),
+(33, 2, 'YCKfg6kHKTg', 'End It', 'RIELL', 13, 196, '2026-06-07 18:03:54'),
+(34, 2, '3rSao4unXqc', 'Calculation Theme', 'Metric', 13, 211, '2026-06-07 18:07:28'),
+(35, 2, 'RWX8NRIOf64', 'Opium', 'Mili', 13, 183, '2026-06-07 18:10:32'),
+(36, 2, 'OTIgSuOI-i8', 'Running up that Hill (Nightcore)', 'Syrex', 13, 84, '2026-06-07 18:11:57'),
+(37, 2, 'wqPdeT6Jpdg', 'Wet', 'Dazey and the Scouts', 13, 18, '2026-06-07 18:12:45'),
+(38, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 31, '2026-06-07 18:13:18'),
+(39, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 159, '2026-06-07 18:15:27');
 
 -- --------------------------------------------------------
 
@@ -439,8 +547,8 @@ INSERT INTO `notifications` (`id`, `user_id`, `type`, `from_user_id`, `payload`,
 (21, 2, 'review', 1, '{\"category\":\"series\",\"itemTitle\":\"zdada\",\"mtype\":\"\"}', 1, '2026-05-27 14:21:43'),
 (22, 1, 'like', 2, '{\"postId\":5,\"postText\":\"Chicos creo que me escucho\"}', 1, '2026-05-29 21:10:53'),
 (23, 1, 'like', 2, '{\"postId\":6,\"postText\":\"nueva pfp\"}', 1, '2026-05-29 21:10:54'),
-(24, 2, 'review', 1, '{\"category\":\"music\",\"itemTitle\":\"Event Horizon (Reach for the Sun and Burn! Burn! Burn!)\",\"mtype\":\"song\"}', 0, '2026-05-29 22:35:17'),
-(25, 2, 'review', 1, '{\"category\":\"music\",\"itemTitle\":\"FIRE!!!\",\"mtype\":\"song\"}', 0, '2026-05-29 22:35:28');
+(24, 2, 'review', 1, '{\"category\":\"music\",\"itemTitle\":\"Event Horizon (Reach for the Sun and Burn! Burn! Burn!)\",\"mtype\":\"song\"}', 1, '2026-05-29 22:35:17'),
+(25, 2, 'review', 1, '{\"category\":\"music\",\"itemTitle\":\"FIRE!!!\",\"mtype\":\"song\"}', 1, '2026-05-29 22:35:28');
 
 -- --------------------------------------------------------
 
@@ -605,7 +713,8 @@ INSERT INTO `playlists` (`id`, `owner_id`, `name`, `created_at`) VALUES
 (7, 1, 'dad', '2026-05-26 18:26:08'),
 (8, 2, 'Angie serotonine', '2026-05-26 18:26:08'),
 (9, 3, 'qeq', '2026-05-26 18:26:08'),
-(12, 1, 'sdawdas', '2026-05-26 19:03:23');
+(12, 1, 'sdawdas', '2026-05-26 19:03:23'),
+(13, 2, 'autismo', '2026-06-04 15:21:09');
 
 -- --------------------------------------------------------
 
@@ -770,7 +879,769 @@ INSERT INTO `playlist_tracks` (`id`, `playlist_id`, `position`, `video_id`, `tit
 (104, 12, 5, 'gtboglNaLgw', 'The Break (Crimson Glass deComposition)', 'Heaven Pierce Her', 263, 'Capi'),
 (105, 12, 6, 'NVqXG3QNav0', 'The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum', 'Heaven Pierce Her', 382, 'Capi'),
 (106, 12, 7, 'stpMtEx5zqc', 'Event Horizon (Reach for the Sun and Burn! Burn! Burn!)', 'Heaven Pierce Her', 312, 'Capi'),
-(107, 12, 8, 'BvPrRkK1I6k', 'The Fall', 'Heaven Pierce Her', 187, 'Capi');
+(107, 12, 8, 'BvPrRkK1I6k', 'The Fall', 'Heaven Pierce Her', 187, 'Capi'),
+(108, 13, 0, 'aHUVqV5CO6w', 'Children of the City', 'Mili', 234, 'Angie'),
+(109, 13, 1, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 145, 'Angie'),
+(110, 13, 2, 'RBhZieVCMPM', 'Between Two Worlds - Realm of Light', 'Mili', 129, 'Angie'),
+(111, 13, 3, 'mAN5O-S3_6I', 'Between Two Worlds - Acapella', 'Mili', 297, 'Angie'),
+(112, 13, 4, 'wVz13x2wC-E', 'Mortal With You - Japanese ver.', 'Mili', 236, 'Angie'),
+(113, 13, 5, '-hEM_jVzWxM', 'Mortal With You - Instrumental', 'Mili', 235, 'Angie'),
+(114, 13, 6, 'KSZp1gwcqtM', 'Bento Box Bivouac', 'Mili', 253, 'Angie'),
+(115, 13, 7, 'XfTWgMgknpY', 'In Hell We Live, Lament (feat. KIHOW)', 'Mili;KIHOW', 225, 'Angie'),
+(116, 13, 8, 't2mQxEtNgA0', 'Bulbel', 'Mili;ENDER LILIES', 208, 'Angie'),
+(117, 13, 9, 'nN-FAKV2Zls', '雨と体液と匂い', 'Mili', 296, 'Angie'),
+(118, 13, 10, 'ei7Kb6DoD_s', '雨と体液と匂い（instrumental）', 'Mili', 299, 'Angie'),
+(119, 13, 11, '-UeABxedQhc', 'Static（instrumental）', 'Mili', 210, 'Angie'),
+(120, 13, 12, '0cvCwHXgyeI', 'Space Colony', 'Mili', 194, 'Angie'),
+(121, 13, 13, 'ESx_hy1n7HA', 'world.execute (me) ;', 'Mili', 212, 'Angie'),
+(122, 13, 14, 'AN72_SVbETA', 'Utopiosphere -Platonism-', 'Mili', 236, 'Angie'),
+(123, 13, 15, 'oHQUUAcB0io', 'Colorful', 'Mili', 241, 'Angie'),
+(124, 13, 16, 'Le5nXTvNYJc', 'Nine Point Eight', 'Mili', 192, 'Angie'),
+(125, 13, 17, '2P8laoe8jbU', 'Friction', 'Mili', 160, 'Angie'),
+(126, 13, 18, 'AN72_SVbETA', 'YUBIKIRI-GENMAN', 'Mili', 236, 'Angie'),
+(127, 13, 19, '8BxSROZU06M', 'Ephemeral', 'Mili', 266, 'Angie'),
+(128, 13, 20, 'kpi3tCU2Clc', 'Fable', 'Mili', 202, 'Angie'),
+(129, 13, 21, 'mkKGMY_zpg4', 'Maroma Samsa', 'Mili', 268, 'Angie'),
+(130, 13, 22, 'zlKAAAW2NxU', 'Witch\'s Invitation', 'Mili', 305, 'Angie'),
+(131, 13, 23, 'vjBFftpQxxM', 'BUTCHER VANITY', 'FLAVOR FOLEY', 186, 'Angie'),
+(132, 13, 24, 'bnkjvpBigVY', 'Don', 'Miranda!;CA7RIEL', 197, 'Angie'),
+(133, 13, 25, 'TGeOpZbBnbA', 'Birthday Kid - Key Ingredient ver.', 'Mili', 226, 'Angie'),
+(134, 13, 26, 'gLRMHUGlp2w', 'Abnormality Dancing Girl', 'razaplays', 206, 'Angie'),
+(135, 13, 27, '6Ro7NubzE9A', '1-800', 'bbno$;Ironmouse', 208, 'Angie'),
+(136, 13, 28, 'fVE9rrbfCQ0', 'Blow My Brains Out', 'Tikkle Me', 222, 'Angie'),
+(137, 13, 29, 'Kf_JjqzryG4', 'Verbatim', 'Mother Mother', 168, 'Angie'),
+(138, 13, 30, 'dT5Ck6bXBu8', 'Don\'t', 'Azumi Takahashi;Lotus Juice;ATLUS Sound Team;ATLUS GAME MUSIC', 165, 'Angie'),
+(139, 13, 31, 'klIxS5o65C4', 'ダイダイダイダイダイキライ', 'Amala', 155, 'Angie'),
+(140, 13, 32, 'wZlv3qDPfjk', 'モエチャッカファイア', 'issey', 156, 'Angie'),
+(141, 13, 33, '51GIxXFKbzk', 'INTERNET YAMERO', 'NEEDY GIRL OVERDOSE;KOTOKO;Aiobahn +81', 244, 'Angie'),
+(142, 13, 34, 'ydXVSm24LC0', 'Don\'t Threaten Me with a Good Time', 'Panic! At The Disco', 211, 'Angie'),
+(143, 13, 35, 'OyuyxJPO56c', 'Headfirst Slide Into Cooperstown On A Bad Bet', 'Fall Out Boy', 234, 'Angie'),
+(144, 13, 36, 'LXuSOkf2M3c', 'Abracadabra', 'Lady Gaga', 224, 'Angie'),
+(145, 13, 37, 'vp6XdbG3AhA', 'Pink Pony Club', 'Chappell Roan', 259, 'Angie'),
+(146, 13, 38, 'w5OUAY1j3gQ', 'again', 'YUI', 258, 'Angie'),
+(147, 13, 39, 'vD_D3zQ4Ais', 'The only sun light', 'Risa', 281, 'Angie'),
+(148, 13, 40, 'PrSjlpWu0cw', 'Devil in Disguise', 'Marino', 104, 'Angie'),
+(149, 13, 41, 'yebNIHKAC4A', 'Golden', 'HUNTR/X;EJAE;AUDREY NUNA;REI AMI;KPop Demon Hunters Cast', 199, 'Angie'),
+(150, 13, 42, 'o8OjEIITii4', 'How It’s Done', 'HUNTR/X;EJAE;AUDREY NUNA;REI AMI;KPop Demon Hunters Cast', 176, 'Angie'),
+(151, 13, 43, 'Ve_a9CXjlQc', 'Takedown', 'HUNTR/X;EJAE;AUDREY NUNA;REI AMI;KPop Demon Hunters Cast', 181, 'Angie'),
+(152, 13, 44, 'S09qwKoSHbM', 'KICK BACK', 'Kenshi Yonezu', 194, 'Angie'),
+(153, 13, 45, 'U_5S_tHezQE', 'check', 'bbno$', 122, 'Angie'),
+(154, 13, 46, '5xc6lQzTUDA', 'Bad Apple!!', 'RichaadEB;Cristina Vee', 300, 'Angie'),
+(155, 13, 47, 'bdP8Rtmz0t0', 'CandyCookieChocolate (feat. HATSUNE MIKU & KASANE TETO)', 'はろける;Hatsune Miku;Kasane Teto', 14, 'Angie'),
+(156, 13, 48, 'JALbemLw3G4', 'Teto Territory', '2hot4tv', 208, 'Angie'),
+(157, 13, 49, 'xPfMb50dsOk', 'Discord', 'The Living Tombstone;Eurobeat Brony', 194, 'Angie'),
+(158, 13, 50, 'cqwcH_WIP-8', 'It\'s Going Down Now', 'Azumi Takahashi;Lotus Juice;ATLUS Sound Team;ATLUS GAME MUSIC', 183, 'Angie'),
+(159, 13, 51, 'mdceoIcWwFw', '沈める街 - New Yoeko ver.', 'ヨエコ', 190, 'Angie'),
+(160, 13, 52, 'dM7PrSrtrd4', 'Doin Time Speed', 'Ren', 23, 'Angie'),
+(161, 13, 53, 'Ka1vNzmD6JE', 'Vampire Empire', 'Big Thief', 193, 'Angie'),
+(162, 13, 54, 'VN06Chef3JM', 'FUKOUNA GIRL', 'STOMACH BOOK', 25, 'Angie'),
+(163, 13, 55, 'r105CzDvoo0', 'Anytime Anywhere', 'milet', 261, 'Angie'),
+(164, 13, 56, '-KE8NmtTlPk', 'After Midnight', 'Chappell Roan', 205, 'Angie'),
+(165, 13, 57, 'olxdCY7hHEw', 'Coffee', 'Chappell Roan', 206, 'Angie'),
+(166, 13, 58, 'kWLai0XoZmg', 'Super Graphic Ultra Modern Girl', 'Chappell Roan', 188, 'Angie'),
+(167, 13, 59, '1mbbr-cJsrk', 'HOT TO GO!', 'Chappell Roan', 185, 'Angie'),
+(168, 13, 60, '7hVIf9YD6Vk', 'My Kink Is Karma', 'Chappell Roan', 223, 'Angie'),
+(169, 13, 61, 'EqUHnojFH5Y', 'Picture You', 'Chappell Roan', 187, 'Angie'),
+(170, 13, 62, 'E9sngJmXijQ', 'Kaleidoscope', 'Chappell Roan', 223, 'Angie'),
+(171, 13, 63, 'vp6XdbG3AhA', 'Pink Pony Club', 'Chappell Roan', 259, 'Angie'),
+(172, 13, 64, 'GcXlN7meclE', 'California', 'Chappell Roan', 211, 'Angie'),
+(173, 13, 65, 'xjBKcdFU3Hs', 'Guilty Pleasure', 'Chappell Roan', 225, 'Angie'),
+(174, 13, 66, 'Qam5A9lG-wc', 'The Subway', 'Chappell Roan', 252, 'Angie'),
+(175, 13, 67, 'vvLxo7h12PQ', 'Kick Back from Chainsaw Man', 'Kotoband;Piper', 86, 'Angie'),
+(176, 13, 68, 'HqemAG6hTvQ', 'Idol from Oshi no Ko', 'Kotoband;Misty M.', 213, 'Angie'),
+(177, 13, 69, 'L9uj2XChyBI', 'Headlock', 'Imogen Heap', 216, 'Angie'),
+(178, 13, 70, 'XWX_j3b9ZeE', 'two', 'bbno$', 137, 'Angie'),
+(179, 13, 71, 'gP9PkttPC10', 'Promised Land from Pichi Pichi Pitch', 'Kotoband;Misty M.', 104, 'Angie'),
+(180, 13, 72, 'uHTZ1BmK6KA', 'Secret Base from AnoHana', 'Kotoband;Misty M.;Hannah B.;Ariadna G.', 180, 'Angie'),
+(181, 13, 73, 'zVrHCm58N-o', 'To Your Oblivion', 'Mili', 262, 'Angie'),
+(182, 13, 74, 'wt4af_R6iJk', 'Duvet', 'bôa', 204, 'Angie'),
+(183, 13, 75, '0oad1M3SpzI', 'Butcher Vanity - Cover Español', 'Miree', 191, 'Angie'),
+(184, 13, 76, 'k5mX3NkA7jM', 'Mary On A Cross', 'Ghost', 245, 'Angie'),
+(185, 13, 77, 'wLaDksDOcE4', 'Anthems For A Seventeen Year-Old Girl', 'Broken Social Scene', 271, 'Angie'),
+(186, 13, 78, '3rSao4unXqc', 'Calculation Theme', 'Metric', 212, 'Angie'),
+(187, 13, 79, 'nmbiBVPe5bY', 'Strategy', 'TWICE', 167, 'Angie'),
+(188, 13, 80, 'pAIkCINLMHA', 'Bathroom Bitch', 'HOLYCHILD', 176, 'Angie'),
+(189, 13, 81, 'dOrszUZS-M8', 'I Like You Best', 'Ella Red', 163, 'Angie'),
+(190, 13, 82, '_UqGrwCbxVI', 'JUST BE COMPETENT', 'r u s s e l b u c k', 157, 'Angie'),
+(191, 13, 83, '9OMh9iZEhwI', 'Smile', 'Dami Im', 183, 'Angie'),
+(192, 13, 84, 'bDpi8EdPMhU', 'JOYRIDE.', 'Kesha', 150, 'Angie'),
+(193, 13, 85, 'b2Bb4FT1LdE', 'Unavailable (Demo Version)', 'Mike Adams;Vincent Russo', 195, 'Angie'),
+(194, 13, 86, 'ViLOklZmQCI', 'favorite apple', 'The Two Lips', 149, 'Angie'),
+(195, 13, 87, 'edirMh-BzY4', 'Ripples of Past Reverie - English Ver.', 'HOYO-MiX;Cassie Wei', 187, 'Angie'),
+(196, 13, 88, 'cVL4bRjA6X0', 'Peach Pit and Cyanide', 'Mili', 199, 'Angie'),
+(197, 13, 89, 'zsBBWBEZkFQ', 'MIRROR', 'Ado', 180, 'Angie'),
+(198, 13, 90, 'Jx7nt0qeLF8', 'What the Ripple Sees', 'Mili', 259, 'Angie'),
+(199, 13, 91, 'dnPe8dSPyWw', 'Cubibibibism', 'OMGkawaiiAngel;NEEDY GIRL OVERDOSE;Haraguchi Sasuke', 204, 'Angie'),
+(200, 13, 92, 'mdceoIcWwFw', 'Shizumeru-Machi (Sinking Town) - New Yoeko ver.', 'Yoeko', 190, 'Angie'),
+(201, 13, 93, 'KJ402ScoUhc', 'Sinking Town', 'Dev1lHawk;Dev1lCat;xaviorthemachine', 179, 'Angie'),
+(202, 13, 94, 'KlTNKOnfXFk', 'Static', 'FLAVOR FOLEY', 244, 'Angie'),
+(203, 13, 95, 'uWMr16O_Aso', 'Teto the 31st (feat. KASANE TETO & Ui)', 'はろける;Kasane Teto;Ui', 139, 'Angie'),
+(204, 13, 96, 'SzkoFKIN50I', 'For the Record', 'Jonathan Groff;Jessie Shelton;36 Questions', 304, 'Angie'),
+(205, 13, 97, 'Zqk3eX4j_qc', 'Neon', 'ONE OK ROCK', 185, 'Angie'),
+(206, 13, 98, 'FhksmAd0O2w', 'Help I\'m Alive', 'Metric', 286, 'Angie'),
+(207, 13, 99, '2CV6aMhpTQs', 'POP IN 2 - ルビー Solo Ver.-', 'B小町;ルビー(CV:伊駒ゆりえ)', 267, 'Angie'),
+(208, 13, 100, 'pHkLpHayna0', 'SPAGHETTI', 'LE SSERAFIM;j-hope', 172, 'Angie'),
+(209, 13, 101, 'h0djuhl97Kw', 'SAIKAI', 'Mili', 324, 'Angie'),
+(210, 13, 102, '6f1-QF9jvBM', 'Anybody Have a Map?', 'Rachel Bay Jones;Jennifer Laura Thompson', 147, 'Angie'),
+(211, 13, 103, 'kfnMvo87fQU', 'Waving Through A Window', 'Ben Platt;Original Broadway Cast of Dear Evan Hansen', 236, 'Angie'),
+(212, 13, 104, 'xkdPRcY0k4o', 'For Forever', 'Ben Platt', 302, 'Angie'),
+(213, 13, 105, '7F6e-dFQHxI', 'Requiem', 'Laura Dreyfuss;Michael Park;Jennifer Laura Thompson', 313, 'Angie'),
+(214, 13, 106, 'X1JpwegsMAM', 'If I Could Tell Her', 'Ben Platt;Laura Dreyfuss', 249, 'Angie'),
+(215, 13, 107, 's1Evnzkez7o', 'Only Us', 'Laura Dreyfuss;Ben Platt', 224, 'Angie'),
+(216, 13, 108, 'XXvHUqR0X1s', 'Good For You', 'Rachel Bay Jones;Kristolyn Lloyd;Will Roland;Ben Platt', 185, 'Angie'),
+(217, 13, 109, 'XCf-xT7hUsE', 'Fight for Me', 'Barrett Wilbert Weed', 155, 'Angie'),
+(218, 13, 110, 'icBDYkfxpMs', 'Looping the Rooms (feat. HATSUNE MIKU)', 'rusino;Hatsune Miku', 134, 'Angie'),
+(219, 13, 111, 'k4MMkrXLX2g', 'Would You Fall in Love with Me Again', 'Jorge Rivera-Herrans;Anna Lea', 346, 'Angie'),
+(220, 13, 112, 'oB8lqgO9e24', 'Warrior of the Mind', 'Jorge Rivera-Herrans;Teagan Earley;Cast of EPIC: The Musical', 208, 'Angie'),
+(221, 13, 113, 'hbuNxmAXdNk', 'Human', 'FLAVOR FOLEY', 268, 'Angie'),
+(222, 13, 114, 'EpbhsrYuQJ4', 'Queen of Venus', 'FLAVOR FOLEY', 268, 'Angie'),
+(223, 13, 115, '9x19_Pjgcvc', 'Remember', 'yuigot;Yachiyo Runami(cv.Saori Hayami)', 233, 'Angie'),
+(224, 13, 116, '4BCUQVaYTbQ', 'Starry Sea', 'Aqu3ra;Yachiyo Runami(cv.Saori Hayami)', 253, 'Angie'),
+(225, 13, 117, 'mgoCQfFqIVk', 'Watashiwa Watashino Kotoga Suki', 'HoneyWorks;Kaguya(cv.Yuko Natsuyoshi)', 251, 'Angie'),
+(226, 13, 118, 'laOwIwY_dWg', 'World is Mine - Kaguya&Yachiyo Runami ver. - CPK! Remix', 'ryo (supercell);Kaguya(cv.Yuko Natsuyoshi);Yachiyo Runami(cv.Saori Hayami)', 297, 'Angie'),
+(227, 13, 119, 'HvgX44ESvHQ', 'I\'m Your Man', 'Mitski', 210, 'Angie'),
+(228, 13, 120, '2ROnuyg_YbA', 'He\'s My Man', 'Luvcat', 233, 'Angie'),
+(229, 13, 121, '3mvB60E8Hto', 'Melt - Kaguya ver. - CPK! Remix', 'ryo (supercell);Kaguya(cv.Yuko Natsuyoshi)', 265, 'Angie'),
+(230, 13, 122, '075raB27CW8', 'ray - Cosmic Princess Kaguya! Version', 'Kaguya(cv.Yuko Natsuyoshi);Yachiyo Runami(cv.Saori Hayami);TAKU INOUE', 302, 'Angie'),
+(231, 13, 123, 'jsqH5MWc0RE', 'Reply', 'kz;Kaguya(cv.Yuko Natsuyoshi)', 308, 'Angie'),
+(232, 13, 124, 'h9c0gegwcM0', 'A Symphony of Moments', '40mP;Kaguya(cv.Yuko Natsuyoshi)', 263, 'Angie'),
+(233, 13, 125, 'IFMLSODxS5U', 'Happy Synthesizer - Cover', 'Kaguya(cv.Yuko Natsuyoshi);yuigot', 105, 'Angie'),
+(234, 13, 126, 'kjQCuv3vHbw', 'Ex-Otogibanashi', 'ryo (supercell);Kaguya(cv.Yuko Natsuyoshi);Yachiyo Runami(cv.Saori Hayami)', 219, 'Angie'),
+(235, 13, 127, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 225, 'Angie'),
+(236, 13, 128, 'pEnGrOGNa8A', 'Loser', 'Sunday Cruise', 195, 'Angie'),
+(237, 13, 129, 'wqPdeT6Jpdg', 'Wet', 'Dazey and the Scouts', 172, 'Angie'),
+(238, 13, 130, 'nbcCG7PkI18', 'Shut Up and Dance', 'WALK THE MOON', 199, 'Angie'),
+(239, 13, 131, 'xO_12-FBrMk', 'Too Little, Too Late', 'Laufey', 234, 'Angie'),
+(240, 13, 132, '84UfQLzYWws', 'String Theory', 'vally.exe;SoundCirclet', 219, 'Angie'),
+(241, 13, 133, 'acnx9QFbAp4', 'TIE HUA FEI', 'Mili;Monster Siren Records', 262, 'Angie'),
+(242, 13, 134, 'YTspU_WM6rE', 'Doin Time - Sped Up', 'Hiko', 181, 'Angie'),
+(243, 13, 135, '5-I1lT6Jbdo', 'Harpy Hare', 'Yaelokre', 180, 'Angie'),
+(244, 13, 136, 'Pj6ntDEEfeE', 'The Red Means I Love You', 'Madds Buckley', 238, 'Angie'),
+(245, 13, 137, 'Jr-vAwJLUJc', 'Wait a Minute! (Sped Up) - I Think I Left My Consciousness in the 6Th Dimension', 'Hiko', 116, 'Angie'),
+(246, 13, 138, '-PgImeQfrEs', 'The Lighthouse', 'Halsey', 273, 'Angie'),
+(247, 13, 139, 'UZton86SuOg', 'Material Girl', 'Madonna', 233, 'Angie'),
+(248, 13, 140, 'jzHtHAg2igc', 'Telepathy', 'BTS', 202, 'Angie'),
+(249, 13, 141, 'xUjpCR3qiz0', 'Porque te vas', 'Jeanette', 205, 'Angie'),
+(250, 13, 142, 'HcYN5Gn5IuM', 'コネクト', 'ClariS', 272, 'Angie'),
+(251, 13, 143, '_sOKkON_UnQ', '4:00A.M.', 'Taeko Onuki', 337, 'Angie'),
+(252, 13, 144, 'qNORzJtsohg', 'Running up that Hill (Sped Up)', 'Sped Up Mage;Syrex', 108, 'Angie'),
+(253, 13, 145, 'BGztdO-GWsw', 'The Moon Will Sing', 'The Crane Wives', 219, 'Angie'),
+(254, 13, 146, 'mZscJ1YkGR0', 'Would You Fall in Love with Me Again', 'Annapantsu;Chloe Breez', 321, 'Angie'),
+(255, 13, 147, 'LmZD-TU96q4', 'IRIS OUT', 'Kenshi Yonezu', 153, 'Angie'),
+(256, 13, 148, 'o6flxGrbmCw', 'Fame is a Gun', 'Addison Rae', 183, 'Angie'),
+(257, 13, 149, 'PFioWmokVgc', 'One Way Or Another - Remastered 2001', 'Blondie', 215, 'Angie'),
+(258, 13, 150, 'R1Ch963iuek', 'Until Our Sky Is Blue', 'Mili', 236, 'Angie'),
+(259, 13, 151, '8LvAiJYKoSM', 'Hayloft', 'Mother Mother', 182, 'Angie'),
+(260, 13, 152, 'x6yGHOpIe5c', 'Burning Pile', 'Mother Mother', 262, 'Angie'),
+(261, 13, 153, 'LTEZm5AYslw', 'Hayloft II', 'Mother Mother', 215, 'Angie'),
+(262, 13, 154, 'nXHoSuUhDEc', 'Arms Tonite', 'Mother Mother', 217, 'Angie'),
+(263, 13, 155, '4o0WYiK52Dg', 'Body', 'Mother Mother', 214, 'Angie'),
+(264, 13, 156, 'Dao5P8Mqkzw', 'Wrecking Ball', 'Mother Mother', 194, 'Angie'),
+(265, 13, 157, 'artn9fErRp8', 'Problems', 'Mother Mother', 208, 'Angie'),
+(266, 13, 158, 'GwSSrwryxN0', 'Impostor Syndrome', 'Sidney Gish', 294, 'Angie'),
+(267, 13, 159, 'isZbEoAzvLg', 'Dr. Sunshine Is Dead', 'Will Wood and the Tapeworms', 287, 'Angie'),
+(268, 13, 160, '8Bu3N-2tA_0', 'Impacto', 'Enjambre;Denise Gutiérrez', 238, 'Angie'),
+(269, 13, 161, 'SgnSMftcFN0', 'I / Me / Myself', 'Will Wood', 292, 'Angie'),
+(270, 13, 162, 'WuzIw73pmSc', 'My Ordinary Life', 'The Living Tombstone', 231, 'Angie'),
+(271, 13, 163, '1v9q8piZnLc', 'I Can\'t Fix You (feat. Crusher-P)', 'The Living Tombstone;Crusher-P', 279, 'Angie'),
+(272, 13, 164, 'a2jGt3VMlcM', 'The Hand', 'Annabelle Dinda', 191, 'Angie'),
+(273, 13, 165, '6HXuC_HCNjw', 'Savages', 'That Handsome Devil', 289, 'Angie'),
+(274, 13, 166, 'WIKqgE4BwAY', 'Gimme Chocolate!!', 'BABYMETAL', 243, 'Angie'),
+(275, 13, 167, '0iVlSNpq8i8', 'BIRDBRAIN', 'Jamie Paige;OK Glass', 256, 'Angie'),
+(276, 13, 168, 'tPgngMS9Yi0', 'My Clematis (VIVINOS - ALNST Original Soundtrack Part.1)', 'Rubyeye', 232, 'Angie'),
+(277, 13, 169, 'eSW2LVbPThw', 'ラビットホール', 'DECO*27', 162, 'Angie'),
+(278, 13, 170, 'o3Z2k-bhoUo', 'Blink Gone (VIVINOS - ALNST Original Soundtrack Part.8)', 'BL8M;AKUGETSU', 189, 'Angie'),
+(279, 13, 171, 'x1UsJ2Znjk0', 'Crime And Punishment', 'Ado', 290, 'Angie'),
+(280, 13, 172, 'LaEgpNBt-bQ', 'M@GICAL CURE! LOVE SHOT! (feat. Hatsune Miku)', 'SAWTOWNE;Hatsune Miku', 217, 'Angie'),
+(281, 13, 173, '1-PMBxtN4N0', 'Black Sorrow (VIVINOS - ALNST Original Soundtrack Part.4)', 'PARK BYEONG HOON', 194, 'Angie'),
+(282, 13, 174, 'WvKd91KwTKM', 'Life We Sow', '魔法使いの約束;Mili', 209, 'Angie'),
+(283, 13, 175, 'L8Jtgj8j4tY', 'Skin-Deep Comedy', '魔法使いの約束;Mili', 322, 'Angie'),
+(284, 13, 176, 'emVNCcwCtuc', 'I Am a Fluff (360 Reality Audio)', 'Mili', 267, 'Angie'),
+(285, 13, 177, 'Sc3SQyM-Gvg', 'Sideshow Duckling', 'Mili', 230, 'Angie'),
+(286, 13, 178, '3UJ_mERvw3A', 'Within (Goblin Slayer Episode Twelve inserted song)', 'Mili', 164, 'Angie'),
+(287, 13, 179, 'nf5faU1fh1M', 'Excalibur', 'Mili', 178, 'Angie'),
+(288, 13, 180, '-vlEd1Pbdxk', 'world.search (you) ;', 'Mili', 295, 'Angie'),
+(289, 13, 181, '6DZjCgxbx5U', 'Rubber Human', 'Mili', 144, 'Angie'),
+(290, 13, 182, 'cbM2ywsJZIo', 'Pass on (Vocal. Gregor)', 'ProjectMoon', 196, 'Angie'),
+(291, 13, 183, 'zD037KtLniI', 'A Turtle\'s Heart - Key Ingredient ver.', 'Mili', 175, 'Angie'),
+(292, 13, 184, 'ESx_hy1n7HA', 'world.execute(me); - Key Ingredient ver.', 'Mili', 212, 'Angie'),
+(293, 13, 185, '0r2GNWvkd4U', 'Iron Lotus - Key Ingredient ver.', 'Mili', 228, 'Angie'),
+(294, 13, 186, '2wSY55e3GxI', 'RTRT - Key Ingredient ver.', 'Mili', 209, 'Angie'),
+(295, 13, 187, 'GIA3V_buzI4', 'TOKYO NEON - Key Ingredient ver.', 'Mili', 253, 'Angie'),
+(296, 13, 188, 'a2O-UrADXwE', 'Rubber Human - Key Ingredient ver.', 'Mili', 148, 'Angie'),
+(297, 13, 189, '8i0UdD-xSRw', 'String Theocracy - Key Ingredient ver.', 'Mili', 170, 'Angie'),
+(298, 13, 190, 'deQIVqwPiE8', 'Ga1ahad and Scientific Witchery - Key Ingredient ver.', 'Mili', 223, 'Angie'),
+(299, 13, 191, 'v2nI3ZMvRCg', 'Lemonade - Key Ingredient ver.', 'Mili', 171, 'Angie'),
+(300, 13, 192, 'DBBCZWkVZLI', 'Summoning 101 - Key Ingredient ver.', 'Mili', 174, 'Angie'),
+(301, 13, 193, 'ZlyVDiX8VdQ', 'From a Place of Love - Key Ingredient ver.', 'Mili', 205, 'Angie'),
+(302, 13, 194, 'BQsUJfR58X0', 'Chocological - Key Ingredient ver.', 'Mili', 241, 'Angie'),
+(303, 13, 195, 'ctiZlAhQmkw', 'Main Theme', 'Binary Haze Interactive;Mili', 65, 'Angie'),
+(304, 13, 196, 'RMRK2A6bXrs', 'Harmonious', 'Binary Haze Interactive;Mili', 188, 'Angie'),
+(305, 13, 197, 'Le5nXTvNYJc', 'Nine Point Eight', 'Mili', 192, 'Angie'),
+(306, 13, 198, 'KGJ02115vNg', 'Holy and Darkness 1', 'arai tasuku;Mili', 599, 'Angie'),
+(307, 13, 199, 'JHY0PYZXvfU', 'sustain++;', 'Mili', 361, 'Angie'),
+(308, 13, 200, 'JHY0PYZXvfU', 'sustain++;（ending ver.）～『攻殻機動隊 SAC_2045』エンディングテーマ～', 'Mili', 361, 'Angie'),
+(309, 13, 201, 'qfDhiBUNzwA', 'Sloth', 'Mili', 174, 'Angie'),
+(310, 13, 202, 'lGIXSbT5FvY', 'Mob Mentality', 'Mili', 62, 'Angie'),
+(311, 13, 203, 'JdcHwbZ-l7Q', 'Though Our Paths May Diverge (Goblin Slayer Episode Seven inserted song)', 'Mili', 199, 'Angie'),
+(312, 13, 204, 'OboGTtdOUfw', 'Ocean Bby', 'Mili', 266, 'Angie'),
+(313, 13, 205, 'HrkFQAQyFGc', '雨と体液と匂い（ending ver.）～TVアニメ『グレイプニル』エンディングテーマ～', 'Mili', 299, 'Angie'),
+(314, 13, 206, 'bYIS0jAWOss', 'Monsters in the Woods', '魔法使いの約束;Mili', 221, 'Angie'),
+(315, 13, 207, 'u3k43z6fiMk', 'Gluttony', '魔法使いの約束;Mili', 220, 'Angie'),
+(316, 13, 208, 'z_byIUR43to', 'Whiteout', '魔法使いの約束;Mili', 213, 'Angie'),
+(317, 13, 209, 'jP1I33ic_YI', 'Main theme (feat. Cassie Wei)', 'Mili;Yamato Kasai;Cassie Wei', 144, 'Angie'),
+(318, 13, 210, 'z3Rz1BLk8Hc', 'Symbiosis (feat. Cassie Wei)', 'Mili;Yamato Kasai;Cassie Wei', 155, 'Angie'),
+(319, 13, 211, 'ATfX1e50v94', 'Dignity (feat. Cassie Wei)', 'Mili;Yamato Kasai;Cassie Wei', 137, 'Angie'),
+(320, 13, 212, 'kbj7CoHYcP0', 'Lily tree (feat. Cassie Wei)', 'Mili;Yamato Kasai;Cassie Wei', 197, 'Angie'),
+(321, 13, 213, 'bI3542HJRzY', 'CandyCookieChocolate', 'はろける', 169, 'Angie'),
+(322, 13, 214, 'THRtKGX-czY', 'An Unhealthy Obsession', 'The Blake Robinson Synthetic Orchestra', 193, 'Angie'),
+(323, 13, 215, 'fVE9rrbfCQ0', 'Blow My Brains Out', 'Tikkle Me', 222, 'Angie'),
+(324, 13, 216, 'vjBFftpQxxM', 'Butcher Vanity', 'Vane Lily;Jamie Paige;ricedeity', 186, 'Angie'),
+(325, 13, 217, '1xEfMnXyGkA', 'Language of the Lost', 'Riproducer', 251, 'Angie'),
+(326, 13, 218, 'BW5G7v5PqPc', 'Writing on the Wall', 'Will Stetson', 276, 'Angie'),
+(327, 13, 219, '0NCnDwv8_oE', 'Therefor you and me', 'si-o', 20, 'Angie'),
+(328, 13, 220, 'QFlCSMlpQIQ', 'The Vampire', 'Rachie', 195, 'Angie'),
+(329, 13, 221, '0T--URl-g_4', 'Writing On The Wall - ver. Alhaitham', 'kanalia', 271, 'Angie'),
+(330, 13, 222, '5NarVgDFNX0', 'アイドル', 'YOASOBI', 226, 'Angie'),
+(331, 13, 223, 'ESx_hy1n7HA', 'world.execute (me) ;', 'Mili', 212, 'Angie'),
+(332, 13, 224, 'Y2izxUyWjTU', 'Doin Time (Sped Up) - Evil, I\'ve Come to Tell You That She\'s Evil, Most Definitely', 'Hiko', 181, 'Angie'),
+(333, 13, 225, 'IcpzqZrpLVM', 'RTRT', 'Mili', 215, 'Angie'),
+(334, 13, 226, 'CocEMWdc7Ck', 'Shakira: Bzrp Music Sessions, Vol. 53/66', 'Bizarrap;Shakira', 218, 'Angie'),
+(335, 13, 227, 'wkJxbV1ZlE0', 'Rosa Pastel', 'Belanova', 186, 'Angie'),
+(336, 13, 228, '7mW4FUe_ySc', 'GOSSIP (feat. Tom Morello)', 'Måneskin;Tom Morello', 168, 'Angie'),
+(337, 13, 229, 'wvz97-lNPH8', 'Villano Antillano: Bzrp Music Sessions, Vol. 51/66', 'Bizarrap;Villano Antillano', 188, 'Angie'),
+(338, 13, 230, 'RtTYQuO1j6w', 'Necromantic', 'Akatsuki Records', 275, 'Angie'),
+(339, 13, 231, 'bnkjvpBigVY', 'Don', 'Miranda!;CA7RIEL', 197, 'Angie'),
+(340, 13, 232, 'wBivPsGuz7Y', 'Unholy', 'Lollia;Sleeping Forest', 164, 'Angie'),
+(341, 13, 233, 'XfTWgMgknpY', 'In Hell We Live, Lament (feat. KIHOW)', 'Mili;KIHOW', 225, 'Angie'),
+(342, 13, 234, 'd-nxW9qBtxQ', 'Ga1ahad and Scientific Witchery', 'Mili', 219, 'Angie'),
+(343, 13, 235, 'x6q41EnhPnU', 'Summoning 101', 'Mili', 176, 'Angie'),
+(344, 13, 236, '-DHcjEVm-l4', 'Gunners in the Rain', 'Mili', 228, 'Angie'),
+(345, 13, 237, 'Ly8QIZ0vZYE', 'Mushrooms', 'Mili', 230, 'Angie'),
+(346, 13, 238, 'WpE98Jn6dAY', 'Sl0t', 'Mili', 290, 'Angie'),
+(347, 13, 239, 'Q2XJNYVOaok', 'Extension of You', 'Mili', 292, 'Angie'),
+(348, 13, 240, 'VkdrrxR96d8', 'Mirror Mirror', 'Mili', 197, 'Angie'),
+(349, 13, 241, 'zlKAAAW2NxU', 'Witch\'s Invitation', 'Mili', 305, 'Angie'),
+(350, 13, 242, '_V17JN76uxc', 'Ancient Dreams in a Modern Land', 'MARINA', 204, 'Angie'),
+(351, 13, 243, 'Ie0Ub3-Dx8Y', 'Teen Idle', 'MARINA', 254, 'Angie'),
+(352, 13, 244, 'F1JTlnHGa90', 'Venus Fly Trap', 'MARINA', 182, 'Angie'),
+(353, 13, 245, 'Ks3YoKqJnfI', 'Romeo and Cinderella', 'Rachie;PalmMute', 298, 'Angie'),
+(354, 13, 246, 'KoV4kKMwz5k', 'Birth of a new witch (Full Size) [feat. Zakuro Motoki]', 'Luck Ganriki;Zakuro Motoki', 300, 'Angie'),
+(355, 13, 247, 'j0gDBT_Kow4', 'Birthday Kid', 'Mili', 213, 'Angie'),
+(356, 13, 248, 'RbYva7AE8Aw', 'Victim', 'Mili', 231, 'Angie'),
+(357, 13, 249, 'dSx77g4yIek', 'ヒーロー', 'supercell', 312, 'Angie'),
+(358, 13, 250, 'wVGbab8tpRA', '星が瞬くこんな夜に 〜ゲームVer.〜', 'supercell', 267, 'Angie'),
+(359, 13, 251, 'tzmpAC7ddPo', 'Zydrate Anatomy', 'Paris Hilton;Alexa Vega;Terrance Zdunich', 204, 'Angie'),
+(360, 13, 252, '_PSjoVXFGAQ', 'Fly, My Wings', 'Mili', 195, 'Angie'),
+(361, 13, 253, 'bJieaH23524', 'Mortal With You', 'Mili', 233, 'Angie'),
+(362, 13, 254, 'nOj_A3aZxGs', 'String Theocracy', 'Mili', 175, 'Angie'),
+(363, 13, 255, 'xyx8DMlUAQ4', 'From a Place of Love', 'Mili', 182, 'Angie'),
+(364, 13, 256, 'lVLXJTubd9w', 'And Then is Heard No More', 'Mili', 177, 'Angie'),
+(365, 13, 257, 'In5Du5x6MZM', 'Iron Lotus', 'Mili', 240, 'Angie'),
+(366, 13, 258, 'aHUVqV5CO6w', 'Children of the City', 'Mili', 234, 'Angie'),
+(367, 13, 259, 'qh7CFsnfdpk', 'Gone Angels', 'Mili', 145, 'Angie'),
+(368, 13, 260, 'UqUH7LHMj50', 'Poems of a Machine', 'Mili', 274, 'Angie'),
+(369, 13, 261, 'Dca9gJyjoAg', 'Salt, Pepper, Birds, and the Thought Police', 'Mili', 244, 'Angie'),
+(370, 13, 262, 'v-zLO_cwijs', 'Red Dahlia', 'Mili', 138, 'Angie'),
+(371, 13, 263, 'S77Dfzzyf-c', 'Unidentified Flavourful Object', 'Mili', 245, 'Angie'),
+(372, 13, 264, 'NPoYb4mbiOg', 'Meatball Submarine', 'Mili', 192, 'Angie'),
+(373, 13, 265, 'p7sNIyP14X8', 'Vulnerability', 'Mili', 129, 'Angie'),
+(374, 13, 266, 'x0b9_Aq3o-Q', 'NENTEN', 'Mili', 190, 'Angie'),
+(375, 13, 267, '-n-iqXTztVQ', 'Bathtub Mermaid', 'Mili', 225, 'Angie'),
+(376, 13, 268, 'uGYk8nfIuKw', 'Cerebrite', 'Mili', 162, 'Angie'),
+(377, 13, 269, '0cvCwHXgyeI', 'Space Colony', 'Mili', 194, 'Angie'),
+(378, 13, 270, 'AN72_SVbETA', 'Utopiosphere -Platonism-', 'Mili', 236, 'Angie'),
+(379, 13, 271, 'Lbn3q0qe16Q', 'Painful Death for the Lactose Intolerant', 'Mili', 127, 'Angie'),
+(380, 13, 272, 'VkhEnvIy0yU', 'YUBIKIRI-GENMAN - special edit', 'Mili', 235, 'Angie'),
+(381, 13, 273, 'oOlWu15vzyE', 'Past the Stargazing Season', 'Mili', 295, 'Angie'),
+(382, 13, 274, 'oHQUUAcB0io', 'Colorful', 'Mili', 241, 'Angie'),
+(383, 13, 275, 'shC5MDtYpBU', 'Boys in Kaleidosphere', 'Mili', 94, 'Angie'),
+(384, 13, 276, 'tBYU9W1ezL0', 'Camelia', 'Mili', 282, 'Angie'),
+(385, 13, 277, 'sA5xYUGet2g', 'Vitamins (feat. world\'s end girlfriend)', 'Mili;World\'s End Girlfriend', 300, 'Angie'),
+(386, 13, 278, '_-9YVWH6YZI', 'Lemonade', 'Mili', 194, 'Angie'),
+(387, 13, 279, 'N5-h77JYOhE', 'Milk', 'Mili', 197, 'Angie'),
+(388, 13, 280, '-vlEd1Pbdxk', 'world.search (you) ;', 'Mili', 295, 'Angie'),
+(389, 13, 281, 'egSj8UlNjf4', 'Gertrauda', 'Mili', 126, 'Angie'),
+(390, 13, 282, 'Zj3-UToODGE', 'TOKYO NEON', 'Mili', 255, 'Angie'),
+(391, 13, 283, '7zj5wfAjF2Q', 'With a Billion Worldful of ', 'Mili;DE DE MOUSE', 205, 'Angie'),
+(392, 13, 284, '1qgOvHut_40', 'Every Other Ghost', 'Mili', 203, 'Angie'),
+(393, 13, 285, '0mzDohtbsdM', 'Fossil', 'Mili', 214, 'Angie'),
+(394, 13, 286, '6DZjCgxbx5U', 'Rubber Human', 'Mili', 144, 'Angie'),
+(395, 13, 287, 'nf5faU1fh1M', 'Excalibur', 'Mili', 178, 'Angie'),
+(396, 13, 288, '_8cMjlCnzZQ', 'Let the Maggots Sing', 'Mili', 267, 'Angie'),
+(397, 13, 289, 'LxduFWbbndE', 'Nine Point Eight -special edit-', 'Mili', 241, 'Angie'),
+(398, 13, 290, '1Hsj3oYhsbk', 'Sleep Talk Metropolis', 'Mili', 243, 'Angie'),
+(399, 13, 291, 'KMaQhPLCqWY', 'Purgatorium', 'お月さま交響曲', 151, 'Angie'),
+(400, 13, 292, 'oPgsK0oKfks', 'LUVORATORRRRRY!', 'Reol', 204, 'Angie'),
+(401, 13, 293, '7aJYvuiOZac', 'ワンダーランド地下', '香椎モイミ', 155, 'Angie'),
+(402, 13, 294, 'XFPdJM8YQoA', 'Abnormality Dancin\' Girl', 'MICCHI;Drazically', 208, 'Angie'),
+(403, 13, 295, '7gmGYDxlg20', 'Six Feet Under', 'Vane Lily', 206, 'Angie'),
+(404, 13, 296, '-H2PCK7DJsQ', 'サラマンダー', 'DECO*27', 157, 'Angie'),
+(405, 13, 297, 'AS4q9yaWJkI', '砂の惑星 feat.初音ミク', 'hachi', 239, 'Angie'),
+(406, 13, 298, 'dy90tA3TT1c', 'Monster', 'YOASOBI', 208, 'Angie'),
+(407, 13, 299, 'yZkPe7TEuyk', 'FIRE!!!', 'Vane Lily;Jamie Paige', 261, 'Angie'),
+(408, 13, 300, 'dSw8CucthGc', 'meltdown', 'iroha(sasaki)', 336, 'Angie'),
+(409, 13, 301, 'SZcilh-cZXE', 'ワールドイズマイン-初音ミク「マジカルミライ 2021」Live- (feat. 初音ミク)', 'ryo (supercell);Hatsune Miku', 254, 'Angie'),
+(410, 13, 302, 'Ka1vNzmD6JE', 'Vampire Empire', 'Big Thief', 193, 'Angie'),
+(411, 13, 303, '5e4INH1yr9c', 'Nothing\'s New', 'Rio Romeo', 209, 'Angie'),
+(412, 13, 304, 'GHWfTwnBA_M', '痛いの痛いの飛んでいけ', 'TOOBOE', 60, 'Angie'),
+(413, 13, 305, 'wZlv3qDPfjk', 'MoeChakkaFire', 'issey', 156, 'Angie'),
+(414, 13, 306, 'dT5Ck6bXBu8', 'Don\'t', 'Azumi Takahashi;Lotus Juice;ATLUS Sound Team;ATLUS GAME MUSIC', 165, 'Angie'),
+(415, 13, 307, '5-I1lT6Jbdo', 'Harpy Hare', 'Yaelokre', 180, 'Angie'),
+(416, 13, 308, 'bDpi8EdPMhU', 'JOYRIDE', 'Kesha', 150, 'Angie'),
+(417, 13, 309, 'KawV_oK6lIc', 'Grown-up\'s Paradise', 'Mili;Monster Siren Records', 254, 'Angie'),
+(418, 13, 310, 'AX3Bsiq-13k', 'Kiss and Make Up', 'Dua Lipa;BLACKPINK', 189, 'Angie'),
+(419, 13, 311, '2ByCR2DRids', 'The Only Heartbreaker', 'Mitski', 185, 'Angie'),
+(420, 13, 312, 't6hN8nGcpY8', 'Working for the Knife', 'Mitski', 159, 'Angie'),
+(421, 13, 313, 'mHKTdlUyyko', 'Francis Forever', 'Mitski', 150, 'Angie'),
+(422, 13, 314, 'AGCL3icu9dk', 'Me and My Husband', 'Mitski', 137, 'Angie'),
+(423, 13, 315, '0Szr5Dcwn4Y', 'Passion', 'PinkPantheress', 138, 'Angie'),
+(424, 13, 316, '3iAXclHlTTg', '脳裏上のクラッカー', 'ZUTOMAYO', 269, 'Angie'),
+(425, 13, 317, 'dcOwj-QE_ZE', '暗く黒く', 'ZUTOMAYO', 258, 'Angie'),
+(426, 13, 318, 'UnIhRpIT7nc', 'ラグトレイン', 'INABAKUMORI', 252, 'Angie'),
+(427, 13, 319, 'DeKLpgzh-qQ', 'ロストアンブレラ', 'INABAKUMORI', 203, 'Angie'),
+(428, 13, 320, 'qJhb43oLbDs', 'hand crushed by a mallet', '100 gecs;Laura Les;Dylan Brady', 127, 'Angie'),
+(429, 13, 321, 'LvQIZ1IqyFc', 'Remember My Name', 'Mitski', 135, 'Angie'),
+(430, 13, 322, '3vjkh-acmTE', 'Washing Machine Heart', 'Mitski', 129, 'Angie'),
+(431, 13, 323, 'fdPL_dToT4k', 'Pink in the Night', 'Mitski', 137, 'Angie'),
+(432, 13, 324, 'TbsBEb1ZxWA', 'Lone Digger', 'Caravan Palace', 231, 'Angie'),
+(433, 13, 325, 'glbmprjG3zw', 'Hai Yorokonde', 'Kocchi no Kento', 161, 'Angie'),
+(434, 13, 326, 'kFZKgf5WG0g', 'Absolute Territory', 'Ken Ashcorp', 269, 'Angie'),
+(435, 13, 327, 'i2OOruTFi80', 'Califórnica', 'La Gusana Ciega', 210, 'Angie'),
+(436, 13, 328, '4A3poKE6qnM', 'Everything at Once', 'Lenka', 158, 'Angie'),
+(437, 13, 329, 'G_JfKOjwzwo', 'Through Patches of Violet', 'Mili', 233, 'Angie'),
+(438, 13, 330, 'XVsg27hh2S4', 'Hope Is the Thing With Feathers', 'Robin;HOYO-MiX;Chevy', 230, 'Angie'),
+(439, 13, 331, 'npyiiInMA0w', 'Sway to My Beat in Cosmos', 'Robin;HOYO-MiX;Chevy', 165, 'Angie'),
+(440, 13, 332, '_57ZW9kq1X8', 'Candy Store', 'Jessica Keenan Wynn;Alice Lee;Elle McLemore', 173, 'Angie'),
+(441, 13, 333, 'GAOxJv96VE8', 'Freeze Your Brain', 'Ryan McCartan;Barrett Wilbert Weed', 171, 'Angie'),
+(442, 13, 334, 'Er6cBpR63XA', 'Seventeen', 'Barrett Wilbert Weed;Ryan McCartan', 192, 'Angie'),
+(443, 13, 335, 'qigbBgDapTc', 'Deep In Abyss - Anime Intro Version', 'Miyu Tomita;Mariye Ise', 223, 'Angie'),
+(444, 13, 336, 'OgDllcyrGuc', 'ENDLESS EMBRACE', 'MYTH & ROID', 328, 'Angie'),
+(445, 13, 337, 'vtJscsqrhL4', 'THE SHAPE OF', '安月名莉子', 213, 'Angie'),
+(446, 13, 338, 'uJxaUi9f5vo', 'Duetting Solo', 'Mili', 155, 'Angie'),
+(447, 13, 339, '2Tl70c6-m3I', 'A Guy That I\'d Kinda Be Into', 'Stephanie Hsu;\'Be More Chill\' Ensemble;Be More Chill', 165, 'Angie'),
+(448, 13, 340, 'r105CzDvoo0', 'Anytime Anywhere', 'milet', 261, 'Angie'),
+(449, 13, 341, 'dddHFJ-1JNk', 'La Primera Versión', 'La Oreja de Van Gogh', 264, 'Angie'),
+(450, 13, 342, 'Pj6ntDEEfeE', 'The Red Means I Love You', 'Madds Buckley', 238, 'Angie'),
+(451, 13, 343, 'cqwcH_WIP-8', 'It\'s Going Down Now', 'Azumi Takahashi;Lotus Juice;ATLUS Sound Team;ATLUS GAME MUSIC', 183, 'Angie'),
+(452, 13, 344, 'AWdiMzS1cEk', 'El Ultimo Vals', 'La Oreja de Van Gogh', 205, 'Angie'),
+(453, 13, 345, 'Jr-vAwJLUJc', 'Wait a Minute! (Sped Up) - I Think I Left My Consciousness in the 6Th Dimension', 'Hiko', 116, 'Angie'),
+(454, 13, 346, 'f-4olQU-YBo', 'Sand Planet', 'Master Andross;JubyPhonic', 266, 'Angie'),
+(455, 13, 347, 'DVA83bnFbu4', 'Between Two Worlds', 'Mili', 297, 'Angie'),
+(456, 13, 348, '-PgImeQfrEs', 'The Lighthouse', 'Halsey', 273, 'Angie'),
+(457, 13, 349, 'zDQ1rWjzgoo', 'Elevator Man', 'Oingo Boingo', 271, 'Angie'),
+(458, 13, 350, 'gq1eCtGCowM', 'Identity', 'Sarina', 273, 'Angie'),
+(459, 13, 351, 'fLzU21ltH4U', 'No_se_ve.mp3', 'Emilia;LUDMILLA;ZECCA', 206, 'Angie'),
+(460, 13, 352, 'ld3p2BbUwO4', 'Pasarela', 'Daddy Yankee', 200, 'Angie'),
+(461, 13, 353, 'cU-8jnh57GY', 'La Noche De Los Dos', 'Daddy Yankee;Natalia Jiménez', 224, 'Angie'),
+(462, 13, 354, 'LEbsx5sYZ3s', 'Versos Perversos', 'Lil Bokeron', 127, 'Angie'),
+(463, 13, 355, '-Qn_yN4g8IM', 'The Vampire', 'DECO*27', 178, 'Angie'),
+(464, 13, 356, 'OIBODIPC_8Y', '勇者', 'YOASOBI', 204, 'Angie'),
+(465, 13, 357, 'gXfa8PwDP9Y', 'Bugambilia', 'Nasa Histoires', 190, 'Angie'),
+(466, 13, 358, '_ypjBAIz0EQ', 'Step On Me', 'The Cardigans', 230, 'Angie'),
+(467, 13, 359, 'GLg2352T_vc', 'Lovefool', 'The Cardigans', 197, 'Angie'),
+(468, 13, 360, 'UZton86SuOg', 'Material Girl', 'Madonna', 233, 'Angie'),
+(469, 13, 361, 'skH-wooEasg', 'GIVE ME RICE', 'Mili', 187, 'Angie'),
+(470, 13, 362, '3GcgxkZuDjs', 'Fushicho', 'Mili', 228, 'Angie'),
+(471, 13, 363, 'RWX8NRIOf64', 'Opium', 'Mili', 184, 'Angie'),
+(472, 13, 364, 'Hy0bdQpEGPI', 'Ikutoshitsuki', 'Mili', 209, 'Angie'),
+(473, 13, 365, 'apaJaq9WBUQ', 'DK', 'Mili', 150, 'Angie'),
+(474, 13, 366, 'et7QuZPSC_U', 'Bulbel', 'Binary Haze Interactive;Mili', 206, 'Angie'),
+(475, 13, 367, 'JnB0BrnZj2w', 'Rosetta', 'Mili', 181, 'Angie'),
+(476, 13, 368, '7mIUHWR6vIc', 'Chocological', 'Mili', 261, 'Angie'),
+(477, 13, 369, 'eCm--tb5SKg', 'Utopiosphere', 'Mili', 133, 'Angie'),
+(478, 13, 370, 'vvc0wA5XYaQ', 'Sacramentum:Unaccompanied Hymn for Torino', 'Mili', 209, 'Angie'),
+(479, 13, 371, 'XmaZv4RuzY8', 'A Turtle\'s Heart', 'Mili', 183, 'Angie'),
+(480, 13, 372, 'UAsjM8kLvuE', 'Mitsubachi', 'Mili', 179, 'Angie'),
+(481, 13, 373, 'AlP5g4C7xG0', 'Static', 'Mili', 214, 'Angie'),
+(482, 13, 374, 'IYiHNzFoA8g', 'My Creator', 'Mili', 193, 'Angie'),
+(483, 13, 375, 'L8Jtgj8j4tY', 'Skin-Deep Comedy', 'Promise of wizard;Mili', 322, 'Angie'),
+(484, 13, 376, 'lkda0SYeZbA', 'Dandelion Girls, Dandelion Boys', 'Mili', 174, 'Angie'),
+(485, 13, 377, '7z4WJAEG3u8', 'Rightfully (TV Animation Goblin Slayer opening)', 'Mili', 211, 'Angie'),
+(486, 13, 378, '92E0X59wzeg', 'Compass', 'Mili', 169, 'Angie'),
+(487, 13, 379, 'Wykhe7OgZeA', 'Paper Bouquet', 'Mili', 209, 'Angie'),
+(488, 13, 380, 'DVA83bnFbu4', 'Between Two Worlds - Realm of Darkness', 'Mili', 297, 'Angie'),
+(489, 13, 381, 'AlP5g4C7xG0', 'Static', 'Mili', 214, 'Angie'),
+(490, 13, 382, 'tLQLa6lM3Us', 'Entertainment -Goblin Slayer II Opening Theme-', 'Mili', 181, 'Angie'),
+(491, 13, 383, 'Js2iTjf9lRg', 'Phantomcat of Meowloween', 'Mili', 165, 'Angie'),
+(492, 13, 384, 'q0qU9iTOX14', 'Petrolea', 'Mili', 261, 'Angie'),
+(493, 13, 385, 'xkaF_Ox6FZc', 'Imagined Flight', 'Mili', 211, 'Angie'),
+(494, 13, 386, 'In5Du5x6MZM', 'Iron Lotus', 'Mili', 240, 'Angie'),
+(495, 13, 387, 'bLRq4Dxs4HI', 'War of Shame', 'Mili', 175, 'Angie'),
+(496, 13, 388, 'q3Vj8fnq51M', 'Cast Me a Spell', 'Promise of wizard;Mili', 140, 'Angie'),
+(497, 13, 389, 'jvFRCD9PplE', 'Dancing Ghost\'s Ball Jointed Darling', 'Mili', 194, 'Angie'),
+(498, 13, 390, 'XfTWgMgknpY', 'In Hell We Live, Lament - Let\'s Lament', 'Mili;KIHOW', 225, 'Angie'),
+(499, 13, 391, '8nYhNlj8XPI', 'Between Two Worlds - Let\'s Lament', 'Mili', 363, 'Angie'),
+(500, 13, 392, 'xyx8DMlUAQ4', 'From a Place of Love', 'Mili', 182, 'Angie'),
+(501, 13, 393, '7z4WJAEG3u8', 'Rightfully (TV Animation Goblin Slayer opening)', 'Mili', 211, 'Angie'),
+(502, 13, 394, 'eSW2LVbPThw', 'ラビットホール', 'DECO*27', 162, 'Angie'),
+(503, 13, 395, 'C11FEkBaGg8', 'Above and Beyond', 'Riproducer', 297, 'Angie'),
+(504, 13, 396, 'khNi_6PnvaE', 'The Fox\'s Wedding', 'MASA WORKS DESIGN', 248, 'Angie'),
+(505, 13, 397, '5NarVgDFNX0', 'Idol', 'YOASOBI', 226, 'Angie'),
+(506, 13, 398, 'C-7TIDIKc98', 'ボルテッカー', 'DECO*27', 153, 'Angie'),
+(507, 13, 399, 'MgNCjYXCxOc', 'Whisper Whisper Whisper', 'Azari', 125, 'Angie'),
+(508, 13, 400, 'qFow8LkHtlU', 'THE GREATEST LIVING SHOW', 'Itoki Hana;Toby Fox', 296, 'Angie'),
+(509, 13, 401, 'EDvS-lPPBGs', 'Chemtrails Over The Country Club', 'Lana Del Rey', 271, 'Angie'),
+(510, 13, 402, 'xtfXl7TZTac', 'Into The Night', 'YOASOBI', 262, 'Angie'),
+(511, 13, 403, 'Iu3ntUb2YwI', 'Alien Alien', 'Nayutalien', 184, 'Angie'),
+(512, 13, 404, 'ocAKhyWuawo', 'わたしのアール', 'WADATAKEAKI KurageP', 214, 'Angie'),
+(513, 13, 405, '-047ko4v05s', 'Washing Machine Heart', 'Mitski', 128, 'Angie'),
+(514, 13, 406, '11Qj2Tpkh0U', 'Nobody', 'Mitski', 193, 'Angie'),
+(515, 13, 407, 'CwGbMYLjIpQ', 'My Love Mine All Mine', 'Mitski', 138, 'Angie'),
+(516, 13, 408, 'XfMBdq5iFnw', 'I Bet on Losing Dogs', 'Mitski', 171, 'Angie'),
+(517, 13, 409, 'LvQIZ1IqyFc', 'Remember My Name', 'Mitski', 135, 'Angie'),
+(518, 13, 410, 'fdPL_dToT4k', 'Pink in the Night', 'Mitski', 137, 'Angie'),
+(519, 13, 411, '-KttTf9jyT8', 'Jobless Monday', 'Mitski', 127, 'Angie'),
+(520, 13, 412, 'WNvH7sUJM8U', 'Getting Even', 'SURAI', 293, 'Angie'),
+(521, 13, 413, 'LCo0KdbVIJM', 'Burning Desires', 'Sān-Z;HOYO-MiX', 139, 'Angie'),
+(522, 13, 414, 'b41yyHH6Cic', 'Flowerworks', 'Promise of wizard;Mili', 226, 'Angie'),
+(523, 13, 415, '_v_Voe5KD1M', 'Re:Re:', 'ASIAN KUNG-FU GENERATION', 229, 'Angie'),
+(524, 13, 416, '48Csilkjev0', 'ネバーランド', 'DECO*27', 157, 'Angie'),
+(525, 13, 417, 'ZuifkacZ0TA', 'Hero', 'Mili', 215, 'Angie'),
+(526, 13, 418, 'nbeW-itQxR0', 'Path to Isolation', 'Jeff Williams;Casey Lee Williams', 240, 'Angie'),
+(527, 13, 419, 'EgL4XbhkCSk', 'KYABA HO', 'PiNKII', 151, 'Angie'),
+(528, 13, 420, '8Bu3N-2tA_0', 'Impacto', 'Enjambre', 238, 'Angie'),
+(529, 13, 421, 'kbNdx0yqbZE', 'モニタリング', 'DECO*27', 181, 'Angie'),
+(530, 13, 422, 'WvKd91KwTKM', 'Life We Sow', '魔法使いの約束', 209, 'Angie'),
+(531, 13, 423, '8Ebqe2Dbzls', 'APT.', 'ROSÉ;Bruno Mars', 170, 'Angie'),
+(532, 13, 424, 'xCh1T6fcRo8', 'Good Luck, Babe!', 'Chappell Roan', 218, 'Angie'),
+(533, 13, 425, 'y9Wxl9Q9lUQ', 'Red Wine Supernova', 'Chappell Roan', 193, 'Angie'),
+(534, 13, 426, 'ukBmTEOzueY', 'HOT TO GO!', 'Chappell Roan', 190, 'Angie'),
+(535, 13, 427, 'n7ZmBBf5-7g', '自傷無色 (feat. 宵崎奏&朝比奈まふゆ&初音ミク)', '25時、ナイトコードで。', 218, 'Angie'),
+(536, 13, 428, 'eWBjxT54RQA', 'ビターチョコデコレーション (feat. 宵崎奏&朝比奈まふゆ&東雲絵名&暁山瑞希&初音ミク)', '25時、ナイトコードで。', 199, 'Angie'),
+(537, 13, 429, 'vp6XdbG3AhA', 'Pink Pony Club', 'Chappell Roan', 259, 'Angie'),
+(538, 13, 430, '7hVIf9YD6Vk', 'My Kink Is Karma', 'Chappell Roan', 223, 'Angie'),
+(539, 13, 431, 'k0optPS9qrA', 'A Night To Remember', 'beabadoobee;Laufey', 233, 'Angie'),
+(540, 13, 432, 'dExLwcq2-0g', 'Should\'ve Been Me', 'Mitski', 192, 'Angie'),
+(541, 13, 433, 'L9uj2XChyBI', 'Headlock', 'Imogen Heap', 216, 'Angie'),
+(542, 13, 434, 'kq2BCYAKDNc', 'From the Start', 'Good Kid', 150, 'Angie'),
+(543, 13, 435, 'Xzy8KwjXbpY', 'Mimukauwa Nice Try', 'nunununununununununununununununununununununununununununununununununununununununununununununununununununununununununununununununununununununu', 38, 'Angie'),
+(544, 13, 436, 'NA3MJmcyPpE', 'Water the Roses', 'FLAVOR FOLEY', 269, 'Angie'),
+(545, 13, 437, 'KUYK5KEU6qg', 'Real Man', 'beabadoobee', 161, 'Angie'),
+(546, 13, 438, '_4BBA8y3DPc', 'Casual', 'Chappell Roan', 234, 'Angie'),
+(547, 13, 439, 'sV2H712ldOI', 'Confessions of a Rotten Girl', 'SAWTOWNE', 208, 'Angie'),
+(548, 13, 440, '9t-uBxQzyXQ', 'Year N', 'Mili', 207, 'Angie'),
+(549, 13, 441, '51GIxXFKbzk', 'INTERNET YAMERO', 'NEEDY GIRL OVERDOSE;KOTOKO;Aiobahn +81', 244, 'Angie'),
+(550, 13, 442, '3omB6DNSTbI', 'Original Me', 'Sān-Z;HOYO-MiX', 223, 'Angie'),
+(551, 13, 443, '8oBV3jPTW4s', 'ロストワンの号哭', 'Neru', 218, 'Angie'),
+(552, 13, 444, 'slVPS_VJqhs', 'KARMANATIONS', 'Akatsuki Records', 229, 'Angie'),
+(553, 13, 445, 'bjYxllq-Uuc', 'WHAT ROBOTS NEED - hazama RUNWAY ver.', 'AWAAWA', 249, 'Angie'),
+(554, 13, 446, 'xdaKBAuO8zg', 'Femininomenon', 'Chappell Roan', 220, 'Angie'),
+(555, 13, 447, '-KE8NmtTlPk', 'After Midnight', 'Chappell Roan', 205, 'Angie'),
+(556, 13, 448, 'olxdCY7hHEw', 'Coffee', 'Chappell Roan', 206, 'Angie'),
+(557, 13, 449, 'kWLai0XoZmg', 'Super Graphic Ultra Modern Girl', 'Chappell Roan', 188, 'Angie'),
+(558, 13, 450, 'EqUHnojFH5Y', 'Picture You', 'Chappell Roan', 187, 'Angie'),
+(559, 13, 451, 'E9sngJmXijQ', 'Kaleidoscope', 'Chappell Roan', 223, 'Angie'),
+(560, 13, 452, 'QW2Alij7jlY', 'Naked In Manhattan', 'Chappell Roan', 211, 'Angie'),
+(561, 13, 453, 'GcXlN7meclE', 'California', 'Chappell Roan', 211, 'Angie'),
+(562, 13, 454, 'xjBKcdFU3Hs', 'Guilty Pleasure', 'Chappell Roan', 225, 'Angie'),
+(563, 13, 455, 'WD49SrC8mEU', 'Process', '魔法使いの約束;Mili', 205, 'Angie'),
+(564, 13, 456, 'DtKXThAkQnk', 'Wicked', 'Crusher-P;Eleanor Forte', 230, 'Angie'),
+(565, 13, 457, 'wtde2lGAAd8', 'The Brave', 'YOASOBI', 194, 'Angie'),
+(566, 13, 458, 'QgxYScXawEE', 'POP IN 2', 'B小町;ルビー(CV:伊駒ゆりえ);有馬かな(CV:潘めぐみ);MEMちょ(CV:大久保瑠美)', 267, 'Angie'),
+(567, 13, 459, 'mcG0nYC89tQ', 'miragecoordinator', 'zts', 433, 'Angie'),
+(568, 13, 460, 'bIBoVGwBVRM', 'worldenddominator', 'zts', 459, 'Angie'),
+(569, 13, 461, 'HUH4YnLTBuQ', 'happiness of marionette', 'Dai', 140, 'Angie'),
+(570, 13, 462, 'fcnDmrtj6Sk', 'Endless Nine', 'Dai', 240, 'Angie'),
+(571, 13, 463, '3uJR22WksQs', 'Girl Inside', 'Mika Kobayashi', 190, 'Angie'),
+(572, 13, 464, 'EzxsTXNmVm0', 'This Is A Life', 'Son Lux;Mitski;David Byrne', 161, 'Angie'),
+(573, 13, 465, 'obxFWNeGDOg', 'Man\'s World', 'MARINA', 213, 'Angie'),
+(574, 13, 466, '9gO0ooqA8Vg', 'Purge The Poison', 'MARINA', 195, 'Angie'),
+(575, 13, 467, 'juyXTc0lxfY', 'Highly Emotional People', 'MARINA', 214, 'Angie'),
+(576, 13, 468, 'HD00JavclfQ', 'New America', 'MARINA', 233, 'Angie'),
+(577, 13, 469, 'uTegeMyRn0U', 'Pandora\'s Box', 'MARINA', 212, 'Angie'),
+(578, 13, 470, 'wT2uhkNGLUk', 'I Love You But I Love Me More', 'MARINA', 224, 'Angie'),
+(579, 13, 471, 'B5-qITdOuSo', 'Flowers', 'MARINA', 234, 'Angie'),
+(580, 13, 472, 'b3JZY7cEwlc', 'Goodbye', 'MARINA', 283, 'Angie'),
+(581, 13, 473, 'iKbV_PZccts', 'Say What?', 'B小町;ルビー(CV:伊駒ゆりえ);有馬かな(CV:潘めぐみ);MEMちょ(CV:大久保瑠美)', 212, 'Angie'),
+(582, 13, 474, 'VL-n2KNHe7M', '深海52Hz', 'B小町;ルビー(CV:伊駒ゆりえ);有馬かな(CV:潘めぐみ);MEMちょ(CV:大久保瑠美)', 175, 'Angie'),
+(583, 13, 475, 'c56TpxfO9q0', 'テレパシ', 'DECO*27', 145, 'Angie'),
+(584, 13, 476, 'l0gaedmUogA', 'Classroom Dreamer', 'Mili', 450, 'Angie'),
+(585, 13, 477, 'm_bIZL5C1aw', 'Nectar (feat. Cassie Wei)', 'Mili;Yamato Kasai;Cassie Wei', 163, 'Angie'),
+(586, 13, 478, '3k8elXd-W_M', 'V&D', 'Mili;Yamato Kasai', 121, 'Angie'),
+(587, 13, 479, '37Npawv4Ais', 'Taboo', 'Mili;Yamato Kasai', 112, 'Angie'),
+(588, 13, 480, 'miJAVDm1NvY', 'White', 'Mili;Yamato Kasai', 86, 'Angie'),
+(589, 13, 481, 'YrO_c2D5Hxw', 'A secret', 'Mili;Yamato Kasai', 75, 'Angie'),
+(590, 13, 482, '-Oo138Q6d4Y', 'Root', 'Mili;Yamato Kasai', 175, 'Angie'),
+(591, 13, 483, 'sFjy8tjLric', 'See you later', 'Mili;Yamato Kasai', 49, 'Angie'),
+(592, 13, 484, 'nsJdXqR1wMY', 'Confidentiality', 'Mili;Yamato Kasai', 75, 'Angie'),
+(593, 13, 485, 'CeHEl5tyLbw', 'Empty dignity', 'Mili;Yamato Kasai', 163, 'Angie'),
+(594, 13, 486, '-5Y0r4HoMKg', 'Magnolia denudata', 'Mili;Yamato Kasai', 197, 'Angie'),
+(595, 13, 487, 'jIoCKvW2JTU', 'Gordita (feat. Residente Calle 13)', 'Shakira;Calle 13', 205, 'Angie'),
+(596, 13, 488, 'N91f4lQM86E', 'Biri-Biri', 'YOASOBI', 188, 'Angie'),
+(597, 13, 489, 'emVNCcwCtuc', 'I Am a Fluff', 'Mili', 267, 'Angie'),
+(598, 13, 490, 'IC8-oN8uCXo', 'Kaiju', 'sakanaction', 253, 'Angie'),
+(599, 13, 491, 'fhTFysCtF6g', 'アポリア', 'Yorushika', 242, 'Angie'),
+(600, 13, 492, 'k5mX3NkA7jM', 'Mary On A Cross', 'Ghost', 245, 'Angie'),
+(601, 13, 493, 'd0BLq72ggeg', 'wi(l)d-screen baroque', 'Daiba Nana (CV: Moeka Koizumi)', 261, 'Angie'),
+(602, 13, 494, 'dh57g0GMQWU', 'Classroom Dreamer', 'Mili', 206, 'Angie'),
+(603, 13, 495, 'OWT6Ixe3c94', 'Hearts Stay Unchanged', 'Mili', 273, 'Angie'),
+(604, 13, 496, 'Groovai-RT4', 'ダイダイダイダイダイキライ', 'Amala', 18, 'Angie'),
+(605, 13, 497, 'xUjpCR3qiz0', 'Porque te vas', 'Jeanette', 205, 'Angie'),
+(606, 13, 498, 'LIgC1EwZczk', 'Wrap Me In Plastic - Marcus Layton Radio Edit', 'CHROMANCE;Marcus Layton', 194, 'Angie'),
+(607, 13, 499, '6JgG8fZAlu0', 'Girls In Bikinis', 'Poppy', 145, 'Angie'),
+(608, 13, 500, 'HcYN5Gn5IuM', 'コネクト', 'ClariS', 272, 'Angie'),
+(609, 13, 501, '_sOKkON_UnQ', '4:00A.M.', 'Taeko Onuki', 337, 'Angie'),
+(610, 13, 502, 'hNF4_Xy7pNM', 'My Alcoholic Friends', 'The Dresden Dolls', 168, 'Angie'),
+(611, 13, 503, 'OTIgSuOI-i8', 'Running up that Hill (Nightcore)', 'Syrex', 113, 'Angie'),
+(612, 13, 504, 'GtEKUILjguA', 'Black Rock Shooter', 'mulmeyun', 302, 'Angie');
+INSERT INTO `playlist_tracks` (`id`, `playlist_id`, `position`, `video_id`, `title`, `artist`, `duration`, `added_by`) VALUES
+(613, 13, 505, 'AbRVk7lIhac', '細菌汚染 - Bacterial Contamination -', 'mathru(KanimisoP)', 237, 'Angie'),
+(614, 13, 506, 'eVY7i-DT0rs', 'チュチュ・バレリーナ', 'もな・るか・みき from AIKATSU☆STARS!', 91, 'Angie'),
+(615, 13, 507, '27YVhrTATWo', '裸足のルネサンス', 'りえ・ななせ from AIKATSU☆STARS!', 262, 'Angie'),
+(616, 13, 508, 'yEUNBao61kY', 'チュチュ・バレリーナ - ユリカ & かえで ver.', 'れみ;ゆな', 282, 'Angie'),
+(617, 13, 509, '27YVhrTATWo', '裸足のルネサンス - 〜レイ ver.〜', 'りえ from AIKATSU☆STARS!', 262, 'Angie'),
+(618, 13, 510, 'icoRdEwYzAQ', 'MEN I LOVE', 'AWAAWA', 236, 'Angie'),
+(619, 13, 511, 'cqao7blU4u0', 'Believe it - あいね & エマ ver.', 'Aine;Ema', 268, 'Angie'),
+(620, 13, 512, 'szyPY8nbBF4', 'TIAN TIAN', 'Mili', 254, 'Angie'),
+(621, 13, 513, 'KlTNKOnfXFk', 'Static', 'FLAVOR FOLEY', 244, 'Angie'),
+(622, 13, 514, 'vD_D3zQ4Ais', 'The only sun light', 'りさ', 281, 'Angie'),
+(623, 13, 515, '3iUgKH8c7p4', 'Retry Now', 'NAKISO', 123, 'Angie'),
+(624, 13, 516, 'LvYL8u4p-aM', 'Spoken For', 'FLAVOR FOLEY', 254, 'Angie'),
+(625, 13, 517, '8E8aWeY-pAc', 'Still Waiting for Your Reply? - Ojisan Style Text (feat. Ui)', 'yoshimoto ojisan;Ui', 188, 'Angie'),
+(626, 13, 518, 'BI9Ue6JwJic', 'チェリーポップ', 'DECO*27', 142, 'Angie'),
+(627, 13, 519, 'eTplxWaAD8o', '天天天国地獄国', 'Aiobahn +81;Nanahira;P丸様｡', 234, 'Angie'),
+(628, 13, 520, 'sDSJ5E8uzZU', 'Water Fountain', 'Alec Benjamin', 219, 'Angie'),
+(629, 13, 521, 'mzmjdntlRJk', 'Paper Crown', 'Alec Benjamin', 200, 'Angie'),
+(630, 13, 522, '8HWFJjRx2y4', 'Water Fountain - Nightcore', 'NightcoreMuzzic;TommyMuzzic', 203, 'Angie'),
+(631, 13, 523, 'dmx_aVPGhs8', 'Pen : Chikara : Katana', 'Hoshimi Junna (CV: Hinata Sato);Daiba Nana (CV: Moeka Koizumi)', 597, 'Angie'),
+(632, 13, 524, 'cA64x2PQTsU', 'I Deserve to Bleed', 'Sushi Soucy', 104, 'Angie'),
+(633, 13, 525, 'YTvIG6gHMh0', 'All The Things She Said', 'Poppy', 224, 'Angie'),
+(634, 13, 526, 'nOxH6KEh5n4', 'Digital Silence', 'Peter McPoland', 211, 'Angie'),
+(635, 13, 527, '8yIHZCD6FEs', 'Bedroom Hymns', 'Florence + The Machine', 183, 'Angie'),
+(636, 13, 528, '6C33PKdV710', 'Teeth', '5 Seconds of Summer', 204, 'Angie'),
+(637, 13, 529, 'W8BYJzn0F0U', 'LA DI DA', 'EVERGLOW', 211, 'Angie'),
+(638, 13, 530, 'Qgduhk26sIw', 'Stunnin\'', 'Curtis Waters;Harm Franklin', 149, 'Angie'),
+(639, 13, 531, 'RkID8_gnTxw', 'THE BADDEST', 'K/DA;i-dle;Wolftyla;Bea Miller;League of Legends', 175, 'Angie'),
+(640, 13, 532, 'jhwoPACmsd8', 'Let\'s Kill Tonight', 'Panic! At The Disco', 214, 'Angie'),
+(641, 13, 533, '76ZPTnduToo', 'My Songs Know What You Did In The Dark (Light Em Up)', 'Fall Out Boy', 186, 'Angie'),
+(642, 13, 534, 'HyHNuVaZJ-k', 'Feel Good Inc.', 'Gorillaz;De La Soul', 255, 'Angie'),
+(643, 13, 535, 'WuzIw73pmSc', 'My Ordinary Life', 'The Living Tombstone', 231, 'Angie'),
+(644, 13, 536, 'XSQUZv8ipCE', 'Oh No!', 'MARINA', 180, 'Angie'),
+(645, 13, 537, 'B1u2Cg0Zlt4', 'Victorious', 'Panic! At The Disco', 180, 'Angie'),
+(646, 13, 538, 'mHKTdlUyyko', 'Francis Forever', 'Mitski', 150, 'Angie'),
+(647, 13, 539, '-KttTf9jyT8', 'Jobless Monday', 'Mitski', 127, 'Angie'),
+(648, 13, 540, '9XRIj1_OTxA', 'Old Friend', 'Mitski', 113, 'Angie'),
+(649, 13, 541, 'BjGB9hc5huk', 'Your Best American Girl', 'Mitski', 212, 'Angie'),
+(650, 13, 542, 'K0-0AL4Wh00', 'Nobody', 'Mitski', 192, 'Angie'),
+(651, 13, 543, 'mje7DWeqFIs', 'Why Didn\'t You Stop Me?', 'Mitski', 142, 'Angie'),
+(652, 13, 544, 'tQIqGGb0JUc', 'Stay Soft', 'Mitski', 195, 'Angie'),
+(653, 13, 545, 'sbLLdy5cdmY', 'Love Me More', 'Mitski', 213, 'Angie'),
+(654, 13, 546, 'KUfkfJfsKrc', 'Two Slow Dancers', 'Mitski', 239, 'Angie'),
+(655, 13, 547, 'A2LEaF1jCeA', 'I Will', 'Mitski', 175, 'Angie'),
+(656, 13, 548, 'S09qwKoSHbM', 'KICK BACK', 'Kenshi Yonezu', 194, 'Angie'),
+(657, 13, 549, 'BGztdO-GWsw', 'The Moon Will Sing', 'The Crane Wives', 0, 'Angie'),
+(658, 13, 550, '1oMk2tK3YGs', 'The Family Jewels', 'MARINA', 246, 'Angie'),
+(659, 13, 551, 'YCKfg6kHKTg', 'End It', 'RIELL', 196, 'Angie'),
+(660, 13, 552, 'ja_Tuacypbc', 'I Didn\'t Ask For This', 'Beth Crowley', 214, 'Angie'),
+(661, 13, 553, '3VTkBuxU4yk', 'MORE', 'K/DA;Madison Beer;i-dle;Lexie Liu;Jaira Burns;Seraphine;League of Legends', 231, 'Angie'),
+(662, 13, 554, 'jU77vmVuYys', 'U (From Belle Soundtrack) - English Version', 'ꉈꀧ꒒꒒ꁄꍈꍈꀧ꒦ꉈ ꉣꅔꎡꅔꁕꁄ;Belle', 288, 'Angie'),
+(663, 13, 555, 'hgyLUeP5UxI', 'LALISA', 'LISA', 203, 'Angie'),
+(664, 13, 556, 'VJy8qZ77bpE', '眩しいDNAだけ', 'ZUTOMAYO', 237, 'Angie'),
+(665, 13, 557, 'x6yGHOpIe5c', 'Burning Pile', 'Mother Mother', 0, 'Angie'),
+(666, 13, 558, 'phDQEkp2FTw', 'Oh my god', 'i-dle', 195, 'Angie'),
+(667, 13, 559, 'KushW6zvazM', 'Ghost Rule', 'DECO*27', 206, 'Angie'),
+(668, 13, 560, 'AA7l0qPQ8HY', 'Nxde', 'i-dle', 178, 'Angie'),
+(669, 13, 561, 'gh8Yz7XbaRk', 'Hermit the Frog', 'MARINA', 0, 'Angie'),
+(670, 13, 562, 'YTvIG6gHMh0', 'All The Things She Said', 'Poppy', 0, 'Angie'),
+(671, 13, 563, 'UOxkGD8qRB4', 'POP/STARS', 'K/DA;Madison Beer;i-dle;Jaira Burns;League of Legends', 203, 'Angie'),
+(672, 13, 564, 'mcU1VCgcUh8', 'Dead Girl Walking', 'Barrett Wilbert Weed;Ryan McCartan', 205, 'Angie'),
+(673, 13, 565, 'LSPXSShg8vs', 'Therefor you and me', 'si-o', 0, 'Angie'),
+(674, 13, 566, 'Dao5P8Mqkzw', 'Wrecking Ball', 'Mother Mother', 194, 'Angie'),
+(675, 13, 567, 'F57P9C4SAW4', 'California Gurls', 'Katy Perry;Snoop Dogg', 234, 'Angie'),
+(676, 13, 568, '_kIrRooQwuk', 'Big God', 'Florence + The Machine', 269, 'Angie'),
+(677, 13, 569, 'iFaZ865eNZo', 'Are You Satisfied?', 'MARINA', 198, 'Angie'),
+(678, 13, 570, 'KUfkfJfsKrc', 'Two Slow Dancers', 'Mitski', 239, 'Angie'),
+(679, 13, 571, '7LhZOJM7p7k', 'Quiet', 'Lights', 194, 'Angie'),
+(680, 13, 572, 'SNU442anX-8', 'I Wouldn\'t Mind', 'He Is We', 199, 'Angie'),
+(681, 13, 573, 'YCxxWli-gkA', 'Satisfied', 'Renée Elise Goldsberry;Original Broadway Cast of Hamilton', 330, 'Angie'),
+(682, 13, 574, 'hC22VEFRM4Q', 'ドラマツルギー', 'Rib', 246, 'Angie'),
+(683, 13, 575, 'pkSStiPbcsA', 'Don', 'Miranda!', 183, 'Angie'),
+(684, 13, 576, 'o-zNYMO6SyQ', 'Warrior', 'Beth Crowley', 307, 'Angie'),
+(685, 13, 577, 'c1sOsg3vtA8', 'INFERNO', 'Sub Urban;Bella Poarch', 133, 'Angie'),
+(686, 13, 578, 'tBYU9W1ezL0', 'Camelia', 'Mili', 282, 'Angie'),
+(687, 13, 579, '_-9YVWH6YZI', 'Lemonade', 'Mili', 194, 'Angie'),
+(688, 13, 580, 'VLE6Y1q13qE', 'DRUM GO DUM', 'K/DA;Wolftyla;Bekuh Boom;Aluna;League of Legends', 201, 'Angie'),
+(689, 13, 581, 'DUT5rEU6pqM', 'Hips Don\'t Lie (feat. Wyclef Jean)', 'Shakira;Wyclef Jean', 0, 'Angie'),
+(690, 13, 582, 'yvsR-xciOTg', 'Camel By Camel', 'Sandy Marton', 356, 'Angie'),
+(691, 13, 583, 'QMGGaNynpLI', 'Unholy (feat. Kim Petras)', 'Sam Smith;Kim Petras', 157, 'Angie'),
+(692, 13, 584, 'B5WIqs41rgg', 'Just Dance', 'Lady Gaga;Colby O\'Donis', 0, 'Angie'),
+(693, 13, 585, 'qDP_HuBaQfs', 'Work', 'Rihanna;Drake', 219, 'Angie'),
+(694, 13, 586, 'eHx--ZtG_Ds', 'Call Me Maybe', 'Carly Rae Jepsen', 195, 'Angie'),
+(695, 13, 587, 'NJDLtltc_N8', 'SloMo', 'Chanel', 180, 'Angie'),
+(696, 13, 588, 'cs6XHDDGfsQ', 'Rosas', 'La Oreja de Van Gogh', 240, 'Angie'),
+(697, 13, 589, 'x6XiOVqWwIY', 'La Niña Que Llora en Tus Fiestas', 'La Oreja de Van Gogh', 166, 'Angie'),
+(698, 13, 590, 'lV6ppJbzQQM', 'Dale Zelda Dale', 'Ganon Rosario', 257, 'Angie'),
+(699, 13, 591, 'hEo6FcrhVVc', 'Dulce Locura', 'La Oreja de Van Gogh', 232, 'Angie'),
+(700, 13, 592, 'HSUX_TSCIjw', 'Vestido Azul', 'La Oreja de Van Gogh', 193, 'Angie'),
+(701, 13, 593, 'xemE6B2K5Rg', 'Magnet', 'Lollia;Chi-chi', 254, 'Angie'),
+(702, 13, 594, 'zkgsWurEfoo', 'That\'s Our Lamp', 'Mitski', 145, 'Angie'),
+(703, 13, 595, 'JDRyqUx1X8M', 'Shut Down', 'BLACKPINK', 176, 'Angie'),
+(704, 13, 596, 'wECwsE4yNSQ', 'Por la Raja de Tu Falda', 'Estopa', 203, 'Angie'),
+(705, 13, 597, 'GtTnyEwtW0c', 'Traición', 'Miranda!', 183, 'Angie'),
+(706, 13, 598, '4h0BSep-4xs', 'Tu jardín con enanitos', 'Melendi', 240, 'Angie'),
+(707, 13, 599, 'WqWYhWQ1gKY', 'Mimimi', 'SEREBRO', 0, 'Angie'),
+(708, 13, 600, 'NVI1NohUuAI', '私がモテないのはどう考えてもお前らが悪い', 'Konomi Suzuki;Kiba Of Akiba', 0, 'Angie'),
+(709, 13, 601, '9j7mDS5vn9Y', 'RITUAL', 'NECRONOMIDOL', 0, 'Angie'),
+(710, 13, 602, '_nO-f2e87Co', 'Yava!', 'BABYMETAL', 0, 'Angie'),
+(711, 13, 603, '_T3S3EwFDNU', 'KARATE', 'BABYMETAL', 0, 'Angie'),
+(712, 13, 604, 'qOtwfyMa5mM', 'Hands Up x Ayesha - Remix', 'skyemane', 0, 'Angie'),
+(713, 13, 605, 'XPOIe6WdhPQ', 'VORACITY', 'MYTH & ROID', 0, 'Angie'),
+(714, 13, 606, 'hF7QDvrBT9Q', 'D.D.D.D.', '(K)NoW_NAME', 0, 'Angie'),
+(715, 13, 607, 'y6pgyNmXtQw', 'Mr. Delincuente', 'Norykko', 0, 'Angie'),
+(716, 13, 608, 'MDErQ1KTzaI', 'PARANOIA', 'HEARTSTEEL;League of Legends;BAEKHYUN;tobi lou;ØZI;Cal Scruby', 0, 'Angie'),
+(717, 13, 609, 'sVZpHFXcFJw', 'GIANTS', 'True Damage;Becky G;Keke Palmer;SOYEON;Duckwrth;Thutmose;League of Legends', 0, 'Angie'),
+(718, 13, 610, 'qIobay7xoYM', 'Suerte (Whenever, Wherever)', 'Shakira', 0, 'Angie'),
+(719, 13, 611, 'S0GgBcNKK5g', 'Mass Destruction', 'Lotus Juice', 0, 'Angie'),
+(720, 13, 612, 'zyhml1UG6ZY', 'FVN!', 'LVL1', 0, 'Angie'),
+(721, 13, 613, 'ReFpNaH1_TE', 'Hijo de la Luna', 'Mecano', 0, 'Angie'),
+(722, 13, 614, 'bUU4eDJAs-Q', 'i like the way you kiss me', 'Artemas', 0, 'Angie'),
+(723, 13, 615, 'xFHNWJVsjmY', 'If I Can Stop One Heart From Breaking', 'Robin;HOYO-MiX;Chevy', 0, 'Angie'),
+(724, 13, 616, 'kWS8Y7uqWn4', 'Emergency Budots Dance', 'bimmehh', 0, 'Angie'),
+(725, 13, 617, '-q80QowuJSk', 'Monodrama', 'HOYO-MiX', 203, 'Angie'),
+(726, 13, 618, 'V2AfXNJImSo', 'Addict', 'PiNKII;Daegho', 0, 'Angie'),
+(727, 13, 619, 'jJzw1h5CR-I', 'Dramaturgy', 'Eve', 0, 'Angie'),
+(728, 13, 620, '1V_xRb0x9aw', 'Clint Eastwood', 'Gorillaz;Del The Funky Homosapien', 0, 'Angie'),
+(729, 13, 621, 'hbckxFs-obM', '薄ら氷心中', 'Sheena Ringo', 0, 'Angie'),
+(730, 13, 622, 'Atvsg_zogxo', 'お勉強しといてよ', 'ZUTOMAYO', 0, 'Angie'),
+(731, 13, 623, 'uT_Uf5uS27w', 'ma chérie ~愛しい君へ~', 'Malace Mizer', 0, 'Angie'),
+(732, 13, 624, '_QCzM4Eei9g', 'メズマライザー (feat. 初音ミク&重音テト)', '32ki;Hatsune Miku;重音テト', 0, 'Angie'),
+(733, 13, 625, '0vfZjdK8Ktw', 'The Mind Electric', 'Miracle Musical', 0, 'Angie'),
+(734, 13, 626, 'CgxOQjYBmss', 'Dadadadadaru', 'amala', 0, 'Angie'),
+(735, 13, 627, 'EBjDpuOF9WE', 'Bang Bang Bang Bang', 'Sohodolls', 0, 'Angie'),
+(736, 13, 628, '13EPS_FkMoI', 'Spit It Out', 'BBpanzu', 0, 'Angie'),
+(737, 13, 629, '0iVlSNpq8i8', 'BIRDBRAIN', 'Jamie Paige;OK Glass', 0, 'Angie'),
+(738, 13, 630, 'bIiIrXM7BUA', 'Bang Bang Bang', 'BBpanzu', 0, 'Angie'),
+(739, 13, 631, 'sTyrH4SOwBY', '1000x1000', 'Mili', 0, 'Angie'),
+(740, 13, 632, 'jwVMgGs50vE', 'Dracula', 'Tame Impala', 0, 'Angie'),
+(741, 13, 633, 'tOzOD-82mW0', 'It\'s Not Like I Like You!!', 'Static-P', 0, 'Angie'),
+(742, 13, 634, 'xIF0Me8j0dg', 'Bubble Pop Electric - Remastered 2019', 'Gwen Stefani;Johnny Vulture', 0, 'Angie'),
+(743, 13, 635, 'x0jrUwxUFLU', 'Seven Minutes in Heaven', 'Mindless Self Indulgence', 0, 'Angie'),
+(744, 13, 636, 'NoyJgR_09Vw', 'Shut Me Up', 'Mindless Self Indulgence', 0, 'Angie'),
+(745, 13, 637, '8So3SA2uJvo', 'A Human\'s Touch', 'TWRP;McKenna Rae', 0, 'Angie'),
+(746, 13, 638, 'X2Rkmj7Eqtc', 'Bait & Switch', 'KMFDM', 0, 'Angie'),
+(747, 13, 639, 'w63orOykrsU', '6up 5oh Cop-Out (Pro / Con)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(748, 13, 640, '5PLN9xzmUSU', 'Skeleton Appreciation Day in Vestal, NY (Bones)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(749, 13, 641, '1esJFm4X8IQ', 'Front Street', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(750, 13, 642, 'WTBcm2ZhjuY', '¡Aikido! (Neurotic / Erotic)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(751, 13, 643, 'pWZkJGsocdM', 'White Knuckle Jerk (Where Do You Get Off?)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(752, 13, 644, 'CMgkgZRy9N8', 'Cover This Song (A Little Bit Mine)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(753, 13, 645, 'PEUJBNDJbq4', 'Thermodynamic Lawyer Esq, G.F.D.', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(754, 13, 646, 'iOAj4pXWUX0', 'Red Moon', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(755, 13, 647, 'KndD5SQxFy4', 'Lysergide Daydream', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(756, 13, 648, 'anQpiHHij-k', 'The First Step', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(757, 13, 649, '2C7joP3MikE', 'Jimmy Mushrooms\' Last Drink: Bedtime in Wayne, NJ', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(758, 13, 650, 'Zl6d35_1FXY', 'Chemical Overreaction / Compound Fracture', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(759, 13, 651, 'w63orOykrsU', 'Everything is a Lot', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(760, 13, 652, 'pXWGzusJsOo', 'Self-', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(761, 13, 653, 'B9wePPxOkLI', '2012', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(762, 13, 654, 'Qt5DzjzyEJo', 'Cotard\'s Solution (Anatta, Dukkha, Anicca)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(763, 13, 655, '3Dd3dl7W8rM', 'Mr. Capgras Encounters a Secondhand Vanity: Tulpamancer\'s Prosopagnosia / Pareidolia (As Direct Result of Trauma to Fusiform Gyrus)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(764, 13, 656, 'lst1NGKHQHk', 'The Song with Five Names a.k.a. Soapbox Tao a.k.a. Checkmate Atheists! a.k.a. Neospace Government (A.K.A. You Can Never Know)', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(765, 13, 657, '-AvYfjmM7ww', 'Hand Me My Shovel, I\'m Going In!', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(766, 13, 658, 'isZbEoAzvLg', 'Dr. Sunshine Is Dead', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(767, 13, 659, 'w63orOykrsU', '-ish', 'Will Wood and the Tapeworms', 0, 'Angie'),
+(768, 13, 660, 'ui2kW-OvtkA', 'Suburbia Overture / Greetings from Mary Bell Township! / (Vampire) Culture / Love Me, Normally', 'Will Wood', 0, 'Angie'),
+(769, 13, 661, 'baquvJnokHY', '2econd 2ight 2eer (that was fun, goodbye.)', 'Will Wood', 0, 'Angie'),
+(770, 13, 662, 'g4UGCaLg2SY', 'Laplace’s Angel (Hurt People? Hurt People!)', 'Will Wood', 0, 'Angie'),
+(771, 13, 663, '86nwbt0BxbM', '…well, better than the alternative', 'Will Wood', 0, 'Angie'),
+(772, 13, 664, 'DvueppU31fM', 'Outliars and Hyppocrates: a fun fact about apples', 'Will Wood', 0, 'Angie'),
+(773, 13, 665, 'zbUgoqu-tb4', 'BlackBoxWarrior - OKULTRA', 'Will Wood', 0, 'Angie'),
+(774, 13, 666, 'nyIKBT7-a9M', 'Marsha, Thankk You for the Dialectics, but I Need You to Leave', 'Will Wood', 0, 'Angie'),
+(775, 13, 667, 'rm9v7ESAFts', 'Love, Me Normally', 'Will Wood', 0, 'Angie'),
+(776, 13, 668, 'MX9LreOigJ8', 'Memento Mori: the most important thing in the world', 'Will Wood', 0, 'Angie'),
+(777, 13, 669, 'zIIUejDC6xE', 'Tomcat Disposables', 'Will Wood', 0, 'Angie'),
+(778, 13, 670, 'AoIhaAL3EQI', 'Becoming the Lastnames', 'Will Wood', 0, 'Angie'),
+(779, 13, 671, 'owJD0Iimnes', 'Cicada Days', 'Will Wood', 0, 'Angie'),
+(780, 13, 672, '4G0SHlkJhlA', 'Euthanasia', 'Will Wood', 0, 'Angie'),
+(781, 13, 673, '-7tQds-Th9s', 'Falling Up', 'Will Wood', 0, 'Angie'),
+(782, 13, 674, 'iVK8jzLLuDg', 'That\'s Enough, Let\'s Get You Home.', 'Will Wood', 0, 'Angie'),
+(783, 13, 675, 'idvMKvnz5Mk', 'Um, It\'s Kind of a Lot', 'Will Wood', 0, 'Angie'),
+(784, 13, 676, 'WeVWxx0-sik', 'Half-Decade Hangover', 'Will Wood', 0, 'Angie'),
+(785, 13, 677, 'VutE_9wpd-c', 'Vampire Reference in a Minor Key', 'Will Wood', 0, 'Angie'),
+(786, 13, 678, 'H0lm5WN848s', 'You Liked This (Okay, Computer!)', 'Will Wood', 0, 'Angie'),
+(787, 13, 679, 'RkHMKUhsBtU', 'The Main Character', 'Will Wood', 0, 'Angie'),
+(788, 13, 680, 'eKjbMuOFF3E', 'Against the Kitchen Floor', 'Will Wood', 0, 'Angie'),
+(789, 13, 681, 'WTe0abueYqo', 'Sex, Drugs, Rock \'n\' roll', 'Will Wood', 0, 'Angie'),
+(790, 13, 682, '93O6EAJrnZc', 'Big Fat Bitchie’s Blueberry Pie, Christmas Tree, and Recreational Jell-O Emporium a.K.a. “Mr. Boy Is on the Roof Again” (From “B.F.B.\'s B-Sides: Bagel Batches, Marsh-Mallows, & Barsh-Mallows)', 'Will Wood', 0, 'Angie'),
+(791, 13, 683, 'RHhgHmy0m9k', 'Willard!', 'Will Wood', 0, 'Angie'),
+(792, 13, 684, 'Ka9woR5pnk0', 'White Noise', 'Will Wood', 0, 'Angie'),
+(793, 13, 685, 'vY_3YrKtUUE', 'Eres Mía', 'Romeo Santos', 0, 'Angie'),
+(794, 13, 686, 'erPCW45lHHM', 'Ruler of My Heart (VIVINOS - ALNST Original Soundtrack Part.5)', 'BL8M;Rubyeye', 0, 'Angie'),
+(795, 13, 687, 'ugqjcXjpCts', 'Night of Nights', 'RichaadEB', 0, 'Angie'),
+(796, 13, 688, 'SweyQg-Jlew', 'Night of Fire', 'RichaadEB;Caleb Hyles;FamilyJules', 0, 'Angie'),
+(797, 13, 689, 'ns6e1WWOneY', 'U.N. Owen Was Her?', 'RichaadEB', 0, 'Angie'),
+(798, 13, 690, 'SLYGnCcakpw', 'Nuclear Fusion', 'RichaadEB', 0, 'Angie'),
+(799, 13, 691, 'vZ0XlpHdh80', 'Lunar Clock Luna Dial', 'RichaadEB;James Fraser', 0, 'Angie'),
+(800, 13, 692, '_9SWpnQzjaM', 'Lunatic Princess', 'RichaadEB', 0, 'Angie'),
+(801, 13, 693, 'wgl-Vx0r8zQ', 'Flowering Night', 'RichaadEB', 0, 'Angie'),
+(802, 13, 694, '2ImLLeIfjME', 'Native Faith', 'RichaadEB', 0, 'Angie'),
+(803, 13, 695, 'XhEkXMkVrLw', 'Septette for the Dead Princess', 'RichaadEB', 0, 'Angie'),
+(804, 13, 696, '2vdPZkzLNcA', 'Reach for the Moon, Immortal Smoke', 'RichaadEB;Alejandro Hernández', 0, 'Angie'),
+(805, 13, 697, 'ZFxDC7CnzvY', 'Beloved Tomboyish Daughter', 'RichaadEB', 0, 'Angie'),
+(806, 13, 698, 'eVCIxtS97Pg', 'Necrofantasia', 'RichaadEB', 0, 'Angie'),
+(807, 13, 699, 'iYqNd7vZFjk', 'Love Coloured Master Spark', 'RichaadEB', 0, 'Angie'),
+(808, 13, 700, '46Mp6Bq1lFM', 'Primordial Beat', 'RichaadEB', 0, 'Angie'),
+(809, 13, 701, 'Vc82j7FxdCM', 'Border of Life', 'RichaadEB', 0, 'Angie'),
+(810, 13, 702, 'zG325qCKH9o', 'Pure Furies ~ Whereabouts of the Heart', 'RichaadEB', 0, 'Angie'),
+(811, 13, 703, 'F4T8JmubdJ8', 'Wind God Girl', 'RichaadEB', 0, 'Angie'),
+(812, 13, 704, '3KqgM7w7VHc', 'Doll Judgment ~ The Girl Who Played with People\'s Shapes', 'RichaadEB', 0, 'Angie'),
+(813, 13, 705, '6pUDJC3UvIQ', 'The Venerable Ancient Battlefield ~ Suwa Foughten Field', 'RichaadEB', 0, 'Angie'),
+(814, 13, 706, 'H7PHyAwjjMk', 'Shanghai Alice of Meiji 17', 'RichaadEB', 0, 'Angie'),
+(815, 13, 707, '6lQyfgivAco', 'Hartmann\'s Youkai Girl', 'RichaadEB', 0, 'Angie'),
+(816, 13, 708, 'aODIcw8ze3Q', 'Emotional Skyscraper ~ Cosmic Mind', 'RichaadEB', 0, 'Angie'),
+(817, 13, 709, 'KXjQyOyP_mw', 'Lullaby of Deserted Hell', 'RichaadEB;Jonny Atma', 0, 'Angie'),
+(818, 13, 710, 'nXorMGAnBLo', 'Pierrot of the Star-Spangled Banner', 'RichaadEB', 0, 'Angie'),
+(819, 13, 711, 'Uv4eonwpKjc', 'Kobito of the Shining Needle ~ Little Princess', 'RichaadEB;YaboiMatoi', 0, 'Angie'),
+(820, 13, 712, 'ugqjcXjpCts', 'Night of Nights', 'RichaadEB', 0, 'Angie'),
+(821, 13, 713, 'awc6vDxjtfc', 'Lunatic Eyes ~ Invisible Full Moon', 'RichaadEB', 0, 'Angie'),
+(822, 13, 714, '7W312_fHWAc', 'Satori Maiden ~ 3rd Eye', 'RichaadEB', 0, 'Angie'),
+(823, 13, 715, 's5_nM3PIV5c', 'Entrusting this World to Idols ~ Idolatrize World', 'RichaadEB', 0, 'Angie'),
+(824, 13, 716, 'ZhClc6X1NIQ', 'Bad Apple!! - Japanese Remaster', 'RichaadEB;Cristina Vee', 0, 'Angie'),
+(825, 13, 717, '5xc6lQzTUDA', 'Bad Apple!! - English Remaster', 'RichaadEB;Cristina Vee', 0, 'Angie'),
+(826, 13, 718, 'CAL4WMpBNs0', 'Your Reality', 'Dan Salvato', 0, 'Angie'),
+(827, 13, 719, 'QDYUiCPLtxk', 'In Absentia ΛΟΓΟΣ', 'Heaven Pierce Her', 0, 'Angie'),
+(828, 13, 720, 'mxKUFhBKmnw', 'Spiral Out (Keep Going)', 'Heaven Pierce Her', 0, 'Angie'),
+(829, 13, 721, 'XY3b4kVAV2Y', 'Never Odd or Even', 'Heaven Pierce Her', 0, 'Angie'),
+(830, 13, 722, '_ysPpT7-f4o', 'No Devil Lived On', 'Heaven Pierce Her', 0, 'Angie'),
+(831, 13, 723, '9BY8FW1LLqw', 'Mirror Rim', 'Heaven Pierce Her', 0, 'Angie'),
+(832, 13, 724, 'gtboglNaLgw', 'The Break (Crimson Glass deComposition)', 'Heaven Pierce Her', 0, 'Angie'),
+(833, 13, 725, 'NVqXG3QNav0', 'The Shattering Circle, or: A Charade of Shadeless Ones and Zeroes Rearranged ad Nihilum', 'Heaven Pierce Her', 0, 'Angie'),
+(834, 13, 726, 'stpMtEx5zqc', 'Event Horizon (Reach for the Sun and Burn! Burn! Burn!)', 'Heaven Pierce Her', 0, 'Angie'),
+(835, 13, 727, 'BvPrRkK1I6k', 'The Fall', 'Heaven Pierce Her', 0, 'Angie'),
+(836, 13, 728, '3wp6C1HRTXA', 'Dune Eternal', 'Heaven Pierce Her', 0, 'Angie'),
+(837, 13, 729, 'HUYZu3LpMHM', 'Sands of Tide', 'Heaven Pierce Her', 0, 'Angie'),
+(838, 13, 730, 'm-WMLdMOQwE', 'Dancer in the Darkness', 'Heaven Pierce Her', 0, 'Angie'),
+(839, 13, 731, 'bcOUS1o6bwM', 'Duel (Versus Reprise)', 'Heaven Pierce Her', 0, 'Angie'),
+(840, 13, 732, 'ZIgtEW8jOt4', 'Deep Blue', 'Heaven Pierce Her', 0, 'Angie'),
+(841, 13, 733, 'JviF4u8qSyk', 'He Is the Light in My Darkness', 'Heaven Pierce Her', 0, 'Angie'),
+(842, 13, 734, 'LNNoFHH5UDQ', 'Death Odyssey', 'Heaven Pierce Her', 0, 'Angie'),
+(843, 13, 735, 'lQ8Hqtgyc5U', 'Death Odyssey Aftermath', 'Heaven Pierce Her', 0, 'Angie'),
+(844, 13, 736, 'sBCS5pRP_xk', 'The Abyss and the Serpent', 'Heaven Pierce Her', 0, 'Angie'),
+(845, 13, 737, 'jp8YBW6RsMc', 'Chord of the Crooked Saints', 'Heaven Pierce Her', 0, 'Angie'),
+(846, 13, 738, 'm5ra-w1xct8', 'Altars of Apostasy', 'Heaven Pierce Her', 0, 'Angie'),
+(847, 13, 739, 'BSpR0DJEgxM', 'The Death of God\'s Will', 'Heaven Pierce Her', 0, 'Angie'),
+(848, 13, 740, 'g5EhlFvqiM8', 'Silence. Introspection.', 'Heaven Pierce Her', 0, 'Angie'),
+(849, 13, 741, '917xijnpJVw', 'The Fire Is Gone (For Piano, Saxophone and Trumpet)', 'Heaven Pierce Her', 0, 'Angie'),
+(850, 13, 742, 'h4eXX5LGxuI', 'Into the Fire', 'Heaven Pierce Her', 0, 'Angie'),
+(851, 13, 743, 'tkLVbp0IH_E', 'Unstoppable Force', 'Heaven Pierce Her', 0, 'Angie'),
+(852, 13, 744, 'RbXEFL9RIWg', 'Cerberus', 'Heaven Pierce Her', 0, 'Angie'),
+(853, 13, 745, '2rzKRG1Jfzs', 'A Thousand Greetings', 'Heaven Pierce Her', 0, 'Angie'),
+(854, 13, 746, 'pUqKjJJTvj4', 'A Shattered Illusion', 'Heaven Pierce Her', 0, 'Angie'),
+(855, 13, 747, 'ukEE6OPltQA', 'A Complete and Utter Destruction of the Senses', 'Heaven Pierce Her', 0, 'Angie'),
+(856, 13, 748, 'jvXwKCex990', 'Sanctuary in the Garden of the Mind', 'Heaven Pierce Her', 0, 'Angie'),
+(857, 13, 749, 'AX9pqyjYZBM', 'Castle Vein', 'Heaven Pierce Her', 0, 'Angie'),
+(858, 13, 750, 'BhEnjxYLBYo', 'Versus', 'Heaven Pierce Her', 0, 'Angie'),
+(859, 13, 751, 'c4HovBdrsYM', 'Cold Winds', 'Heaven Pierce Her', 0, 'Angie'),
+(860, 13, 752, 'rD3ONF40PYw', 'Requiem', 'Heaven Pierce Her', 0, 'Angie'),
+(861, 13, 753, '0eGf62Isnwo', 'Panic Betrayer', 'Heaven Pierce Her', 0, 'Angie'),
+(862, 13, 754, 'FIuia_wqvZw', 'In the Presence of a King', 'Heaven Pierce Her', 0, 'Angie'),
+(863, 13, 755, '0oKVuDnNX-4', 'Guts', 'Heaven Pierce Her', 0, 'Angie'),
+(864, 13, 756, 'kzbbO_lyZ94', 'Glory', 'Heaven Pierce Her', 0, 'Angie'),
+(865, 13, 757, 'HZY-9V1YX_U', 'Divine Intervention', 'Heaven Pierce Her', 0, 'Angie'),
+(866, 13, 758, 'ZDStF3H4L-o', 'Disgrace. Humiliation.', 'Heaven Pierce Her', 0, 'Angie'),
+(867, 13, 759, 'VjzFO06Xrzw', 'The Fire Is Gone (For Music Box)', 'Heaven Pierce Her', 0, 'Angie'),
+(868, 13, 760, 'KtGOy5nK8w8', 'Run Rabbit', 'Mollie Elizabeth', 0, 'Angie');
 
 -- --------------------------------------------------------
 
@@ -882,15 +1753,16 @@ CREATE TABLE `recordatorios` (
   `fecha` date NOT NULL,
   `tipo` enum('cita','examen','aniversario','otro') DEFAULT 'otro',
   `descripcion` text DEFAULT NULL,
-  `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
+  `creado_en` timestamp NOT NULL DEFAULT current_timestamp(),
+  `periodicidad` varchar(10) NOT NULL DEFAULT 'ninguna'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `recordatorios`
 --
 
-INSERT INTO `recordatorios` (`id`, `usuario_id`, `pareja_id`, `titulo`, `fecha`, `tipo`, `descripcion`, `creado_en`) VALUES
-(3, 2, 1, 'awdasdawd', '2026-05-26', 'cita', '', '2026-05-26 18:42:49');
+INSERT INTO `recordatorios` (`id`, `usuario_id`, `pareja_id`, `titulo`, `fecha`, `tipo`, `descripcion`, `creado_en`, `periodicidad`) VALUES
+(3, 2, 1, 'awdasdawd', '2026-05-26', 'cita', '', '2026-05-26 18:42:49', 'ninguna');
 
 -- --------------------------------------------------------
 
@@ -929,6 +1801,24 @@ INSERT INTO `themes` (`id`, `user_id`, `name`, `colors`, `wallpaper`, `start_ico
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `user_presence`
+--
+
+CREATE TABLE `user_presence` (
+  `user_id` int(11) NOT NULL,
+  `last_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `user_presence`
+--
+
+INSERT INTO `user_presence` (`user_id`, `last_at`) VALUES
+(2, '2026-06-07 16:16:29');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `user_settings`
 --
 
@@ -945,7 +1835,7 @@ CREATE TABLE `user_settings` (
 
 INSERT INTO `user_settings` (`user_id`, `key_name`, `value`, `updated_at`) VALUES
 (1, 'player', '{\"playlistId\":2,\"trackIndex\":0,\"volume\":18}', '2026-05-29 22:35:23'),
-(2, 'player', '{\"playlistId\":12,\"trackIndex\":7}', '2026-05-29 19:37:22'),
+(2, 'player', '{\"playlistId\":13,\"trackIndex\":127,\"volume\":100}', '2026-06-07 16:12:47'),
 (8, 'player', '{\"playlistId\":null,\"trackIndex\":0}', '2026-05-29 16:21:27');
 
 -- --------------------------------------------------------
@@ -1031,6 +1921,30 @@ ALTER TABLE `item_invites`
   ADD KEY `idx_iinv_type` (`type`);
 
 --
+-- Indexes for table `listening_invites`
+--
+ALTER TABLE `listening_invites`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_to` (`to_user_id`,`status`),
+  ADD KEY `idx_session` (`session_id`);
+
+--
+-- Indexes for table `listening_participants`
+--
+ALTER TABLE `listening_participants`
+  ADD PRIMARY KEY (`session_id`,`user_id`),
+  ADD KEY `idx_user` (`user_id`,`left_at`),
+  ADD KEY `idx_last_seen` (`last_seen_at`);
+
+--
+-- Indexes for table `listening_sessions`
+--
+ALTER TABLE `listening_sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_host` (`host_user_id`,`closed_at`),
+  ADD KEY `idx_updated` (`updated_at`);
+
+--
 -- Indexes for table `list_items`
 --
 ALTER TABLE `list_items`
@@ -1050,19 +1964,29 @@ ALTER TABLE `list_item_collaborators`
 -- Indexes for table `mascotas`
 --
 ALTER TABLE `mascotas`
-  ADD PRIMARY KEY (`user_id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `user_id` (`user_id`);
 
 --
 -- Indexes for table `mascota_memoria`
 --
 ALTER TABLE `mascota_memoria`
-  ADD PRIMARY KEY (`user_id`,`clave`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_memoria` (`user_id`,`clave`);
 
 --
--- Indexes for table `mascota_gustos`
+-- Indexes for table `mascota_objetos`
 --
-ALTER TABLE `mascota_gustos`
-  ADD PRIMARY KEY (`user_id`,`alimento`);
+ALTER TABLE `mascota_objetos`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `mascota_vinculos`
+--
+ALTER TABLE `mascota_vinculos`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_vinculo` (`mascota_id_a`,`mascota_id_b`);
 
 --
 -- Indexes for table `messages`
@@ -1080,11 +2004,27 @@ ALTER TABLE `momentos`
   ADD KEY `pareja_id` (`pareja_id`);
 
 --
+-- Indexes for table `music_album_actions`
+--
+ALTER TABLE `music_album_actions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_user_year` (`user_id`,`played_at`),
+  ADD KEY `idx_user_album` (`user_id`,`album_title`);
+
+--
 -- Indexes for table `music_extras`
 --
 ALTER TABLE `music_extras`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_mex_user` (`user_id`);
+
+--
+-- Indexes for table `music_plays`
+--
+ALTER TABLE `music_plays`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_user_year` (`user_id`,`played_at`),
+  ADD KEY `idx_user_video` (`user_id`,`video_id`);
 
 --
 -- Indexes for table `notifications`
@@ -1213,6 +2153,13 @@ ALTER TABLE `themes`
   ADD KEY `idx_themes_public` (`is_public`);
 
 --
+-- Indexes for table `user_presence`
+--
+ALTER TABLE `user_presence`
+  ADD PRIMARY KEY (`user_id`),
+  ADD KEY `idx_last_at` (`last_at`);
+
+--
 -- Indexes for table `user_settings`
 --
 ALTER TABLE `user_settings`
@@ -1243,10 +2190,46 @@ ALTER TABLE `item_invites`
   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
+-- AUTO_INCREMENT for table `listening_invites`
+--
+ALTER TABLE `listening_invites`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `listening_sessions`
+--
+ALTER TABLE `listening_sessions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `list_items`
 --
 ALTER TABLE `list_items`
   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+
+--
+-- AUTO_INCREMENT for table `mascotas`
+--
+ALTER TABLE `mascotas`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `mascota_memoria`
+--
+ALTER TABLE `mascota_memoria`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `mascota_objetos`
+--
+ALTER TABLE `mascota_objetos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `mascota_vinculos`
+--
+ALTER TABLE `mascota_vinculos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `messages`
@@ -1261,10 +2244,22 @@ ALTER TABLE `momentos`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
+-- AUTO_INCREMENT for table `music_album_actions`
+--
+ALTER TABLE `music_album_actions`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `music_extras`
 --
 ALTER TABLE `music_extras`
   MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `music_plays`
+--
+ALTER TABLE `music_plays`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=40;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -1306,7 +2301,7 @@ ALTER TABLE `partner_invites`
 -- AUTO_INCREMENT for table `playlists`
 --
 ALTER TABLE `playlists`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `playlist_invites`
@@ -1318,7 +2313,7 @@ ALTER TABLE `playlist_invites`
 -- AUTO_INCREMENT for table `playlist_tracks`
 --
 ALTER TABLE `playlist_tracks`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=108;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=869;
 
 --
 -- AUTO_INCREMENT for table `posts`
@@ -1406,6 +2401,24 @@ ALTER TABLE `list_items`
 ALTER TABLE `list_item_collaborators`
   ADD CONSTRAINT `list_item_collaborators_ibfk_1` FOREIGN KEY (`item_id`) REFERENCES `list_items` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `list_item_collaborators_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `mascotas`
+--
+ALTER TABLE `mascotas`
+  ADD CONSTRAINT `mascotas_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `mascota_memoria`
+--
+ALTER TABLE `mascota_memoria`
+  ADD CONSTRAINT `mascota_memoria_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `mascota_objetos`
+--
+ALTER TABLE `mascota_objetos`
+  ADD CONSTRAINT `mascota_objetos_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `messages`
