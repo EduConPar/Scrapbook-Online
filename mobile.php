@@ -1615,10 +1615,12 @@ window.MuShell = (function(){
     function publishNowPlaying(isPlaying, force) {
         if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
         var now = Date.now();
-        /* Throttle de 800ms para el tick periódico, pero los eventos
-           "importantes" (cambio de pista, play/pause) lo saltan para que
-           la TV reaccione al instante. */
-        if (!force && now - __NP_LAST < 800) return;
+        /* Throttle de 500ms para el tick periódico (antes 800), pero los
+           eventos "importantes" (cambio de pista, play/pause) lo saltan
+           para que la TV reaccione al instante. Bajamos el throttle
+           para permitir el ritmo de 2s + cubrir ráfagas (cambio de
+           track + start play). */
+        if (!force && now - __NP_LAST < 500) return;
         __NP_LAST = now;
         var tr = QUEUE[CUR_IDX];
         var pos = 0, dur = 0;
@@ -1858,22 +1860,31 @@ window.MuShell = (function(){
 
     /* ── HOST: broadcast del estado ──────────────────────── */
     async function ltHostBroadcast() {
-        if (LT_ROLE !== 'host' || !YT_PLAYER) return;
-        if (CUR_IDX < 0 || CUR_IDX >= QUEUE.length) return;
-        var tr = QUEUE[CUR_IDX];
-        if (!tr) return;
-        var ct = 0, dur = 0;
-        try {
-            ct  = Math.floor(YT_PLAYER.getCurrentTime() || 0);
-            dur = Math.floor(YT_PLAYER.getDuration()    || 0);
-        } catch (_) {}
+        if (LT_ROLE !== 'host') return;
+        /* Recoge estado del player solo si hay track cargado. Si no, sigue
+           mandando heartbeat (update-state vacío) para que el backend
+           refresque last_seen_at del host. Sin esto el wrapped contaría
+           cero minutos si la sesión está creada pero todavía no se ha
+           pulsado play. */
+        var tr        = null;
+        var ct        = 0;
+        var dur       = 0;
         var isPlaying = false;
-        try { isPlaying = YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1; } catch (_) {}
+        if (YT_PLAYER && CUR_IDX >= 0 && CUR_IDX < QUEUE.length) {
+            tr = QUEUE[CUR_IDX] || null;
+            if (tr) {
+                try {
+                    ct  = Math.floor(YT_PLAYER.getCurrentTime() || 0);
+                    dur = Math.floor(YT_PLAYER.getDuration()    || 0);
+                    isPlaying = YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1;
+                } catch (_) {}
+            }
+        }
         var r = await ltFetch('update-state', { body: {
-            videoId:      tr.videoId,
-            title:        tr.title  || '',
-            artist:       tr.artist || '',
-            coverUrl:     'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg',
+            videoId:      tr ? tr.videoId : '',
+            title:        tr ? (tr.title  || '') : '',
+            artist:       tr ? (tr.artist || '') : '',
+            coverUrl:     tr ? ('https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg') : '',
             currentTimeS: ct,
             durationS:    dur,
             isPlaying:    isPlaying,
@@ -2000,7 +2011,7 @@ window.MuShell = (function(){
         var list = document.getElementById('mu-lt-user-list');
         var r = await ltFetch('users');
         if (!r || !r.ok || !r.users || !r.users.length) {
-            list.innerHTML = '<div style="font-size:11px;text-align:center;padding:8px;">No hay otros usuarios.</div>';
+            list.innerHTML = '<div style="font-size:12px;text-align:center;padding:10px;line-height:1.45;">Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span></div>';
             return;
         }
         list.innerHTML = r.users.map(function(u){
@@ -2048,25 +2059,16 @@ window.MuShell = (function(){
         }
     }
 
-    /* ── Polling de invites entrantes ────────────────────── */
-    async function ltPollInvites() {
-        if (LT_ROLE) return;
-        var r = await ltFetch('invites');
-        if (!r || !r.ok || !r.invites) return;
-        r.invites.forEach(function(inv){
-            if (LT_SHOWN_INVITES[inv.id]) return;
-            LT_SHOWN_INVITES[inv.id] = true;
-            ltToast({
-                id: 'invite-' + inv.id,
-                title:   '🎧 ' + (inv.from_label || '?') + ' te invita',
-                message: 'Escuchar juntos: ' + (inv.track_title || 'una canción'),
-                actions: [
-                    { label: 'Rechazar', fn: function(){ ltFetch('decline', { body: { inviteId: inv.id } }); } },
-                    { label: 'Aceptar',  fn: function(){ ltJoinAsGuest(inv.id); } },
-                ],
-            });
-        });
-    }
+    /* ── Polling de invites de listen-together ──────────────
+       Ahora delegado al mNotifPollAll() unificado (definido más abajo,
+       fuera de este IIFE). Mantenemos la función como stub porque
+       ltBootstrap la referencia, pero ya no hace nada — la unificación
+       cubre los invites de listen junto con partner/playlist/item. */
+    async function ltPollInvites() { /* no-op: ahora mNotifPollAll */ }
+    /* Exposición global para que mNotifPollAll pueda aceptar invites de
+       listen-together delegando a ltJoinAsGuest (que vive en este scope). */
+    window.ltJoinAsGuestFromNotif = ltJoinAsGuest;
+    window.ltFetchFromNotif       = ltFetch;
 
     /* Wire UI buttons — el botón mu-full-lt ya no existe; la entrada
        a Listen Together se hace desde el menú long-press del vinilo. */
@@ -2171,9 +2173,13 @@ window.MuShell = (function(){
         if (fillEl) fillEl.style.width = pct + '%';
         var c1 = document.getElementById('mu-full-time-cur'); if (c1) c1.textContent = fmt(cur);
         var t1 = document.getElementById('mu-full-time-tot'); if (t1) t1.textContent = fmt(tot);
-        /* Sync periódico de posición con la TV cada ~5s para corregir
-           drift. publishNowPlaying tiene su propio throttle. */
-        if (Date.now() - __NP_TICK > 5000) {
+        /* Sync periódico de posición con la TV cada ~2s para corregir
+           drift. Antes era 5s → la TV podía acumular hasta 5s+lag de
+           desfase antes de tener data fresca. 2s acerca la "última
+           posición conocida" del móvil y, combinado con `age` que
+           devuelve el servidor, mantiene a la TV dentro de ~1-2s del
+           móvil. publishNowPlaying tiene su propio throttle. */
+        if (Date.now() - __NP_TICK > 2000) {
             __NP_TICK = Date.now();
             var playing = false;
             try { playing = YT_PLAYER.getPlayerState() === 1; } catch (_) {}
@@ -3121,6 +3127,205 @@ window.MuShell = (function(){
         if (cpBp && cpBp.classList.contains('is-open')) cpCloseModal();
         else if (settingsBp && settingsBp.classList.contains('is-open')) closeSettings();
     });
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   NOTIFICACIONES UNIFICADAS — sondea cada 15s assets/notifications/
+   pending.php y muestra como toast los invites pendientes de las 4
+   fuentes (listen, partner, playlist, item).
+   - Al cargar la app: fetch inmediato → si hay pending, los muestra.
+   - Deep-link #notif=<source> (viene de tap en push): el primer invite
+     de esa fuente se abre como SHEET full-overlay (más visible) en vez
+     de toast pequeño.
+   ════════════════════════════════════════════════════════════════ */
+(function mNotifSystem(){
+    var SHOWN = {};   /* {source: {id: true}} → evita spam */
+    var POLL_T = null;
+    var POLL_URL = 'assets/notifications/pending.php';
+
+    /* Toast reusable (idéntico estilo a ltToast). */
+    function mToast(opts) {
+        var existing = document.getElementById('m-toast-' + (opts.id || ''));
+        if (existing) existing.remove();
+        var t = document.createElement('div');
+        t.id = 'm-toast-' + (opts.id || Date.now());
+        t.className = 'mu-lt-toast';
+        if (opts.sheet) t.classList.add('mu-lt-toast-sheet');
+        var html = '';
+        if (opts.title)   html += '<div class="toast-title">'   + opts.title   + '</div>';
+        if (opts.message) html += '<div class="toast-msg">'     + opts.message + '</div>';
+        if (opts.actions && opts.actions.length) {
+            html += '<div class="toast-actions">';
+            opts.actions.forEach(function(a, i){
+                html += '<button data-act-i="' + i + '">' + a.label + '</button>';
+            });
+            html += '</div>';
+        }
+        t.innerHTML = html;
+        document.body.appendChild(t);
+        if (opts.actions && opts.actions.length) {
+            t.querySelectorAll('button[data-act-i]').forEach(function(b){
+                b.addEventListener('click', function(){
+                    var i = +b.getAttribute('data-act-i');
+                    if (opts.actions[i] && opts.actions[i].fn) opts.actions[i].fn();
+                    t.remove();
+                });
+            });
+        }
+        if (!opts.actions || !opts.actions.length) {
+            setTimeout(function(){ if (t.parentNode) t.remove(); }, opts.duration || 4500);
+        }
+    }
+
+    function fetchJSON(url, opts) {
+        opts = opts || {};
+        var init = { credentials: 'same-origin', method: opts.method || 'GET' };
+        if (opts.body) {
+            init.headers = { 'Content-Type': 'application/json' };
+            init.body    = JSON.stringify(opts.body);
+        }
+        return fetch(url, init).then(function(r){ return r.json(); })
+                               .catch(function(){ return { ok: false }; });
+    }
+
+    /* Handlers por fuente. Cada uno define icono, mensaje y acciones. */
+    var HANDLERS = {
+        listen: function(inv, asSheet){
+            mToast({
+                id:    'listen-' + inv.id,
+                sheet: asSheet,
+                title: '🎧 ' + (inv.fromLabel || '?') + ' te invita',
+                message: inv.trackTitle
+                    ? 'Escuchar juntos: ' + inv.trackTitle
+                    : 'Escuchar juntos en directo',
+                actions: [
+                    { label: 'Rechazar', fn: function(){
+                        if (window.ltFetchFromNotif) {
+                            window.ltFetchFromNotif('decline', { body: { inviteId: inv.id } });
+                        }
+                    }},
+                    { label: 'Aceptar', fn: function(){
+                        if (window.ltJoinAsGuestFromNotif) {
+                            window.ltJoinAsGuestFromNotif(inv.id);
+                        }
+                    }},
+                ],
+            });
+        },
+        partner: function(inv, asSheet){
+            mToast({
+                id:    'partner-' + inv.id,
+                sheet: asSheet,
+                title: '💌 ' + (inv.fromLabel || '?') + ' quiere ser tu pareja',
+                message: 'Acepta para vincular vuestros calendarios.',
+                actions: [
+                    { label: 'Rechazar', fn: function(){
+                        fetchJSON('assets/couple/api.php?action=respond-partner-invite',
+                            { method: 'POST', body: { inviteId: inv.id, response: 'reject' } });
+                    }},
+                    { label: 'Aceptar', fn: function(){
+                        fetchJSON('assets/couple/api.php?action=respond-partner-invite',
+                            { method: 'POST', body: { inviteId: inv.id, response: 'accept' } });
+                    }},
+                ],
+            });
+        },
+        playlist: function(inv, asSheet){
+            mToast({
+                id:    'playlist-' + inv.id,
+                sheet: asSheet,
+                title: '📋 ' + (inv.fromLabel || '?') + ' te invita',
+                message: 'Colaborar en "' + (inv.playlistName || 'playlist') + '"',
+                actions: [
+                    { label: 'Rechazar', fn: function(){
+                        fetchJSON('assets/music/api.php?action=respond-invite',
+                            { method: 'POST', body: { inviteId: inv.id, action: 'reject' } });
+                    }},
+                    { label: 'Aceptar', fn: function(){
+                        fetchJSON('assets/music/api.php?action=respond-invite',
+                            { method: 'POST', body: { inviteId: inv.id, action: 'accept' } });
+                    }},
+                ],
+            });
+        },
+        item: function(inv, asSheet){
+            mToast({
+                id:    'item-' + inv.id,
+                sheet: asSheet,
+                title: '➕ ' + (inv.fromLabel || '?') + ' te invita',
+                message: 'Colaborar en "' + (inv.itemTitle || 'item') + '"',
+                actions: [
+                    { label: 'Rechazar', fn: function(){
+                        fetchJSON('assets/profile/api.php?action=respond-item-invite',
+                            { method: 'POST', body: { inviteId: inv.id, action: 'reject' } });
+                    }},
+                    { label: 'Aceptar', fn: function(){
+                        fetchJSON('assets/profile/api.php?action=respond-item-invite',
+                            { method: 'POST', body: { inviteId: inv.id, action: 'accept' } });
+                    }},
+                ],
+            });
+        },
+    };
+
+    /* Sondeo: descarga pending → muestra los nuevos. Si la URL tiene un
+       deep-link de push (#notif=<source>), el primer invite de esa
+       fuente sale como SHEET y bypasea el SHOWN-tracking para que
+       siempre vuelva a aparecer al tap (incluso si el toast se
+       descartó antes). */
+    function poll(checkDeepLink) {
+        return fetchJSON(POLL_URL).then(function(d){
+            if (!d || !d.ok || !Array.isArray(d.invites)) return;
+            var deepSource = null;
+            if (checkDeepLink) {
+                var m = /#notif=([a-z]+)/i.exec(location.hash);
+                if (m) {
+                    deepSource = m[1].toLowerCase();
+                    try { history.replaceState(null, '', location.pathname); } catch (_) {}
+                }
+            }
+            var deepShown = false;
+            d.invites.forEach(function(inv){
+                var src = inv.source;
+                if (!HANDLERS[src]) return;
+                SHOWN[src] = SHOWN[src] || {};
+                var isDeep = (deepSource === src) && !deepShown;
+                if (SHOWN[src][inv.id] && !isDeep) return;
+                SHOWN[src][inv.id] = true;
+                if (isDeep) deepShown = true;
+                HANDLERS[src](inv, isDeep);
+            });
+        });
+    }
+
+    /* Estilo extra para "sheet" — toast ampliado al centro de la pantalla
+       cuando viene de un deep-link de push. */
+    var st = document.createElement('style');
+    st.textContent = '.mu-lt-toast-sheet { bottom: auto !important; top: 50% !important; '
+        + 'transform: translate(-50%, -50%) !important; min-width: 280px; max-width: 92vw; '
+        + 'padding: 14px 18px !important; }';
+    document.head.appendChild(st);
+
+    /* Arranque: poll inmediato + cada 15s.
+       hashchange: si llega un #notif=<source> mientras la app está
+       abierta (lo dispara el SW al navegar tras tap en push), re-poll
+       con detección de deep-link para sacar la sheet. */
+    poll(true);
+    POLL_T = setInterval(function(){ poll(false); }, 15000);
+    window.addEventListener('hashchange', function(){
+        if (/#notif=/i.test(location.hash)) poll(true);
+    });
+})();
+
+/* Heartbeat de presencia — móvil, mismo endpoint que desktop. */
+(function mPresenceHeartbeat(){
+    function ping(){
+        fetch('assets/profile/api.php?action=heartbeat', {
+            method: 'POST', credentials: 'same-origin'
+        }).catch(function(){});
+    }
+    ping();
+    setInterval(ping, 30000);
 })();
 </script>
 

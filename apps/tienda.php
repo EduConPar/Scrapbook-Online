@@ -422,9 +422,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <button type="button" class="button" id="tienda-discord-btn">…</button>
         </div>
         <div class="tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
-        <div class="tienda-tab"        data-view="principal" data-cat="interfaces">🎨 Interfaces</div>
-        <div class="tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</div>
-        <div class="tienda-tab"        data-view="principal" data-cat="haros">⚪ Haros</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="interfaces"><img src="../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</div>
+        <div class="tienda-tab"        data-view="principal" data-cat="haros"><img src="../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</div>
         <div id="tienda-donar-footer">
             <button type="button" class="button" id="tienda-donar-btn" data-view="donaciones">☕ Donaciones</button>
         </div>

@@ -588,7 +588,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <div class="tm-tabs" id="temas-tabs">
     <button class="button tm-tab active" data-tab="themes"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Mis temas</button>
     <button class="button tm-tab"        data-tab="personalize"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Personalización</button>
-    <button class="button tm-tab"        data-tab="library">🌐 Biblioteca</button>
+    <button class="button tm-tab"        data-tab="library"><img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Biblioteca</button>
 </div>
 
 <!-- TAB 1: MIS TEMAS — lista + editor de colores + toolbar -->
@@ -659,15 +659,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <!-- Vista de Interfaces / Haros / Mascotas con cosas que tienes. -->
     <div id="temas-personalize">
         <section class="tm-section">
-            <h3 class="tm-section-title">🎨 Interfaces</h3>
+            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</h3>
             <div class="pers-grid" id="pers-themes-grid"></div>
         </section>
         <section class="tm-section">
-            <h3 class="tm-section-title">⚪ Haros</h3>
+            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</h3>
             <div class="pers-grid" id="pers-haros-grid"></div>
         </section>
         <section class="tm-section">
-            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</h3>
+            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</h3>
             <div class="pers-grid" id="pers-mascots-grid"></div>
         </section>
     </div>
@@ -676,7 +676,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- TAB 3: BIBLIOTECA -->
 <div class="tm-pane" id="temas-pane-library" hidden>
     <div class="tm-section">
-        <h3 class="tm-section-title">🌐 Biblioteca de temas</h3>
+        <h3 class="tm-section-title"><img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Biblioteca de temas</h3>
         <div class="tm-section-body">
             <p style="font-size:11px;color:var(--text);margin:0 0 8px;line-height:1.4;">
                 Temas publicados por la comunidad. Pulsa para probar; pulsa al autor para visitar su perfil.
@@ -1043,7 +1043,7 @@ function showThemeCtxMenu(x, y, name){
     var opts = [];
     /* Los temas descargados de la biblioteca NO se pueden publicar */
     if (!isDownloaded) {
-        opts.push({ label: isPub ? '🌐 Quitar de la biblioteca' : '🌐 Publicar en la biblioteca',
+        opts.push({ label: '<img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">' + (isPub ? 'Quitar de la biblioteca' : 'Publicar en la biblioteca'),
                     action: function(){ setThemePublic(name, !isPub); } });
     }
     opts.push({ label: '📋 Crear copia', action: function(){ duplicateTheme(name); } });

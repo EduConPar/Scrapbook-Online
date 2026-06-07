@@ -37,6 +37,18 @@ html, body {
     height: 100vh;
     overflow: hidden;
 }
+/* El sidebar es UNIFICADO: tiene dos bloques .gal-sidebar-section
+   (uno para Galería, otro para OCs). El tab handler toggea la
+   visibilidad de cada bloque. Como el wrapper #gal-sidebar siempre
+   está visible con sus 220px, los tabs no se mueven y el panel OCs
+   no necesita su propio sidebar interno. */
+.gal-sidebar-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
 
 /* Sidebar */
 #gal-sidebar {

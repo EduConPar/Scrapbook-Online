@@ -104,12 +104,14 @@ html, .mh-body {
     align-items: center;
     justify-content: center;
     font-size: 24px;
+    position: relative;       /* ancla el .pf-presence-dot */
     box-shadow:
         -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
          1px  1px 0 var(--bezel-light-1, #fff),
         -2px -2px 0 var(--bezel-dark-2, grey),
          2px  2px 0 var(--bezel-light-2, #dfdfdf);
 }
+.mh-userbar-avatar.has-presence-dot { overflow: visible; }
 .mh-userbar-avatar > img {
     /* Píxeles explícitos en vez de % para que el img no se expanda
        más allá del wrapper (algunos navegadores con object-fit + flex

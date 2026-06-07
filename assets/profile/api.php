@@ -47,6 +47,19 @@ $u       = requireAuth();
 $userKey = $u['key'];
 $action  = $_GET['action'] ?? $_POST['action'] ?? '';
 
+/* Auto-migración: tabla user_presence — un row por usuario, last_at
+   actualizado vía heartbeat cada 30s desde la shell. Online = last_at
+   en los últimos 60s. */
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS user_presence (
+            user_id INT PRIMARY KEY,
+            last_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_last_at (last_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+} catch (Throwable $e) { /* silencio */ }
+
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
 function pf_uid(PDO $pdo, string $userKey): ?int {
     static $cache = [];
@@ -894,6 +907,12 @@ case 'send-item-invite': {
     $toUid = pf_uid($pdo, $toUser);
     if (!$toUid) jsonError('Usuario destino inválido');
 
+    /* Restringir colaboraciones a seguidores mutuos. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    if (!isMutualFollow($pdo, $uid, $toUid)) {
+        jsonError('Solo puedes invitar a usuarios con seguimiento mutuo');
+    }
+
     $stmt = $pdo->prepare("SELECT title, image, music_type, artist
                            FROM list_items
                            WHERE id = ? AND owner_id = ? AND category = ?");
@@ -921,6 +940,14 @@ case 'send-item-invite': {
             $category === 'music' ? ($item['music_type'] ?: 'song') : null,
             $category === 'music' ? ($item['artist'] ?? '') : null,
         ]);
+    /* Push notification al destinatario. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
+    $fromLabel = $loginUsers[$userKey]['label'] ?? $userKey;
+    sendPushToUser($pdo, (int)$toUid, buildInvitePushPayload(
+        'item',
+        '➕ ' . $fromLabel . ' te invita',
+        'Colaborar en "' . ($item['title'] ?? '') . '"',
+    ));
     jsonResponse(['ok' => true]);
 }
 
@@ -1123,6 +1150,30 @@ case 'get-profile-notifs': {
         $list[] = $entry;
     }
     jsonResponse(['ok' => true, 'notifs' => $list, 'unread' => $unread]);
+}
+
+case 'heartbeat': {
+    /* Ping de presencia — la shell desktop/móvil lo manda cada 30s. */
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $pdo->prepare("
+        INSERT INTO user_presence (user_id) VALUES (?)
+        ON DUPLICATE KEY UPDATE last_at = NOW()
+    ")->execute([$uid]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'presence': {
+    /* Devuelve los user_keys que han hecho heartbeat en los últimos 60s
+       (consideramos "online" → 2x el intervalo de ping = margen seguro
+       de un fallo de red puntual). */
+    $st = $pdo->query("
+        SELECT u.user_key
+          FROM user_presence p
+          JOIN usuarios u ON u.id = p.user_id
+         WHERE p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
+    ");
+    jsonResponse(['ok' => true, 'online' => $st->fetchAll(PDO::FETCH_COLUMN)]);
 }
 
 case 'mark-notifs-read': {

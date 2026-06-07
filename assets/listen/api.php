@@ -178,6 +178,17 @@ if ($action === 'create') {
        invites los filtraba). */
     $existing = getActiveSessionAsHost($pdo, $userId);
     if ($existing) {
+        /* Aseguramos que el host también esté como participante (para
+           que el wrapped cuente sus minutos junto a los invitados). Si
+           había salido, reabrir su fila. */
+        $pdo->prepare("
+            INSERT INTO listening_participants (session_id, user_id)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE
+                joined_at = NOW(),
+                last_seen_at = NOW(),
+                left_at = NULL
+        ")->execute([(int)$existing['id'], $userId]);
         echo json_encode(['ok' => true, 'session_id' => (int)$existing['id'], 'reused' => true]);
         exit;
     }
@@ -188,6 +199,10 @@ if ($action === 'create') {
     $pdo->prepare("INSERT INTO listening_sessions (host_user_id) VALUES (?)")
         ->execute([$userId]);
     $sid = (int)$pdo->lastInsertId();
+    /* El host también se registra como participante para que sus
+       minutos cuenten en el wrapped junto a cada invitado. */
+    $pdo->prepare("INSERT INTO listening_participants (session_id, user_id) VALUES (?, ?)")
+        ->execute([$sid, $userId]);
     echo json_encode(['ok' => true, 'session_id' => $sid]);
     exit;
 }
@@ -214,18 +229,32 @@ if ($action === 'update-state') {
         !empty($j['isPlaying']) ? 1 : 0,
         (int)$host['id'],
     ]);
+    /* Refresca last_seen_at del host (igual que hace el poll del guest).
+       Necesario para que la query de buddies del wrapped use un cierre
+       preciso cuando la sesión se abandona sin "leave" explícito. Si
+       la fila no existe (sesiones antiguas creadas antes de la mejora),
+       la creamos. */
+    $pdo->prepare("
+        INSERT INTO listening_participants (session_id, user_id)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE last_seen_at = NOW(), left_at = NULL
+    ")->execute([(int)$host['id'], $userId]);
     /* Devolvemos lista de participantes activos para que el host detecte
-       cuando alguien nuevo se une y muestre notificación. */
+       cuando alguien nuevo se une y muestre notificación. EXCLUIMOS al
+       propio host — desde que se inserta en listening_participants para
+       que sus minutos cuenten en el wrapped, también aparecía aquí y
+       el frontend mostraba "X (uno mismo) se unió". */
     $stp = $pdo->prepare("
         SELECT u.label, u.user_key
           FROM listening_participants p
           JOIN usuarios u ON u.id = p.user_id
          WHERE p.session_id = ?
+           AND p.user_id <> ?
            AND p.left_at IS NULL
            AND p.last_seen_at > DATE_SUB(NOW(), INTERVAL 30 SECOND)
          ORDER BY p.joined_at DESC
     ");
-    $stp->execute([(int)$host['id']]);
+    $stp->execute([(int)$host['id'], (int)$userId]);
     $list = $stp->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode([
         'ok'                => true,
@@ -276,6 +305,12 @@ if ($action === 'invite') {
         echo json_encode(['ok' => false, 'error' => 'Usuario inválido']);
         exit;
     }
+    /* Defense in depth: rechazar si no es seguimiento mutuo. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    if (!isMutualFollow($pdo, (int)$userId, (int)$toId)) {
+        echo json_encode(['ok' => false, 'error' => 'Solo puedes invitar a usuarios con seguimiento mutuo']);
+        exit;
+    }
     /* Asegura que tengamos sesión host abierta. */
     $host = getActiveSessionAsHost($pdo, $userId);
     if (!$host) {
@@ -292,7 +327,23 @@ if ($action === 'invite') {
         INSERT INTO listening_invites (session_id, from_user_id, to_user_id)
         VALUES (?, ?, ?)
     ")->execute([(int)$host['id'], $userId, $toId]);
-    echo json_encode(['ok' => true, 'invite_id' => (int)$pdo->lastInsertId()]);
+    $newInviteId = (int)$pdo->lastInsertId();
+
+    /* Push notification al destinatario. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
+    $fromLabel = '';
+    try {
+        $st = $pdo->prepare("SELECT label FROM usuarios WHERE id = ?");
+        $st->execute([(int)$userId]);
+        $fromLabel = (string)$st->fetchColumn();
+    } catch (Throwable $e) {}
+    sendPushToUser($pdo, (int)$toId, buildInvitePushPayload(
+        'listen',
+        '🎧 ' . ($fromLabel ?: 'Alguien') . ' te invita',
+        'Escuchar juntos en directo',
+    ));
+
+    echo json_encode(['ok' => true, 'invite_id' => $newInviteId]);
     exit;
 }
 
@@ -390,15 +441,22 @@ if ($action === 'leave') {
 }
 
 if ($action === 'users') {
-    /* Lista usuarios a los que se puede invitar (todos menos uno mismo).
-       Devuelve los que han estado activos recientemente primero (last_seen). */
+    /* Lista usuarios a los que se puede invitar a escuchar juntos:
+       solo aquellos con seguimiento mutuo respecto al usuario actual. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    $mutualIds = mutualFollowerIds($pdo, (int)$userId);
+    if (!$mutualIds) {
+        echo json_encode(['ok' => true, 'users' => []]);
+        exit;
+    }
+    $ph = implode(',', array_fill(0, count($mutualIds), '?'));
     $st = $pdo->prepare("
         SELECT u.user_key, u.label
           FROM usuarios u
-         WHERE u.id <> ?
+         WHERE u.id IN ($ph)
          ORDER BY u.label
     ");
-    $st->execute([$userId]);
+    $st->execute($mutualIds);
     echo json_encode(['ok' => true, 'users' => $st->fetchAll(PDO::FETCH_ASSOC)]);
     exit;
 }

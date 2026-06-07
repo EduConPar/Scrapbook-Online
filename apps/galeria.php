@@ -77,22 +77,44 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
 <!-- Vista CONECTADA -->
 <div id="gal-main" style="display:none;">
-    <!-- Sidebar -->
+    <!-- Sidebar UNIFICADO: contiene tanto los filtros de Galería como
+         los de OCs en bloques separados. El handler de tabs cambia
+         cuál bloque está visible. Esto mantiene el sidebar SIEMPRE en
+         su posición (220px a la izquierda) → los tabs nunca se mueven
+         y el sidebar de OCs aparece exactamente donde debería estar. -->
     <aside id="gal-sidebar">
-        <div class="gal-side-head">🔍 Buscar</div>
-        <div class="gal-side-pad">
-            <input type="text" id="gal-search" placeholder="Nombre de archivo...">
-        </div>
+        <!-- ── Filtros de Galería ── -->
+        <div class="gal-sidebar-section" data-for-tab="galeria">
+            <div class="gal-side-head">🔍 Buscar</div>
+            <div class="gal-side-pad">
+                <input type="text" id="gal-search" placeholder="Nombre de archivo...">
+            </div>
 
-        <div class="gal-side-head">🏷 Etiquetas</div>
-        <div id="gal-tag-list">
-            <div class="gal-empty" id="gal-tag-empty">Sin etiquetas todavía.</div>
-        </div>
+            <div class="gal-side-head">🏷 Etiquetas</div>
+            <div id="gal-tag-list">
+                <div class="gal-empty" id="gal-tag-empty">Sin etiquetas todavía.</div>
+            </div>
 
-        <div id="gal-sidebar-footer">
-            <button class="button" id="gal-clear-filters">Limpiar filtros</button>
-            <button class="button" id="gal-discord-settings" title="Webhook de Discord">⚙ Discord</button>
-            <button class="button" id="gal-disconnect" title="Cerrar sesión de Drive">🔌 Desconectar</button>
+            <div id="gal-sidebar-footer">
+                <button class="button" id="gal-clear-filters">Limpiar filtros</button>
+                <button class="button" id="gal-discord-settings" title="Webhook de Discord">⚙ Discord</button>
+                <button class="button" id="gal-disconnect" title="Cerrar sesión de Drive">🔌 Desconectar</button>
+            </div>
+        </div>
+        <!-- ── Filtros de OCs (ocultos hasta cambiar de tab) ── -->
+        <div class="gal-sidebar-section" data-for-tab="ocs" style="display:none;">
+            <div class="gal-side-head">🔍 Buscar</div>
+            <div class="gal-side-pad">
+                <input type="text" id="ocs-search" placeholder="Nombre del OC...">
+            </div>
+            <div class="gal-side-head">🏷 Etiquetas</div>
+            <div id="ocs-cat-list" style="flex:1;overflow-y:auto;padding:4px;">
+                <div class="gal-empty">Sin etiquetas.</div>
+            </div>
+            <div id="ocs-sidebar-footer">
+                <button class="button" id="ocs-clear-filters">Limpiar filtros</button>
+                <button class="button" id="ocs-new-cat-btn">＋ Etiqueta</button>
+            </div>
         </div>
     </aside>
 
@@ -100,7 +122,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <main id="gal-main-area">
         <div id="gal-tabs">
   <button class="button gal-tab active" data-tab="galeria"><img src="../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Galería</button>
-  <button class="button gal-tab" data-tab="ocs">🎭 OCs</button>
+  <button class="button gal-tab" data-tab="ocs"><img src="../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">OCs</button>
 </div>
         <div id="gal-toolbar">
             <button class="button" id="gal-upload">⬆ Subir imagen</button>
@@ -123,21 +145,8 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <button class="button" id="ocs-refresh-btn" title="Recargar">↻</button>
           </div>
           <div id="ocs-body" style="display:flex;flex:1;overflow:hidden;">
-            <!-- Sidebar -->
-            <aside id="ocs-sidebar">
-              <div class="gal-side-head">🔍 Buscar</div>
-              <div class="gal-side-pad">
-                <input type="text" id="ocs-search" placeholder="Nombre del OC...">
-              </div>
-              <div class="gal-side-head">🏷 Etiquetas</div>
-              <div id="ocs-cat-list" style="flex:1;overflow-y:auto;padding:4px;">
-                <div class="gal-empty">Sin etiquetas.</div>
-              </div>
-              <div id="ocs-sidebar-footer">
-                <button class="button" id="ocs-clear-filters">Limpiar filtros</button>
-                <button class="button" id="ocs-new-cat-btn">＋ Etiqueta</button>
-              </div>
-            </aside>
+            <!-- Sidebar movido a #gal-sidebar (unificado). ocs-panel
+                 ahora solo contiene la grid + el wrapper. -->
             <!-- Grid centrado -->
             <div id="ocs-grid-wrap">
               <div id="ocs-grid"></div>
@@ -2136,14 +2145,8 @@ window.addEventListener('load', tryAutoConnectDrive);
 
 #ocs-body { display:flex; flex:1; overflow:hidden; }
 
-/* Sidebar — mismas medidas que #gal-sidebar de la galería. */
-#ocs-sidebar {
-  width: 220px; flex-shrink: 0;
-  background: var(--win-bg);
-  border-right: 1px solid var(--border);
-  box-shadow: 1px 0 0 var(--bezel-light-1);
-  display: flex; flex-direction: column; overflow: hidden;
-}
+/* Sidebar de OCs unificado dentro de #gal-sidebar — solo el footer
+   mantiene estilos propios para el grupo de botones (limpiar/+etiqueta). */
 #ocs-sidebar-footer {
   padding: 6px 8px; display: flex; flex-direction: column;
   gap: 4px; border-top: 1px solid var(--border);
@@ -2426,11 +2429,40 @@ document.addEventListener('click', function(e) {
   /* Cambio de vista COMPLETO: la barra lateral de la galería (buscar +
      etiquetas) solo aplica al modo galería; en OCs se oculta para que la
      vista de OCs ocupe todo el ancho. */
-  var sb = document.getElementById('gal-sidebar');
-  if (sb) sb.style.display = isOcs ? 'none' : '';
-  ['gal-toolbar','gal-grid','gal-grid-empty'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.style.display=isOcs?'none':'';
+  /* Sidebar UNIFICADO con dos bloques: mostrar solo el del tab activo.
+     El wrapper #gal-sidebar siempre queda visible (220px) → los tabs
+     y el contenido del panel OCs no se desplazan. */
+  var tabKey = isOcs ? 'ocs' : 'galeria';
+  document.querySelectorAll('.gal-sidebar-section').forEach(function(sec) {
+    sec.style.display = (sec.dataset.forTab === tabKey) ? '' : 'none';
   });
+  /* gal-grid y gal-grid-empty se TOGGLEAN mutuamente según haya o no
+     archivos — renderGrid() es quien decide cuál mostrar. Si limpiamos
+     el inline display de AMBOS al volver de OCs, los dos se vuelven
+     visibles (cada uno con su display CSS por defecto) → comparten
+     flex space y los thumbs salen rectangulares.
+     Por eso: al OCULTAR (isOcs=true) ponemos display:none en ambos;
+     al MOSTRAR (isOcs=false) reseteamos solo gal-toolbar y llamamos
+     a renderGrid() para que reaplique la visibilidad correcta. */
+  var toolbar = document.getElementById('gal-toolbar');
+  var grid    = document.getElementById('gal-grid');
+  var empty   = document.getElementById('gal-grid-empty');
+  if (isOcs) {
+    if (toolbar) toolbar.style.display = 'none';
+    if (grid)    grid.style.display    = 'none';
+    if (empty)   empty.style.display   = 'none';
+  } else {
+    if (toolbar) toolbar.style.display = '';
+    /* Reseteamos display de gal-grid ANTES de llamar a renderGrid:
+       renderGrid solo modifica innerHTML y gal-grid-empty.style.display,
+       NUNCA toca gal-grid.style.display. Si lo dejamos en 'none' (que
+       se queda del switch a OCs), los items se renderizan en un grid
+       oculto → galería en blanco. Reseteándolo aquí queda con el
+       display:grid que define el CSS. */
+    if (grid)  grid.style.display  = '';
+    if (empty) empty.style.display = 'none';
+    if (typeof renderGrid === 'function') renderGrid();
+  }
   var panel=document.getElementById('ocs-panel');
   if (panel) {
     panel.classList.toggle('is-active', isOcs);

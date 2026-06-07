@@ -388,7 +388,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="temas-tabs">
             <button class="button temas-tab-btn active" data-tab="themes"><img src="../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mis temas</button>
             <button class="button temas-tab-btn" data-tab="personalize"><img src="../assets/img/appIcons/drawingIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Personalización</button>
-            <button class="button temas-tab-btn" data-tab="library">🌐 Biblioteca</button>
+            <button class="button temas-tab-btn" data-tab="library"><img src="../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Biblioteca</button>
         </div>
 
         <!-- Tab: Mis temas -->
@@ -441,7 +441,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
         <!-- Tab: Biblioteca -->
         <div class="temas-tab-pane" id="temas-pane-library" hidden>
-            <div class="temas-side-head">🌐 Biblioteca de temas</div>
+            <div class="temas-side-head"><img src="../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Biblioteca de temas</div>
             <p style="font-size:10px;color:var(--text-faint);padding:6px 4px;line-height:1.4;">
                 Temas publicados por la comunidad. Pulsa un tema para probarlo;
                 pulsa el autor para visitar su perfil.
@@ -473,15 +473,15 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <!-- Personalización (Temas / Haros / Mascotas con cosas que tienes) -->
         <div id="temas-personalize" hidden>
             <section class="pers-section">
-                <h3 class="pers-section-title">🎨 Interfaces</h3>
+                <h3 class="pers-section-title"><img src="../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</h3>
                 <div class="pers-grid" id="pers-themes-grid"></div>
             </section>
             <section class="pers-section">
-                <h3 class="pers-section-title">⚪ Haros</h3>
+                <h3 class="pers-section-title"><img src="../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</h3>
                 <div class="pers-grid" id="pers-haros-grid"></div>
             </section>
             <section class="pers-section">
-                <h3 class="pers-section-title"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</h3>
+                <h3 class="pers-section-title"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</h3>
                 <div class="pers-grid" id="pers-mascots-grid"></div>
             </section>
         </div>
@@ -741,7 +741,7 @@ function showThemeCtxMenu(x, y, name){
     var opts = [];
     /* Los temas descargados de la biblioteca NO se pueden publicar */
     if (!isDownloaded) {
-        opts.push({ label: isPub ? '🌐 Quitar de la biblioteca' : '🌐 Publicar en la biblioteca',
+        opts.push({ label: '<img src="../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">' + (isPub ? 'Quitar de la biblioteca' : 'Publicar en la biblioteca'),
                     action: function(){ setThemePublic(name, !isPub); } });
     }
     opts.push({ label: '📋 Crear copia', action: function(){ duplicateTheme(name); } });

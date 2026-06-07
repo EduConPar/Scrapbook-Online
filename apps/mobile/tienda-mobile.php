@@ -535,9 +535,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
      aquí — se accede desde el botón del header. -->
 <div class="ti-tabs">
     <div class="button tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
-    <div class="button tienda-tab"        data-view="principal" data-cat="interfaces">🎨 Interfaces</div>
-    <div class="button tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;"> Mascotas</div>
-    <div class="button tienda-tab"        data-view="principal" data-cat="haros">⚪ Haros</div>
+    <div class="button tienda-tab"        data-view="principal" data-cat="interfaces"><img src="../../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</div>
+    <div class="button tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</div>
+    <div class="button tienda-tab"        data-view="principal" data-cat="haros"><img src="../../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</div>
 </div>
 
 <!-- Vista Principal — grid de items de la categoría seleccionada. -->

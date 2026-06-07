@@ -155,14 +155,17 @@ case 'list':
 
 case 'get':
     $id = (int)($_GET['id'] ?? 0);
-    /* Lectura abierta: cualquier usuario autenticado puede ver la ficha
-       de cualquier OC (la app ya muestra la biblioteca cruzada via
-       `list_all`). Las acciones de escritura (update/delete) sí siguen
-       exigiendo `user_id = userId`. */
+    /* Lectura restringida: solo OCs propios o de usuarios con seguimiento
+       mutuo. Las acciones de escritura (update/delete) ya exigen
+       `user_id = userId`. */
     $stmt = $pdo->prepare('SELECT * FROM ocs WHERE id = ?');
     $stmt->execute([$id]);
     $oc = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$oc) jsonError('No encontrado', 404);
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    if (!isMutualFollow($pdo, (int)$userId, (int)$oc['user_id'])) {
+        jsonError('Solo puedes ver OCs de usuarios con seguimiento mutuo', 403);
+    }
     unset($oc['user_id']);
 
     $cs = $pdo->prepare('
@@ -319,22 +322,29 @@ case 'reorder':
     exit;
 
 case 'list_all':
-    /* OCs de TODOS los usuarios, agrupados por autor. La biblioteca es
-       compartida intencionalmente (el frontend ofrece un selector de usuario).
+    /* OCs propios + de usuarios con seguimiento mutuo, agrupados por autor.
+       El frontend ofrece un selector de usuario; la lista se restringe a
+       quienes mantienen seguimiento mutuo con el usuario logueado.
        Incluimos también las categorías PROPIAS de cada usuario para que la
        sidebar pueda renderizar las del usuario que estás viendo, no las tuyas. */
-    $rows = $pdo->prepare('
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    $allowedIds = mutualFollowerIds($pdo, (int)$userId);
+    $allowedIds[] = (int)$userId;
+    $allowedIds = array_unique(array_map('intval', $allowedIds));
+    $placeholders = implode(',', array_fill(0, count($allowedIds), '?'));
+    $rows = $pdo->prepare("
         SELECT o.*, u.username, u.label,
-               GROUP_CONCAT(DISTINCT CONCAT(c.id, ":", c.nombre, ":", c.color)
-                            ORDER BY c.nombre SEPARATOR "|") AS cats
+               GROUP_CONCAT(DISTINCT CONCAT(c.id, ':', c.nombre, ':', c.color)
+                            ORDER BY c.nombre SEPARATOR '|') AS cats
         FROM ocs o
         JOIN usuarios u            ON u.id    = o.user_id
         LEFT JOIN oc_categoria_rel r ON r.oc_id = o.id
         LEFT JOIN oc_categorias    c ON c.id   = r.categoria_id
+        WHERE o.user_id IN ($placeholders)
         GROUP BY o.id
         ORDER BY u.id ASC, o.orden ASC, o.id DESC
-    ');
-    $rows->execute();
+    ");
+    $rows->execute($allowedIds);
     $byUser = [];
     foreach ($rows->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $cats = [];

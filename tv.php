@@ -712,7 +712,15 @@ function applyNowPlaying(d) {
     STATE.track     = d.track || null;
     STATE.isPlaying = !!d.isPlaying;
     if (d.track) {
-        STATE.serverPos = (typeof d.track.position === 'number') ? d.track.position : 0;
+        var basePos = (typeof d.track.position === 'number') ? d.track.position : 0;
+        /* `age` = segundos transcurridos en el servidor desde el último
+           save-now-playing. Si el móvil está reproduciendo, su posición
+           REAL ahora es position + age (más la latencia red→TV, no
+           estimable sin clock sync). Sin este ajuste el TV interpolaría
+           desde una snapshot atrasada → drift estable de ~2-3s + cualquier
+           lag adicional acumulado. */
+        var age = (typeof d.age === 'number') ? d.age : 0;
+        STATE.serverPos = STATE.isPlaying ? (basePos + age) : basePos;
         STATE.duration  = (typeof d.track.duration === 'number') ? d.track.duration : 0;
         STATE.serverTs  = now();
     }
@@ -760,6 +768,12 @@ var LAST_SEEK_TS = 0;
    que detectamos el atasco — si persiste, escalamos a forzar play
    → mute-trick → recargar video → recrear player. */
 var STUCK_SINCE = 0;
+/* Tracking de buffering. Cada entrada en BUFFERING marca el inicio;
+   al salir contamos el tiempo total perdido. Después de un buffer
+   largo (>2s) forzamos un resync agresivo porque sabemos que el TV
+   ha caído atrás. */
+var BUFFER_STARTED = 0;
+var POST_BUFFER_RESYNC = false;
 /* Embed bloqueado por el autor (errores 101/150). En este caso la TV
    se queda como "now-playing visual": portada, título, vinilo girando
    y barra de progreso desde la posición del móvil. Sin reintentos. */
@@ -817,6 +831,18 @@ function createPlayer() {
                 onStateChange: function(e) {
                     if (e.data === YT_PLAYING || e.data === YT_BUFFERING) {
                         STUCK_SINCE = 0; /* salió del atasco */
+                    }
+                    /* Marca inicio/fin de buffering — buffer largo →
+                       resync agresivo al volver a PLAYING. */
+                    if (e.data === YT_BUFFERING) {
+                        if (!BUFFER_STARTED) BUFFER_STARTED = now();
+                    } else if (e.data === YT_PLAYING && BUFFER_STARTED) {
+                        var buffered = now() - BUFFER_STARTED;
+                        BUFFER_STARTED = 0;
+                        /* Si el buffer fue >1.5s, programamos resync
+                           agresivo: la próxima ejecución de syncPlayer
+                           usará umbral 0 en vez del normal de 2s. */
+                        if (buffered > 1500) POST_BUFFER_RESYNC = true;
                     }
                     if (!STATE.isPlaying) return;
                     if (e.data === YT_CUED || e.data === YT_UNSTARTED) {
@@ -950,20 +976,35 @@ function syncPlayer() {
        1. Está reproduciendo (no tiene sentido seekear en pausa).
        2. El estado del player ya no está buffering (seekear en mitad
           de un buffer empeora el corte).
-       3. Pasaron >5s desde el último seek/load (deja al buffer estabilizarse).
-       4. La diferencia con el servidor es enorme (>8s) — drift pequeño
-          se ignora porque cada seek = otro corte de audio.
-       Estos umbrales eliminan los "el audio se corta cada pocos
-       segundos intentando re-sincronizar". */
+       3. Pasaron >3s desde el último seek/load (deja al buffer estabilizarse).
+          Antes 5s — bajado para corregir drift más rápido.
+       4. La diferencia con el servidor es notable (>2s) — antes 8s era
+          muy laxo y permitía desincronización audible. 2s mantiene
+          alineación percibida sin cortar el audio constantemente.
+       Después de un buffer >1.5s, el TV se sabe atrasado: corregimos
+       independientemente del cooldown con umbral 1s. */
     if (!STATE.isPlaying) return;
     if (ps === YT_BUFFERING) return;
-    if (now() - LAST_SEEK_TS < 5000) return;
 
     var elapsed  = (now() - STATE.serverTs) / 1000;
     var expected = STATE.serverPos + elapsed;
     var actual   = 0;
     try { actual = ytPlayer.getCurrentTime() || 0; } catch (_) {}
-    if (Math.abs(actual - expected) > 8) {
+    var diff = Math.abs(actual - expected);
+
+    var threshold;
+    if (POST_BUFFER_RESYNC) {
+        /* Justo después de un buffer largo el TV ESTÁ atrasado por
+           definición — corregimos con umbral más bajo y saltamos
+           cooldown del seek. */
+        threshold = 1;
+        POST_BUFFER_RESYNC = false;
+    } else {
+        if (now() - LAST_SEEK_TS < 3000) return;
+        threshold = 2;
+    }
+
+    if (diff > threshold) {
         try { ytPlayer.seekTo(expected, true); } catch (_) {}
         LAST_SEEK_TS = now();
     }
@@ -1005,7 +1046,7 @@ function schedulePoll() {
 }
 fetchNowPlaying();
 setInterval(tickProgress,  300);
-setInterval(syncPlayer,   1500);
+setInterval(syncPlayer,    900);   /* antes 1500 — chequeo de drift más frecuente */
 </script>
 
 <?php endif; ?>

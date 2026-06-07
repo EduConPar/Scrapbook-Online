@@ -514,6 +514,81 @@ function actionStats(): void {
     }
     unset($al);
 
+    /* ── LISTEN-TOGETHER BUDDIES ────────────────────────────────
+       Aproximación: para cada usuario distinto del actual que haya
+       compartido al menos una sesión conmigo, sumamos los segundos
+       de OVERLAP (joined_at .. min(left_at, last_seen_at)).
+       Considera las sesiones donde:
+         - YO he sido host y el otro participante, O
+         - El otro ha sido host y yo participante, O
+         - Ambos hemos sido participantes.
+       Resultado: lista ordenada por segundos totales escuchados juntos. */
+    $buddies = [];
+    try {
+        $sqlBuddies = $all
+            ? "
+                SELECT u.user_key, u.label,
+                       SUM(GREATEST(0,
+                           TIMESTAMPDIFF(SECOND,
+                               GREATEST(myP.joined_at, otherP.joined_at),
+                               LEAST(
+                                   COALESCE(myP.left_at,    myP.last_seen_at),
+                                   COALESCE(otherP.left_at, otherP.last_seen_at)
+                               )
+                           )
+                       )) AS secs_together
+                  FROM listening_participants myP
+                  JOIN listening_participants otherP
+                    ON otherP.session_id = myP.session_id
+                   AND otherP.user_id   != myP.user_id
+                  JOIN usuarios u ON u.id = otherP.user_id
+                 WHERE myP.user_id = ?
+                 GROUP BY otherP.user_id
+                HAVING secs_together > 0
+                 ORDER BY secs_together DESC
+                 LIMIT 10
+            "
+            : "
+                SELECT u.user_key, u.label,
+                       SUM(GREATEST(0,
+                           TIMESTAMPDIFF(SECOND,
+                               GREATEST(myP.joined_at, otherP.joined_at),
+                               LEAST(
+                                   COALESCE(myP.left_at,    myP.last_seen_at),
+                                   COALESCE(otherP.left_at, otherP.last_seen_at)
+                               )
+                           )
+                       )) AS secs_together
+                  FROM listening_participants myP
+                  JOIN listening_participants otherP
+                    ON otherP.session_id = myP.session_id
+                   AND otherP.user_id   != myP.user_id
+                  JOIN usuarios u ON u.id = otherP.user_id
+                 WHERE myP.user_id = ?
+                   AND YEAR(myP.joined_at) = ?
+                 GROUP BY otherP.user_id
+                HAVING secs_together > 0
+                 ORDER BY secs_together DESC
+                 LIMIT 10
+            ";
+        $stB = $pdo->prepare($sqlBuddies);
+        $stB->execute($all ? [$userId] : [$userId, $year]);
+        foreach ($stB->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $secs = (int)$row['secs_together'];
+            /* Resolución de la imagen del usuario por su label. Devuelve
+               ruta relativa al root (assets/img/<label>.<ext>) o '' si no
+               existe. El frontend está en /apps/ así que prepende '../'. */
+            $imgRel = function_exists('getUserImage') ? getUserImage($row['label']) : '';
+            $buddies[] = [
+                'user_key' => $row['user_key'],
+                'label'    => $row['label'],
+                'minutes'  => (int)round($secs / 60),
+                'secs'     => $secs,
+                'image_url'=> $imgRel ? ('../' . $imgRel) : '',
+            ];
+        }
+    } catch (Throwable $e) { /* tabla puede no existir todavía */ }
+
     echo json_encode([
         'ok'         => true,
         'year'       => $year,
@@ -528,5 +603,6 @@ function actionStats(): void {
         'artists'    => $artists,
         'albums'     => $albums,
         'genres'     => $genres,
+        'buddies'    => $buddies,
     ]);
 }

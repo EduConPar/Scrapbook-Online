@@ -231,7 +231,7 @@ window.DesktopState.whenReady = function(cb){
 
 <!-- DESKTOP CONTEXT MENU (right-click) -->
 <ul id="desktop-ctx-menu" class="desk-ctx">
-    <li data-action="new-folder">📁 Nueva carpeta</li>
+    <li data-action="new-folder"><img src="assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Nueva carpeta</li>
 </ul>
 
 <!-- ICON CONTEXT MENU (táctil: long-press sobre un icono) -->
@@ -255,7 +255,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- MODAL "Nueva carpeta" -->
 <div class="window" id="folder-create-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed;">
     <div class="title-bar">
-        <div class="title-bar-text">📁 Nueva carpeta</div>
+        <div class="title-bar-text"><img src="assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Nueva carpeta</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="folder-create-x"></button>
         </div>
@@ -2279,6 +2279,20 @@ window.notifSystem = (function() {
     }
 })();
 
+/* ── Presencia: heartbeat cada 30s al servidor para marcar al usuario
+   actual como online. assets/profile/api.php?action=heartbeat upserta
+   user_presence.last_at = NOW(). Otros clientes consultan ?action=presence
+   para pintar el indicador. */
+(function presenceHeartbeat(){
+    function ping(){
+        fetch('assets/profile/api.php?action=heartbeat', {
+            method: 'POST', credentials: 'same-origin'
+        }).catch(function(){});
+    }
+    ping();
+    setInterval(ping, 30000);
+})();
+
 /* =========================================================
    DOUBLE-TAP → DBLCLICK (táctil)
    ─────────────────────────────────────────────────────────
@@ -2973,9 +2987,10 @@ window.notifSystem = (function() {
     });
 
     /* ─── Wrapped (Spotify Wrapped clone) ──────────────────────── */
-    /* Drag-only setup para la ventana Wrapped (sin resize — la slide
-       deck no se redimensiona). */
-    if (window.WindowManager) window.WindowManager.setup('wrapped-window', true);
+    /* Setup completo: drag por la title-bar + resize por las esquinas.
+       El card resumen y la imagen final escalan automáticamente con el
+       tamaño del iframe (ver updateWcScale en wrapped.php). */
+    if (window.WindowManager) window.WindowManager.setup('wrapped-window', false);
 
     var wrappedFrame   = document.getElementById('wrapped-frame');
     var wrappedDevBtn  = document.getElementById('wrapped-dev-btn');

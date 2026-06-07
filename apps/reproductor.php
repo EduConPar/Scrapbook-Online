@@ -776,7 +776,7 @@ async function ltOpenModal() {
     const r = await ltFetch('users');
     const list = document.getElementById('lt-user-list');
     if (!r || !r.ok || !r.users || r.users.length === 0) {
-        list.innerHTML = '<div class="lt-status" style="text-align:center;">No hay otros usuarios.</div>';
+        list.innerHTML = '<div class="lt-status" style="text-align:center;line-height:1.45;">Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span></div>';
         return;
     }
     list.innerHTML = r.users.map(function(u){
@@ -2428,7 +2428,7 @@ var addTrackCallback = null;
             .then(function(users) {
                 collabUserList.innerHTML = '';
                 if (!Array.isArray(users) || !users.length) {
-                    collabUserList.innerHTML = '<div class="pl-home-msg">No hay otros usuarios.</div>';
+                    collabUserList.innerHTML = '<div class="pl-home-msg" style="text-align:center;line-height:1.45;">Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span></div>';
                     return;
                 }
                 users.forEach(function(u) {

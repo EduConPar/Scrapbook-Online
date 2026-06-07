@@ -397,6 +397,88 @@
     flex: 1;
     overflow: hidden;
     min-height: 0;
+    position: relative;   /* ancla el panel emoji absoluto */
+}
+.pf-emote:hover { background: var(--bezel-light-2, #dfdfdf) !important; }
+
+/* ── Presencia online/offline ─────────────────────────────────────
+   Punto en la esquina inferior derecha del avatar. Por defecto gris
+   (offline). Con .online → verde con animación de brillo pulsante.
+
+   IMPORTANTE: .profile-avatar-frame tiene overflow:hidden para clipear
+   la imagen interior — el dot vive FUERA del frame (bottom:-2px,
+   right:-2px), así que cuando contiene un dot le forzamos
+   overflow:visible. La imagen sigue ocupando 100% del frame así que
+   no se nota el cambio salvo por el dot que ahora asoma. */
+.profile-avatar-frame,
+.profile-social-card .profile-avatar-frame {
+    position: relative;
+}
+.profile-avatar-frame.has-presence-dot {
+    overflow: visible !important;
+}
+
+/* Wrapper de la sidebar followed — necesita position:relative para
+   anclar el dot pequeño en su esquina inferior derecha. */
+.profile-nav-icon-followed {
+    position: relative;
+}
+.pf-presence-dot.pf-presence-dot-small {
+    width: 7px; height: 7px;
+    bottom: -1px; right: -1px;
+    box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                inset -1px -1px 0 rgba(0,0,0,0.35);
+}
+.pf-presence-dot.pf-presence-dot-small.online {
+    /* `alternate` + un único par from→to → el browser reproduce ida y
+       vuelta sin el "stop" momentáneo que producía el patrón
+       0%/50%/100% con ease-in-out (la velocidad caía a 0 en el rebote). */
+    animation: pfPresencePulseSmall 1.2s ease-in-out infinite alternate;
+}
+@keyframes pfPresencePulseSmall {
+    from {
+        box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                    0 0 2px rgba(46,204,113,0.5);
+        opacity: 0.85;
+    }
+    to {
+        box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                    0 0 7px rgba(46,204,113,1);
+        opacity: 1;
+    }
+}
+.pf-presence-dot {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #888;
+    box-shadow:
+        0 0 0 2px var(--win-bg, silver),
+        inset -1px -1px 0 rgba(0,0,0,0.35);
+    z-index: 2;
+}
+.pf-presence-dot.online {
+    background: #2ecc71;
+    animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes pfPresencePulse {
+    from {
+        box-shadow:
+            0 0 0 2px var(--win-bg, silver),
+            0 0 3px rgba(46,204,113,0.5),
+            inset -1px -1px 0 rgba(0,0,0,0.2);
+        opacity: 0.85;
+    }
+    to {
+        box-shadow:
+            0 0 0 2px var(--win-bg, silver),
+            0 0 10px rgba(46,204,113,1),
+            inset -1px -1px 0 rgba(0,0,0,0.2);
+        opacity: 1;
+    }
 }
 #profile-chat-messages {
     flex: 1;

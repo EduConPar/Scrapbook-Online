@@ -332,6 +332,12 @@ case 'invite-collaborator': {
     $toUid = uidByKey($pdo, $toUser);
     if (!$toUid) jsonError('Usuario destino inválido');
 
+    /* Restringir colaboraciones a seguidores mutuos. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    if (!isMutualFollow($pdo, $uid, $toUid)) {
+        jsonError('Solo puedes invitar a usuarios con seguimiento mutuo');
+    }
+
     /* Validar que la playlist es del usuario actual */
     $stmt = $pdo->prepare("SELECT name FROM playlists WHERE id = ? AND owner_id = ?");
     $stmt->execute([$playlistId, $uid]);
@@ -355,6 +361,15 @@ case 'invite-collaborator': {
     $pdo->prepare("INSERT INTO playlist_invites (to_user_id, from_user_id, playlist_id, type)
                    VALUES (?, ?, ?, 'invite')")
         ->execute([$toUid, $uid, $playlistId]);
+    /* Push notification al destinatario. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
+    global $loginUsers;
+    $fromLabel = $loginUsers[$userKey]['label'] ?? $userKey;
+    sendPushToUser($pdo, (int)$toUid, buildInvitePushPayload(
+        'playlist',
+        '📋 ' . $fromLabel . ' te invita',
+        'Colaborar en "' . $plName . '"',
+    ));
     jsonResponse(['ok' => true]);
 }
 
@@ -414,10 +429,25 @@ case 'respond-invite': {
 /* ─── Usuarios ───────────────────────────────────────────── */
 
 case 'get-users': {
+    /* Solo devuelve usuarios con seguimiento mutuo respecto al actual.
+       Usado por la UI de invitar colaboradores en playlists; si la lista
+       sale filtrada, el usuario nunca ve invitables que iban a fallar. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
     global $loginUsers;
+    $uid = uidByKey($pdo, $userKey);
+    $mutualIds = $uid ? mutualFollowerIds($pdo, $uid) : [];
+    /* Resolver user_keys de los IDs mutuos en una sola query. */
+    $mutualKeys = [];
+    if ($mutualIds) {
+        $ph = implode(',', array_fill(0, count($mutualIds), '?'));
+        $st = $pdo->prepare("SELECT user_key FROM usuarios WHERE id IN ($ph)");
+        $st->execute($mutualIds);
+        $mutualKeys = array_flip($st->fetchAll(PDO::FETCH_COLUMN));
+    }
     $users = [];
     foreach ($loginUsers as $k => $u2) {
         if ($k === $userKey) continue;
+        if (!isset($mutualKeys[$k])) continue;
         $users[] = ['key' => $k, 'label' => $u2['label']];
     }
     jsonResponse($users);
@@ -788,12 +818,19 @@ case 'get-now-playing': {
         $stmt->execute([$uid]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) { $row = null; }
+    /* `age` = segundos transcurridos en el servidor desde el último
+       save-now-playing. Permite que la TV compute la posición REAL del
+       móvil compensando la latencia de red móvil→servidor. Sin esto,
+       el polling de la TV usa una snapshot que puede estar varios
+       segundos atrasada → desincronización progresiva. */
     $payload = $row
         ? [
             'ok'        => true,
             'track'     => json_decode($row['track_json'], true),
             'isPlaying' => !!$row['is_playing'],
             'updatedAt' => (int)$row['ts'],
+            'age'       => max(0, time() - (int)$row['ts']),
+            'serverNow' => time(),
             'user'      => $u['label'],
         ]
         : ['ok' => true, 'track' => null, 'isPlaying' => false];

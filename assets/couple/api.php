@@ -154,9 +154,22 @@ case 'delete-recordatorio': {
 
 /* ─── Usuarios ─── */
 case 'get-users': {
+    /* Solo seguidores mutuos respecto al usuario actual — usado por la
+       UI de invitar a pareja en el calendario. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    $uid = getCurrentUserId($pdo, $userKey);
+    $mutualIds = $uid ? mutualFollowerIds($pdo, $uid) : [];
+    $mutualKeys = [];
+    if ($mutualIds) {
+        $ph = implode(',', array_fill(0, count($mutualIds), '?'));
+        $st = $pdo->prepare("SELECT user_key FROM usuarios WHERE id IN ($ph)");
+        $st->execute($mutualIds);
+        $mutualKeys = array_flip($st->fetchAll(PDO::FETCH_COLUMN));
+    }
     $users = [];
     foreach ($GLOBALS['loginUsers'] as $key => $u2) {
         if ($key === $userKey) continue;
+        if (!isset($mutualKeys[$key])) continue;
         $users[] = ['key' => $key, 'label' => $u2['label']];
     }
     jsonResponse($users);
@@ -186,6 +199,12 @@ case 'invite-partner': {
     $toId   = getCurrentUserId($pdo, $toUser);
     if (!$fromId || !$toId) jsonError('Usuario no encontrado en BD', 500);
 
+    /* Defense in depth: solo seguidores mutuos. */
+    require_once dirname(__DIR__) . '/social-helpers.php';
+    if (!isMutualFollow($pdo, (int)$fromId, (int)$toId)) {
+        jsonError('Solo puedes invitar a usuarios con seguimiento mutuo');
+    }
+
     /* UNIQUE(to_user_id, from_user_id) → si ya existe lanza 23000;
        lo traducimos al mismo mensaje que daba la versión JSON. */
     try {
@@ -195,6 +214,14 @@ case 'invite-partner': {
         if ($e->getCode() === '23000') jsonError('Ya tienes una invitación pendiente');
         throw $e;
     }
+    /* Push notification al destinatario. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
+    $fromLabel = $GLOBALS['loginUsers'][$userKey]['label'] ?? $userKey;
+    sendPushToUser($pdo, (int)$toId, buildInvitePushPayload(
+        'partner',
+        '💌 ' . $fromLabel . ' quiere ser tu pareja',
+        'Acepta para vincular vuestros calendarios',
+    ));
     jsonResponse(['ok' => true]);
 }
 

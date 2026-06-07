@@ -947,15 +947,19 @@ $year  = (int)($_GET['year'] ?? date('Y'));
     .wrapped-card {
         background: var(--win-bg, silver);
         color: var(--text, #000);
-        /* Ancho responsivo al iframe:
-            - Mínimo 420px (o el 92% del ancho si no cabe).
-            - Crece con la altura (60vh) cuando hay espacio.
-            - Cap 800px en ultrawides.
-           Esto garantiza que en ventanas pequeñas se vea igual que
-           antes, y en una ventana maximizada (mucho alto disponible)
-           el card crezca proporcionalmente. */
-        width: min(92vw, max(420px, 60vh), 800px);
+        /* Logical width fijo a 380 (un poco más pequeño que antes para
+           que NO se salga de la ventana al escalar). Todos los offsets
+           internos siguen calibrados a este tamaño base. El crecimiento
+           real lo hace transform:scale() controlado por --wc-scale que
+           actualiza el JS en cada resize. */
+        width: 380px;
         padding: 3px;
+        transform: scale(var(--wc-scale, 1));
+        transform-origin: top center;
+        /* Reserva el alto extra que ocupa el card escalado en el flujo
+           del flex container (transform no afecta layout). Card natural
+           height ≈ 720px; el card escalado ocupa 720 * scale. */
+        margin-bottom: calc(720px * (var(--wc-scale, 1) - 1));
         box-shadow:
             inset -1px -1px var(--bezel-dark-1, #0a0a0a),
             inset  1px  1px var(--bezel-light-1, #fff),
@@ -1601,6 +1605,10 @@ function buildSlideBgs() {
         topGenre:    dx(25,  10, 60, 38),
         /* Lista géneros. */
         genres:      dx(20,   5, 40, 18),
+        /* Buddy top — tono cálido medio-claro (parejita en directo). */
+        buddyTop:    dx(30,   5, 52, 28),
+        /* Buddy list — algo más sobrio que el HERO. */
+        buddyList:   dx(25,   0, 42, 20),
         /* Cierre: mismo que welcome para cerrar el ciclo. */
         closure:     dx(0,    0, 26, 10),
     };
@@ -1697,6 +1705,26 @@ function buildSlides(data) {
     songForGroup.artist  = __topArtist ? pickUnique(__topArtist.top_songs) : null;
     songForGroup.album   = __topAlbum  ? pickUnique(__topAlbum.top_songs)  : null;
     songForGroup.genre   = __topGenre  ? pickUnique(__topGenre.top_songs)  : null;
+
+    /* Buddies (listen-together top): canción random "considerable" que
+       NO haya salido en grupos anteriores. Fallback al pool de songs. */
+    const buddyConsPool = (data.considerable_songs || data.songs || [])
+        .filter(s => s.video_id);
+    songForGroup.buddyTop = pickUnique(buddyConsPool);
+    songForGroup.buddyList = pickUnique(buddyConsPool);
+    if (!songForGroup.buddyTop || !songForGroup.buddyList) {
+        const fallback = (data.songs || []).filter(s => s.video_id && !usedVids.has(s.video_id));
+        if (!songForGroup.buddyTop && fallback.length) {
+            const s = fallback.shift();
+            songForGroup.buddyTop = { video_id: s.video_id, title: s.title, artist: s.artist };
+            usedVids.add(s.video_id);
+        }
+        if (!songForGroup.buddyList && fallback.length) {
+            const s = fallback.shift();
+            songForGroup.buddyList = { video_id: s.video_id, title: s.title, artist: s.artist };
+            usedVids.add(s.video_id);
+        }
+    }
 
     const groupSong = (g) => {
         const s = songForGroup[g];
@@ -1999,6 +2027,78 @@ function buildSlides(data) {
         `, groupSong('genre'), { title: 'top-genres.exe', status: 'Ranking genres...' }));
     }
 
+    /* ── BUDDIES — Listen-Together ─────────────────────────────────
+       Top buddy (1 slide HERO) + top 3 buddies (1 slide ranking). Solo
+       si hay datos. Cada slide arranca con su propia canción "considerable"
+       distinta a las usadas en grupos anteriores. */
+    const buddies = (data.buddies || []).filter(b => b.user_key);
+    /* Marco Win98 4-layer raised (idéntico al .profile-avatar-frame de
+       perfil.css). Cuadrado, NO redondo. */
+    const FRAME_SHADOW = '-1px -1px 0 var(--bezel-dark-1, #0a0a0a), 1px 1px 0 var(--bezel-light-1, #fff), -2px -2px 0 var(--bezel-dark-2, grey), 2px 2px 0 var(--bezel-light-2, #dfdfdf)';
+    /* Versión más notoria del marco — usada en el HERO (top 1). Escala
+       los layers a 3-6px en lugar de 1-2px + drop-shadow exterior. */
+    const FRAME_SHADOW_BIG = '-3px -3px 0 var(--bezel-dark-1, #0a0a0a), 3px 3px 0 var(--bezel-light-1, #fff), -6px -6px 0 var(--bezel-dark-2, grey), 6px 6px 0 var(--bezel-light-2, #dfdfdf), 10px 10px 0 rgba(0,0,0,0.5)';
+
+    /* Helper: avatar grande cuadrado para slide HERO. */
+    const buddyAvatar = (b, size) => {
+        const initial = escapeHtml((b.label || '?').charAt(0).toUpperCase());
+        const sizeCss = size || 'clamp(120px,28vw,200px)';
+        const wrap = `margin:28px auto;width:${sizeCss};height:${sizeCss};background:var(--inset-bg,var(--input-bg,#fff));overflow:hidden;box-shadow:${FRAME_SHADOW_BIG};`;
+        if (b.image_url) {
+            return `<div style="${wrap}">
+                <img src="${escapeHtml(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.outerHTML='<div style=\\'width:100%;height:100%;background:var(--accent);color:var(--accent-text,#fff);display:flex;align-items:center;justify-content:center;font-size:clamp(56px,12vw,96px);font-weight:bold;\\'>${initial}</div>'">
+            </div>`;
+        }
+        return `<div style="${wrap}background:var(--accent);display:flex;align-items:center;justify-content:center;">
+            <span style="font-size:clamp(56px,12vw,96px);color:var(--accent-text,#fff);font-weight:bold;">${initial}</span>
+        </div>`;
+    };
+    /* Avatar pequeño inline cuadrado para top-3 list. */
+    const buddyAvatarInline = (b) => {
+        const initial = escapeHtml((b.label || '?').charAt(0).toUpperCase());
+        const wrap = `width:32px;height:32px;background:var(--inset-bg,var(--input-bg,#fff));overflow:hidden;flex-shrink:0;box-shadow:${FRAME_SHADOW};`;
+        if (b.image_url) {
+            return `<div style="${wrap}">
+                <img src="${escapeHtml(b.image_url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.outerHTML='<div style=\\'width:100%;height:100%;background:var(--accent);color:var(--accent-text,#fff);display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;\\'>${initial}</div>'">
+            </div>`;
+        }
+        return `<div style="${wrap}background:var(--accent);display:flex;align-items:center;justify-content:center;">
+            <span style="color:var(--accent-text,#fff);font-weight:bold;font-size:14px;">${initial}</span>
+        </div>`;
+    };
+
+    if (buddies.length > 0) {
+        const topBuddy = buddies[0];
+        slides.push(makeSlide('buddyTop', `
+            <h1 class="slide-title" style="font-size:clamp(28px,4.5vw,56px);">
+                Con quien más has escuchado música
+            </h1>
+            ${buddyAvatar(topBuddy)}
+            <div class="slide-subtitle" style="font-size:clamp(20px,3.5vw,36px);margin-top:8px;">
+                ${escapeHtml(topBuddy.label || topBuddy.user_key)}
+            </div>
+            <div class="slide-subtitle" style="opacity:0.8;font-size:clamp(13px,1.8vw,18px);">
+                ${(topBuddy.minutes || 0).toLocaleString('es-ES')} minutos escuchando juntos
+            </div>
+        `, groupSong('buddyTop'), { title: 'buddy.exe', status: 'Loading partner stats...' }));
+
+        slides.push(makeSlide('buddyList', `
+            <h1 class="slide-title" style="font-size:clamp(28px,4.5vw,56px);">Tus compañeros de escucha</h1>
+            <div class="top-list">
+                ${buddies.slice(0, 3).map((b, idx) => `
+                    <div class="top-item" style="--i:${idx}">
+                        <div class="top-rank">${idx + 1}</div>
+                        ${buddyAvatarInline(b)}
+                        <div class="top-meta">
+                            <div class="top-meta-title">${escapeHtml(b.label || b.user_key)}</div>
+                            <div class="top-meta-sub">${(b.minutes || 0).toLocaleString('es-ES')} min</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `, groupSong('buddyList'), { title: 'top-buddies.exe', status: 'Ranking buddies...' }));
+    }
+
     /* Cierre */
     /* TARJETA RESUMEN — última slide. Estilo Spotify Wrapped:
        foto top artist + listas Top Artists/Top Songs + minutos + género.
@@ -2297,6 +2397,33 @@ document.addEventListener('keydown', e => {
 });
 
 /* ════════════════════════════════════════════════════════════════
+   --wc-scale dinámico — escala el card resumen (slide final) en
+   proporción al tamaño del iframe. CSS calc no soporta dividir
+   longitudes con distintas unidades, así que el cálculo va aquí.
+   - byHeight: cuánto cabe verticalmente (88vh / 600px de alto natural).
+   - byWidth:  cuánto cabe horizontalmente (92vw / 420px de ancho).
+   - clamp(1, ..., 2.2): nunca encoge por debajo de 1, max 2.2x.
+   ════════════════════════════════════════════════════════════════ */
+function updateWcScale() {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    /* El card mantiene SIEMPRE el mismo ratio respecto al iframe:
+       - Card natural: 380w × 720h (la altura aprox del último slide
+         con título, hero 1:1, top artists/songs, stats y footer).
+       - byHeight: el card ocupa el 87% del alto del iframe.
+       - byWidth:  nunca excede el 90% del ancho del iframe.
+       Se permite encoger hasta 0.5 (ventanas muy pequeñas) y crecer
+       hasta 3.0 (sin cap teórico, sólo seguridad). El más restrictivo
+       de byHeight/byWidth gana → el card cabe siempre. */
+    const byHeight = (H * 0.90) / 720;
+    const byWidth  = (W * 0.95) / 380;
+    const scale = Math.max(0.5, Math.min(byHeight, byWidth, 3));
+    document.documentElement.style.setProperty('--wc-scale', scale.toFixed(3));
+}
+window.addEventListener('resize', updateWcScale);
+updateWcScale();
+
+/* ════════════════════════════════════════════════════════════════
    MÚSICA DE FONDO — YouTube iframe API hidden player.
    Reproduce las top songs del usuario como banda sonora del wrapped.
    La cola arranca con la canción nº1; al terminar pasa a la siguiente
@@ -2580,12 +2707,10 @@ async function renderCardManually(card) {
     };
 
     /* Layout — coordinadas en CSS pixels, luego escalamos.
-       W permanece como 420 (constante de diseño: todos los offsets
-       internos están calibrados para este ancho).
-       outputScale escala el BITMAP final según el ancho real que tiene
-       el card en pantalla → la imagen compartida/descargada conserva
-       la proporción interna pero crece con la ventana. */
-    const W = 420;
+       W = 380 (mismo valor que la CSS .wrapped-card width).
+       outputScale escala el BITMAP final según el ancho real (con
+       transform:scale aplicado) que tiene el card en pantalla. */
+    const W = 380;
     const PAD = 14;
     const HERO_SIZE = W - 20; /* margin 10px cada lado */
     const displayedW = Math.max(280, card.getBoundingClientRect().width || W);

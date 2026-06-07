@@ -578,7 +578,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <main id="gal-main-area">
         <div id="gal-tabs">
   <button class="button gal-tab active" data-tab="galeria"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Galería</button>
-  <button class="button gal-tab" data-tab="ocs">🎭 OCs</button>
+  <button class="button gal-tab" data-tab="ocs"><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">OCs</button>
 </div>
         <div id="gal-toolbar">
             <button class="button" id="gal-upload">⬆ Subir</button>
@@ -2939,9 +2939,27 @@ document.addEventListener('click', function(e) {
      vista de OCs ocupe todo el ancho. */
   var sb = document.getElementById('gal-sidebar');
   if (sb) sb.style.display = isOcs ? 'none' : '';
-  ['gal-toolbar','gal-grid','gal-grid-empty'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.style.display=isOcs?'none':'';
-  });
+  /* gal-grid y gal-grid-empty se TOGGLEAN mutuamente según haya o no
+     archivos — renderGrid() es quien decide cuál mostrar. Si limpiamos
+     el inline display de AMBOS al volver de OCs, los dos se vuelven
+     visibles → comparten flex space y los thumbs salen rectangulares. */
+  var toolbar = document.getElementById('gal-toolbar');
+  var grid    = document.getElementById('gal-grid');
+  var empty   = document.getElementById('gal-grid-empty');
+  if (isOcs) {
+    if (toolbar) toolbar.style.display = 'none';
+    if (grid)    grid.style.display    = 'none';
+    if (empty)   empty.style.display   = 'none';
+  } else {
+    if (toolbar) toolbar.style.display = '';
+    /* Reset display de gal-grid: renderGrid solo modifica innerHTML
+       y gal-grid-empty.style.display, no toca gal-grid.style.display.
+       Sin esto se queda con el 'none' del switch a OCs → renderiza
+       items en un grid invisible. */
+    if (grid)  grid.style.display  = '';
+    if (empty) empty.style.display = 'none';
+    if (typeof renderGrid === 'function') renderGrid();
+  }
   var panel=document.getElementById('ocs-panel');
   if (panel) {
     panel.classList.toggle('is-active', isOcs);

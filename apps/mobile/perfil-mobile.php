@@ -991,6 +991,48 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .pf-friend-chat:active { transform: scale(0.92); }
 
+        /* .pf-friend-av tiene overflow:hidden para clipear la imagen
+           interna. El dot vive FUERA (bottom/right -2px), así que el
+           contenedor con dot necesita overflow:visible. */
+        .pf-friend-av.has-presence-dot { overflow: visible !important; }
+
+        /* Punto de presencia online/offline — esquina inferior derecha.
+           Cuando hay chat-badge en la misma esquina, lo movemos arriba
+           izquierda para no colisionar. */
+        .pf-presence-dot {
+            position: absolute;
+            bottom: -2px; right: -2px;
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: #888;
+            box-shadow: 0 0 0 2px var(--win-bg, silver),
+                        inset -1px -1px 0 rgba(0,0,0,0.35);
+            z-index: 2;
+        }
+        .pf-friend-av .pf-friend-chat + .pf-presence-dot {
+            bottom: auto; right: auto;
+            top: -2px; left: -2px;
+        }
+        .pf-presence-dot.online {
+            background: #2ecc71;
+            /* alternate elimina el "stop" en el rebote 50%→100% del patrón
+               keyframes-en-3-puntos: con un único par from→to y direction
+               alternate el ciclo es continuo en valor y en velocidad. */
+            animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
+        }
+        @keyframes pfPresencePulse {
+            from {
+                box-shadow: 0 0 0 2px var(--win-bg, silver),
+                            0 0 3px rgba(46,204,113,0.5);
+                opacity: 0.85;
+            }
+            to {
+                box-shadow: 0 0 0 2px var(--win-bg, silver),
+                            0 0 12px rgba(46,204,113,1);
+                opacity: 1;
+            }
+        }
+
         /* ── Badges de mensajes sin leer ──
            Pintamos un círculo rojo con el contador (1-9, o "9+" si excede).
            Vive sobre el avatar del amigo en Social (esquina superior derecha)
@@ -1145,7 +1187,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <button class="pf-tab active" data-cat="movies"><img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas <span class="pf-tab-count" id="cnt-movies">·</span></button>
                 <button class="pf-tab" data-cat="series"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series <span class="pf-tab-count" id="cnt-series">·</span></button>
                 <button class="pf-tab" data-cat="books">📖 Libros <span class="pf-tab-count" id="cnt-books">·</span></button>
-                <button class="pf-tab" data-cat="games">🎮 Juegos <span class="pf-tab-count" id="cnt-games">·</span></button>
+                <button class="pf-tab" data-cat="games"><img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Juegos <span class="pf-tab-count" id="cnt-games">·</span></button>
                 <button class="pf-tab" data-cat="music"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Música <span class="pf-tab-count" id="cnt-music">·</span></button>
             </nav>
 
@@ -1153,7 +1195,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                  cuando la pestaña activa es 'music'. -->
             <nav class="pf-subtabs" id="pf-music-subtabs" hidden>
                 <button class="pf-subtab active" data-mtab="albums" type="button">💿 Álbumes</button>
-                <button class="pf-subtab" data-mtab="songs" type="button"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
+                <button class="pf-subtab" data-mtab="songs" type="button"><img src="../../assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
             </nav>
 
             <!-- Sub-toggle de estado: pendientes / en curso / completadas.
@@ -2184,8 +2226,16 @@ function openCollabDialog(item, origIdx, cat) {
         }
 
         var invitable = Object.keys(PROFILE_USERS).filter(function(k){
-            return k !== USER_KEY && cur.indexOf(k) === -1;
+            return k !== USER_KEY
+                && cur.indexOf(k) === -1
+                && isMutual(k);   /* solo seguidores mutuos */
         });
+        if (!invitable.length && !cur.length) {
+            var empty = document.createElement('div');
+            empty.style.cssText = 'text-align:center;padding:12px 8px;font-size:12px;line-height:1.45;';
+            empty.innerHTML = 'Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span>';
+            listEl.appendChild(empty);
+        }
         if (invitable.length) {
             if (cur.length) {
                 var sep = document.createElement('hr');
@@ -2918,6 +2968,49 @@ function isMutual(uKey) {
            STATE.myFollowers.indexOf(uKey) !== -1;
 }
 
+/* Presencia: refresca los puntos online/offline en los avatares de
+   Social. Llamado al cargar y cada 20s. Cachea el último set para que
+   los re-renders apliquen el estado sin esperar al fetch. */
+var __pfLastOnline = {};
+function applyPresence() {
+    document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
+        var k = dot.getAttribute('data-userkey');
+        dot.classList.toggle('online', !!__pfLastOnline[k]);
+    });
+}
+/* Helper: attach/replace dot en cualquier wrapper de avatar. userKey
+   '' o falsy → elimina el dot. */
+function attachPresenceDot(wrap, userKey, small) {
+    if (!wrap) return;
+    var existing = wrap.querySelector('.pf-presence-dot');
+    if (existing) existing.remove();
+    if (!userKey) {
+        wrap.classList.remove('has-presence-dot');
+        return;
+    }
+    wrap.classList.add('has-presence-dot');
+    var dot = document.createElement('span');
+    dot.className = 'pf-presence-dot' + (small ? ' pf-presence-dot-small' : '');
+    dot.setAttribute('data-userkey', userKey);
+    if (__pfLastOnline[userKey]) dot.classList.add('online');
+    wrap.appendChild(dot);
+}
+window.__pfAttachPresenceDot = attachPresenceDot;
+function refreshPresenceDots() {
+    fetch(API + '?action=presence', { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d || !d.ok || !Array.isArray(d.online)) return;
+            __pfLastOnline = {};
+            d.online.forEach(function(k) { __pfLastOnline[k] = true; });
+            applyPresence();
+        })
+        .catch(function() {});
+}
+window.__pfApplyPresence = applyPresence;
+refreshPresenceDots();
+setInterval(refreshPresenceDots, 20000);
+
 /* ─── Posts ─────────────────────────────────────────────────────── */
 function renderPosts(posts) {
     var listEl = document.getElementById('pf-posts-list');
@@ -3182,7 +3275,7 @@ function renderSocial() {
             : '';
         html +=
             '<div class="pf-friend-card" data-user="' + esc(uKey) + '">' +
-                '<div class="pf-friend-av">' + avHtml + chatBadge + '</div>' +
+                '<div class="pf-friend-av has-presence-dot">' + avHtml + chatBadge + '<span class="pf-presence-dot" data-userkey="' + esc(uKey) + '"></span></div>' +
                 '<div class="pf-friend-label">' + esc(uInfo.label) + '</div>' +
             '</div>';
     });
@@ -3196,6 +3289,8 @@ function renderSocial() {
     gridEl.querySelectorAll('[data-user]').forEach(function(card){
         card.addEventListener('click', function(){ viewOtherUser(card.dataset.user); });
     });
+    /* Re-aplica el estado de presencia conocido sin esperar al fetch. */
+    if (window.__pfApplyPresence) window.__pfApplyPresence();
     /* Badge 💬: stopPropagation para que no dispare también viewOtherUser. */
     gridEl.querySelectorAll('[data-act="chat"]').forEach(function(btn){
         btn.addEventListener('click', function(e){
@@ -3229,7 +3324,7 @@ function openExploreDialog() {
                 : '<span>👤</span>';
             listHtml +=
                 '<div class="pf-friend-card" data-user="' + esc(uKey) + '">' +
-                    '<div class="pf-friend-av">' + avHtml + '</div>' +
+                    '<div class="pf-friend-av has-presence-dot">' + avHtml + '<span class="pf-presence-dot" data-userkey="' + esc(uKey) + '"></span></div>' +
                     '<div class="pf-friend-label">' + esc(uInfo.label) + '</div>' +
                 '</div>';
         });
@@ -3317,6 +3412,7 @@ function updateHeaderForViewing() {
         } else {
             avatarEl.innerHTML = '<span>👤</span>';
         }
+        attachPresenceDot(avatarEl, STATE.viewingUser);
     } else {
         nameEl.textContent  = USER_LABEL;
         greetEl.textContent = 'Perfil de';
@@ -3326,6 +3422,7 @@ function updateHeaderForViewing() {
         } else {
             avatarEl.innerHTML = '<span>👤</span>';
         }
+        attachPresenceDot(avatarEl, USER_KEY);
     }
     toggleProfileActions();
 }
@@ -3355,20 +3452,29 @@ function openChat(uKey) {
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.id = 'pf-chat-backdrop';
+    /* Avatar del usuario en la title-bar. Si tiene image → img, si no → inicial sobre accent. */
+    var avHtml = uInfo.image
+        ? '<img src="' + esc(uInfo.image) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">'
+        : '<div style="width:100%;height:100%;background:var(--accent);color:var(--accent-text,#fff);font-size:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;">' + esc((uInfo.label || '?').charAt(0).toUpperCase()) + '</div>';
     bd.innerHTML =
         '<div class="window pf-modal pf-chat-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">💬 ' + esc(uInfo.label) + '</div>' +
+                '<div class="title-bar-text" style="display:flex;align-items:center;gap:6px;">' +
+                    '<span id="pf-chat-title-av" style="position:relative;width:18px;height:18px;display:inline-block;background:var(--inset-bg,#fff);box-shadow:-1px -1px 0 var(--bezel-dark-1,#0a0a0a), 1px 1px 0 var(--bezel-light-1,#fff);flex-shrink:0;">' + avHtml + '</span>' +
+                    '<span>' + esc(uInfo.label) + '</span>' +
+                '</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
             '</div>' +
-            '<div class="window-body pf-chat-body">' +
+            '<div class="window-body pf-chat-body" style="position:relative;">' +
                 '<div class="pf-chat-messages" id="pf-chat-messages">' +
                     '<div class="pf-chat-empty">Cargando…</div>' +
                 '</div>' +
+                '<div id="pf-chat-emoji-panel" style="display:none;position:absolute;bottom:48px;left:8px;right:8px;background:var(--win-bg,silver);padding:6px;z-index:5;box-shadow:inset -1px -1px var(--bezel-dark-1,#0a0a0a),inset 1px 1px var(--bezel-light-1,#fff),inset -2px -2px var(--bezel-dark-2,grey),inset 2px 2px var(--bezel-light-2,#dfdfdf);max-height:160px;overflow-y:auto;"></div>' +
                 '<div class="pf-chat-input-row">' +
                     '<input type="text" id="pf-chat-input" maxlength="2000" placeholder="Escribe un mensaje…">' +
+                    '<button class="button" id="pf-chat-emoji-btn" type="button" title="Emotes" style="padding:3px 8px;">😀</button>' +
                     '<button class="button" id="pf-chat-send" type="button">Enviar</button>' +
                 '</div>' +
             '</div>' +
@@ -3378,10 +3484,51 @@ function openChat(uKey) {
     bd.querySelector('.title-bar-controls button').addEventListener('click', closeChat);
     bd.addEventListener('click', function(e){ if (e.target === bd) closeChat(); });
 
+    /* Dot de presencia del user con el que estoy chateando — pequeño,
+       en la esquina inferior derecha del avatar de la title-bar. */
+    var chatAv = bd.querySelector('#pf-chat-title-av');
+    if (chatAv && window.__pfAttachPresenceDot) {
+        window.__pfAttachPresenceDot(chatAv, uKey, true);
+    }
+
     var input = bd.querySelector('#pf-chat-input');
     var sendBtn = bd.querySelector('#pf-chat-send');
     sendBtn.addEventListener('click', sendChatMessage);
     input.addEventListener('keydown', function(e){ if (e.key === 'Enter') sendChatMessage(); });
+
+    /* Emoji picker — paleta de emotes. Mismo set y comportamiento que desktop. */
+    var EMOTES = ['😀','😂','🥲','😅','😍','😘','🤩','🤔','🙄','😎',
+                  '😭','😡','🥺','😴','🤤','🤯','🤗','🫶','🫡','👀',
+                  '🥳','😏','😉','🙃','😬','😱','🤣','😋','😇','🤧',
+                  '👍','👎','🙌','👏','💪','🙏','🤝','✌️','🤞','👌',
+                  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💖',
+                  '🔥','✨','💯','⭐','🎉','🎊','🎵','🎶','🎁','☕',
+                  '🍕','🍔','🍿','🍻','🍰','🌹','🌸','🌈','☀️','🌙'];
+    var panel  = bd.querySelector('#pf-chat-emoji-panel');
+    var emBtn  = bd.querySelector('#pf-chat-emoji-btn');
+    if (panel && emBtn) {
+        panel.innerHTML = EMOTES.map(function(e){
+            return '<button type="button" style="background:transparent;border:0;font-size:20px;padding:4px 6px;cursor:pointer;font-family:inherit;min-height:32px;" data-em="' + e + '">' + e + '</button>';
+        }).join('');
+        emBtn.addEventListener('click', function(e){
+            e.stopPropagation();
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        });
+        panel.addEventListener('click', function(e){
+            var b = e.target.closest('button[data-em]');
+            if (!b) return;
+            var em = b.getAttribute('data-em');
+            var start = input.selectionStart || input.value.length;
+            var end   = input.selectionEnd   || input.value.length;
+            input.value = input.value.slice(0, start) + em + input.value.slice(end);
+            input.focus();
+            input.setSelectionRange(start + em.length, start + em.length);
+        });
+        bd.addEventListener('click', function(e){
+            if (panel.style.display === 'none') return;
+            if (!panel.contains(e.target) && e.target !== emBtn) panel.style.display = 'none';
+        });
+    }
 
     loadChatMessages();
     CHAT.pollTimer = setInterval(loadChatMessages, 1500);

@@ -29,12 +29,12 @@ require_once dirname(__DIR__) . '/assets/config.php';
                     <span class="profile-nav-count" id="profile-count-series">—</span>
                 </div>
                 <div class="profile-nav-item" data-cat="books">
-                    <span class="profile-nav-icon">📚</span>
+                    <span class="profile-nav-icon"><img src="assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                     <span class="profile-nav-label">Libros</span>
                     <span class="profile-nav-count" id="profile-count-books">—</span>
                 </div>
                 <div class="profile-nav-item" data-cat="games">
-                    <span class="profile-nav-icon">🎮</span>
+                    <span class="profile-nav-icon"><img src="assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                     <span class="profile-nav-label">Videojuegos</span>
                     <span class="profile-nav-count" id="profile-count-games">—</span>
                 </div>
@@ -52,7 +52,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                         <span class="profile-nav-label">Mejor del año</span>
                     </div>
                     <div class="profile-nav-item" data-melon="recent">
-                        <span class="profile-nav-icon">🆕</span>
+                        <span class="profile-nav-icon"><img src="assets/img/appIcons/newsIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                         <span class="profile-nav-label">Reciente</span>
                     </div>
                     <div class="profile-nav-item" data-melon="alltime">
@@ -204,10 +204,10 @@ require_once dirname(__DIR__) . '/assets/config.php';
                 <div id="profile-melon-cats">
                     <button class="button melon-cat-btn" data-mcat="movies"><img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas</button>
                     <button class="button melon-cat-btn" data-mcat="series"><img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series</button>
-                    <button class="button melon-cat-btn" data-mcat="books">📚 Libros</button>
-                    <button class="button melon-cat-btn" data-mcat="games">🎮 Videojuegos</button>
-                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="album">💿 Álbumes</button>
-                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="song"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
+                    <button class="button melon-cat-btn" data-mcat="books"><img src="assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Libros</button>
+                    <button class="button melon-cat-btn" data-mcat="games"><img src="assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Videojuegos</button>
+                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="album"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Álbumes</button>
+                    <button class="button melon-cat-btn" data-mcat="music" data-mtype="song"><img src="assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canciones</button>
                 </div>
                 <div id="profile-melon-body">
                     <div id="profile-melon-status" style="padding:14px;text-align:center;font-size:11px;color:#808080;">Selecciona una categoría</div>
@@ -222,15 +222,22 @@ require_once dirname(__DIR__) . '/assets/config.php';
 <!-- CHAT WINDOW -->
 <div class="window" id="profile-chat-window" style="display:none;position:fixed;z-index:10002;width:340px;height:420px;">
     <div class="title-bar">
-        <div class="title-bar-text" id="profile-chat-title">💬 Chat</div>
+        <div class="title-bar-text" id="profile-chat-title" style="display:flex;align-items:center;gap:6px;">
+            <span id="profile-chat-title-av" style="width:18px;height:18px;display:inline-block;background:var(--inset-bg,#fff);overflow:hidden;box-shadow:-1px -1px 0 var(--bezel-dark-1,#0a0a0a), 1px 1px 0 var(--bezel-light-1,#fff);flex-shrink:0;"></span>
+            <span id="profile-chat-title-text">Chat</span>
+        </div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-chat-close"></button>
         </div>
     </div>
     <div class="window-body" id="profile-chat-body">
         <div id="profile-chat-messages"></div>
+        <!-- Panel emoji (oculto por defecto). Se posiciona absoluto sobre
+             el input-row al togglear. -->
+        <div id="profile-chat-emoji-panel" style="display:none;position:absolute;bottom:48px;left:8px;right:8px;background:var(--win-bg,silver);padding:6px;z-index:5;box-shadow:inset -1px -1px var(--bezel-dark-1,#0a0a0a),inset 1px 1px var(--bezel-light-1,#fff),inset -2px -2px var(--bezel-dark-2,grey),inset 2px 2px var(--bezel-light-2,#dfdfdf);max-height:140px;overflow-y:auto;"></div>
         <div id="profile-chat-input-row">
             <input type="text" id="profile-chat-input" maxlength="2000" placeholder="Escribe un mensaje…">
+            <button class="button" id="profile-chat-emoji-btn" type="button" title="Emotes" style="padding:3px 8px;">😀</button>
             <button class="button" id="profile-chat-send">Enviar</button>
         </div>
     </div>
@@ -429,8 +436,8 @@ require_once dirname(__DIR__) . '/assets/config.php';
         <div id="music-add-step1">
             <p style="margin:0 0 10px;font-size:11px;">¿Qué quieres añadir?</p>
             <div class="field-row" style="gap:6px;">
-                <button class="button" id="music-add-type-song" style="flex:1;"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canción</button>
-                <button class="button" id="music-add-type-album" style="flex:1;">💿 Álbum / Playlist</button>
+                <button class="button" id="music-add-type-song" style="flex:1;"><img src="assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Canción</button>
+                <button class="button" id="music-add-type-album" style="flex:1;"><img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Álbum / Playlist</button>
             </div>
         </div>
         <div id="music-add-step2" style="display:none;">
@@ -507,8 +514,8 @@ var PROFILE_USERS = <?php
     var CATS = {
         movies: { label: 'Películas',   icon: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
         series: { label: 'Series',      icon: '📺' },
-        books:  { label: 'Libros',      icon: '📚' },
-        games:  { label: 'Videojuegos', icon: '🎮' },
+        books:  { label: 'Libros',      icon: '<img src="assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
+        games:  { label: 'Videojuegos', icon: '<img src="assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
         music:  { label: 'Música',      icon: '🎵' }
     };
 
@@ -959,7 +966,9 @@ var PROFILE_USERS = <?php
             }
 
             var invitable = Object.keys(PROFILE_USERS).filter(function(k) {
-                return k !== currentSessionUser && existingCollabs.indexOf(k) === -1;
+                return k !== currentSessionUser
+                    && existingCollabs.indexOf(k) === -1
+                    && isMutual(k);   /* solo seguidores mutuos */
             });
             if (invitable.length) {
                 if (existingCollabs.length) {
@@ -995,7 +1004,10 @@ var PROFILE_USERS = <?php
                     })(uKey)));
                 });
             } else if (!existingCollabs.length) {
-                list.appendChild(collabSectionTitle('No hay otros usuarios disponibles'));
+                var empty = document.createElement('div');
+                empty.style.cssText = 'text-align:center;padding:10px 6px;font-size:12px;line-height:1.45;';
+                empty.innerHTML = 'Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span>';
+                list.appendChild(empty);
             }
         }
 
@@ -2297,6 +2309,12 @@ var PROFILE_USERS = <?php
             frame.innerHTML = img
                 ? '<img src="' + img + '" alt="" class="profile-avatar-img">'
                 : '<div class="profile-avatar-placeholder">👤</div>';
+            /* Dot de presencia para el usuario al que pertenece la topbar.
+               Si no estoy viewing-other, es mi propio user — el dot
+               siempre se pintará como online (mi heartbeat está activo). */
+            if (window.__attachPresenceDot) {
+                window.__attachPresenceDot(frame, viewingUser || currentSessionUser);
+            }
         }
         if (nameEl) nameEl.textContent = label;
         if (titleEl) titleEl.innerHTML = icon + ' ' + ownLabel;
@@ -2320,7 +2338,7 @@ var PROFILE_USERS = <?php
 
     /* ──── Melon reviews ──── */
     var MELON_LABELS = { year: 'Mejor del año', recent: 'Reciente', alltime: 'Todo el tiempo' };
-    var MELON_ICONS  = { movies: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', series: '📺', books: '📚', games: '🎮', music: '🎵' };
+    var MELON_ICONS  = { movies: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', series: '📺', books: '<img src="assets/img/appIcons/booksIcon.png" alt="" style="width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', games: '<img src="assets/img/appIcons/juegosIcon.png" alt="" style="width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', music: '🎵' };
     var MELON_MUST_VERBS = { movies: 'watch', series: 'watch', books: 'read', games: 'play', music: 'listen' };
     var melonPeriod = null;
     var melonCat    = null;
@@ -2643,6 +2661,14 @@ var PROFILE_USERS = <?php
         } else {
             avWrap.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
         }
+        /* Punto de presencia — empieza offline, el poller lo actualizará.
+           Necesita has-presence-dot para anular el overflow:hidden del
+           frame que clipearía el dot que está en bottom:-2px right:-2px. */
+        avWrap.classList.add('has-presence-dot');
+        var dot = document.createElement('span');
+        dot.className = 'pf-presence-dot';
+        dot.setAttribute('data-userkey', userKey);
+        avWrap.appendChild(dot);
         card.appendChild(avWrap);
         var nameEl = document.createElement('div');
         nameEl.className = 'profile-social-name';
@@ -2671,6 +2697,8 @@ var PROFILE_USERS = <?php
             var card = buildSocialCard(k);
             if (card) exploreEl.appendChild(card);
         });
+        /* Re-aplica el estado de presencia conocido sin esperar al fetch. */
+        if (window.__applyPresence) window.__applyPresence();
         if (!exploreKeys.length) {
             exploreEl.innerHTML = '<div class="profile-social-empty">No hay más usuarios.</div>';
         }
@@ -2692,7 +2720,7 @@ var PROFILE_USERS = <?php
             item.className = 'profile-nav-item profile-nav-followed';
             item.dataset.user = k;
             var iconWrap = document.createElement('span');
-            iconWrap.className = 'profile-nav-icon';
+            iconWrap.className = 'profile-nav-icon profile-nav-icon-followed';
             if (u.image) {
                 var img = document.createElement('img');
                 img.className = 'profile-nav-avatar';
@@ -2701,6 +2729,12 @@ var PROFILE_USERS = <?php
             } else {
                 iconWrap.textContent = '👤';
             }
+            /* Punto de presencia para los followed — más pequeño que en
+               las social cards porque el avatar de la sidebar es 22×22. */
+            var navDot = document.createElement('span');
+            navDot.className = 'pf-presence-dot pf-presence-dot-small';
+            navDot.setAttribute('data-userkey', k);
+            iconWrap.appendChild(navDot);
             item.appendChild(iconWrap);
             var label = document.createElement('span');
             label.className = 'profile-nav-label';
@@ -2734,6 +2768,8 @@ var PROFILE_USERS = <?php
             }
             nav.appendChild(item);
         });
+        /* Re-aplica el estado de presencia conocido. */
+        if (window.__applyPresence) window.__applyPresence();
     }
 
     function viewOtherUser(userKey) {
@@ -2759,6 +2795,7 @@ var PROFILE_USERS = <?php
                     } else {
                         avFrame.innerHTML = '<div class="profile-avatar-placeholder">👤</div>';
                     }
+                    if (window.__attachPresenceDot) window.__attachPresenceDot(avFrame, data.userKey);
                 }
                 var nameEl = document.getElementById('profile-username');
                 if (nameEl) nameEl.textContent = data.label;
@@ -2802,6 +2839,63 @@ var PROFILE_USERS = <?php
         return ownFollowing.indexOf(userKey) !== -1 && myFollowers.indexOf(userKey) !== -1;
     }
 
+    /* Presencia: cada 20s pide la lista de online y refresca los puntos.
+       Cacheamos el último set para que renderSocialList/renderFollowedNav
+       puedan re-aplicar el estado sin esperar al siguiente fetch. */
+    var lastOnlineSet = {};
+    function applyPresence() {
+        document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
+            var k = dot.getAttribute('data-userkey');
+            dot.classList.toggle('online', !!lastOnlineSet[k]);
+        });
+    }
+    /* Helper: marca un .profile-avatar-frame con su dot de presencia.
+       Cualquier dot previo se elimina. userKey '' o falsy → sin dot. */
+    function attachPresenceDot(frame, userKey) {
+        if (!frame) return;
+        var existing = frame.querySelector('.pf-presence-dot');
+        if (existing) existing.remove();
+        if (!userKey) {
+            frame.classList.remove('has-presence-dot');
+            return;
+        }
+        frame.classList.add('has-presence-dot');
+        var dot = document.createElement('span');
+        dot.className = 'pf-presence-dot';
+        dot.setAttribute('data-userkey', userKey);
+        frame.appendChild(dot);
+        if (lastOnlineSet[userKey]) dot.classList.add('online');
+    }
+    window.__attachPresenceDot = attachPresenceDot;
+    function refreshPresenceDots() {
+        fetch('assets/profile/api.php?action=presence', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || !d.ok || !Array.isArray(d.online)) return;
+                lastOnlineSet = {};
+                d.online.forEach(function(k) { lastOnlineSet[k] = true; });
+                applyPresence();
+            })
+            .catch(function() {});
+    }
+    /* Expone applyPresence para que las funciones de render puedan
+       re-aplicar el estado al recrear los dots. */
+    window.__applyPresence = applyPresence;
+    refreshPresenceDots();
+    setInterval(refreshPresenceDots, 20000);
+
+    /* Inicializa el dot en los 3 avatares hard-coded del HTML
+       (default profile view, cat view, music view). Apuntan al usuario
+       propio cuando se carga, ya que no estamos viewing-other. */
+    [
+        '#profile-avatar-col .profile-avatar-frame',
+        '#profile-catview-avatar-wrap .profile-avatar-frame',
+        '#music-catview-avatar-wrap .profile-avatar-frame',
+    ].forEach(function(sel) {
+        var fr = document.querySelector(sel);
+        if (fr) attachPresenceDot(fr, currentSessionUser);
+    });
+
     function loadMyFollowers(cb) {
         fetch('assets/profile/api.php?action=get-followers')
             .then(function(r) { return r.json(); })
@@ -2824,7 +2918,29 @@ var PROFILE_USERS = <?php
         chatWithUser = userKey;
         chatLastSeenId = null;
         var u = PROFILE_USERS[userKey];
-        document.getElementById('profile-chat-title').textContent = '💬 ' + u.label;
+        /* Avatar del usuario en lugar del 💬. Si no hay imagen, fallback a la inicial. */
+        var avEl = document.getElementById('profile-chat-title-av');
+        if (avEl) {
+            if (u.image) {
+                avEl.innerHTML = '<img src="' + escHtml(u.image) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+            } else {
+                avEl.innerHTML = '<div style="width:100%;height:100%;background:var(--accent);color:var(--accent-text,#fff);font-size:10px;font-weight:bold;display:flex;align-items:center;justify-content:center;">' + escHtml((u.label || '?').charAt(0).toUpperCase()) + '</div>';
+            }
+            /* `position:relative` para anclar el dot absoluto a la esquina
+               del span; `overflow:visible` porque el dot se posiciona
+               fuera del rect (bottom/right negativos). */
+            avEl.style.position = 'relative';
+            avEl.style.overflow = 'visible';
+            /* Dot de presencia del user con el que chateo. */
+            var prevDot = avEl.querySelector('.pf-presence-dot');
+            if (prevDot) prevDot.remove();
+            var chatDot = document.createElement('span');
+            chatDot.className = 'pf-presence-dot pf-presence-dot-small';
+            chatDot.setAttribute('data-userkey', userKey);
+            if (lastOnlineSet[userKey]) chatDot.classList.add('online');
+            avEl.appendChild(chatDot);
+        }
+        document.getElementById('profile-chat-title-text').textContent = u.label;
         var win = document.getElementById('profile-chat-window');
         win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
@@ -2924,6 +3040,44 @@ var PROFILE_USERS = <?php
         if (input) input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
         });
+        /* Emoji picker — paleta de emotes comunes. Click en uno → append
+           al input. Click fuera del panel o re-toggle del botón → cierra. */
+        var EMOTES = ['😀','😂','🥲','😅','😍','😘','🤩','🤔','🙄','😎',
+                      '😭','😡','🥺','😴','🤤','🤯','🤗','🫶','🫡','👀',
+                      '🥳','😏','😉','🙃','😬','😱','🤣','😋','😇','🤧',
+                      '👍','👎','🙌','👏','💪','🙏','🤝','✌️','🤞','👌',
+                      '❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💖',
+                      '🔥','✨','💯','⭐','🎉','🎊','🎵','🎶','🎁','☕',
+                      '🍕','🍔','🍿','🍻','🍰','🌹','🌸','🌈','☀️','🌙'];
+        var panel  = document.getElementById('profile-chat-emoji-panel');
+        var btn    = document.getElementById('profile-chat-emoji-btn');
+        if (panel && btn && input) {
+            /* Renderiza el grid de emotes una vez. */
+            panel.innerHTML = EMOTES.map(function(e){
+                return '<button type="button" class="pf-emote" style="background:transparent;border:0;font-size:18px;padding:2px 4px;cursor:pointer;font-family:inherit;" data-em="' + e + '">' + e + '</button>';
+            }).join('');
+            panel.style.display = 'none';
+            btn.addEventListener('click', function(e){
+                e.stopPropagation();
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+            panel.addEventListener('click', function(e){
+                var b = e.target.closest('button[data-em]');
+                if (!b) return;
+                var em = b.getAttribute('data-em');
+                /* Inserta en la posición del cursor. */
+                var start = input.selectionStart || input.value.length;
+                var end   = input.selectionEnd   || input.value.length;
+                input.value = input.value.slice(0, start) + em + input.value.slice(end);
+                input.focus();
+                input.setSelectionRange(start + em.length, start + em.length);
+            });
+            /* Click fuera del panel cierra. */
+            document.addEventListener('click', function(e){
+                if (panel.style.display === 'none') return;
+                if (!panel.contains(e.target) && e.target !== btn) panel.style.display = 'none';
+            });
+        }
     })();
 
     function addItemToOwnProfile(cat, item) {
@@ -3019,6 +3173,7 @@ var PROFILE_USERS = <?php
                     echo json_encode('<div class="profile-avatar-placeholder">👤</div>');
                 }
             ?>;
+            if (window.__attachPresenceDot) window.__attachPresenceDot(avFrame, currentSessionUser);
         }
         var nameEl = document.getElementById('profile-username');
         if (nameEl) nameEl.textContent = <?php echo json_encode($desktopLabel); ?>;

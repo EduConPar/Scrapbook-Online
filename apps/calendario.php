@@ -71,7 +71,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     <button class="button" onclick="history.back()">◄ Volver</button>
     <span style="font-size: 13px; color: var(--text);">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
     <?php if (!$pareja): ?>
-    <button class="button" id="btn-invitar">💌 Invitar a mi pareja</button>
+    <button class="button" id="btn-invitar">💌 Invitar</button>
     <?php endif; ?>
 </div>
 
@@ -631,7 +631,10 @@ document.getElementById('btn-invitar').addEventListener('click', function() {
     .then(users => {
         const list = document.getElementById('user-list');
         list.innerHTML = '';
-        if (!users.length) { list.innerHTML = '<p style="font-size:11px;">No hay otros usuarios.</p>'; return; }
+        if (!users.length) {
+            list.innerHTML = '<div style="text-align:center;padding:12px 6px;font-size:12px;line-height:1.45;">Aún no tienes amigos que invitar.<br><span style="opacity:0.75;font-size:11px;">Seguíos entre vosotros para haceros amigos.</span></div>';
+            return;
+        }
         users.forEach(u => {
             const btn = document.createElement('button');
             btn.className = 'button';
