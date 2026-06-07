@@ -732,7 +732,9 @@ document.getElementById('momento-foto').addEventListener('change', function() {
     document.getElementById('momento-foto-nombre').value = this.files.length ? this.files[0].name : '';
 });
 
-cargarTodo();
+/* Purgar recordatorios no periódicos ya pasados antes de cargar */
+fetch(API_BASE + '?action=purge-recordatorios&pareja_id=' + parejaId, { method: 'POST' })
+    .finally(() => cargarTodo());
 
 /* ─── Modal Win98 de confirmación ─── */
 (function(){

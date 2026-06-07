@@ -9,10 +9,11 @@
    GET   ?action=get-users
    GET   ?action=get-partner-invites
 
-   POST  ?action=save-momento          { pareja_id, titulo, fecha, descripcion, emocion }
-   POST  ?action=save-recordatorio     { pareja_id, titulo, fecha, tipo, descripcion }
+   POST  ?action=save-momento          { pareja_id, titulo, fecha, descripcion }
+   POST  ?action=save-recordatorio     { pareja_id, titulo, fecha, descripcion, periodicidad }
    POST  ?action=delete-momento        { id }
    POST  ?action=delete-recordatorio   { id }
+   POST  ?action=purge-recordatorios   (borra no-periódicos cuya fecha < hoy)
    POST  ?action=invite-partner        { toUser }
    POST  ?action=respond-partner-invite{ inviteId, action: 'accept'|'reject', fecha? }
    POST  ?action=upload-foto           multipart: momento_id + foto
@@ -24,8 +25,7 @@ $u        = requireAuth();
 $userKey  = $u['key'];
 $action   = $_GET['action'] ?? $_POST['action'] ?? '';
 
-/* Helper: obtiene el id (PK) en la tabla `usuarios` del usuario actual.
-   Resuelve por user_key — más fiable que casar username con lower(label). */
+/* Helper: obtiene el id (PK) en la tabla `usuarios` del usuario actual. */
 function getCurrentUserId(PDO $pdo, string $userKey): ?int {
     static $cache = [];
     if (array_key_exists($userKey, $cache)) return $cache[$userKey];
@@ -43,12 +43,12 @@ case 'get-momentos': {
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
     if ($parejaId) {
-        $stmt = $pdo->prepare("SELECT m.id, m.titulo, m.descripcion, m.emocion, m.fecha, m.foto, u.username AS autor
+        $stmt = $pdo->prepare("SELECT m.id, m.titulo, m.descripcion, m.fecha, m.foto, u.username AS autor
                                FROM momentos m JOIN usuarios u ON m.usuario_id = u.id
                                WHERE m.pareja_id = ? ORDER BY m.fecha ASC");
         $stmt->execute([$parejaId]);
-   } else {
-        $stmt = $pdo->prepare("SELECT id, titulo, descripcion, emocion, fecha, foto, ? AS autor
+    } else {
+        $stmt = $pdo->prepare("SELECT id, titulo, descripcion, fecha, foto, ? AS autor
                                FROM momentos WHERE usuario_id = ? AND pareja_id IS NULL
                                ORDER BY fecha ASC");
         $stmt->execute([strtolower($GLOBALS['loginUsers'][$userKey]['label']), $userId]);
@@ -63,13 +63,13 @@ case 'save-momento': {
     $titulo = trim($b['titulo'] ?? '');
     $fecha  = $b['fecha'] ?? '';
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
-    $stmt = $pdo->prepare("INSERT INTO momentos (pareja_id, usuario_id, titulo, descripcion, emocion, fecha)
-                           VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO momentos (pareja_id, usuario_id, titulo, descripcion, fecha)
+                           VALUES (?, ?, ?, ?, ?)");
     $pid = (int)($b['pareja_id'] ?? 0);
-$stmt->execute([
-    $pid > 0 ? $pid : null, $userId, $titulo,
-    trim($b['descripcion'] ?? ''), $b['emocion'] ?? '', $fecha,
-]);
+    $stmt->execute([
+        $pid > 0 ? $pid : null, $userId, $titulo,
+        trim($b['descripcion'] ?? ''), $fecha,
+    ]);
     jsonResponse(['ok' => true, 'id' => $pdo->lastInsertId()]);
 }
 
@@ -111,12 +111,12 @@ case 'get-recordatorios': {
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
     if ($parejaId) {
-        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.tipo, r.descripcion, u.username AS autor
+        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion, r.periodicidad, u.username AS autor
                                FROM recordatorios r JOIN usuarios u ON r.usuario_id = u.id
                                WHERE r.pareja_id = ? ORDER BY r.fecha ASC");
         $stmt->execute([$parejaId]);
     } else {
-        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.tipo, r.descripcion, u.username AS autor
+        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion, r.periodicidad, u.username AS autor
                                FROM recordatorios r JOIN usuarios u ON r.usuario_id = u.id
                                WHERE r.usuario_id = ? AND r.pareja_id = 0 ORDER BY r.fecha ASC");
         $stmt->execute([$userId]);
@@ -131,11 +131,13 @@ case 'save-recordatorio': {
     $titulo = trim($b['titulo'] ?? '');
     $fecha  = $b['fecha'] ?? '';
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
-    $stmt = $pdo->prepare("INSERT INTO recordatorios (usuario_id, pareja_id, titulo, fecha, tipo, descripcion)
+    $periodicidad = in_array($b['periodicidad'] ?? '', ['anual','mensual','semanal'])
+                    ? $b['periodicidad'] : 'ninguna';
+    $stmt = $pdo->prepare("INSERT INTO recordatorios (usuario_id, pareja_id, titulo, fecha, descripcion, periodicidad)
                            VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->execute([
         $userId, (int)($b['pareja_id'] ?? 0), $titulo, $fecha,
-        $b['tipo'] ?? 'otro', trim($b['descripcion'] ?? ''),
+        trim($b['descripcion'] ?? ''), $periodicidad,
     ]);
     jsonResponse(['ok' => true]);
 }
@@ -152,10 +154,31 @@ case 'delete-recordatorio': {
     jsonResponse(['ok' => true]);
 }
 
+case 'purge-recordatorios': {
+    /* Elimina recordatorios no periódicos cuya fecha ya pasó,
+       restringido a la pareja del usuario actual para no tocar datos ajenos. */
+    $userId = getCurrentUserId($pdo, $userKey);
+    if (!$userId) jsonResponse(['ok' => true]);
+    $parejaId = (int)($_GET['pareja_id'] ?? 0);
+    $hoy = date('Y-m-d');
+    if ($parejaId) {
+        $stmt = $pdo->prepare("DELETE FROM recordatorios
+                               WHERE pareja_id = ?
+                                 AND (periodicidad = 'ninguna' OR periodicidad IS NULL)
+                                 AND fecha < ?");
+        $stmt->execute([$parejaId, $hoy]);
+    } else {
+        $stmt = $pdo->prepare("DELETE FROM recordatorios
+                               WHERE usuario_id = ? AND pareja_id = 0
+                                 AND (periodicidad = 'ninguna' OR periodicidad IS NULL)
+                                 AND fecha < ?");
+        $stmt->execute([$userId, $hoy]);
+    }
+    jsonResponse(['ok' => true, 'deleted' => $stmt->rowCount()]);
+}
+
 /* ─── Usuarios ─── */
 case 'get-users': {
-    /* Solo seguidores mutuos respecto al usuario actual — usado por la
-       UI de invitar a pareja en el calendario. */
     require_once dirname(__DIR__) . '/social-helpers.php';
     $uid = getCurrentUserId($pdo, $userKey);
     $mutualIds = $uid ? mutualFollowerIds($pdo, $uid) : [];
@@ -175,7 +198,7 @@ case 'get-users': {
     jsonResponse($users);
 }
 
-/* ─── Invitaciones de pareja (SQL: partner_invites) ─── */
+/* ─── Invitaciones de pareja ─── */
 case 'get-partner-invites': {
     $uid = getCurrentUserId($pdo, $userKey);
     if (!$uid) jsonResponse([]);
@@ -199,14 +222,11 @@ case 'invite-partner': {
     $toId   = getCurrentUserId($pdo, $toUser);
     if (!$fromId || !$toId) jsonError('Usuario no encontrado en BD', 500);
 
-    /* Defense in depth: solo seguidores mutuos. */
     require_once dirname(__DIR__) . '/social-helpers.php';
     if (!isMutualFollow($pdo, (int)$fromId, (int)$toId)) {
         jsonError('Solo puedes invitar a usuarios con seguimiento mutuo');
     }
 
-    /* UNIQUE(to_user_id, from_user_id) → si ya existe lanza 23000;
-       lo traducimos al mismo mensaje que daba la versión JSON. */
     try {
         $pdo->prepare("INSERT INTO partner_invites (to_user_id, from_user_id) VALUES (?, ?)")
             ->execute([$toId, $fromId]);
@@ -214,7 +234,6 @@ case 'invite-partner': {
         if ($e->getCode() === '23000') jsonError('Ya tienes una invitación pendiente');
         throw $e;
     }
-    /* Push notification al destinatario. */
     require_once dirname(__DIR__) . '/push/send-push.php';
     $fromLabel = $GLOBALS['loginUsers'][$userKey]['label'] ?? $userKey;
     sendPushToUser($pdo, (int)$toId, buildInvitePushPayload(
@@ -235,7 +254,6 @@ case 'respond-partner-invite': {
     $uid = getCurrentUserId($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
 
-    /* Solo el destinatario puede responder a la invitación. */
     $stmt = $pdo->prepare("SELECT from_user_id FROM partner_invites WHERE id = ? AND to_user_id = ?");
     $stmt->execute([$inviteId, $uid]);
     $fromId = $stmt->fetchColumn();
@@ -246,7 +264,6 @@ case 'respond-partner-invite': {
     if ($act === 'reject') jsonResponse(['ok' => true]);
     if (!$fecha) jsonError('Falta la fecha de inicio');
 
-    /* Aceptar → crear pareja (si no existe ya). */
     $stmt = $pdo->prepare("SELECT id FROM parejas
                            WHERE (usuario1_id = ? AND usuario2_id = ?)
                               OR (usuario1_id = ? AND usuario2_id = ?)");
@@ -257,6 +274,7 @@ case 'respond-partner-invite': {
         ->execute([(int)$fromId, $uid, $fecha]);
     jsonResponse(['ok' => true]);
 }
+
 case 'save-momento-foto-url': {
     $b         = jsonBody();
     $momentoId = (int)($b['momento_id'] ?? 0);
