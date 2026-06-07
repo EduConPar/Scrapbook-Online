@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 07, 2026 at 06:16 PM
+-- Generation Time: Jun 07, 2026 at 06:28 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -400,13 +400,6 @@ CREATE TABLE `momentos` (
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `momentos`
---
-
-INSERT INTO `momentos` (`id`, `pareja_id`, `usuario_id`, `titulo`, `descripcion`, `foto`, `emoji`, `emocion`, `fecha`, `creado_en`) VALUES
-(7, 1, 2, 'asdadsdad', '', NULL, NULL, '😊', '2026-05-26', '2026-05-26 18:42:53');
-
 -- --------------------------------------------------------
 
 --
@@ -507,7 +500,14 @@ INSERT INTO `music_plays` (`id`, `user_id`, `video_id`, `title`, `artist`, `play
 (36, 2, 'OTIgSuOI-i8', 'Running up that Hill (Nightcore)', 'Syrex', 13, 84, '2026-06-07 18:11:57'),
 (37, 2, 'wqPdeT6Jpdg', 'Wet', 'Dazey and the Scouts', 13, 18, '2026-06-07 18:12:45'),
 (38, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 31, '2026-06-07 18:13:18'),
-(39, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 159, '2026-06-07 18:15:27');
+(39, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 159, '2026-06-07 18:15:27'),
+(40, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 161, '2026-06-07 18:21:52'),
+(41, 2, 'EiS7cKfuf6w', 'Sienna', 'The Marías', 13, 224, '2026-06-07 18:22:57'),
+(42, 2, 'AS4q9yaWJkI', '砂の惑星 feat.初音ミク', 'hachi', 13, 39, '2026-06-07 18:23:36'),
+(43, 2, 'AS4q9yaWJkI', '砂の惑星 feat.初音ミク', 'hachi', 13, 189, '2026-06-07 18:26:06'),
+(44, 2, 'AS4q9yaWJkI', '砂の惑星 feat.初音ミク', 'hachi', 13, 239, '2026-06-07 18:26:57'),
+(45, 2, '_QCzM4Eei9g', 'メズマライザー (feat. 初音ミク&重音テト)', '32ki;Hatsune Miku;重音テト', 13, 7, '2026-06-07 18:27:06'),
+(46, 2, 'G_JfKOjwzwo', 'Through Patches of Violet', 'Mili', 13, 3, '2026-06-07 18:27:10');
 
 -- --------------------------------------------------------
 
@@ -1751,18 +1751,10 @@ CREATE TABLE `recordatorios` (
   `pareja_id` int(11) NOT NULL DEFAULT 0,
   `titulo` varchar(100) NOT NULL,
   `fecha` date NOT NULL,
-  `tipo` enum('cita','examen','aniversario','otro') DEFAULT 'otro',
   `descripcion` text DEFAULT NULL,
   `creado_en` timestamp NOT NULL DEFAULT current_timestamp(),
   `periodicidad` varchar(10) NOT NULL DEFAULT 'ninguna'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `recordatorios`
---
-
-INSERT INTO `recordatorios` (`id`, `usuario_id`, `pareja_id`, `titulo`, `fecha`, `tipo`, `descripcion`, `creado_en`, `periodicidad`) VALUES
-(3, 2, 1, 'awdasdawd', '2026-05-26', 'cita', '', '2026-05-26 18:42:49', 'ninguna');
 
 -- --------------------------------------------------------
 
@@ -1814,7 +1806,7 @@ CREATE TABLE `user_presence` (
 --
 
 INSERT INTO `user_presence` (`user_id`, `last_at`) VALUES
-(2, '2026-06-07 16:16:29');
+(2, '2026-06-07 16:28:38');
 
 -- --------------------------------------------------------
 
@@ -1835,7 +1827,7 @@ CREATE TABLE `user_settings` (
 
 INSERT INTO `user_settings` (`user_id`, `key_name`, `value`, `updated_at`) VALUES
 (1, 'player', '{\"playlistId\":2,\"trackIndex\":0,\"volume\":18}', '2026-05-29 22:35:23'),
-(2, 'player', '{\"playlistId\":13,\"trackIndex\":127,\"volume\":100}', '2026-06-07 16:12:47'),
+(2, 'player', '{\"playlistId\":13,\"trackIndex\":329,\"volume\":100}', '2026-06-07 16:27:07'),
 (8, 'player', '{\"playlistId\":null,\"trackIndex\":0}', '2026-05-29 16:21:27');
 
 -- --------------------------------------------------------
@@ -2259,7 +2251,7 @@ ALTER TABLE `music_extras`
 -- AUTO_INCREMENT for table `music_plays`
 --
 ALTER TABLE `music_plays`
-  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=40;
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=47;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -2331,7 +2323,7 @@ ALTER TABLE `post_comments`
 -- AUTO_INCREMENT for table `recordatorios`
 --
 ALTER TABLE `recordatorios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `themes`
