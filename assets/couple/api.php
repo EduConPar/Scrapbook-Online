@@ -35,6 +35,22 @@ function getCurrentUserId(PDO $pdo, string $userKey): ?int {
     return $cache[$userKey] = $id ? (int)$id : null;
 }
 
+/* Auto-migración: tabla que registra qué recordatorios YA se notificaron
+   para cada threshold (7/2/1 días) y fecha de ocurrencia, evitando
+   reenviar la misma notificación. */
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS reminder_notifs_sent (
+            recordatorio_id INT NOT NULL,
+            user_id         INT NOT NULL,
+            threshold       INT NOT NULL,
+            occurrence_date DATE NOT NULL,
+            sent_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (recordatorio_id, user_id, threshold, occurrence_date)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+} catch (Throwable $e) { /* silencio */ }
+
 switch ($action) {
 
 /* ─── Momentos ─── */
@@ -209,6 +225,142 @@ case 'get-partner-invites': {
                            ORDER BY pi.created_at ASC");
     $stmt->execute([$uid]);
     jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
+/* Recordatorios próximos al usuario actual (y a su pareja si tiene),
+   filtrados a las próximas ocurrencias que caen en 7, 2 o 1 días.
+   Cada match registra un row en reminder_notifs_sent → solo se devuelve
+   UNA vez. Si la tabla tiene PK compuesta y INSERT IGNORE, ejecuciones
+   concurrentes no duplican notificaciones. Manda push best-effort. */
+case 'upcoming-reminders': {
+    $userId = getCurrentUserId($pdo, $userKey);
+    if (!$userId) jsonResponse(['ok' => true, 'reminders' => []]);
+
+    /* Encuentra pareja_id del usuario (si tiene). */
+    $stPair = $pdo->prepare("
+        SELECT id FROM parejas
+         WHERE usuario1_id = ? OR usuario2_id = ?
+         LIMIT 1
+    ");
+    $stPair->execute([$userId, $userId]);
+    $parejaId = (int)($stPair->fetchColumn() ?: 0);
+
+    /* Carga TODOS los recordatorios del usuario + de su pareja. */
+    if ($parejaId) {
+        $stR = $pdo->prepare("
+            SELECT id, titulo, fecha, descripcion, periodicidad
+              FROM recordatorios
+             WHERE usuario_id = ? OR pareja_id = ?
+        ");
+        $stR->execute([$userId, $parejaId]);
+    } else {
+        $stR = $pdo->prepare("
+            SELECT id, titulo, fecha, descripcion, periodicidad
+              FROM recordatorios
+             WHERE usuario_id = ?
+        ");
+        $stR->execute([$userId]);
+    }
+    $rows = $stR->fetchAll(PDO::FETCH_ASSOC);
+
+    $today = new DateTimeImmutable('today');
+    $matches = [];
+
+    /* Calcula la próxima ocurrencia de un recordatorio en función de su
+       periodicidad (ninguna/semanal/mensual/anual). Devuelve DateTime
+       o null si ya no aplica. */
+    $nextOccurrence = function(string $fecha, ?string $periodicidad) use ($today): ?DateTimeImmutable {
+        try {
+            $d = new DateTimeImmutable($fecha);
+        } catch (Throwable $e) { return null; }
+        $per = $periodicidad ?: 'ninguna';
+        if ($per === 'ninguna') {
+            return ($d >= $today) ? $d : null;
+        }
+        if ($per === 'semanal') {
+            $diffDays = (int)$today->diff($d)->format('%r%a');
+            /* Avanzar de 7 en 7 hasta caer en o después de hoy. */
+            while ($diffDays < 0) {
+                $d = $d->modify('+7 days');
+                $diffDays = (int)$today->diff($d)->format('%r%a');
+            }
+            return $d;
+        }
+        if ($per === 'mensual') {
+            /* Misma día-del-mes. Si pasó este mes, próximo mes. */
+            $tryDate = $today->setDate(
+                (int)$today->format('Y'),
+                (int)$today->format('m'),
+                min((int)$d->format('d'), (int)$today->format('t'))
+            );
+            if ($tryDate < $today) {
+                $next = $today->modify('first day of next month');
+                $tryDate = $next->setDate(
+                    (int)$next->format('Y'),
+                    (int)$next->format('m'),
+                    min((int)$d->format('d'), (int)$next->format('t'))
+                );
+            }
+            return $tryDate;
+        }
+        if ($per === 'anual') {
+            $tryDate = $today->setDate(
+                (int)$today->format('Y'),
+                (int)$d->format('m'),
+                (int)$d->format('d')
+            );
+            if ($tryDate < $today) {
+                $tryDate = $tryDate->modify('+1 year');
+            }
+            return $tryDate;
+        }
+        return null;
+    };
+
+    $thresholds = [7, 2, 1];
+    foreach ($rows as $r) {
+        $next = $nextOccurrence($r['fecha'], $r['periodicidad'] ?? null);
+        if (!$next) continue;
+        $diffDays = (int)$today->diff($next)->format('%r%a');
+        if (!in_array($diffDays, $thresholds, true)) continue;
+
+        /* INSERT IGNORE: si ya enviamos esta notif (recordatorio + user
+           + threshold + occurrence_date) la query no devuelve nada
+           nuevo. rowCount = 0 → ya estaba notificado. */
+        $stIns = $pdo->prepare("
+            INSERT IGNORE INTO reminder_notifs_sent
+                (recordatorio_id, user_id, threshold, occurrence_date)
+            VALUES (?, ?, ?, ?)
+        ");
+        $stIns->execute([(int)$r['id'], (int)$userId, $diffDays, $next->format('Y-m-d')]);
+        if ($stIns->rowCount() === 0) continue;
+
+        $matches[] = [
+            'id'          => (int)$r['id'],
+            'titulo'      => $r['titulo'],
+            'descripcion' => $r['descripcion'] ?? '',
+            'fecha'       => $next->format('Y-m-d'),
+            'threshold'   => $diffDays,
+        ];
+    }
+
+    /* Push notification best-effort por cada match nuevo. */
+    if (!empty($matches)) {
+        require_once dirname(__DIR__) . '/push/send-push.php';
+        foreach ($matches as $m) {
+            $whenStr = $m['threshold'] === 1 ? 'mañana'
+                     : ($m['threshold'] === 2 ? 'en 2 días' : 'en 1 semana');
+            sendPushToUser($pdo, (int)$userId, [
+                'type'  => 'reminder',
+                'title' => '🔔 Recordatorio',
+                'body'  => $m['titulo'] . ' ' . $whenStr,
+                'tag'   => 'reminder-' . $m['id'] . '-' . $m['threshold'],
+                'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=reminder',
+            ]);
+        }
+    }
+
+    jsonResponse(['ok' => true, 'reminders' => $matches]);
 }
 
 case 'invite-partner': {

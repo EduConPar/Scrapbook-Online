@@ -68,7 +68,6 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
 <!-- BARRA SUPERIOR -->
 <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
-    <button class="button" onclick="history.back()">◄ Volver</button>
     <span style="font-size: 13px; color: var(--text);">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
     <?php if (!$pareja): ?>
     <button class="button" id="btn-invitar">💌 Invitar</button>
@@ -109,6 +108,267 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
         </div>
     </div>
 </div>
+
+<!-- VENTANA COUNTDOWN — épica, cuenta atrás con música en bucle -->
+<div class="window" id="countdown-window"
+     style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(1100px,96vw); z-index:9600; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="countdown-title-text">⏳ Cuenta atrás</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="countdown-close"></button>
+        </div>
+    </div>
+    <div class="window-body cd-body">
+        <div class="cd-content">
+            <div class="cd-title-row">
+                <h1 class="cd-title" id="countdown-titulo-big">Recordatorio</h1>
+            </div>
+            <div class="cd-status" id="countdown-passed">QUEDAN</div>
+
+            <div class="cd-grid">
+                <div class="cd-cell">
+                    <div class="cd-flap-wrap">
+                        <span class="cd-flap-ghost">88</span>
+                        <span class="cd-flap" id="cd-dias">00</span>
+                    </div>
+                    <div class="cd-lbl">DÍAS</div>
+                </div>
+                <div class="cd-sep">:</div>
+                <div class="cd-cell">
+                    <div class="cd-flap-wrap">
+                        <span class="cd-flap-ghost">88</span>
+                        <span class="cd-flap" id="cd-horas">00</span>
+                    </div>
+                    <div class="cd-lbl">HORAS</div>
+                </div>
+                <div class="cd-sep">:</div>
+                <div class="cd-cell">
+                    <div class="cd-flap-wrap">
+                        <span class="cd-flap-ghost">88</span>
+                        <span class="cd-flap" id="cd-mins">00</span>
+                    </div>
+                    <div class="cd-lbl">MIN</div>
+                </div>
+                <div class="cd-sep">:</div>
+                <div class="cd-cell">
+                    <div class="cd-flap-wrap">
+                        <span class="cd-flap-ghost">88</span>
+                        <span class="cd-flap" id="cd-segs">00</span>
+                    </div>
+                    <div class="cd-lbl">SEG</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Container del player YT (oculto fuera de pantalla — solo audio). -->
+        <div id="countdown-yt-wrap" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
+            <div id="countdown-yt"></div>
+        </div>
+    </div>
+</div>
+<style>
+    /* ════════════════════════════════════════════════════════════
+       ESTÉTICA LCD ÉPICA con colores del tema del usuario.
+       - Panel negro profundo (LCD apagado).
+       - Dígitos en var(--accent) con glow pulsante.
+       - "Segmentos fantasma" del mismo accent al 12% (la convención
+         de un LCD real: los 8 apagados se ven muy tenues detrás).
+       - Bordes neon + vignette + scanlines para look retro-futurista.
+       ════════════════════════════════════════════════════════════ */
+    .cd-body {
+        padding: 0 !important;
+        position: relative;
+        overflow: hidden;
+        height: min(620px, 82vh);
+        background:
+            radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 10%, #000) 0%, #050505 70%, #000 100%);
+    }
+    /* Scanlines sutiles tipo CRT antiguo. */
+    .cd-body::before {
+        content: '';
+        position: absolute; inset: 0;
+        background: repeating-linear-gradient(180deg,
+            transparent 0, transparent 3px,
+            rgba(0,0,0,0.18) 3px, rgba(0,0,0,0.18) 4px);
+        pointer-events: none;
+        z-index: 2;
+        mix-blend-mode: multiply;
+    }
+    /* Vignette — oscurece las esquinas para concentrar la mirada. */
+    .cd-body::after {
+        content: '';
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse at center,
+            transparent 40%, rgba(0,0,0,0.55) 100%);
+        pointer-events: none;
+        z-index: 3;
+    }
+    .cd-content {
+        position: relative;
+        z-index: 5;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+    }
+    .cd-title-row { margin-bottom: 8px; }
+    .cd-title {
+        margin: 0;
+        font-family: 'Courier New', 'Consolas', monospace;
+        font-size: clamp(22px, 3.5vw, 36px);
+        font-weight: 900;
+        letter-spacing: 10px;
+        text-transform: uppercase;
+        color: var(--accent, #00ffaa);
+        text-shadow:
+            0 0 6px var(--accent, #00ffaa),
+            0 0 18px var(--accent, #00ffaa),
+            0 0 36px color-mix(in srgb, var(--accent) 60%, transparent);
+        animation: cdTitlePulse 2.4s ease-in-out infinite alternate;
+    }
+    @keyframes cdTitlePulse {
+        from { filter: brightness(0.95); }
+        to   { filter: brightness(1.25); }
+    }
+    .cd-status {
+        font-family: 'Courier New', 'Consolas', monospace;
+        font-size: 13px;
+        letter-spacing: 14px;
+        color: var(--accent, #00ffaa);
+        opacity: 0.55;
+        text-shadow: 0 0 6px var(--accent, #00ffaa);
+        margin-bottom: 30px;
+    }
+    .cd-grid {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin-bottom: 18px;
+        padding: 24px 30px;
+        background: rgba(0,0,0,0.55);
+        border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+        border-radius: 12px;
+        box-shadow:
+            inset 0 0 30px rgba(0,0,0,0.9),
+            0 0 14px color-mix(in srgb, var(--accent) 50%, transparent),
+            0 0 42px color-mix(in srgb, var(--accent) 25%, transparent),
+            0 0 80px color-mix(in srgb, var(--accent) 15%, transparent);
+        animation: cdPanelPulse 3s ease-in-out infinite alternate;
+    }
+    @keyframes cdPanelPulse {
+        from {
+            box-shadow:
+                inset 0 0 30px rgba(0,0,0,0.9),
+                0 0 10px color-mix(in srgb, var(--accent) 40%, transparent),
+                0 0 30px color-mix(in srgb, var(--accent) 20%, transparent);
+        }
+        to {
+            box-shadow:
+                inset 0 0 30px rgba(0,0,0,0.9),
+                0 0 20px color-mix(in srgb, var(--accent) 70%, transparent),
+                0 0 60px color-mix(in srgb, var(--accent) 35%, transparent),
+                0 0 100px color-mix(in srgb, var(--accent) 20%, transparent);
+        }
+    }
+    .cd-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .cd-flap-wrap {
+        position: relative;
+        line-height: 1;
+        /* Ancho mínimo que acomoda DOS dígitos del tamaño máximo
+           (124px) sin cortar: cada "8" ~75px + letter-spacing + padding
+           interno → reservamos 200-230px generosos. */
+        min-width: clamp(110px, 17vw, 210px);
+        padding: 0 14px;
+    }
+    .cd-flap-ghost,
+    .cd-flap {
+        font-family: 'Courier New', 'Consolas', monospace;
+        font-weight: 900;
+        font-size: clamp(64px, 11vw, 124px);
+        line-height: 1;
+        letter-spacing: 3px;
+        display: block;
+        white-space: nowrap;
+    }
+    .cd-flap-ghost {
+        /* Segmentos apagados — accent al 12%. Convención LCD. */
+        color: color-mix(in srgb, var(--accent) 12%, transparent);
+        user-select: none;
+        text-shadow: none;
+    }
+    .cd-flap {
+        position: absolute;
+        inset: 0;
+        padding: inherit;
+        color: var(--accent, #00ffaa);
+        text-shadow:
+            0 0 6px var(--accent, #00ffaa),
+            0 0 18px var(--accent, #00ffaa),
+            0 0 36px color-mix(in srgb, var(--accent) 70%, transparent),
+            0 0 64px color-mix(in srgb, var(--accent) 40%, transparent);
+        animation: cdDigitGlow 2.6s ease-in-out infinite alternate;
+    }
+    @keyframes cdDigitGlow {
+        from {
+            text-shadow:
+                0 0 4px var(--accent, #00ffaa),
+                0 0 12px var(--accent, #00ffaa),
+                0 0 24px color-mix(in srgb, var(--accent) 60%, transparent);
+            filter: brightness(0.95);
+        }
+        to {
+            text-shadow:
+                0 0 8px var(--accent, #00ffaa),
+                0 0 22px var(--accent, #00ffaa),
+                0 0 48px color-mix(in srgb, var(--accent) 80%, transparent),
+                0 0 90px color-mix(in srgb, var(--accent) 50%, transparent);
+            filter: brightness(1.25);
+        }
+    }
+    .cd-flap.tick {
+        /* "Tick" cuando el valor cambia — flash de brillo + escala. */
+        animation: cdTickLcd 0.45s ease-out;
+    }
+    @keyframes cdTickLcd {
+        0%   { filter: brightness(1);   transform: scale(1); }
+        30%  { filter: brightness(2);   transform: scale(1.05); }
+        60%  { filter: brightness(1.5); transform: scale(1.02); }
+        100% { filter: brightness(1);   transform: scale(1); }
+    }
+    .cd-lbl {
+        font-family: 'Courier New', 'Consolas', monospace;
+        font-size: 11px;
+        letter-spacing: 5px;
+        color: var(--accent, #00ffaa);
+        opacity: 0.7;
+        margin-top: 18px;
+        font-weight: bold;
+        text-shadow: 0 0 6px var(--accent, #00ffaa);
+    }
+    .cd-sep {
+        font-family: 'Courier New', 'Consolas', monospace;
+        font-size: clamp(52px, 10vw, 100px);
+        font-weight: 900;
+        color: var(--accent, #00ffaa);
+        animation: cdColonBlinkLcd 1s steps(2, start) infinite;
+        align-self: flex-start;
+        padding-top: 10px;
+        text-shadow:
+            0 0 8px var(--accent, #00ffaa),
+            0 0 18px var(--accent, #00ffaa);
+    }
+    @keyframes cdColonBlinkLcd {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.15; }
+    }
+</style>
 
 <!-- POPUP DÍA -->
 <div class="popup-overlay" id="popup-dia">
@@ -220,20 +480,13 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
         </div>
     </div>
 
-    <!-- DERECHA: Recordatorios + Momentos -->
+    <!-- DERECHA: Recordatorios (próximos 14 días) -->
     <div style="display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
 
         <div class="window" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
             <div class="title-bar"><div class="title-bar-text"><img src="../assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Recordatorios</div></div>
             <div class="window-body" style="padding: 10px; flex: 1; overflow-y: auto;">
                 <div id="recordatorios-lista"><p style="font-size:11px;color:#808080;">Cargando...</p></div>
-            </div>
-        </div>
-
-        <div class="window" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-            <div class="title-bar"><div class="title-bar-text">💗 Momentos</div></div>
-            <div class="window-body" style="padding: 10px; flex: 1; overflow-y: auto;">
-                <div id="momentos-lista"><p style="font-size:11px;color:#808080;">Cargando...</p></div>
             </div>
         </div>
 
@@ -314,65 +567,189 @@ function cargarTodo() {
 
         renderCalendario();
         renderRecordatorios(recordatoriosExpandidos);
-        renderMomentos(momentos);
+        /* Sidebar de "Momentos" eliminado — la sidebar derecha solo
+           muestra recordatorios próximos. */
     }).catch(() => renderCalendario());
 }
 
 function renderRecordatorios(lista) {
     const div = document.getElementById('recordatorios-lista');
-    if (!lista.length) { div.innerHTML = '<p style="font-size:11px;color:#808080;">No hay recordatorios.</p>'; return; }
 
+    /* Solo mostrar los que sean dentro de los próximos 14 días
+       (hoy incluido). Cualquier fecha pasada o más allá de 2 semanas
+       queda fuera de la sidebar — siguen viéndose en el grid del mes. */
     const hoyStr = hoy.toISOString().split('T')[0];
+    const limite = new Date(hoy);
+    limite.setDate(limite.getDate() + 14);
+    const limiteStr = limite.toISOString().split('T')[0];
+    lista = lista.filter(r => r.fecha >= hoyStr && r.fecha <= limiteStr);
+
+    if (!lista.length) {
+        div.innerHTML = '<p style="font-size:11px;color:#808080;">Sin recordatorios en las próximas 2 semanas.</p>';
+        return;
+    }
 
     lista.sort((a,b) => a.fecha.localeCompare(b.fecha));
     div.innerHTML = '';
     lista.forEach(r => {
-        const pasado = r.fecha < hoyStr;
+        /* La lista ya viene filtrada al rango hoy..hoy+14, así que no
+           hay "pasado" — todo es 0..14 días. */
         const item = document.createElement('div');
-        item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;' + (pasado ? 'opacity:0.5;' : '');
+        item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
         const diasRestantes = Math.ceil((new Date(r.fecha) - hoy) / (1000*60*60*24));
-        const cuandoStr = pasado ? 'Pasado' : diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' días';
+        const cuandoStr = diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' día' + (diasRestantes === 1 ? '' : 's');
         const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' · 🔁 ' + r.periodicidad : '';
         const texto = document.createElement('div');
         texto.style.cssText = 'flex: 1;';
         texto.innerHTML = '<strong>' + r.titulo + '</strong><br>' +
             '<span style="color:#808080;">' + r.fecha + ' · ' + cuandoStr + periodicoLabel + (r.autor ? ' · ' + r.autor : '') + '</span>' +
             (r.descripcion ? '<br>' + r.descripcion : '');
+        const btns = document.createElement('div');
+        btns.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
+        const btnVer = document.createElement('button');
+        btnVer.className = 'button';
+        btnVer.textContent = '👁';
+        btnVer.title = 'Ver cuenta atrás';
+        btnVer.style.cssText = 'font-size: 10px; padding: 1px 4px;';
+        btnVer.addEventListener('click', () => abrirCountdown(r));
         const btnDel = document.createElement('button');
         btnDel.className = 'button';
         btnDel.textContent = '✕';
-        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px; flex-shrink: 0;';
+        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px;';
         btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
+        btns.appendChild(btnVer);
+        btns.appendChild(btnDel);
         item.appendChild(texto);
-        item.appendChild(btnDel);
+        item.appendChild(btns);
         div.appendChild(item);
     });
 }
 
-function renderMomentos(lista) {
-    const div = document.getElementById('momentos-lista');
-    if (!lista.length) { div.innerHTML = '<p style="font-size:11px;color:#808080;">No hay momentos.</p>'; return; }
+/* ════════════════════════════════════════════════════════════════
+   CUENTA ATRÁS — ventana modal con D/H/M/S restantes hasta el
+   recordatorio. Música de fondo: YouTube tvoh8bVTLUQ a partir del
+   minuto 2:09 en bucle hasta cerrar.
+   ════════════════════════════════════════════════════════════════ */
+const COUNTDOWN_VIDEO_ID = 'tvoh8bVTLUQ';
+const COUNTDOWN_START_SEC = 129;  /* 2 min 09 s */
+let countdownTimer = null;
+let countdownYtPlayer = null;
+let countdownYtReady = false;
+let countdownTargetMs = 0;
+let countdownTitulo = '';
 
-    const ordenados = [...lista].sort((a, b) => b.fecha.localeCompare(a.fecha));
-    div.innerHTML = '';
-    ordenados.forEach(m => {
-        const item = document.createElement('div');
-        item.style.cssText = 'border: 1px solid #ff69b4; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
-        const texto = document.createElement('div');
-        texto.style.cssText = 'flex: 1; cursor: pointer;';
-        texto.innerHTML = '<strong>' + m.titulo + '</strong>' +
-            '<br><span style="color:#808080;">' + m.fecha + (m.autor ? ' · ' + m.autor : '') + '</span>' +
-            (m.descripcion ? '<br>' + m.descripcion : '');
-        texto.addEventListener('click', () => abrirPopupDia(m.fecha));
-        const btnDel = document.createElement('button');
-        btnDel.className = 'button';
-        btnDel.textContent = '✕';
-        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px; flex-shrink: 0;';
-        btnDel.addEventListener('click', () => eliminarMomento(m.id));
-        item.appendChild(texto);
-        item.appendChild(btnDel);
-        div.appendChild(item);
-    });
+/* Carga la YT IFrame API una sola vez. */
+(function loadCountdownYtApi() {
+    if (window.YT && window.YT.Player) { countdownYtReady = true; return; }
+    var s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(s);
+    /* Callback global de YouTube API. Si ya existía otro, lo encadena. */
+    var prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = function() {
+        countdownYtReady = true;
+        if (prev) try { prev(); } catch(_) {}
+    };
+})();
+
+function abrirCountdown(rec) {
+    countdownTargetMs = new Date(rec.fecha + 'T00:00:00').getTime();
+    countdownTitulo = rec.titulo || 'Recordatorio';
+    document.getElementById('countdown-title-text').textContent = '⏳ ' + countdownTitulo;
+    const bigTitle = document.getElementById('countdown-titulo-big');
+    if (bigTitle) bigTitle.textContent = countdownTitulo;
+    actualizarCountdown(true);
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = setInterval(actualizarCountdown, 1000);
+    const win = document.getElementById('countdown-window');
+    win.style.display = 'flex';
+    if (!win.dataset.dragWired) {
+        if (window._calMakeDraggable) window._calMakeDraggable(win);
+    }
+    iniciarMusicaCountdown();
+}
+
+function cerrarCountdown() {
+    document.getElementById('countdown-window').style.display = 'none';
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    pararMusicaCountdown();
+}
+
+function actualizarCountdown(forceAll) {
+    const ahora = Date.now();
+    let restante = countdownTargetMs - ahora;
+    const pasado = restante < 0;
+    if (pasado) restante = -restante;
+    const dias  = Math.floor(restante / (1000 * 60 * 60 * 24));
+    const horas = Math.floor((restante / (1000 * 60 * 60)) % 24);
+    const mins  = Math.floor((restante / (1000 * 60)) % 60);
+    const segs  = Math.floor((restante / 1000) % 60);
+    /* `tick` solo cuando el valor cambia → escala+brillo pulsado solo
+       en la celda que se mueve, no en todas a la vez. */
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const str = String(val).padStart(2, '0');
+        if (forceAll || el.textContent !== str) {
+            el.textContent = str;
+            el.classList.remove('tick');
+            /* Force reflow para reiniciar la animación. */
+            void el.offsetWidth;
+            el.classList.add('tick');
+        }
+    };
+    set('cd-dias', dias);
+    set('cd-horas', horas);
+    set('cd-mins', mins);
+    set('cd-segs', segs);
+    document.getElementById('countdown-passed').textContent = pasado ? 'PASARON' : 'QUEDAN';
+}
+
+function iniciarMusicaCountdown() {
+    /* Si la API aún no terminó de cargarse, reintenta cada 200ms. */
+    if (!countdownYtReady || !window.YT || !window.YT.Player) {
+        setTimeout(iniciarMusicaCountdown, 200);
+        return;
+    }
+    /* Player nuevo en cada apertura: garantiza arrancar en 2:09. */
+    if (countdownYtPlayer) {
+        try { countdownYtPlayer.destroy(); } catch(_) {}
+        countdownYtPlayer = null;
+    }
+    try {
+        countdownYtPlayer = new YT.Player('countdown-yt', {
+            videoId: COUNTDOWN_VIDEO_ID,
+            playerVars: {
+                autoplay: 1,
+                start:    COUNTDOWN_START_SEC,
+                controls: 0,
+                modestbranding: 1,
+                rel:      0,
+                playsinline: 1,
+                loop:     0,   /* loop manual con onStateChange — más fiable */
+            },
+            events: {
+                onReady: function(e) {
+                    try { e.target.playVideo(); } catch(_) {}
+                    try { e.target.setVolume(70); } catch(_) {}
+                },
+                onStateChange: function(e) {
+                    /* 0 = ENDED. Al terminar volvemos a 2:09. */
+                    if (e.data === 0) {
+                        try { e.target.seekTo(COUNTDOWN_START_SEC, true); } catch(_) {}
+                        try { e.target.playVideo(); } catch(_) {}
+                    }
+                }
+            }
+        });
+    } catch(_) {}
+}
+
+function pararMusicaCountdown() {
+    if (!countdownYtPlayer) return;
+    try { countdownYtPlayer.stopVideo(); } catch(_) {}
+    try { countdownYtPlayer.destroy(); } catch(_) {}
+    countdownYtPlayer = null;
 }
 
 function renderCalendario() {
@@ -736,6 +1113,97 @@ document.getElementById('momento-foto').addEventListener('change', function() {
 fetch(API_BASE + '?action=purge-recordatorios&pareja_id=' + parejaId, { method: 'POST' })
     .finally(() => cargarTodo());
 
+/* Refresca cuando otro contexto (ej. perfil que crea un momento al
+   "completar" un item) avisa vía postMessage. El parent es la ventana
+   del desktop o del shell móvil. */
+window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'momento-saved' || e.data.type === 'recordatorio-saved') {
+        cargarTodo();
+    }
+});
+
+/* ════════════════════════════════════════════════════════════════
+   DRAGGABLE — todas las ventanas popup (invite, día, partner-notif,
+   confirmar). El primer mousedown sobre la title-bar convierte la
+   posición CSS (que puede usar transform:translate(-50%,-50%)) a
+   left/top absolutos en px y elimina el transform → a partir de ahí
+   left/top son la fuente de verdad. Compatible con .window de 98.css.
+   ════════════════════════════════════════════════════════════════ */
+(function setupCalendarDrag() {
+    function makeDraggable(winEl) {
+        if (!winEl || winEl.dataset.dragWired === '1') return;
+        var titleBar = winEl.querySelector('.title-bar');
+        if (!titleBar) return;
+        winEl.dataset.dragWired = '1';
+        titleBar.style.cursor = 'move';
+        titleBar.style.userSelect = 'none';
+        var dragging = false;
+        var startX = 0, startY = 0;
+        var winX = 0, winY = 0;
+        function onMouseDown(e) {
+            /* Ignorar clicks en botones de la title-bar (close/min/max). */
+            if (e.target.closest('.title-bar-controls')) return;
+            if (e.button !== undefined && e.button !== 0) return;
+            /* Si todavía está centrado vía transform, convertir a left/top
+               absolutos antes del primer drag. */
+            var r = winEl.getBoundingClientRect();
+            winEl.style.transform = 'none';
+            winEl.style.left = r.left + 'px';
+            winEl.style.top  = r.top  + 'px';
+            winEl.style.margin = '0';
+            dragging = true;
+            startX = e.clientX; startY = e.clientY;
+            winX = r.left; winY = r.top;
+            e.preventDefault();
+        }
+        function onMouseMove(e) {
+            if (!dragging) return;
+            var dx = e.clientX - startX, dy = e.clientY - startY;
+            var nx = winX + dx, ny = winY + dy;
+            /* Limita al viewport (deja al menos 20px visible). */
+            var vw = window.innerWidth, vh = window.innerHeight;
+            var w = winEl.offsetWidth, h = winEl.offsetHeight;
+            nx = Math.max(20 - w, Math.min(vw - 20, nx));
+            ny = Math.max(0,      Math.min(vh - 20, ny));
+            winEl.style.left = nx + 'px';
+            winEl.style.top  = ny + 'px';
+        }
+        function onMouseUp() { dragging = false; }
+        titleBar.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup',   onMouseUp);
+        /* Soporte táctil básico. */
+        titleBar.addEventListener('touchstart', function(e) {
+            if (e.touches.length !== 1) return;
+            var t = e.touches[0];
+            onMouseDown({ clientX: t.clientX, clientY: t.clientY, button: 0, target: t.target, preventDefault: function(){ e.preventDefault(); } });
+        }, { passive: false });
+        document.addEventListener('touchmove', function(e) {
+            if (!dragging || e.touches.length !== 1) return;
+            var t = e.touches[0];
+            onMouseMove({ clientX: t.clientX, clientY: t.clientY });
+            e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('touchend', onMouseUp);
+    }
+    window._calMakeDraggable = makeDraggable;
+
+    /* Inicializa los popups que ya existen en el DOM. El popup-dia
+       contiene la .window dentro de un .popup-overlay → drag aplica
+       a la .window interna. */
+    [
+        document.getElementById('invite-window'),
+        document.querySelector('#partner-notif > .window'),
+        document.querySelector('#popup-dia > .window'),
+        document.getElementById('cal-confirm-modal'),
+        document.getElementById('countdown-window'),
+    ].forEach(function(w) { if (w) makeDraggable(w); });
+})();
+
+/* Cierre de la ventana countdown — para la música y limpia el timer. */
+document.getElementById('countdown-close').addEventListener('click', cerrarCountdown);
+
 /* ─── Modal Win98 de confirmación ─── */
 (function(){
     function open(text, onOk){
@@ -765,7 +1233,7 @@ fetch(API_BASE + '?action=purge-recordatorios&pareja_id=' + parejaId, { method: 
 </script>
 
 <!-- Modal Win98 compartido para confirmar eliminaciones -->
-<div class="window" id="cal-confirm-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:8500; flex-direction:column;">
+<div class="window" id="cal-confirm-modal" style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); min-width:340px; max-width:460px; z-index:9500; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text" id="cal-confirm-title">Confirmar eliminación</div>
         <div class="title-bar-controls">

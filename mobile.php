@@ -3327,6 +3327,42 @@ window.MuShell = (function(){
     ping();
     setInterval(ping, 30000);
 })();
+
+/* Polling de recordatorios próximos (7/2/1 días). Mismo endpoint que
+   desktop. Aquí no tenemos notifSystem; reusamos el estilo de toast
+   Win98 inferior creando una instancia local con la misma CSS class
+   .mu-lt-toast que ya está definida en este archivo. */
+(function mRemindersPoll(){
+    function whenLabel(t){
+        if (t === 1) return 'mañana';
+        if (t === 2) return 'en 2 días';
+        if (t === 7) return 'en 1 semana';
+        return 'en ' + t + ' días';
+    }
+    function showReminderToast(rm) {
+        var existing = document.getElementById('reminder-toast-' + rm.id + '-' + rm.threshold);
+        if (existing) existing.remove();
+        var t = document.createElement('div');
+        t.id = 'reminder-toast-' + rm.id + '-' + rm.threshold;
+        t.className = 'mu-lt-toast';
+        t.innerHTML =
+            '<div class="toast-title">🔔 Recordatorio</div>' +
+            '<div class="toast-msg">' + (rm.titulo || '') + ' ' + whenLabel(rm.threshold) + '</div>';
+        document.body.appendChild(t);
+        setTimeout(function(){ if (t.parentNode) t.remove(); }, 8000);
+    }
+    function poll(){
+        fetch('assets/couple/api.php?action=upcoming-reminders', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok || !Array.isArray(d.reminders)) return;
+                d.reminders.forEach(showReminderToast);
+            })
+            .catch(function(){});
+    }
+    setTimeout(poll, 5000);
+    setInterval(poll, 5 * 60 * 1000);
+})();
 </script>
 
 </body>

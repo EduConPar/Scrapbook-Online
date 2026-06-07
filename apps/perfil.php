@@ -4387,7 +4387,18 @@ var PROFILE_USERS = <?php
     }).then(function(r) { return r.json(); })
       .then(function(data) {
           console.log('save-momento respuesta:', JSON.stringify(data));
-          if (!data.ok || !data.id || !item.image) return;
+          if (!data || !data.ok) return;
+          /* Avisa al iframe del calendario para que recargue. La perfil
+             y el calendar-iframe viven en el mismo top-level (perfil es
+             partial); mandar postMessage al iframe le dispara su
+             listener interno de "momento-saved". */
+          try {
+              var calFr = document.getElementById('calendar-iframe');
+              if (calFr && calFr.contentWindow) {
+                  calFr.contentWindow.postMessage({ type: 'momento-saved' }, '*');
+              }
+          } catch(_) {}
+          if (!data.id || !item.image) return;
           fetch('assets/couple/api.php?action=save-momento-foto-url', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

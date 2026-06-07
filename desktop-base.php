@@ -2293,6 +2293,38 @@ window.notifSystem = (function() {
     setInterval(ping, 30000);
 })();
 
+/* ── Recordatorios próximos: poll cada 5 min al endpoint que devuelve
+   los que caen a 7/2/1 días y no han sido notificados. Cada match
+   dispara notifSystem.show() ─────────────────────────────────────── */
+(function remindersPoll(){
+    function whenLabel(t){
+        if (t === 1) return 'mañana';
+        if (t === 2) return 'en 2 días';
+        if (t === 7) return 'en 1 semana';
+        return 'en ' + t + ' días';
+    }
+    function poll(){
+        fetch('assets/couple/api.php?action=upcoming-reminders', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok || !Array.isArray(d.reminders) || !window.notifSystem) return;
+                d.reminders.forEach(function(rm){
+                    window.notifSystem.show({
+                        id:    'reminder-' + rm.id + '-' + rm.threshold,
+                        type:  'info',
+                        title: '🔔 Recordatorio',
+                        message: rm.titulo + ' ' + whenLabel(rm.threshold),
+                        autoDismissAfter: 8000,
+                    });
+                });
+            })
+            .catch(function(){});
+    }
+    /* Primer fetch a los 5s del arranque (deja a notifSystem inicializarse). */
+    setTimeout(poll, 5000);
+    setInterval(poll, 5 * 60 * 1000);
+})();
+
 /* =========================================================
    DOUBLE-TAP → DBLCLICK (táctil)
    ─────────────────────────────────────────────────────────
