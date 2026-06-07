@@ -53,7 +53,6 @@ try {
 
 switch ($action) {
 
-/* ─── Momentos ─── */
 case 'get-momentos': {
     $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonResponse([]);
@@ -64,10 +63,11 @@ case 'get-momentos': {
                                WHERE m.pareja_id = ? ORDER BY m.fecha ASC");
         $stmt->execute([$parejaId]);
     } else {
-        $stmt = $pdo->prepare("SELECT id, titulo, descripcion, fecha, foto, ? AS autor
-                               FROM momentos WHERE usuario_id = ? AND pareja_id IS NULL
-                               ORDER BY fecha ASC");
-        $stmt->execute([strtolower($GLOBALS['loginUsers'][$userKey]['label']), $userId]);
+        $stmt = $pdo->prepare("SELECT m.id, m.titulo, m.descripcion, m.fecha, m.foto, u.username AS autor
+                               FROM momentos m JOIN usuarios u ON m.usuario_id = u.id
+                               WHERE m.usuario_id = ? AND m.pareja_id IS NULL
+                               ORDER BY m.fecha ASC");
+        $stmt->execute([$userId]);
     }
     jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));
 }
@@ -79,12 +79,14 @@ case 'save-momento': {
     $titulo = trim($b['titulo'] ?? '');
     $fecha  = $b['fecha'] ?? '';
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
-    $stmt = $pdo->prepare("INSERT INTO momentos (pareja_id, usuario_id, titulo, descripcion, fecha)
-                           VALUES (?, ?, ?, ?, ?)");
+    $foto = trim($b['foto'] ?? '');
+    $stmt = $pdo->prepare("INSERT INTO momentos (pareja_id, usuario_id, titulo, descripcion, fecha, foto)
+                           VALUES (?, ?, ?, ?, ?, ?)");
     $pid = (int)($b['pareja_id'] ?? 0);
     $stmt->execute([
         $pid > 0 ? $pid : null, $userId, $titulo,
         trim($b['descripcion'] ?? ''), $fecha,
+        $foto ?: null,
     ]);
     jsonResponse(['ok' => true, 'id' => $pdo->lastInsertId()]);
 }

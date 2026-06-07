@@ -393,7 +393,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
         <?php if ($pareja): ?>
         <div class="window">
-            <div class="title-bar"><div class="title-bar-text">💕 Juntos</div></div>
+            <div class="title-bar"><div class="title-bar-text">💕 Tiempo juntos</div></div>
             <div class="window-body" style="padding: 12px; text-align: center;">
                 <div id="dias-contador" style="font-size: 28px; font-weight: bold;"></div>
                 <div style="font-size: 11px; margin-top: 4px;">días juntos</div>
@@ -419,10 +419,9 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
                     <textarea id="momento-desc" style="width: 100%; height: 50px;"></textarea>
                 </div>
                 <div class="field-row-stacked" style="margin-bottom: 8px;">
-                    <label style="font-size: 11px;">Foto (opcional)</label>
+                    <label style="font-size: 11px;">Foto URL (opcional)</label>
                     <div class="field-row" style="gap:4px;">
-                        <input type="text" id="momento-foto-nombre" readonly placeholder="Sin archivo" style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
-                        <button class="button" id="momento-foto-browse" style="min-width:70px;flex-shrink:0;height:21px;min-height:21px;">Examinar...</button>
+                        <input type="text" id="momento-foto-url" placeholder="https://..." style="flex:1;min-width:0;cursor:default;font-size:11px;height:21px;">
                     </div>
                     <input type="file" id="momento-foto" accept="image/*" style="display:none;">
                 </div>
@@ -465,7 +464,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
     <!-- CENTRO: Calendario -->
     <div class="window" style="display: flex; flex-direction: column; overflow: hidden;">
-        <div class="title-bar"><div class="title-bar-text">📅 Calendario</div></div>
+        <div class="title-bar"><div class="title-bar-text"> Calendario</div></div>
         <div class="window-body" style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <button class="button" id="prev-month">◄</button>
@@ -912,12 +911,16 @@ document.getElementById('next-month').addEventListener('click', () => {
 
 document.getElementById('btn-guardar-momento').addEventListener('click', function() {
     const titulo = document.getElementById('momento-titulo').value.trim();
-    const fecha = document.getElementById('momento-fecha').value;
-    const desc = document.getElementById('momento-desc').value.trim();
-    const fotoInput = document.getElementById('momento-foto');
+    const fecha  = document.getElementById('momento-fecha').value;
+    const desc   = document.getElementById('momento-desc').value.trim();
+    const foto   = document.getElementById('momento-foto-url').value.trim();
     const status = document.getElementById('momento-status');
 
-    if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
+    if (!titulo || !fecha) {
+        status.style.color = 'red';
+        status.textContent = 'Título y fecha son obligatorios.';
+        return;
+    }
 
     status.style.color = '#808080';
     status.textContent = 'Guardando...';
@@ -925,38 +928,16 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
     fetch(API_BASE + '?action=save-momento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc })
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, foto })
     })
     .then(r => r.json())
     .then(data => {
         if (data.error) { status.style.color = 'red'; status.textContent = data.error; return; }
-
-        const momentoId = data.id;
-
-        if (fotoInput.files.length > 0) {
-            const formData = new FormData();
-            formData.append('foto', fotoInput.files[0]);
-            formData.append('momento_id', momentoId);
-
-            return fetch(API_BASE + '?action=upload-foto', {
-                method: 'POST',
-                body: formData
-            })
-            .then(r => r.json())
-            .then(fotoData => {
-                if (fotoData.error) { status.style.color = 'orange'; status.textContent = '⚠️ Momento guardado pero error con la foto: ' + fotoData.error; }
-                else { status.style.color = 'green'; status.textContent = '✅ Guardado con foto'; }
-                document.getElementById('momento-titulo').value = '';
-                document.getElementById('momento-desc').value = '';
-                fotoInput.value = '';
-                document.getElementById('momento-foto-nombre').value = '';
-                cargarTodo();
-            });
-        }
-
-        status.style.color = 'green'; status.textContent = '✅ Guardado';
+        status.style.color = 'green';
+        status.textContent = '✅ Guardado';
         document.getElementById('momento-titulo').value = '';
-        document.getElementById('momento-desc').value = '';
+        document.getElementById('momento-desc').value  = '';
+        document.getElementById('momento-foto-url').value = '';
         cargarTodo();
     });
 });
