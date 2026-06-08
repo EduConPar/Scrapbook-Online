@@ -31,6 +31,7 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
         <div class="title-bar-text" id="player-tb-text"><?php echo appTitleIcon('musicaIcon', '♪'); ?><span id="player-pl-name">Reproductor</span></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize" id="player-minimize"></button>
+            <button aria-label="Maximize" id="player-maximize"></button>
             <button aria-label="Close" id="player-close"></button>
         </div>
     </div>
@@ -67,6 +68,122 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
                 <input type="range" id="player-volume" min="0" max="100" value="100" step="1" orient="vertical">
             </div>
             <span id="volume-icon">◄))</span>
+        </div>
+    </div>
+</div>
+
+<!-- FULLSCREEN PLAYER — versión "maximizada" del reproductor, con
+     vinilo girando + controles grandes (clon visual del fullscreen
+     player del móvil). El estado de reproducción se comparte con el
+     reproductor normal (mismos ytPlayer + playlist + currentTrack);
+     este overlay solo es una vista alternativa. -->
+<div id="player-full" aria-hidden="true">
+    <div class="window pf-window">
+        <div class="title-bar pf-titlebar">
+            <div class="title-bar-text"><?php echo appTitleIcon('songIcon', '♪'); ?>Melon Player — <span id="pf-pl-name">Reproductor</span></div>
+            <div class="title-bar-controls">
+                <button aria-label="Restore" id="pf-restore"></button>
+                <button aria-label="Close" id="pf-close-x"></button>
+            </div>
+        </div>
+        <div class="window-body pf-body">
+            <!-- Cover difuminado de fondo — añade color de ambiente
+                 sin ocultar el chrome Win98. -->
+            <div class="pf-bg-cover" id="pf-bg-cover" aria-hidden="true"></div>
+
+            <!-- ═══ VINILO FLOTANTE — encima del hifi, fuera del componente ═══ -->
+            <div class="pf-vinyl-floating">
+                <div class="pf-vinyl-glow"></div>
+                <div class="pf-vinyl-wrap">
+                    <div class="pf-vinyl" id="pf-vinyl">
+                        <div class="pf-vinyl-label empty" id="pf-vinyl-label">♪</div>
+                        <div class="pf-vinyl-hole"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ HIFI COMPONENT — solo título, progreso y controles ═══ -->
+            <div class="pf-unit">
+                <!-- LCD: título / artista + clock digital. -->
+                <div class="pf-lcd">
+                    <div class="pf-lcd-left">
+                        <div class="pf-lcd-marker">▶</div>
+                        <div class="pf-lcd-info">
+                            <div class="pf-title-wrap"><span class="pf-title" id="pf-title">—</span></div>
+                            <div class="pf-artist-wrap"><span class="pf-artist" id="pf-artist">—</span></div>
+                        </div>
+                    </div>
+                    <div class="pf-lcd-clock">
+                        <span class="pf-clock-cur" id="pf-time-cur">0:00</span>
+                        <span class="pf-clock-sep">/</span>
+                        <span class="pf-clock-tot" id="pf-time-tot">0:00</span>
+                    </div>
+                </div>
+
+                <!-- PROGRESS: cassette tape con dos carretes a los lados. -->
+                <div class="pf-tape">
+                    <div class="pf-reel pf-reel-l" id="pf-reel-l">
+                        <span class="pf-reel-spoke" style="--rot: 0deg"></span>
+                        <span class="pf-reel-spoke" style="--rot: 60deg"></span>
+                        <span class="pf-reel-spoke" style="--rot: 120deg"></span>
+                    </div>
+                    <div class="pf-progress" id="pf-progress-track">
+                        <div class="pf-progress-fill" id="pf-progress-fill"></div>
+                    </div>
+                    <div class="pf-reel pf-reel-r" id="pf-reel-r">
+                        <span class="pf-reel-spoke" style="--rot: 0deg"></span>
+                        <span class="pf-reel-spoke" style="--rot: 60deg"></span>
+                        <span class="pf-reel-spoke" style="--rot: 120deg"></span>
+                    </div>
+                </div>
+
+                <!-- TRANSPORT BAR Win98 con divider. -->
+                <div class="pf-transport">
+                    <!-- IZQUIERDA: shuffle + lyrics -->
+                    <div class="pf-extras">
+                        <button class="button pf-extra" id="pf-shuffle" type="button" aria-label="Aleatorio" aria-pressed="false">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="16 3 21 3 21 8"/>
+                                <line x1="4" y1="20" x2="21" y2="3"/>
+                                <polyline points="21 16 21 21 16 21"/>
+                                <line x1="15" y1="15" x2="21" y2="21"/>
+                                <line x1="4" y1="4" x2="9" y2="9"/>
+                            </svg>
+                        </button>
+                        <button class="button pf-extra" id="pf-lyrics" type="button" aria-label="Letra">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="9" y="2" width="6" height="12" rx="3"/>
+                                <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
+                                <line x1="12" y1="19" x2="12" y2="22"/>
+                                <line x1="8" y1="22" x2="16" y2="22"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- CENTRO: prev / play / next -->
+                    <div class="pf-controls">
+                        <button class="button pf-btn" id="pf-prev" type="button" aria-label="Anterior">⏮</button>
+                        <button class="button pf-btn pf-primary" id="pf-toggle" type="button" aria-label="Play/Pausa">
+                            <span class="pf-icon-play">►</span>
+                            <span class="pf-icon-pause">⏸</span>
+                        </button>
+                        <button class="button pf-btn" id="pf-next" type="button" aria-label="Siguiente">⏭</button>
+                    </div>
+
+                    <!-- DERECHA: Volumen -->
+                    <div class="pf-volume-wrap">
+                        <span class="pf-vol-icon" id="pf-vol-icon" aria-hidden="true">◄))</span>
+                        <input type="range" id="pf-volume" class="pf-volume" min="0" max="100" value="100" step="1" aria-label="Volumen">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lyric video — solo la línea actualmente sonando flota
+                 sobre el reproductor con tremble por carácter +
+                 slide/fade al cambiar. Sin fondo, sin blur, sin scroll. -->
+            <div id="pf-lyrics-overlay" aria-hidden="true">
+                <div class="pf-lyr-stage" id="pf-lyr-stage"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -2904,6 +3021,1322 @@ function relTime(sentAt) {
             if (LYR_OPEN) fetchForCurrent();
         };
     }
+
+    /* Expone close para que el módulo del fullscreen pueda cerrar la
+       ventana de letras al maximizar (requisito UX del usuario). */
+    window.__lyricsClose = close_;
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   FULLSCREEN PLAYER — minimize / maximize / sync / lyrics overlay.
+   ════════════════════════════════════════════════════════════════ */
+(function fullscreenPlayerModule() {
+    const root       = document.getElementById('player-full');
+    const win        = document.getElementById('music-player');
+    if (!root || !win) return;
+
+    const btnMin     = document.getElementById('player-minimize');
+    const btnMax     = document.getElementById('player-maximize');
+    const btnRestore = document.getElementById('pf-restore');
+    const btnCloseX  = document.getElementById('pf-close-x');
+
+    /* Refs UI fullscreen. */
+    const vinyl    = document.getElementById('pf-vinyl');
+    const vinylLbl = document.getElementById('pf-vinyl-label');
+    const titleEl  = document.getElementById('pf-title');
+    const artistEl = document.getElementById('pf-artist');
+    const plNameEl = document.getElementById('pf-pl-name');
+    const progFill = document.getElementById('pf-progress-fill');
+    const progBar  = document.getElementById('pf-progress-track');
+    const tCurEl   = document.getElementById('pf-time-cur');
+    const tTotEl   = document.getElementById('pf-time-tot');
+    const btnPrev2 = document.getElementById('pf-prev');
+    const btnNext2 = document.getElementById('pf-next');
+    const btnTgl2  = document.getElementById('pf-toggle');
+    const btnSh2   = document.getElementById('pf-shuffle');
+    const btnLyr   = document.getElementById('pf-lyrics');
+
+    /* Helpers de formato y sync. */
+    function fmtTime(s) {
+        if (!s || isNaN(s)) return '0:00';
+        s = Math.floor(s);
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return m + ':' + (r < 10 ? '0' + r : r);
+    }
+    /* Refs adicionales del nuevo layout. */
+    const bgCover = document.getElementById('pf-bg-cover');
+    const reelL   = document.getElementById('pf-reel-l');
+    const reelR   = document.getElementById('pf-reel-r');
+
+    function syncFromOriginalPlayer() {
+        try {
+            if (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number') {
+                const tr = playlist[currentTrack];
+                if (tr) {
+                    titleEl.textContent  = tr.title  || '—';
+                    artistEl.textContent = tr.artist || '—';
+                    if (tr.videoId) {
+                        const cover = 'https://img.youtube.com/vi/' + tr.videoId + '/mqdefault.jpg';
+                        vinylLbl.style.backgroundImage = 'url("' + cover + '")';
+                        vinylLbl.classList.remove('empty');
+                        vinylLbl.textContent = '';
+                        /* Fondo difuminado con el cover de la canción. */
+                        if (bgCover) bgCover.style.backgroundImage = 'url("' + cover + '")';
+                    } else {
+                        vinylLbl.classList.add('empty');
+                        vinylLbl.textContent = '♪';
+                        vinylLbl.style.backgroundImage = '';
+                        if (bgCover) bgCover.style.backgroundImage = '';
+                    }
+                }
+            }
+            const plName = document.getElementById('player-pl-name');
+            if (plName) plNameEl.textContent = plName.textContent;
+
+            if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getDuration) {
+                const dur = ytPlayer.getDuration() || 0;
+                const cur = ytPlayer.getCurrentTime() || 0;
+                if (dur > 0) progFill.style.width = ((cur / dur) * 100) + '%';
+                tCurEl.textContent = fmtTime(cur);
+                tTotEl.textContent = fmtTime(dur);
+                const playing = ytPlayer.getPlayerState && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING;
+                btnTgl2.classList.toggle('pf-playing', !!playing);
+                vinyl.classList.toggle('pf-spinning', !!playing);
+                /* Reels girando en sync con el play state. */
+                if (reelL) reelL.style.animationPlayState = playing ? 'running' : 'paused';
+                if (reelR) reelR.style.animationPlayState = playing ? 'running' : 'paused';
+            }
+            /* Sync shuffle visual desde el botón original. */
+            if (typeof autoplayRandom !== 'undefined') {
+                btnSh2.classList.toggle('is-on', !!autoplayRandom);
+                btnSh2.setAttribute('aria-pressed', autoplayRandom ? 'true' : 'false');
+            }
+            /* Sync volumen (el slider y el icono) desde el slider
+               original — atrapa cambios externos. */
+            if (typeof window.__pfSyncVolume === 'function') window.__pfSyncVolume();
+        } catch(_){}
+    }
+
+    let syncTimer = null;
+    let isOpen = false;
+
+    function openFullscreen() {
+        if (isOpen) return;
+        /* Cierra la ventana de letras flotante si estaba abierta —
+           en el fullscreen las letras se muestran como overlay. */
+        if (typeof window.__lyricsClose === 'function') {
+            try { window.__lyricsClose(); } catch(_){}
+        }
+        root.classList.add('pf-active');
+        isOpen = true;
+        syncFromOriginalPlayer();
+        if (syncTimer) clearInterval(syncTimer);
+        syncTimer = setInterval(syncFromOriginalPlayer, 500);
+    }
+    function closeFullscreen() {
+        if (!isOpen) return;
+        root.classList.remove('pf-active');
+        /* Cierra el overlay de letras también. */
+        root.classList.remove('pf-lyrics-active');
+        pfLyricsOpen = false;
+        if (pfLyrTimer) { clearInterval(pfLyrTimer); pfLyrTimer = null; }
+        isOpen = false;
+        if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+    }
+
+    /* Minimize: usa taskbarManager para llevar el reproductor a la
+       taskbar — igual que cualquier otra ventana del desktop. */
+    if (btnMin) btnMin.addEventListener('click', function() {
+        if (window.taskbarManager) {
+            if (!window.taskbarManager.isRegistered('music-player')) {
+                window.taskbarManager.register('music-player', 'Reproductor', '♪', 'block');
+            }
+            window.taskbarManager.minimize('music-player');
+        } else {
+            win.style.display = 'none';
+        }
+    });
+
+    /* Maximize: abre fullscreen overlay. */
+    if (btnMax) btnMax.addEventListener('click', openFullscreen);
+    if (btnRestore) btnRestore.addEventListener('click', closeFullscreen);
+    if (btnCloseX)  btnCloseX.addEventListener('click', closeFullscreen);
+
+    /* Forward de controles al reproductor original — reusa toda la
+       lógica de play/pause/prev/next/shuffle sin duplicar. */
+    if (btnPrev2) btnPrev2.addEventListener('click', () => document.getElementById('btn-prev').click());
+    if (btnNext2) btnNext2.addEventListener('click', () => document.getElementById('btn-next').click());
+    if (btnTgl2)  btnTgl2.addEventListener('click',  () => document.getElementById('btn-play').click());
+    if (btnSh2)   btnSh2.addEventListener('click',   () => document.getElementById('btn-shuffle').click());
+
+    /* Seek en la progress bar. */
+    if (progBar) progBar.addEventListener('click', function(e) {
+        if (typeof ytPlayer === 'undefined' || !ytPlayer || !ytPlayer.getDuration) return;
+        const rect = progBar.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        ytPlayer.seekTo(pct * ytPlayer.getDuration(), true);
+        syncFromOriginalPlayer();
+    });
+
+    /* ── Volumen — proxy al slider del player original. ──
+       Forward del input → setea el value del #player-volume y dispara
+       su event 'input' para reusar toda la lógica de persistencia +
+       icono altavoz + setVolume del ytPlayer. */
+    const volSlider2 = document.getElementById('pf-volume');
+    const volIcon2   = document.getElementById('pf-vol-icon');
+    function updateVolIcon(v) {
+        if (!volIcon2) return;
+        if (v === 0) volIcon2.textContent = '◄✕';
+        else if (v < 50) volIcon2.textContent = '◄)';
+        else volIcon2.textContent = '◄))';
+    }
+    if (volSlider2) {
+        volSlider2.addEventListener('input', function() {
+            const v = parseInt(this.value, 10);
+            const orig = document.getElementById('player-volume');
+            if (orig) {
+                orig.value = v;
+                orig.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.setVolume) {
+                ytPlayer.setVolume(v);
+            }
+            updateVolIcon(v);
+        });
+    }
+    /* Sync inicial + cada vez que se abra el fullscreen: lee el value
+       del slider original y refleja en el del fullscreen + icono.
+       Expuesto en window.__pfSyncVolume → syncFromOriginalPlayer lo
+       llama dentro de su tick para mantener consistencia con cambios
+       externos (otra pestaña, restore desde state). */
+    window.__pfSyncVolume = function() {
+        const orig = document.getElementById('player-volume');
+        if (orig && volSlider2) {
+            volSlider2.value = orig.value;
+            updateVolIcon(parseInt(orig.value, 10));
+        }
+    };
+    window.__pfSyncVolume();
+
+    /* Logger del módulo: envía cada paso a logs/lyrics-debug.log
+       en el servidor + console.log local. NO bloquea (fire-and-forget). */
+    function pfLog(msg) {
+        try { console.log('[pf-lyrics]', msg); } catch(_){}
+        try {
+            fetch('assets/music/api.php?action=client-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ msg: '[pf-lyrics] ' + msg }),
+                credentials: 'same-origin',
+                keepalive: true,
+            });
+        } catch(_){}
+    }
+
+    /* ════════════════════════════════════════════════════════════
+       LYRIC VIDEO — solo la línea ACTUAL flota sobre el reproductor.
+       - Sin fondo, sin blur (integración directa con el player).
+       - Cada char tiene su propio tremble (delay + duration random).
+       - Al cambiar de línea: la anterior sube + fade-out, la nueva
+         entra desde abajo + fade-in.
+       - Si la canción está en gap instrumental (>7s entre líneas y
+         ya pasaron 3.5s de la línea actual): no se muestra nada.
+       - Solo letras SINCRONIZADAS (LRC). Si solo hay plain, no se
+         muestra nada (no sabemos qué está sonando).
+       ════════════════════════════════════════════════════════════ */
+    let pfLyrLines = null;
+    let pfLyrVid   = null;
+    let pfLyrCurIdx = -1;     /* índice de línea actualmente mostrada (-1 = ninguna) */
+    let pfLyricsOpen = false;
+    let pfLyrTimer = null;
+    const overlay  = document.getElementById('pf-lyrics-overlay');
+    const lyrStage = document.getElementById('pf-lyr-stage');
+
+    function escH(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function pfParseLRC(lrc) {
+        const lines = [];
+        if (!lrc) return lines;
+        lrc.split(/\r?\n/).forEach(raw => {
+            const stamps = []; let rest = raw;
+            const re = /^\s*\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/;
+            let m;
+            while ((m = re.exec(rest))) {
+                const min = +m[1], sec = +m[2], frac = m[3] ? +m[3] / Math.pow(10, m[3].length) : 0;
+                stamps.push(min * 60 + sec + frac);
+                rest = rest.slice(m[0].length);
+            }
+            const text = rest.trim();
+            if (stamps.length && text) stamps.forEach(t => lines.push({ time: t, text }));
+        });
+        lines.sort((a, b) => a.time - b.time);
+        return lines;
+    }
+    function pfCurTrack() {
+        if (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number') {
+            return playlist[currentTrack] || null;
+        }
+        return null;
+    }
+
+    /* Construye el HTML de una línea agrupando los chars POR PALABRA.
+       Cada palabra es un <span class="pf-lyr-word"> con white-space:
+       nowrap → la palabra es indivisible: o cabe entera en la línea
+       actual, o salta entera a la siguiente. Dentro de cada palabra,
+       cada char es un <span class="pf-lyr-char"> con tremble propio. */
+    function pfRenderLine(text) {
+        if (!text) return '';
+        const out = ['<span class="pf-lyr-line-content">'];
+        /* Split por whitespace pero MANTENIENDO los espacios como tokens
+           (para preservar separaciones múltiples). */
+        const tokens = text.split(/(\s+)/);
+        for (const tok of tokens) {
+            if (tok === '') continue;
+            if (/^\s+$/.test(tok)) {
+                /* Solo whitespace → &nbsp; por cada espacio para que no
+                   se colapsen. */
+                out.push('&nbsp;');
+                continue;
+            }
+            /* Palabra → wrappear todo el bloque para que sea indivisible. */
+            out.push('<span class="pf-lyr-word">');
+            for (let i = 0; i < tok.length; i++) {
+                const c = tok[i];
+                const delay = (Math.random() * 1.8).toFixed(2);
+                const dur   = (1.4 + Math.random() * 1.4).toFixed(2);
+                out.push('<span class="pf-lyr-char" style="--delay:' + delay + 's;--dur:' + dur + 's">' + escH(c) + '</span>');
+            }
+            out.push('</span>');
+        }
+        out.push('</span>');
+        return out.join('');
+    }
+
+    /* Muestra una línea nueva o limpia el stage si text es null.
+       Aprovecha CSS animations forwards: insertar el elemento dispara
+       pfLyrSlideIn automáticamente; añadir .leaving dispara
+       pfLyrSlideOut. Sin RAF, sin transitions class-swap-fragile. */
+    /* Modos experimentales single-line + multi-line. */
+    const PF_EXP_MODES = [
+        'vert-left', 'tilt-r', 'corner-tl', 'top', 'mega',
+        'diagonal', 'vert-right', 'tilt-l', 'corner-br', 'bottom',
+    ];
+    /* Multi-modes con totals reducidos para que la animación no se
+       eternice. Cada one tiene un cap absoluto de tiempo (PF_MULTI_MAX_MS)
+       que fuerza el final si los versos son lentos. */
+    const PF_MULTI_MODES = [
+        { mode: 'fill-vert',  total: 5, holdMs: 1100 },
+        { mode: 'fill-stack', total: 4, holdMs: 900  },
+    ];
+    /* Cap absoluto de tiempo total para multi-modes y fast-stack. Si
+       los versos son lentos y no completamos los slots a tiempo,
+       cerramos el grupo aquí (5.5s + hold ≈ 6.5s total). */
+    const PF_MULTI_MAX_MS      = 5500;
+    const PF_FAST_STACK_MAX_MS = 5500;
+    const PF_FAST_LINE_THRESHOLD = 2.0;
+    const PF_FAST_STACK_TOTAL = 7;
+
+    let pfLineCounter = 0;
+    let pfMultiState = null;        /* {mode, total, slot, holdMs, startedAt} */
+    let pfFastStackCounter = 0;
+    let pfFastStackStartedAt = 0;   /* ms timestamp del primer fast-line en curso */
+
+    /* Devuelve la duración de la línea actual en segundos (tiempo
+       hasta el siguiente verso). Si es la última, devuelve un valor
+       alto (treated as long). */
+    function pfGetCurLineDuration() {
+        if (!pfLyrLines || pfLyrCurIdx < 0 || pfLyrCurIdx >= pfLyrLines.length) return 999;
+        const cur = pfLyrLines[pfLyrCurIdx];
+        const next = pfLyrLines[pfLyrCurIdx + 1];
+        if (!next) return 999;
+        return next.time - cur.time;
+    }
+
+    function pfPickMode(opts) {
+        opts = opts || {};
+        const avoidStack = !!opts.avoidStacking;
+        const avoidVert  = !!opts.avoidVertical;
+        let progress = 0;
+        try {
+            if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getDuration) {
+                const d = ytPlayer.getDuration() || 0;
+                const t = ytPlayer.getCurrentTime() || 0;
+                if (d > 0) progress = t / d;
+            }
+        } catch(_){}
+        /* Intro/outro → center + blur. Reset estados acumulativos. */
+        if (progress < 0.25 || progress > 0.92) {
+            pfMultiState = null;
+            pfFastStackCounter = 0;
+            pfFastStackStartedAt = 0;
+            return { mode: 'center', blur: true };
+        }
+        /* Si esta línea no debe apilarse pero hay un multi-mode en
+           curso → lo abortamos (la siguiente line will be normal). */
+        if (avoidStack && pfMultiState) {
+            pfMultiState = null;
+        }
+        const now = Date.now();
+        /* Si hay un multi-mode en curso: continúa hasta completar o
+           hasta el cap absoluto de tiempo (lo que ocurra primero). */
+        if (pfMultiState) {
+            const slot = pfMultiState.slot;
+            const total = pfMultiState.total;
+            const elapsed = now - pfMultiState.startedAt;
+            const isLast = (slot + 1) >= total || elapsed >= PF_MULTI_MAX_MS;
+            const result = {
+                mode: pfMultiState.mode,
+                blur: false,
+                slot: slot,
+                total: total,
+                isLast: isLast,
+                holdMs: pfMultiState.holdMs,
+            };
+            if (isLast) pfMultiState = null;
+            else pfMultiState.slot++;
+            return result;
+        }
+        /* ── Detección de línea rápida ──
+           Si la línea actual dura menos del threshold → fast-stack.
+           El stack tiene un cap de tiempo: si lleva >5.5s acumulando,
+           lo forzamos a cerrar (treat as long line) para que no se
+           eternice durante un verso de rap largo. */
+        const lineDur = pfGetCurLineDuration();
+        if (lineDur < PF_FAST_LINE_THRESHOLD && !avoidStack) {
+            if (pfFastStackStartedAt === 0) pfFastStackStartedAt = now;
+            const elapsedFast = now - pfFastStackStartedAt;
+            if (elapsedFast < PF_FAST_STACK_MAX_MS) {
+                const slot = pfFastStackCounter % PF_FAST_STACK_TOTAL;
+                pfFastStackCounter++;
+                return {
+                    mode: 'fast-stack',
+                    blur: false,
+                    slot: slot,
+                    total: PF_FAST_STACK_TOTAL,
+                    isFastStack: true,
+                };
+            }
+            /* Cap superado → forzar reset, esta línea va por modo normal. */
+            pfFastStackCounter = 0;
+            pfFastStackStartedAt = 0;
+        } else {
+            /* Línea larga o avoidStack → reset del fast-stack. */
+            pfFastStackCounter = 0;
+            pfFastStackStartedAt = 0;
+        }
+        /* Dado random: 22% chance de arrancar un multi-mode después
+           del 4º verso. avoidStack excluye TODOS los multi-modes;
+           avoidVert excluye fill-vert (también es apilado vertical
+           de caracteres como vert-left/right). */
+        if (pfLineCounter > 3 && Math.random() < 0.22 && !avoidStack) {
+            let candidates = PF_MULTI_MODES;
+            if (avoidVert) {
+                candidates = candidates.filter(c => c.mode !== 'fill-vert');
+            }
+            if (candidates.length > 0) {
+                const cfg = candidates[Math.floor(Math.random() * candidates.length)];
+                pfMultiState = {
+                    mode: cfg.mode, total: cfg.total, slot: 1,
+                    holdMs: cfg.holdMs, startedAt: now,
+                };
+                return {
+                    mode: cfg.mode,
+                    blur: false,
+                    slot: 0,
+                    total: cfg.total,
+                    isLast: false,
+                    holdMs: cfg.holdMs,
+                };
+            }
+        }
+        /* Single-line: rotamos modos experimentales. Si avoidVert
+           filtramos los modos verticales (vert-left/right) que no
+           caben bien para verses largos. */
+        let modes = PF_EXP_MODES;
+        if (avoidVert) {
+            modes = modes.filter(m => m !== 'vert-left' && m !== 'vert-right');
+        }
+        const idx = pfLineCounter % modes.length;
+        return { mode: modes[idx], blur: false };
+    }
+
+    /* Extrae las partes entre paréntesis del verso. Soporta paréntesis
+       ASCII y CJK fullwidth (）). Devuelve {main, asides}:
+         - main: texto SIN las partes paréntesis, trim.
+         - asides: array de strings con cada contenido de paréntesis.
+       Si todo el verso son paréntesis → main será '' y asides tendrá
+       el contenido. */
+    function pfExtractParens(text) {
+        if (!text) return { main: '', asides: [] };
+        const re = /[(（]([^)）]+)[)）]/g;
+        const asides = [];
+        let m;
+        while ((m = re.exec(text)) !== null) {
+            const t = m[1].trim();
+            if (t) asides.push(t);
+        }
+        const main = text.replace(re, '').replace(/\s+/g, ' ').trim();
+        return { main, asides };
+    }
+
+    /* Contador de asides (paréntesis) para rotar la esquina en la que
+       se muestran (tl → tr → bl → br). Reset al cerrar lyrics. */
+    const PF_ASIDE_CORNERS = ['tl', 'tr', 'bl', 'br'];
+    let pfAsideCounter = 0;
+
+    /* State activo de un grupo de líneas consecutivas idénticas mostradas
+       como scatter. {startIdx, endIdx, text, count}. Mientras pfLyrCurIdx
+       esté en este rango, NO re-renderizamos — el scatter ya está visible. */
+    let pfRepeatLineGroup = null;
+
+    /* Detecta si la línea ACTUAL (pfLyrCurIdx) inicia un grupo de
+       líneas consecutivas idénticas. Devuelve {startIdx, endIdx, text,
+       count} si hay 3+ repeticiones consecutivas, o null. */
+    function pfDetectMultiLineRepeat() {
+        if (!pfLyrLines || pfLyrCurIdx < 0 || pfLyrCurIdx >= pfLyrLines.length) return null;
+        const target = _pfNorm(pfLyrLines[pfLyrCurIdx].text);
+        if (!target) return null;
+        let endIdx = pfLyrCurIdx;
+        while (endIdx + 1 < pfLyrLines.length && _pfNorm(pfLyrLines[endIdx + 1].text) === target) {
+            endIdx++;
+        }
+        const count = endIdx - pfLyrCurIdx + 1;
+        if (count >= 3) {
+            return { startIdx: pfLyrCurIdx, endIdx, text: pfLyrLines[pfLyrCurIdx].text, count };
+        }
+        return null;
+    }
+    /* Cuánto tiempo permanece visible un aside antes de auto-cerrarse. */
+    const PF_ASIDE_HOLD_MS = 4500;
+
+    /* Renderiza una palabra/frase entre paréntesis como overlay pequeño
+       en una esquina. NO limpia las líneas anteriores. Auto-fade tras
+       PF_ASIDE_HOLD_MS para no quedar fantasma indefinidamente. */
+    function pfRenderAsideCorner(text) {
+        if (!lyrStage || !text) return;
+        const corner = PF_ASIDE_CORNERS[pfAsideCounter++ % PF_ASIDE_CORNERS.length];
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-lyr-line-wrap pf-lyr-mode-aside pf-lyr-aside-' + corner;
+        wrap.innerHTML = pfRenderLine(text);
+        lyrStage.appendChild(wrap);
+        setTimeout(() => {
+            if (!wrap.parentNode || wrap.classList.contains('leaving')) return;
+            wrap.style.animationDelay = '0s';
+            wrap.classList.add('leaving');
+            setTimeout(() => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 700);
+        }, PF_ASIDE_HOLD_MS);
+    }
+
+    /* Helper de normalización para comparaciones case/punctuation-insensitive. */
+    function _pfNorm(s) {
+        return (s || '').trim().toLowerCase().replace(/[.,!?;:¡¿]+$/, '');
+    }
+
+    /* Detecta si una línea consiste en UNA ÚNICA palabra enfática:
+         - Palabra de 2+ chars seguida de 1-3 signos de exclamación
+           (FIRE!, GO!, wow!!!).
+         - O ALL CAPS de 4+ chars (FIRE, BURN, WHATEVER).
+       Solo aplica cuando la línea trim+limpia-puntuación es UN solo
+       token (sin espacios ni más palabras). Devuelve la palabra
+       enfática o null. */
+    function pfDetectSingleEmphasis(text) {
+        if (!text) return null;
+        /* Trim outer punctuation (excepto !) y whitespace. */
+        const trimmed = text.trim().replace(/^[.,;:¡¿\-—\s]+|[.,;:\-—\s]+$/g, '').trim();
+        if (!trimmed) return null;
+        /* Debe ser UNA sola palabra (sin espacios). */
+        if (/\s/.test(trimmed)) return null;
+        /* Palabra + 1-3 exclamaciones. */
+        const exclMatch = trimmed.match(/^([\p{L}\d]+)(!{1,3})$/u);
+        if (exclMatch && exclMatch[1].length >= 2) return trimmed;
+        /* ALL CAPS de 4+ chars (sin exclamación). */
+        if (/^[\p{Lu}][\p{Lu}\d]{3,}$/u.test(trimmed)) return trimmed;
+        return null;
+    }
+
+    /* Renderiza una palabra enfática como overlay GIGANTE centrado.
+       Auto-fade tras 2.5s. Múltiples emph pueden coexistir si el line
+       tiene varias (cada una con su delay distinto). */
+    function pfRenderEmphasis(word) {
+        if (!lyrStage || !word) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-lyr-line-wrap pf-lyr-mode-emph';
+        wrap.innerHTML = pfRenderLine(word);
+        lyrStage.appendChild(wrap);
+        setTimeout(() => {
+            if (!wrap.parentNode || wrap.classList.contains('leaving')) return;
+            wrap.style.animationDelay = '0s';
+            wrap.classList.add('leaving');
+            setTimeout(() => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 600);
+        }, 2500);
+    }
+
+    /* Detecta repeticiones de palabra o FRASE dentro de una línea:
+         - "Sí, sí, sí, sí" → palabra "Sí" repetida.
+         - "everybody it's all up in my, everybody it's all up in my, everybody it's all in my"
+           → frase "everybody it's all up in my" repetida (con la 3ª ligeramente diferente, igualmente cuenta).
+       Devuelve {word, count} o null. La detección es tolerante: si la
+       frase MÁS COMÚN aparece 2+ veces en una línea con 3+ frases,
+       se considera repetición. */
+    function pfDetectRepeatedWord(text) {
+        if (!text) return null;
+
+        /* Paso 1: palabra única repetida. Todas iguales → outliers vacíos. */
+        const words = text.split(/[^\p{L}\p{N}]+/u).filter(p => p.length > 0);
+        if (words.length >= 3) {
+            const first = words[0].toLowerCase();
+            if (words.every(p => p.toLowerCase() === first)) {
+                return { word: words[0], count: words.length, triggerCount: words.length, outliers: [] };
+            }
+        }
+
+        /* Paso 2: frase repetida — split por comas/puntos/punto-coma. */
+        const phrases = text.split(/[,;.!?¡¿]+\s*/).map(s => s.trim()).filter(s => s.length > 0);
+        if (phrases.length >= 3) {
+            const counts = {};
+            for (const p of phrases) {
+                const k = _pfNorm(p);
+                if (k) counts[k] = (counts[k] || 0) + 1;
+            }
+            let bestKey = null, bestCount = 0;
+            for (const k in counts) {
+                if (counts[k] > bestCount) { bestKey = k; bestCount = counts[k]; }
+            }
+            if (bestCount >= 2) {
+                const phrase = phrases.find(p => _pfNorm(p) === bestKey) || phrases[0];
+                const outliers = phrases.filter(p => _pfNorm(p) !== bestKey);
+                const orderedPhrases = phrases.map(p => ({
+                    text: p,
+                    isOutlier: _pfNorm(p) !== bestKey,
+                    length: p.length,
+                }));
+                return {
+                    word: phrase,
+                    count: bestCount,
+                    triggerCount: phrases.length,
+                    outliers,
+                    orderedPhrases,
+                };
+            }
+        }
+
+        /* Paso 3: TOKEN GROUP repetido (sin comas). Cubre versos como
+           "i love you i love you i love you" — separados por espacios
+           pero sin puntuación. Busca el grupo más pequeño que cubra
+           todos los tokens repitiendo 3+ veces. */
+        const tokens = text.trim().split(/\s+/).filter(t => t.length > 0);
+        if (tokens.length >= 3) {
+            for (let groupSize = 1; groupSize <= Math.floor(tokens.length / 3); groupSize++) {
+                const candidate = tokens.slice(0, groupSize).join(' ');
+                const candLower = candidate.toLowerCase();
+                let matchCount = 0;
+                for (let i = 0; i + groupSize <= tokens.length; i += groupSize) {
+                    const slice = tokens.slice(i, i + groupSize).join(' ').toLowerCase();
+                    if (slice === candLower) matchCount++;
+                    else break;
+                }
+                if (matchCount * groupSize === tokens.length && matchCount >= 3) {
+                    const op = [];
+                    for (let k = 0; k < matchCount; k++) {
+                        op.push({ text: candidate, isOutlier: false, length: candidate.length });
+                    }
+                    return {
+                        word: candidate, count: matchCount,
+                        triggerCount: matchCount, outliers: [],
+                        orderedPhrases: op,
+                    };
+                }
+            }
+        }
+
+        /* Paso 4: CHAR-LEVEL substring repetido (sin separadores ni
+           espacios). Cubre "くるくるくるくる" (Japonés), "lalala",
+           "OhOhOhOh", etc. Encuentra el sub-patrón más corto que
+           cubre el texto entero repitiendo 3+ veces. */
+        const charTrimmed = text.trim();
+        if (charTrimmed.length >= 4) {
+            for (let L = 1; L <= Math.floor(charTrimmed.length / 3); L++) {
+                const candidate = charTrimmed.substring(0, L);
+                if (!candidate.trim()) continue;
+                const candLower = candidate.toLowerCase();
+                let cnt = 0, i = 0;
+                while (i + L <= charTrimmed.length
+                    && charTrimmed.substring(i, i + L).toLowerCase() === candLower) {
+                    cnt++;
+                    i += L;
+                }
+                /* Cobertura total Y 3+ repeticiones. */
+                if (i === charTrimmed.length && cnt >= 3) {
+                    const op = [];
+                    for (let k = 0; k < cnt; k++) {
+                        op.push({ text: candidate, isOutlier: false, length: candidate.length });
+                    }
+                    return {
+                        word: candidate, count: cnt,
+                        triggerCount: cnt, outliers: [],
+                        orderedPhrases: op,
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /* Construye y suelta N copias de la misma palabra esparcidas en
+       posiciones de un GRID virtual. Stepwise entry — el delay entre
+       cada copia se calcula a partir de la duración del verso ÷ total
+       de frases (incluyendo outliers). Sincroniza con la música:
+         - "sí, sí, sí" (línea 1s / 3 frases) → step ~0.33s (rápido)
+         - "im i bad × 4" (línea 4s / 4 frases) → step ~1s (lento)
+       opts.lineDurMs: duración del verso (defecto 2s).
+       opts.totalCount: total de frases incluyendo outliers (defecto count).
+       Devuelve el stepDelay calculado (s) para que el caller sincronice
+       los outliers también con el mismo ritmo. */
+    function pfRenderScatter(word, count, opts) {
+        opts = opts || {};
+        /* delaysSec: array de delays absolutos en segundos para cada
+           copia (en orden de aparición temporal). Si se proporciona,
+           tiene prioridad. Si no, se cae al cálculo legacy basado en
+           lineDurMs/totalCount. */
+        const delaysSec = opts.delaysSec || null;
+        const lineDurMs = opts.lineDurMs || 2000;
+        const totalCount = opts.totalCount || count;
+        const max = Math.min(count, 8);
+        const cols = Math.ceil(Math.sqrt(max));
+        const rows = Math.ceil(max / cols);
+        const padX = 12, padY = 18;
+        const usableW = 100 - padX * 2;
+        const usableH = 100 - padY * 2;
+        const cellW = usableW / cols;
+        const cellH = usableH / rows;
+        /* Si NO viene delaysSec, calculamos step uniforme basado en
+           lineDurMs (modo legacy). */
+        const stepRaw = (lineDurMs / 1000) / Math.max(totalCount, 1);
+        const fallbackStep = Math.max(0.18, Math.min(stepRaw, 1.2));
+        const order = [];
+        for (let i = 0; i < max; i++) order.push(i);
+        for (let i = order.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+        }
+        order.forEach((cellIdx, displayIdx) => {
+            const col = cellIdx % cols;
+            const row = Math.floor(cellIdx / cols);
+            const cx = padX + (col + 0.5) * cellW;
+            const cy = padY + (row + 0.5) * cellH;
+            const jx = (Math.random() - 0.5) * cellW * 0.4;
+            const jy = (Math.random() - 0.5) * cellH * 0.4;
+            const wrap = document.createElement('div');
+            wrap.className = 'pf-lyr-line-wrap pf-lyr-mode-scatter';
+            wrap.style.setProperty('--x', (cx + jx).toFixed(2));
+            wrap.style.setProperty('--y', (cy + jy).toFixed(2));
+            wrap.style.setProperty('--r', String(-14 + Math.random() * 28));
+            wrap.style.setProperty('--s', String(0.75 + Math.random() * 0.45));
+            /* displayIdx es el orden VISUAL (post-shuffle). Para el
+               TIEMPO usamos directamente displayIdx también — i.e., la
+               copia visualmente N-ésima aparece en el delay N-ésimo.
+               El shuffle de cells es solo para no leer en grid. */
+            const delay = (delaysSec && delaysSec[displayIdx] !== undefined)
+                ? delaysSec[displayIdx]
+                : displayIdx * fallbackStep;
+            wrap.style.animationDelay = delay.toFixed(2) + 's';
+            wrap.innerHTML = pfRenderLine(word);
+            lyrStage.appendChild(wrap);
+        });
+        return delaysSec ? delaysSec[delaysSec.length - 1] || 0 : (max - 1) * fallbackStep;
+    }
+
+    /* Helper para marcar como leaving los wraps existentes. Limpia el
+       animation-delay inline para que TODAS las salidas arranquen a la
+       vez — sin esto, las copias del scatter heredaban el delay
+       escalonado de entrada (0.4s × idx) y salían también escalonadas. */
+    function pfFadeOutWraps(selector) {
+        const els = lyrStage ? lyrStage.querySelectorAll(selector || '.pf-lyr-line-wrap') : [];
+        Array.from(els).forEach(el => {
+            if (el.classList.contains('leaving')) return;
+            el.style.animationDelay = '0s';
+            el.classList.add('leaving');
+            const toRemove = el;
+            setTimeout(() => { if (toRemove.parentNode) toRemove.parentNode.removeChild(toRemove); }, 800);
+        });
+    }
+
+    function pfShowLine(text) {
+        if (!lyrStage) { pfLog('showLine: lyrStage is null'); return; }
+        pfLog('showLine called, text=' + JSON.stringify(text ? text.substring(0, 80) : null));
+        if (text) {
+            const status = lyrStage.querySelector('.pf-lyr-status');
+            if (status) status.remove();
+        }
+        if (!text) {
+            /* Silencio → quita las líneas principales. Asides se mantienen
+               hasta su auto-fade (4.5s tras aparecer). */
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            pfRepeatLineGroup = null;
+            return;
+        }
+        /* ── Multi-line repeat ──
+           Si estamos DENTRO de un grupo ya activo (idx en rango), no
+           renderizamos nada nuevo — el scatter previo sigue en pantalla. */
+        if (pfRepeatLineGroup && pfLyrCurIdx >= pfRepeatLineGroup.startIdx && pfLyrCurIdx <= pfRepeatLineGroup.endIdx) {
+            pfLog('  skip: still in active multi-line repeat group');
+            return;
+        }
+        /* Si salimos del grupo, lo limpiamos y seguimos al check de
+           nuevo grupo. */
+        pfRepeatLineGroup = null;
+        /* Detecta si la línea ACTUAL inicia un grupo de N líneas
+           consecutivas idénticas → scatter del verso. */
+        const multiRepeat = pfDetectMultiLineRepeat();
+        if (multiRepeat) {
+            /* Para multi-line TENEMOS timestamps reales de cada línea
+               — los usamos directamente para sincronizar las copias del
+               scatter con el ritmo del canto. Cada copia aparece en el
+               momento EXACTO en que su línea del LRC tocaría. */
+            const startTime = pfLyrLines[multiRepeat.startIdx]?.time || 0;
+            const delaysSec = [];
+            for (let i = 0; i < multiRepeat.count; i++) {
+                const t = pfLyrLines[multiRepeat.startIdx + i]?.time;
+                delaysSec.push(t !== undefined ? Math.max(0, t - startTime) : i * 0.5);
+            }
+            pfLog('  multi-line repeat: idx ' + multiRepeat.startIdx + '-' + multiRepeat.endIdx
+                + ' count=' + multiRepeat.count
+                + ' delaysSec=[' + delaysSec.map(d => d.toFixed(2)).join(',') + '] "'
+                + multiRepeat.text.substring(0, 40) + '"');
+            pfRepeatLineGroup = multiRepeat;
+            pfLineCounter++;
+            root.classList.remove('pf-lyr-blurred');
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            pfRenderScatter(multiRepeat.text, multiRepeat.count, {
+                delaysSec,
+            });
+            return;
+        }
+
+        /* ── Detección de paréntesis ──
+           Si el verso tiene paréntesis, separamos el main (lo de fuera)
+           del aside (lo de dentro). Aside se renderiza en esquina
+           pequeña SIN borrar la línea anterior. */
+        const parens = pfExtractParens(text);
+        if (parens.asides.length > 0 && !parens.main) {
+            /* Verso TOTALMENTE entre paréntesis → no borra la previa,
+               solo añade el aside en esquina. */
+            pfLog('  aside-only: "' + parens.asides.join('|') + '"');
+            parens.asides.forEach(a => pfRenderAsideCorner(a));
+            return;
+        }
+        /* El texto principal a renderizar es lo de fuera de los
+           paréntesis. Si no había paréntesis, parens.main === text. */
+        const mainText = parens.main || text;
+
+        /* Si la línea entera es UNA sola palabra enfática (FIRE!, GO!,
+           BURN, etc.) → render como overlay grande explosivo en lugar
+           del modo normal. NO emph para versos con texto regular. */
+        const singleEmph = pfDetectSingleEmphasis(mainText);
+        if (singleEmph) {
+            pfLog('  single-word emph: "' + singleEmph + '"');
+            pfLineCounter++;
+            root.classList.remove('pf-lyr-blurred');
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            pfRenderEmphasis(singleEmph);
+            /* Asides del verso (paréntesis) también se muestran. */
+            parens.asides.forEach(a => pfRenderAsideCorner(a));
+            return;
+        }
+
+        /* Caso especial: palabra/frase repetida ("Sí, sí, sí, sí" o
+           "im i bad, im i bad, im i bad, im i really that bad") → scatter
+           + emphasis para outliers. triggerCount >= 3 gates. */
+        const repeated = pfDetectRepeatedWord(mainText);
+        if (repeated && repeated.triggerCount >= 3) {
+            const outliers = repeated.outliers || [];
+            const ordered = repeated.orderedPhrases || [];
+            /* ── Sincronización por LONGITUD DE FRASE ──
+               El tiempo de cada frase se estima como (chars × SEC_PER_CHAR).
+               Tomamos longitud antes que duración del verso porque a veces
+               el verso es largo en tiempo pero las frases cortas (silencio
+               final, como "oh, oh, right"). Cada frase aparece en el offset
+               acumulado de las anteriores. Clamps: 0.15s mínimo por frase
+               (visibilidad), 1.8s máximo (no esperas absurdas). */
+            const SEC_PER_CHAR = 0.1;
+            let cumChars = 0;
+            const scatterDelays = [];
+            const outlierTimings = [];
+            ordered.forEach(p => {
+                const startTimeSec = cumChars * SEC_PER_CHAR;
+                if (p.isOutlier) {
+                    outlierTimings.push({ text: p.text, delaySec: startTimeSec });
+                } else {
+                    scatterDelays.push(startTimeSec);
+                }
+                cumChars += Math.max(2, p.length);  /* min 2 chars para frases super cortas */
+            });
+            pfLog('  scatter: word="' + repeated.word + '" copies=' + repeated.count
+                + ' outliers=' + outliers.length
+                + ' scatterDelays=[' + scatterDelays.map(d => d.toFixed(2)).join(',') + ']');
+            pfLineCounter++;
+            root.classList.remove('pf-lyr-blurred');
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            pfRenderScatter(repeated.word, repeated.count, {
+                delaysSec: scatterDelays,
+            });
+            const expectedIdx = pfLyrCurIdx;
+            outlierTimings.forEach(({ text, delaySec }) => {
+                setTimeout(() => {
+                    if (!pfLyricsOpen) return;
+                    if (pfLyrCurIdx !== expectedIdx) return;
+                    pfRenderEmphasis(text);
+                }, delaySec * 1000);
+            });
+            parens.asides.forEach(a => pfRenderAsideCorner(a));
+            return;
+        }
+        /* ── Detección de línea larga ──
+           Thresholds independientes:
+             - avoidVertical: para vert-left/right (1 char por fila).
+               20 chars máx (más allá no cabe verticalmente en 90vh).
+             - avoidStacking: para multi-modes (fill-vert/stack, fast).
+               40 chars máx — el font es más chico, caben más. */
+        const lineDur = pfGetCurLineDuration();
+        const choice = pfPickMode({
+            avoidVertical: mainText.length > 20 || lineDur > 6,
+            avoidStacking: mainText.length > 40 || lineDur > 6,
+        });
+        pfLineCounter++;
+        const isMulti     = (choice.slot !== undefined) && !choice.isFastStack;
+        const isFastStack = !!choice.isFastStack;
+        pfLog('  mode=' + choice.mode + ' blur=' + choice.blur + ' lineCounter=' + pfLineCounter
+            + (isMulti     ? (' slot=' + choice.slot + '/' + choice.total + (choice.isLast?' (LAST)':'')) : '')
+            + (isFastStack ? (' fast-slot=' + choice.slot + '/' + choice.total) : ''));
+        if (choice.blur) root.classList.add('pf-lyr-blurred');
+        else root.classList.remove('pf-lyr-blurred');
+
+        /* Los asides (paréntesis en esquinas) NUNCA se limpian por el
+           flujo principal — se autoextinguen tras PF_ASIDE_HOLD_MS.
+           Por eso todos los selectores de limpieza excluyen .pf-lyr-mode-aside. */
+        if (isFastStack) {
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-fast-stack):not(.pf-lyr-mode-aside)');
+            pfFadeOutWraps('.pf-lyr-line-wrap.pf-lyr-mode-fast-stack[data-pf-slot="' + choice.slot + '"]');
+        } else if (isMulti) {
+            if (choice.slot === 0) {
+                pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            }
+        } else {
+            pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+        }
+
+        const wrap = document.createElement('div');
+        wrap.className = 'pf-lyr-line-wrap pf-lyr-mode-' + choice.mode;
+        if (isMulti || isFastStack) {
+            wrap.style.setProperty('--slot', String(choice.slot));
+            wrap.style.setProperty('--total', String(choice.total));
+            wrap.setAttribute('data-pf-slot', String(choice.slot));
+        }
+        wrap.innerHTML = pfRenderLine(mainText);
+        lyrStage.appendChild(wrap);
+
+        /* Schedule fade-out grupal del multi-mode al completar. */
+        if (isMulti && choice.isLast) {
+            const groupSelector = '.pf-lyr-line-wrap.pf-lyr-mode-' + choice.mode;
+            setTimeout(() => pfFadeOutWraps(groupSelector), choice.holdMs);
+        }
+
+        /* Después de renderizar el main, añadimos los asides (si los hay)
+           en esquinas — no reemplazan el main, son overlay adicional. */
+        parens.asides.forEach(a => pfRenderAsideCorner(a));
+    }
+
+    /* Controller del fetch activo — al iniciar un nuevo fetch (track
+       change) se aborta el anterior para no malgastar recursos ni
+       sobreescribir el estado del track nuevo con la respuesta vieja. */
+    let pfFetchController = null;
+
+    async function pfFetchForCurrent() {
+        /* Aborta el fetch anterior si existe — al cambiar de canción,
+           la request vieja se cancela inmediatamente. */
+        if (pfFetchController) {
+            try { pfFetchController.abort(); } catch(_){}
+        }
+        const controller = new AbortController();
+        pfFetchController = controller;
+
+        const tr = pfCurTrack();
+        if (!tr || !tr.videoId) {
+            pfLog('fetch: no track or videoId');
+            pfLyrLines = null; pfLyrVid = null; pfLyrCurIdx = -1;
+            pfShowLine(null);
+            return;
+        }
+        if (tr.videoId === pfLyrVid && pfLyrLines) {
+            pfLog('fetch: cache hit, lines=' + pfLyrLines.length);
+            pfLyrCurIdx = -2;
+            if (pfLyricsOpen) pfTick();
+            return;
+        }
+        pfLyrVid = tr.videoId; pfLyrLines = null; pfLyrCurIdx = -1;
+
+        /* Espera hasta 3s a que el YT player reporte una duración real
+           (>0). Sin esto, fetches inmediatos tras cambiar de track usan
+           dur=0 y caen en cache miss (server-side cache key no incluye
+           dur ya, pero LRCLIB hace una búsqueda menos precisa). */
+        let dur = 0;
+        const waitStart = Date.now();
+        while (Date.now() - waitStart < 3000) {
+            try {
+                if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getDuration) {
+                    dur = Math.floor(ytPlayer.getDuration() || 0);
+                }
+            } catch(_){}
+            if (dur > 0) break;
+            await new Promise(r => setTimeout(r, 200));
+            /* Salidas tempranas — si nos abortaron o el track cambió. */
+            if (controller.signal.aborted) { pfLog('fetch: aborted during dur-wait'); return; }
+            const curT = pfCurTrack();
+            if (!curT || curT.videoId !== tr.videoId) { pfLog('fetch: track changed during dur-wait'); return; }
+        }
+
+        const qs = new URLSearchParams({ title: tr.title || '', artist: tr.artist || '', duration: String(dur) });
+        pfLog('fetch: GET title=' + (tr.title||'') + ' artist=' + (tr.artist||'') + ' dur=' + dur);
+        try {
+            const r = await fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), {
+                credentials: 'same-origin',
+                signal: controller.signal,
+            });
+            pfLog('fetch: response status=' + r.status);
+            const d = await r.json();
+            pfLog('fetch: response ok=' + (d&&d.ok) + ' found=' + (d&&d.found) + ' hasSynced=' + !!(d&&d.synced) + ' syncedLen=' + ((d&&d.synced||'').length));
+            if (controller.signal.aborted) { pfLog('fetch: aborted post-response'); return; }
+            if (pfLyrVid !== tr.videoId) { pfLog('fetch: track changed mid-fetch, ignoring'); return; }
+            if (!d || !d.ok || !d.found || !d.synced) { pfLog('fetch: no synced data, returning'); return; }
+            const parsed = pfParseLRC(d.synced);
+            pfLog('fetch: parsed ' + parsed.length + ' synced lines');
+            if (parsed.length > 0) {
+                pfLog('fetch: first line @' + parsed[0].time + 's "' + parsed[0].text.substring(0, 40) + '"');
+                pfLog('fetch: last  line @' + parsed[parsed.length-1].time + 's');
+            }
+            if (parsed.length) {
+                pfLyrLines = parsed;
+                pfLyrCurIdx = -2;
+                if (pfLyricsOpen) pfTick();
+            }
+        } catch(e) {
+            if (e && e.name === 'AbortError') {
+                pfLog('fetch: aborted (track changed)');
+                return;
+            }
+            pfLog('fetch: exception: ' + (e && e.message ? e.message : String(e)));
+        } finally {
+            /* Si este controller sigue siendo el activo, lo limpiamos.
+               Si ya fue reemplazado por otro fetch, no lo tocamos. */
+            if (pfFetchController === controller) pfFetchController = null;
+        }
+    }
+
+    /* Tick: calcula qué línea (si alguna) debería estar visible AHORA.
+       Detección de gap → durante huecos instrumentales largos no
+       mostramos nada, pero más permisiva que antes (15s threshold).
+       Heartbeat cada 5 ticks (1s) loguea estado del player + tiempo
+       para diagnosticar si el sync funciona. */
+    let pfTickCount = 0;
+    function pfTick() {
+        if (!pfLyricsOpen) return;
+        if (!pfLyrLines || !pfLyrLines.length) {
+            if (pfLyrCurIdx !== -1) { pfLyrCurIdx = -1; pfShowLine(null); }
+            return;
+        }
+        let t = 0;
+        try { if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getCurrentTime) t = ytPlayer.getCurrentTime() || 0; } catch(_){}
+        /* Heartbeat — cada 5 ticks (1s) loguea estado actual. Solo
+           durante los primeros 30s tras open para no llenar el log. */
+        pfTickCount++;
+        if (pfTickCount % 5 === 0 && pfTickCount <= 150) {
+            let st = 'unknown';
+            try {
+                if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getPlayerState) {
+                    const s = ytPlayer.getPlayerState();
+                    st = ({'-1':'UNSTARTED','0':'ENDED','1':'PLAYING','2':'PAUSED','3':'BUFFERING','5':'CUED'})[String(s)] || ('STATE_' + s);
+                }
+            } catch(_){}
+            pfLog('heartbeat: tick#' + pfTickCount + ' t=' + t.toFixed(2) + ' state=' + st + ' firstLine@=' + (pfLyrLines && pfLyrLines[0] ? pfLyrLines[0].time : '?'));
+        }
+        /* Binary search: última línea con time <= t. */
+        let lo = 0, hi = pfLyrLines.length - 1, idx = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (pfLyrLines[mid].time <= t) { idx = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        /* Detección de gap — relajada: solo ocultar si el gap a la
+           siguiente es >15s Y ya pasaron 8s desde la actual. Antes era
+           7s/3.5s lo que ocultaba demasiado durante canciones con
+           pausas naturales entre versos. */
+        let showIdx = idx;
+        if (showIdx >= 0) {
+            const cur  = pfLyrLines[showIdx];
+            const next = pfLyrLines[showIdx + 1];
+            const elapsed = t - cur.time;
+            if (next) {
+                const gap = next.time - cur.time;
+                if (gap > 15 && elapsed > 8) showIdx = -1;
+            } else {
+                /* Última línea: ocultar después de 20s (outro largo). */
+                if (elapsed > 20) showIdx = -1;
+            }
+        }
+        if (showIdx !== pfLyrCurIdx) {
+            pfLog('tick: t=' + t.toFixed(2) + ' rawIdx=' + idx + ' showIdx=' + showIdx + ' prevIdx=' + pfLyrCurIdx
+                + (showIdx >= 0 ? ' line="' + pfLyrLines[showIdx].text.substring(0, 50) + '"' : ' (no line)'));
+            pfLyrCurIdx = showIdx;
+            pfShowLine(showIdx >= 0 ? pfLyrLines[showIdx].text : null);
+        }
+    }
+
+    /* Toast con un solo texto (para "Sin letra…", etc). */
+    function pfFlashStatus(msg, ms) {
+        if (!lyrStage) return;
+        const old = lyrStage.querySelector('.pf-lyr-status');
+        if (old) old.remove();
+        const el = document.createElement('div');
+        el.className = 'pf-lyr-status';
+        el.textContent = msg;
+        lyrStage.appendChild(el);
+        setTimeout(() => { el.classList.add('fade'); setTimeout(() => el.remove(), 500); }, ms || 1600);
+    }
+    /* Loader minimalista — solo 3 dots bounceando, sin texto.
+       (El parámetro label se ignora; se mantiene por compatibilidad). */
+    function pfFlashLoading(label, ms) {
+        if (!lyrStage) return;
+        const old = lyrStage.querySelector('.pf-lyr-status');
+        if (old) old.remove();
+        const el = document.createElement('div');
+        el.className = 'pf-lyr-status pf-lyr-status-loading';
+        const dotsWrap = document.createElement('span');
+        dotsWrap.className = 'pf-loading-dots';
+        for (let i = 0; i < 3; i++) {
+            const d = document.createElement('span');
+            d.className = 'pf-loading-dot';
+            d.textContent = '.';
+            dotsWrap.appendChild(d);
+        }
+        el.appendChild(dotsWrap);
+        lyrStage.appendChild(el);
+        setTimeout(() => { el.classList.add('fade'); setTimeout(() => el.remove(), 500); }, ms || 60000);
+    }
+    /* Toast estilo "Now Playing" — título grande + artista debajo.
+       Se muestra al cargar lyrics correctamente. */
+    function pfFlashTrack(title, artist, ms) {
+        if (!lyrStage) return;
+        const old = lyrStage.querySelector('.pf-lyr-status');
+        if (old) old.remove();
+        const el = document.createElement('div');
+        el.className = 'pf-lyr-status pf-lyr-status-track';
+        const tEl = document.createElement('div');
+        tEl.className = 'pf-lyr-status-title';
+        tEl.textContent = title || '—';
+        const aEl = document.createElement('div');
+        aEl.className = 'pf-lyr-status-artist';
+        aEl.textContent = artist || '';
+        el.appendChild(tEl);
+        if (artist) el.appendChild(aEl);
+        lyrStage.appendChild(el);
+        setTimeout(() => { el.classList.add('fade'); setTimeout(() => el.remove(), 500); }, ms || 2600);
+    }
+
+    function pfUpdateBtnState() {
+        if (!btnLyr) return;
+        btnLyr.classList.toggle('is-on', pfLyricsOpen);
+        btnLyr.setAttribute('aria-pressed', pfLyricsOpen ? 'true' : 'false');
+    }
+
+    function pfOpenLyrics() {
+        root.classList.add('pf-lyrics-active');
+        pfLyricsOpen = true;
+        pfUpdateBtnState();
+        pfLyrCurIdx = -2;
+        const tr = pfCurTrack();
+        try { console.log('[pf-lyrics] open. track=', tr && tr.title, 'videoId=', tr && tr.videoId, 'cached=', tr && tr.videoId === pfLyrVid && !!pfLyrLines); } catch(_){}
+        if (!pfLyrLines || !tr || tr.videoId !== pfLyrVid) {
+            pfFlashLoading('🎤 Buscando letra', 60000);   /* persiste hasta cambio */
+        }
+        pfFetchForCurrent().then(() => {
+            if (!pfLyricsOpen) return;
+            try { console.log('[pf-lyrics] fetch done. lines=', (pfLyrLines||[]).length); } catch(_){}
+            if (!pfLyrLines || !pfLyrLines.length) {
+                pfFlashStatus('🥲 Sin letra sincronizada para esta canción', 8000);
+                return;
+            }
+            /* Si al activar las letras ya hay una línea visible (porque
+               la canción está en mitad de un verso y pfTick disparó
+               showLine en cache hit), NO mostramos el toast "Now
+               Playing" — taparía el verso ya visible. Solo cleanup del
+               loading toast. */
+            const lineVisible = lyrStage && lyrStage.querySelector('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+            if (lineVisible) {
+                const status = lyrStage.querySelector('.pf-lyr-status');
+                if (status) status.remove();
+                return;
+            }
+            const t = pfCurTrack();
+            pfFlashTrack(t && t.title || 'Canción', t && t.artist || '', 2800);
+        });
+        if (pfLyrTimer) clearInterval(pfLyrTimer);
+        pfLyrTimer = setInterval(pfTick, 200);
+    }
+    function pfCloseLyrics() {
+        root.classList.remove('pf-lyrics-active');
+        root.classList.remove('pf-lyr-blurred');
+        pfLyricsOpen = false;
+        pfUpdateBtnState();
+        if (pfLyrTimer) { clearInterval(pfLyrTimer); pfLyrTimer = null; }
+        pfLyrCurIdx = -1;
+        pfLineCounter = 0;
+        pfMultiState = null;
+        pfFastStackCounter = 0;
+        pfFastStackStartedAt = 0;
+        pfAsideCounter = 0;
+        pfRepeatLineGroup = null;
+        /* Cancela cualquier fetch en vuelo al cerrar. */
+        if (pfFetchController) { try { pfFetchController.abort(); } catch(_){} pfFetchController = null; }
+        /* Cancela debounce de reload pendiente. */
+        if (pfReloadDebounceTimer) { clearTimeout(pfReloadDebounceTimer); pfReloadDebounceTimer = null; }
+        if (lyrStage) lyrStage.innerHTML = '';
+    }
+
+    /* Botón micrófono: toggle on/off + visual feedback (.is-on). */
+    if (btnLyr) btnLyr.addEventListener('click', function() {
+        if (pfLyricsOpen) pfCloseLyrics();
+        else pfOpenLyrics();
+    });
+    /* Debounce del reload — si el usuario salta rápido entre canciones,
+       no queremos disparar un fetch + render por cada skip. Solo cuando
+       la canción se "asienta" 1.5s arrancamos la carga real. */
+    let pfReloadDebounceTimer = null;
+    const PF_RELOAD_DEBOUNCE_MS = 1500;
+
+    /* Limpieza ligera inmediata al cambiar de track — quita los wraps
+       visibles SIN animación (mucho más rápido que pfFadeOutWraps que
+       crea 50+ animations CSS por wrap). Asides se preservan. */
+    function pfQuickClearStage() {
+        if (!lyrStage) return;
+        const els = lyrStage.querySelectorAll('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+        els.forEach(el => el.remove());
+        const status = lyrStage.querySelector('.pf-lyr-status');
+        if (status) status.remove();
+    }
+
+    /* Cuando cambia el track con las letras abiertas:
+       1. INMEDIATO: cancela fetch en vuelo + clear DOM + loading dots
+          + reset de TODO el estado de letra previa.
+       2. DEBOUNCED: tras 1.5s sin más cambios, arranca el fetch real
+          de la nueva canción.
+       Si el usuario salta otra vez antes de 1.5s, el timer se cancela
+       y se reinicia → solo trabajo de carga REAL cuando el usuario
+       "se queda" en una canción. */
+    function pfReloadForTrack() {
+        if (!pfLyricsOpen) return;
+
+        /* === FASE 1 inmediata: cleanup ligero === */
+
+        /* Cancela el debounce pendiente si existía. */
+        if (pfReloadDebounceTimer) {
+            clearTimeout(pfReloadDebounceTimer);
+            pfReloadDebounceTimer = null;
+        }
+        /* Cancela cualquier fetch en vuelo. */
+        if (pfFetchController) {
+            try { pfFetchController.abort(); } catch(_){}
+            pfFetchController = null;
+        }
+        /* Reset completo del estado de letra previa. */
+        pfLyrLines = null;
+        pfLyrVid = null;
+        pfLyrCurIdx = -2;
+        pfLineCounter = 0;
+        pfMultiState = null;
+        pfFastStackCounter = 0;
+        pfFastStackStartedAt = 0;
+        pfRepeatLineGroup = null;
+        root.classList.remove('pf-lyr-blurred');
+        /* DOM cleanup INSTANTÁNEO (sin animación). */
+        pfQuickClearStage();
+        /* Loading dots como feedback visual mientras se debouncea. */
+        pfFlashLoading('', 60000);
+
+        /* === FASE 2 debounced: fetch real tras 1.5s === */
+
+        pfReloadDebounceTimer = setTimeout(() => {
+            pfReloadDebounceTimer = null;
+            if (!pfLyricsOpen) return;
+            const tr = pfCurTrack();
+            pfLog('reloadForTrack (debounced): ' + (tr ? (tr.title + ' / ' + tr.videoId) : 'no-track'));
+            if (!tr || !tr.videoId) {
+                /* Sin track activo → solo quita el loading. */
+                const st = lyrStage && lyrStage.querySelector('.pf-lyr-status');
+                if (st) st.remove();
+                return;
+            }
+            pfFetchForCurrent().then(() => {
+                if (!pfLyricsOpen) return;
+                if (!pfLyrLines || !pfLyrLines.length) {
+                    pfFlashStatus('🥲 Sin letra sincronizada para esta canción', 8000);
+                } else {
+                    /* No mostrar el toast "Now Playing" si ya hay una
+                       línea visible (cache hit con el reproductor en
+                       mitad de un verso). */
+                    const lineVisible = lyrStage && lyrStage.querySelector('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+                    if (!lineVisible) {
+                        const tCur = pfCurTrack();
+                        pfFlashTrack(tCur && tCur.title || 'Canción', tCur && tCur.artist || '', 2800);
+                    } else {
+                        const st = lyrStage.querySelector('.pf-lyr-status');
+                        if (st) st.remove();
+                    }
+                }
+            });
+        }, PF_RELOAD_DEBOUNCE_MS);
+    }
+
+    /* Hook a updateTrackUI: al cambiar de track con lyrics abiertas,
+       dispara el reload completo. */
+    const __origUpdateTrackUI2 = (typeof window.updateTrackUI === 'function') ? window.updateTrackUI : null;
+    if (__origUpdateTrackUI2) {
+        window.updateTrackUI = function(idx) {
+            __origUpdateTrackUI2(idx);
+            if (pfLyricsOpen) pfReloadForTrack();
+        };
+    }
+
+    /* ── Right-click menu ──
+       Mismo menú contextual que la playlist (Añadir a playlist /
+       Añadir a perfil / Escuchar juntos), accesible con right-click
+       en cualquier parte del player pequeño Y del fullscreen. */
+    function getCurTrackForCtx() {
+        if (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number') {
+            return playlist[currentTrack];
+        }
+        return null;
+    }
+    function attachCtxMenu(el) {
+        if (!el) return;
+        el.addEventListener('contextmenu', function(e) {
+            const tr = getCurTrackForCtx();
+            if (!tr) return;
+            if (typeof window.openTrackCtxMenu === 'function') {
+                window.openTrackCtxMenu(e, tr);
+            }
+        });
+    }
+    /* Player pequeño: cualquier zona excepto los botones interactivos. */
+    attachCtxMenu(document.getElementById('player-titlebar'));
+    attachCtxMenu(document.getElementById('player-content'));
+    attachCtxMenu(document.getElementById('player-cover-wrap'));
+    /* Fullscreen: title-bar + display + info. */
+    attachCtxMenu(document.querySelector('#player-full .pf-titlebar'));
+    attachCtxMenu(document.querySelector('#player-full .pf-display'));
+    attachCtxMenu(document.querySelector('#player-full .pf-info'));
 })();
 <?php endif; ?>
 </script>

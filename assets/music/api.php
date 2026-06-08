@@ -807,6 +807,26 @@ case 'save-now-playing': {
 }
 
 /* ─── Letras (LRCLIB) ───────────────────────────────────── */
+/* ─── Debug logger del módulo lyric-video del fullscreen player ───
+   POSTea {msg} → escribe línea con timestamp en logs/lyrics-debug.log
+   Solo para diagnosticar bugs de render/sync de letras. */
+case 'client-log': {
+    $b = jsonBody();
+    $msg = is_string($b['msg'] ?? null) ? substr($b['msg'], 0, 2000) : '';
+    if ($msg === '') jsonResponse(['ok' => true]);
+    $logDir  = dirname(__DIR__, 2) . '/logs';
+    if (!is_dir($logDir)) @mkdir($logDir, 0755, true);
+    $logFile = $logDir . '/lyrics-debug.log';
+    /* Rotate al sobrepasar 512KB (evita que crezca eternamente). */
+    if (file_exists($logFile) && filesize($logFile) > 512 * 1024) {
+        @rename($logFile, $logFile . '.1');
+    }
+    $stamp = date('Y-m-d H:i:s.') . substr(microtime(false), 2, 3);
+    $line  = "[$stamp] {$userKey}: {$msg}\n";
+    @file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
+    jsonResponse(['ok' => true]);
+}
+
 case 'get-lyrics': {
     require_once __DIR__ . '/lyrics-helpers.php';
     $title    = trim($_GET['title']    ?? '');

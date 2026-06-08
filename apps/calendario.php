@@ -500,6 +500,18 @@ const parejaId = <?php echo $parejaId; ?>;
 const fechaInicio = '<?php echo $fechaInicio; ?>';
 const hoy = new Date();
 
+/* ── Constantes de configuración — antes magic numbers dispersos. */
+const CFG = {
+    sidebarDays:      14,        /* sidebar derecha → próximos N días */
+    expandPadMonths:  1,         /* recordatorios expandidos = mes ±1 */
+    invitePollMinMs:  5000,      /* polling de invitaciones — inicial */
+    invitePollMaxMs:  120000,    /* ... techo (backoff exponencial) */
+    countdownTickMs:  1000,      /* tick del countdown */
+    ytRetryMs:        200,       /* reintento si YT API no está lista */
+    ytMaxRetries:     50,        /* máx reintentos antes de abortar */
+    confirmEscape:    'Escape',  /* tecla para cerrar modales */
+};
+
 /* ── Helpers de fecha — SIEMPRE LOCAL, NUNCA UTC ──
    Bug histórico: `new Date('YYYY-MM-DD')` se interpreta como UTC
    midnight, no como medianoche local. En zonas horarias negativas
@@ -550,16 +562,14 @@ const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
 
 function expandirRecordatorios(lista) {
-    /* Acotamos a ventana ±1 mes alrededor del mes visible + 14 días
-       hacia delante (sidebar). Antes expandía 3 años por recordatorio
-       (~156 ocurrencias semanales × N recordatorios → MBs de memoria).
-       Re-llamar tras navegar de mes. */
+    /* Acotamos a ventana ±CFG.expandPadMonths alrededor del mes visible
+       + CFG.sidebarDays hacia delante (sidebar). Antes expandía 3 años
+       por recordatorio → MBs de memoria. Re-llamar tras navegar mes. */
     const expandidos = [];
-    const desde = new Date(currentYear, currentMonth - 1, 1);
-    const hasta = new Date(currentYear, currentMonth + 2, 0);
-    /* Garantiza que cubrimos sidebar (hoy + 14 días). */
+    const desde = new Date(currentYear, currentMonth - CFG.expandPadMonths, 1);
+    const hasta = new Date(currentYear, currentMonth + CFG.expandPadMonths + 1, 0);
     const sidebarLimit = new Date(hoyMidnight);
-    sidebarLimit.setDate(sidebarLimit.getDate() + 14);
+    sidebarLimit.setDate(sidebarLimit.getDate() + CFG.sidebarDays);
     if (sidebarLimit > hasta) hasta.setTime(sidebarLimit.getTime());
 
     lista.forEach(r => {
@@ -668,11 +678,11 @@ function renderRecordatorios(lista) {
     const div = document.getElementById('recordatorios-lista');
     if (!div) return;
 
-    /* Solo recordatorios dentro de [hoy, hoy+14d]. Pasados y lejanos
-       siguen siendo visibles como puntos en el grid del mes. */
+    /* Solo recordatorios dentro de [hoy, hoy+CFG.sidebarDays]. Pasados
+       y lejanos siguen siendo visibles como puntos en el grid del mes. */
     const hoyStr = toISODate(hoyMidnight);
     const limite = new Date(hoyMidnight);
-    limite.setDate(limite.getDate() + 14);
+    limite.setDate(limite.getDate() + CFG.sidebarDays);
     const limiteStr = toISODate(limite);
     lista = lista.filter(r => r && r.fecha >= hoyStr && r.fecha <= limiteStr);
 
@@ -687,28 +697,26 @@ function renderRecordatorios(lista) {
         const recDate = parseISODate(r.fecha);
         if (!recDate) return;
         const item = document.createElement('div');
-        item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
+        item.className = 'sidebar-rec';
         const diasRestantes = Math.round((recDate - hoyMidnight) / 86400000);
         const cuandoStr = diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' día' + (diasRestantes === 1 ? '' : 's');
         const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' · 🔁 ' + escHTML(r.periodicidad) : '';
         const texto = document.createElement('div');
-        texto.style.cssText = 'flex: 1;';
+        texto.className = 'sidebar-rec-texto';
         texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong><br>' +
-            '<span style="color:#808080;">' + escHTML(r.fecha) + ' · ' + cuandoStr + periodicoLabel +
+            '<span class="muted">' + escHTML(r.fecha) + ' · ' + cuandoStr + periodicoLabel +
             (r.autor ? ' · ' + escHTML(r.autor) : '') + '</span>' +
             (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
         const btns = document.createElement('div');
-        btns.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
+        btns.className = 'sidebar-rec-btns';
         const btnVer = document.createElement('button');
-        btnVer.className = 'button';
+        btnVer.className = 'button btn-icon-sm';
         btnVer.textContent = '👁';
         btnVer.title = 'Ver cuenta atrás';
-        btnVer.style.cssText = 'font-size: 10px; padding: 1px 4px;';
         btnVer.addEventListener('click', () => abrirCountdown(r));
         const btnDel = document.createElement('button');
-        btnDel.className = 'button';
+        btnDel.className = 'button btn-icon-sm';
         btnDel.textContent = '✕';
-        btnDel.style.cssText = 'font-size: 10px; padding: 1px 4px;';
         btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
         btns.appendChild(btnVer);
         btns.appendChild(btnDel);
@@ -731,17 +739,24 @@ let countdownYtReady = false;
 let countdownTargetMs = 0;
 let countdownTitulo = '';
 
-/* Carga la YT IFrame API una sola vez. */
+/* Carga la YT IFrame API una sola vez. A10: guard contra dobles
+   inyecciones del script (recarga del iframe, navegación con shell
+   de desktop, etc) usando data-attribute en el <head>. */
 (function loadCountdownYtApi() {
     if (window.YT && window.YT.Player) { countdownYtReady = true; return; }
-    var s = document.createElement('script');
-    s.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(s);
+    /* Marca canónica que persiste aunque este script se re-ejecute. */
+    var alreadyInjected = !!document.querySelector('script[data-yt-iframe-api]');
+    if (!alreadyInjected) {
+        var s = document.createElement('script');
+        s.src = 'https://www.youtube.com/iframe_api';
+        s.setAttribute('data-yt-iframe-api', '1');
+        document.head.appendChild(s);
+    }
     /* Callback global de YouTube API. Si ya existía otro, lo encadena. */
     var prev = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = function() {
         countdownYtReady = true;
-        if (prev) try { prev(); } catch(_) {}
+        if (typeof prev === 'function') try { prev(); } catch(_) {}
     };
 })();
 
@@ -760,7 +775,7 @@ function abrirCountdown(rec) {
     if (bigTitle) bigTitle.textContent = countdownTitulo;
     actualizarCountdown(true);
     if (countdownTimer) clearInterval(countdownTimer);
-    countdownTimer = setInterval(actualizarCountdown, 1000);
+    countdownTimer = setInterval(actualizarCountdown, CFG.countdownTickMs);
     const win = document.getElementById('countdown-window');
     win.style.display = 'flex';
     if (!win.dataset.dragWired) {
@@ -852,10 +867,78 @@ function pararMusicaCountdown() {
     countdownYtPlayer = null;
 }
 
-function renderCalendario() {
-    document.getElementById('month-label').textContent = meses[currentMonth] + ' ' + currentYear;
+/* Cache de celdas DOM por fecha — el grid SOLO se reconstruye cuando
+   cambia mes/año. Las recargas de datos (cargarTodo tras un guardado/
+   borrado) actualizan únicamente los dots/foto de las celdas existentes.
+   Antes se re-creaban 42 nodos por cada cambio. */
+let __gridCellsByDate = {};
+let __gridCurrentKey = null;
+
+function _safeFotoCellSrc(foto) {
+    if (!foto || typeof foto !== 'string') return '';
+    if (/^https?:\/\//i.test(foto)) return foto;
+    if (!/^[\w.\-]+$/.test(foto)) return '';
+    return '../uploads/momentos/' + foto;
+}
+
+function _updateCellContent(cell, fechaStr, d) {
+    /* Borra contenido previo (num, foto, dots), recoloca según data
+       actual. No re-añade el listener — el cell ya lo tiene del
+       buildGridShell. */
+    while (cell.firstChild) cell.removeChild(cell.firstChild);
+    cell.classList.remove('cal-cell-foto');
+    cell.style.backgroundImage = '';
+    cell.style.borderColor = '';
+
+    const momentosDelDia = momentosPorFecha[fechaStr] || [];
+    const tieneRecordatorios = recordatoriosPorFecha[fechaStr] && recordatoriosPorFecha[fechaStr].length > 0;
+    const esHoy = d === hoy.getDate() && currentMonth === hoy.getMonth() && currentYear === hoy.getFullYear();
+    const momentoConFoto = momentosDelDia.find(m => m && m.foto);
+
+    if (momentoConFoto) {
+        const src = _safeFotoCellSrc(momentoConFoto.foto);
+        if (src) {
+            cell.style.backgroundImage = 'url("' + src.replace(/"/g, '%22') + '")';
+            cell.classList.add('cal-cell-foto');
+        }
+        const num = document.createElement('div');
+        num.className = 'cal-cell-num';
+        num.textContent = d;
+        cell.appendChild(num);
+    } else if (esHoy) {
+        cell.style.borderColor = 'transparent';
+        const barra = document.createElement('div');
+        barra.className = 'cal-cell-today';
+        barra.textContent = d;
+        cell.appendChild(barra);
+    } else {
+        const num = document.createElement('div');
+        num.className = 'cal-cell-num';
+        num.textContent = d;
+        cell.appendChild(num);
+    }
+
+    if (momentosDelDia.length > 0 || tieneRecordatorios) {
+        const dots = document.createElement('div');
+        dots.style.cssText = 'display:flex; justify-content:center; gap:2px; padding-bottom:3px;';
+        if (momentosDelDia.length > 0) {
+            const dot = document.createElement('div');
+            dot.style.cssText = 'width:5px;height:5px;background:#ff69b4;border-radius:50%;';
+            dots.appendChild(dot);
+        }
+        if (tieneRecordatorios) {
+            const dot = document.createElement('div');
+            dot.style.cssText = 'width:5px;height:5px;background:#4a90d9;border-radius:50%;';
+            dots.appendChild(dot);
+        }
+        cell.appendChild(dots);
+    }
+}
+
+function _rebuildGridShell() {
     const grid = document.getElementById('calendar-grid');
     grid.innerHTML = '';
+    __gridCellsByDate = {};
 
     diasSemana.forEach(d => {
         const cell = document.createElement('div');
@@ -878,53 +961,28 @@ function renderCalendario() {
 
     for (let d = 1; d <= totalDias; d++) {
         const cell = document.createElement('div');
-        const fechaStr = currentYear + '-' + String(currentMonth+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-        const momentosDelDia = momentosPorFecha[fechaStr] || [];
-        const tieneRecordatorios = recordatoriosPorFecha[fechaStr] && recordatoriosPorFecha[fechaStr].length > 0;
-        const esHoy = d === hoy.getDate() && currentMonth === hoy.getMonth() && currentYear === hoy.getFullYear();
-        const momentoConFoto = momentosDelDia.find(m => m.foto);
-
         cell.className = 'cal-cell';
-
-        if (momentoConFoto) {
-            cell.style.backgroundImage = 'url(' + (momentoConFoto.foto.startsWith('http') ? momentoConFoto.foto : '../uploads/momentos/' + momentoConFoto.foto) + ')';
-            cell.classList.add('cal-cell-foto');
-            const num = document.createElement('div');
-            num.className = 'cal-cell-num';
-            num.textContent = d;
-            cell.appendChild(num);
-        } else if (esHoy) {
-            cell.style.borderColor = 'transparent';
-            const barra = document.createElement('div');
-            barra.className = 'cal-cell-today';
-            barra.textContent = d;
-            cell.appendChild(barra);
-        } else {
-            const num = document.createElement('div');
-            num.className = 'cal-cell-num';
-            num.textContent = d;
-            cell.appendChild(num);
-        }
-
-        if (momentosDelDia.length > 0 || tieneRecordatorios) {
-            const dots = document.createElement('div');
-            dots.style.cssText = 'display:flex; justify-content:center; gap:2px; padding-bottom:3px;';
-            if (momentosDelDia.length > 0) {
-                const dot = document.createElement('div');
-                dot.style.cssText = 'width:5px;height:5px;background:#ff69b4;border-radius:50%;';
-                dots.appendChild(dot);
-            }
-            if (tieneRecordatorios) {
-                const dot = document.createElement('div');
-                dot.style.cssText = 'width:5px;height:5px;background:#4a90d9;border-radius:50%;';
-                dots.appendChild(dot);
-            }
-            cell.appendChild(dots);
-        }
-
+        const fechaStr = currentYear + '-' + String(currentMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
         cell.addEventListener('click', () => abrirPopupDia(fechaStr));
         grid.appendChild(cell);
+        __gridCellsByDate[fechaStr] = { cell, d };
     }
+}
+
+function renderCalendario() {
+    document.getElementById('month-label').textContent = meses[currentMonth] + ' ' + currentYear;
+    const key = currentYear + '-' + currentMonth;
+    if (key !== __gridCurrentKey) {
+        _rebuildGridShell();
+        __gridCurrentKey = key;
+    }
+    /* Diff update: solo refresca contenido interno de cada celda según
+       los datos actuales. Click listeners se mantienen porque las
+       celdas son las mismas. */
+    Object.keys(__gridCellsByDate).forEach(fechaStr => {
+        const { cell, d } = __gridCellsByDate[fechaStr];
+        _updateCellContent(cell, fechaStr, d);
+    });
 }
 
 function abrirPopupDia(fecha) {
@@ -936,84 +994,99 @@ function abrirPopupDia(fecha) {
     contenido.innerHTML = '';
 
     if (!momentos.length && !recordatorios.length) {
-        contenido.innerHTML = '<p style="font-size:11px;color:#808080;">No hay nada este día.</p>';
-    }
-
-    /* Helper interno: valida `foto` para evitar atributo `src` con
-       protocolos peligrosos (javascript:, data:) o saltos de atributo. */
-    function safeFotoSrc(foto) {
-        if (!foto || typeof foto !== 'string') return '';
-        if (/^https?:\/\//i.test(foto)) return foto;
-        /* Si es un nombre de archivo guardado, validar que no salga
-           del directorio (sin slashes, sin ..). */
-        if (!/^[\w.\-]+$/.test(foto)) return '';
-        return '../uploads/momentos/' + foto;
+        const empty = document.createElement('p');
+        empty.className = 'popup-empty';
+        empty.textContent = 'No hay nada este día.';
+        contenido.appendChild(empty);
     }
 
     if (momentos.length) {
-        const h = document.createElement('p');
-        h.style.cssText = 'font-size:11px; font-weight:bold; color:#ff69b4; margin-bottom:6px;';
-        h.textContent = '💗 Momentos';
-        contenido.appendChild(h);
-        momentos.forEach(m => {
-            const div = document.createElement('div');
-            div.style.cssText = 'border: 1px solid #ff69b4; padding: 8px; margin-bottom: 8px; font-size: 11px; border-radius: 2px;';
-            const fotoSrc = safeFotoSrc(m.foto);
-            let html = '';
-            if (fotoSrc) {
-                html += '<img src="' + escHTML(fotoSrc) + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
-            }
-            html += '<div style="display:flex; justify-content:space-between; align-items:flex-start;">';
-            html += '<div><strong>' + escHTML(m.titulo) + '</strong>';
-            if (m.autor) html += ' <span style="color:#808080;">(' + escHTML(m.autor) + ')</span>';
-            if (m.descripcion) html += '<br>' + escHTML(m.descripcion);
-            html += '</div></div>';
-            div.innerHTML = html;
-            /* Botón eliminar como nodo aparte → addEventListener (antes
-               onclick=eliminarMomento(id) inline). */
-            const btnDel = document.createElement('button');
-            btnDel.className = 'button';
-            btnDel.textContent = '✕';
-            btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;position:absolute;';
-            /* Re-insertarlo dentro del wrapper flex (último div del html). */
-            const wrap = div.querySelector('div');
-            if (wrap) {
-                btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;';
-                wrap.appendChild(btnDel);
-            } else {
-                div.appendChild(btnDel);
-            }
-            btnDel.addEventListener('click', () => eliminarMomento(m.id));
-            contenido.appendChild(div);
-        });
+        contenido.appendChild(_buildSectionHeader('💗 Momentos', 'popup-section-momentos'));
+        momentos.forEach(m => contenido.appendChild(_buildMomentoCard(m)));
     }
 
     if (recordatorios.length) {
-        const h = document.createElement('p');
-        h.style.cssText = 'font-size:11px; font-weight:bold; color:#4a90d9; margin-bottom:6px; margin-top:8px;';
-        h.textContent = '🔔 Recordatorios';
-        contenido.appendChild(h);
-        recordatorios.forEach(r => {
-            const div = document.createElement('div');
-            div.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display:flex; justify-content:space-between; align-items:flex-start;';
-            const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' <span style="color:#808080;">· 🔁 ' + escHTML(r.periodicidad) + '</span>' : '';
-            const texto = document.createElement('div');
-            texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong>' + periodicoLabel +
-                (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
-            const btnDel = document.createElement('button');
-            btnDel.className = 'button';
-            btnDel.textContent = '✕';
-            btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;';
-            btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
-            div.appendChild(texto);
-            div.appendChild(btnDel);
-            contenido.appendChild(div);
-        });
+        contenido.appendChild(_buildSectionHeader('🔔 Recordatorios', 'popup-section-recs'));
+        recordatorios.forEach(r => contenido.appendChild(_buildRecordatorioRow(r)));
     }
 
     document.getElementById('popup-dia').classList.add('active');
     document.getElementById('momento-fecha').value = fecha;
     document.getElementById('rec-fecha').value = fecha;
+}
+
+/* ── Helpers de render del popup-dia ───────────────────────────────
+   Extraídos de abrirPopupDia para que sean ~10 líneas cada uno.
+   Estilos en CSS (.momento-card, .rec-row, etc.). */
+
+function _buildSectionHeader(title, className) {
+    const h = document.createElement('p');
+    h.className = 'popup-section-title ' + className;
+    h.textContent = title;
+    return h;
+}
+
+/* Valida `foto` para evitar atributos `src` con protocolos peligrosos
+   (javascript:, data:) o saltos de atributo. */
+function _safeFotoSrc(foto) {
+    if (!foto || typeof foto !== 'string') return '';
+    if (/^https?:\/\//i.test(foto)) return foto;
+    if (!/^[\w.\-]+$/.test(foto)) return '';
+    return '../uploads/momentos/' + foto;
+}
+
+function _buildMomentoCard(m) {
+    const div = document.createElement('div');
+    div.className = 'momento-card';
+
+    const fotoSrc = _safeFotoSrc(m.foto);
+    if (fotoSrc) {
+        const img = document.createElement('img');
+        img.src = fotoSrc;     /* atributo, no inline HTML → sin XSS */
+        img.alt = '';
+        img.className = 'momento-card-img';
+        div.appendChild(img);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'momento-card-row';
+
+    const texto = document.createElement('div');
+    let html = '<strong>' + escHTML(m.titulo) + '</strong>';
+    if (m.autor)       html += ' <span class="muted">(' + escHTML(m.autor) + ')</span>';
+    if (m.descripcion) html += '<br>' + escHTML(m.descripcion);
+    texto.innerHTML = html;
+    row.appendChild(texto);
+
+    const btnDel = document.createElement('button');
+    btnDel.className = 'button btn-del-row';
+    btnDel.textContent = '✕';
+    btnDel.addEventListener('click', () => eliminarMomento(m.id));
+    row.appendChild(btnDel);
+
+    div.appendChild(row);
+    return div;
+}
+
+function _buildRecordatorioRow(r) {
+    const div = document.createElement('div');
+    div.className = 'rec-row';
+
+    const periodicoLabel = (r.periodicidad && r.periodicidad !== 'ninguna')
+        ? ' <span class="muted">· 🔁 ' + escHTML(r.periodicidad) + '</span>'
+        : '';
+    const texto = document.createElement('div');
+    texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong>' + periodicoLabel +
+        (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
+
+    const btnDel = document.createElement('button');
+    btnDel.className = 'button btn-del-row';
+    btnDel.textContent = '✕';
+    btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
+
+    div.appendChild(texto);
+    div.appendChild(btnDel);
+    return div;
 }
 
 document.getElementById('popup-close').addEventListener('click', () => {
@@ -1172,48 +1245,79 @@ document.getElementById('invite-close').addEventListener('click', function() {
 
 let currentPartnerInvite = null;
 
-function checkPartnerInvites() {
-    fetch(API_BASE + '?action=get-partner-invites')
-    .then(r => r.json())
-    .then(data => {
-        if (!Array.isArray(data) || !data.length) return;
-        const inv = data[0];
-        if (currentPartnerInvite && currentPartnerInvite.id === inv.id) return;
-        currentPartnerInvite = inv;
-        document.getElementById('partner-notif-msg').textContent = inv.fromLabel + ' quiere ser tu pareja 💕';
-        document.getElementById('partner-notif').style.display = 'block';
-    })
-    .catch(() => {});
+/* M2: backoff exponencial — empieza polleando rápido (5s) y si no hay
+   novedad va espaciando hasta CFG.invitePollMaxMs (2min). Reset a
+   intervalo mínimo en cuanto aparece una invitación nueva. Ahorra
+   ~80-90% de requests cuando no hay actividad. */
+var __invitePollDelay  = CFG.invitePollMinMs;
+var __invitePollTimer  = null;
+var __invitePollEmpty  = 0;     // requests seguidos sin novedad
+
+async function checkPartnerInvites() {
+    const r = await apiFetch(API_BASE + '?action=get-partner-invites');
+    if (!r.ok) {
+        /* Error de red — espacia agresivamente para no DDoSearnos a nosotros mismos. */
+        __invitePollEmpty++;
+        return;
+    }
+    const data = r.data;
+    if (!Array.isArray(data) || !data.length) {
+        __invitePollEmpty++;
+        return;
+    }
+    const inv = data[0];
+    if (currentPartnerInvite && currentPartnerInvite.id === inv.id) {
+        __invitePollEmpty++;
+        return;
+    }
+    /* Novedad encontrada — reset agresivo. */
+    __invitePollEmpty = 0;
+    __invitePollDelay = CFG.invitePollMinMs;
+    currentPartnerInvite = inv;
+    document.getElementById('partner-notif-msg').textContent = inv.fromLabel + ' quiere ser tu pareja 💕';
+    document.getElementById('partner-notif').style.display = 'block';
 }
 
-function respondInvite(action) {
+function _schedulePartnerPoll() {
+    /* Sin novedad → duplicamos el intervalo hasta el techo. */
+    if (__invitePollEmpty > 2) {
+        __invitePollDelay = Math.min(__invitePollDelay * 2, CFG.invitePollMaxMs);
+        __invitePollEmpty = 0;
+    }
+    __invitePollTimer = setTimeout(async function tick() {
+        if (document.visibilityState === 'visible') {
+            await checkPartnerInvites();
+        }
+        _schedulePartnerPoll();
+    }, __invitePollDelay);
+}
+
+async function respondInvite(action) {
     if (!currentPartnerInvite) return;
     const fecha = document.getElementById('partner-fecha').value;
     if (action === 'accept' && !fecha) { alert('Por favor introduce la fecha en que empezasteis.'); return; }
-    fetch(API_BASE + '?action=respond-partner-invite', {
+    const r = await apiFetch(API_BASE + '?action=respond-partner-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteId: currentPartnerInvite.id, action: action, fecha: fecha })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { alert(data.error); return; }
-        document.getElementById('partner-notif').style.display = 'none';
-        if (action === 'accept') location.reload();
+        body: JSON.stringify({ inviteId: currentPartnerInvite.id, action: action, fecha: fecha }),
     });
+    if (!r.ok) { alert('Error de red. Inténtalo de nuevo.'); return; }
+    if (r.data && r.data.error) { alert(r.data.error); return; }
+    document.getElementById('partner-notif').style.display = 'none';
+    if (action === 'accept') location.reload();
 }
 
 document.getElementById('partner-accept').addEventListener('click', () => respondInvite('accept'));
 document.getElementById('partner-reject').addEventListener('click', () => respondInvite('reject'));
 
 checkPartnerInvites();
-/* Polling cada 5s + cleanup al cerrar/ocultar el iframe. Pausa cuando
-   la pestaña está oculta para no machacar el server. */
-var __invitePollId = setInterval(function() {
-    if (document.visibilityState === 'visible') checkPartnerInvites();
-}, 5000);
+_schedulePartnerPoll();
+/* Para el cleanup unificado — referencia al setTimeout activo. */
+var __invitePollId = { clear: function() { if (__invitePollTimer) clearTimeout(__invitePollTimer); } };
 window.addEventListener('beforeunload', function() {
-    if (__invitePollId) clearInterval(__invitePollId);
+    /* __invitePollId ahora es {clear}: el polling usa setTimeout
+       recursivo en lugar de setInterval (M2 backoff). */
+    if (typeof __invitePollId !== 'undefined' && __invitePollId && __invitePollId.clear) __invitePollId.clear();
     /* Para evitar que el countdown timer + el player YT sigan corriendo
        si el iframe se descarga (recarga, navegación). */
     try { cerrarCountdown(); } catch(_){}
@@ -1223,7 +1327,7 @@ window.addEventListener('beforeunload', function() {
    estándar Win98 ausente antes. Orden: confirm modal → countdown →
    popup-dia → invite-window. */
 document.addEventListener('keydown', function(e) {
-    if (e.key !== 'Escape') return;
+    if (e.key !== CFG.confirmEscape) return;
     const confirmEl  = document.getElementById('cal-confirm-modal');
     if (confirmEl && confirmEl.classList.contains('active')) {
         confirmEl.classList.remove('active');

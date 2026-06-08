@@ -158,10 +158,13 @@ case 'save-recordatorio': {
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
     $periodicidad = in_array($b['periodicidad'] ?? '', ['anual','mensual','semanal'])
                     ? $b['periodicidad'] : 'ninguna';
+    /* A4: unificamos parejaId con NULL como hace `momentos`. Antes
+       guardaba 0 literal y rompía joins / queries consistentes. */
+    $pid = (int)($b['pareja_id'] ?? 0);
     $stmt = $pdo->prepare("INSERT INTO recordatorios (usuario_id, pareja_id, titulo, fecha, descripcion, periodicidad)
                            VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->execute([
-        $userId, (int)($b['pareja_id'] ?? 0), $titulo, $fecha,
+        $userId, $pid > 0 ? $pid : null, $titulo, $fecha,
         trim($b['descripcion'] ?? ''), $periodicidad,
     ]);
     jsonResponse(['ok' => true]);
@@ -180,12 +183,15 @@ case 'delete-recordatorio': {
 }
 
 case 'purge-recordatorios': {
-    /* Elimina recordatorios no periódicos cuya fecha ya pasó,
-       restringido a la pareja del usuario actual para no tocar datos ajenos. */
+    /* Elimina recordatorios no periódicos cuya fecha ya pasó hace
+       MÁS DE 1 DÍA. A5: margen de seguridad para no borrar el
+       recordatorio del día actual cerca de medianoche, ni si el
+       reloj del usuario está desfasado vs el del servidor. */
     $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonResponse(['ok' => true]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
-    $hoy = date('Y-m-d');
+    /* fecha < hoy - 1 día → solo borramos lo que pasó hace 2+ días. */
+    $hoy = date('Y-m-d', strtotime('-1 day'));
     if ($parejaId) {
         $stmt = $pdo->prepare("DELETE FROM recordatorios
                                WHERE pareja_id = ?
@@ -194,7 +200,7 @@ case 'purge-recordatorios': {
         $stmt->execute([$parejaId, $hoy]);
     } else {
         $stmt = $pdo->prepare("DELETE FROM recordatorios
-                               WHERE usuario_id = ? AND pareja_id = 0
+                               WHERE usuario_id = ? AND (pareja_id = 0 OR pareja_id IS NULL)
                                  AND (periodicidad = 'ninguna' OR periodicidad IS NULL)
                                  AND fecha < ?");
         $stmt->execute([$userId, $hoy]);
@@ -422,7 +428,22 @@ case 'respond-partner-invite': {
 
     $pdo->prepare("DELETE FROM partner_invites WHERE id = ?")->execute([$inviteId]);
 
-    if ($act === 'reject') jsonResponse(['ok' => true]);
+    /* B12: nombre del usuario que respondió (para mostrar en el push). */
+    $respLabel = '';
+    $st = $pdo->prepare("SELECT username FROM usuarios WHERE id = ?");
+    $st->execute([$uid]);
+    $respLabel = (string)($st->fetchColumn() ?: 'Alguien');
+
+    if ($act === 'reject') {
+        /* B12: notifica al inviter que su invitación fue rechazada. */
+        require_once dirname(__DIR__) . '/push/send-push.php';
+        sendPushToUser($pdo, (int)$fromId, [
+            'title' => '💔 Invitación rechazada',
+            'body'  => ucfirst($respLabel) . ' ha rechazado tu invitación de pareja.',
+            'url'   => '/apps/calendario.php',
+        ]);
+        jsonResponse(['ok' => true]);
+    }
     if (!$fecha) jsonError('Falta la fecha de inicio');
 
     $stmt = $pdo->prepare("SELECT id FROM parejas
@@ -433,6 +454,15 @@ case 'respond-partner-invite': {
 
     $pdo->prepare("INSERT INTO parejas (usuario1_id, usuario2_id, fecha_inicio) VALUES (?, ?, ?)")
         ->execute([(int)$fromId, $uid, $fecha]);
+
+    /* B12: notifica al inviter que la invitación fue ACEPTADA. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
+    sendPushToUser($pdo, (int)$fromId, [
+        'title' => '💕 ¡Sois pareja!',
+        'body'  => ucfirst($respLabel) . ' ha aceptado tu invitación. Abrid el calendario juntos.',
+        'url'   => '/apps/calendario.php',
+    ]);
+
     jsonResponse(['ok' => true]);
 }
 
