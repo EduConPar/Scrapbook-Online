@@ -175,6 +175,13 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
         }
     } else {
         $item['status'] = $r['status'] ?: 'pending';
+        /* completed_at: marca el momento en que el item pasó a estado
+           "completed". Solo se incluye si el status es completed Y
+           tiene un timestamp guardado. El cliente lo usa para mostrar
+           "Completado el [fecha]". */
+        if ($item['status'] === 'completed' && !empty($r['completed_at_ts'])) {
+            $item['completedAt'] = (int)$r['completed_at_ts'];
+        }
     }
     if ($r['review_stars'] !== null) {
         $item['review'] = [
@@ -195,7 +202,10 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
 function pf_loadAllLists(PDO $pdo, int $uid): array {
     $lists = pf_emptyLists();
     /* Propias */
-    $stmt = $pdo->prepare("SELECT i.*, UNIX_TIMESTAMP(i.reviewed_at) AS reviewed_at_ts, u.user_key AS shared_from_key
+    $stmt = $pdo->prepare("SELECT i.*,
+                                  UNIX_TIMESTAMP(i.reviewed_at)  AS reviewed_at_ts,
+                                  UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
+                                  u.user_key AS shared_from_key
                            FROM list_items i
                            LEFT JOIN usuarios u ON i.shared_from = u.id
                            WHERE i.owner_id = ?
@@ -205,7 +215,9 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
 
     /* Las que comparten conmigo: estoy como colaborador → la entrada
        aparece en mi lista con sharedFrom apuntando al owner. */
-    $stmt = $pdo->prepare("SELECT i.*, UNIX_TIMESTAMP(i.reviewed_at) AS reviewed_at_ts,
+    $stmt = $pdo->prepare("SELECT i.*,
+                                  UNIX_TIMESTAMP(i.reviewed_at)  AS reviewed_at_ts,
+                                  UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
                                   ou.user_key AS owner_key
                            FROM list_item_collaborators c
                            JOIN list_items i ON c.item_id = i.id
@@ -658,6 +670,56 @@ case 'get-lists': {
     jsonResponse(pf_loadAllLists($pdo, $uid));
 }
 
+/* Autocomplete: devuelve titles distintos de items ya creados en la
+   categoría dada que matcheen el prefijo q. Excluye los que el usuario
+   ya tiene (own + shared con él) para evitar sugerir duplicados.
+   Cap a 8 sugerencias para que el dropdown no se vuelva absurdo. */
+case 'search-titles': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonResponse(['ok' => true, 'suggestions' => []]);
+    $category = $_GET['category'] ?? '';
+    $q        = trim((string)($_GET['q'] ?? ''));
+    if (!in_array($category, ['movies','series','books','games','music'], true) || $q === '') {
+        jsonResponse(['ok' => true, 'suggestions' => []]);
+    }
+    /* Titles que el usuario ya tiene en esta categoría — para excluirlos. */
+    $stmt = $pdo->prepare("
+        SELECT LOWER(title) AS t FROM list_items WHERE owner_id = ? AND category = ?
+        UNION
+        SELECT LOWER(i.title) AS t FROM list_item_collaborators c
+        JOIN list_items i ON c.item_id = i.id
+        WHERE c.user_id = ? AND i.category = ?
+    ");
+    $stmt->execute([$uid, $category, $uid, $category]);
+    $excluded = array_flip(array_map(function($r){ return $r['t']; }, $stmt->fetchAll(PDO::FETCH_ASSOC)));
+
+    /* Búsqueda case-insensitive con MATCHES por prefijo Y por contains.
+       Priorizamos prefijo (title LIKE 'q%') sobre contains (title LIKE '%q%'). */
+    $like      = $q . '%';
+    $likeAny   = '%' . $q . '%';
+    /* Distinct por title (puede haber varios users con el mismo título). */
+    $stmt = $pdo->prepare("
+        SELECT title, MAX(image) AS image,
+               CASE WHEN LOWER(title) LIKE ? THEN 1 ELSE 2 END AS rank_p
+        FROM list_items
+        WHERE category = ? AND LOWER(title) LIKE ?
+        GROUP BY LOWER(title)
+        ORDER BY rank_p ASC, title ASC
+        LIMIT 30
+    ");
+    $stmt->execute([mb_strtolower($like), $category, mb_strtolower($likeAny)]);
+    $suggestions = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (count($suggestions) >= 8) break;
+        if (isset($excluded[mb_strtolower($row['title'])])) continue;
+        $suggestions[] = [
+            'title' => $row['title'],
+            'image' => $row['image'] ?? '',
+        ];
+    }
+    jsonResponse(['ok' => true, 'suggestions' => $suggestions]);
+}
+
 case 'save-lists': {
     global $loginUsers;
     $uid = pf_uid($pdo, $userKey);
@@ -684,20 +746,48 @@ case 'save-lists': {
         $sharedWithMe[(int)$r['id']] = (int)$r['owner_id'];
     }
 
-    /* Snapshot de los items propios CON collaborators para detectar bajas */
+    /* Snapshot de los items propios CON collaborators para detectar bajas.
+       También trae status y completed_at_ts previos para preservar la
+       fecha de completado entre saves (sin esto cada save resetearía el
+       timestamp aunque el item siguiera en completed). */
     $oldItems = [];
     if (!empty($myOwnIds)) {
         $place = implode(',', array_fill(0, count($myOwnIds), '?'));
-        $stmt = $pdo->prepare("SELECT id, title FROM list_items WHERE id IN ($place)");
+        $stmt = $pdo->prepare("SELECT id, title, status, UNIX_TIMESTAMP(completed_at) AS completed_at_ts
+                               FROM list_items WHERE id IN ($place)");
         $stmt->execute($myOwnIds);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-            $oldItems[(int)$r['id']] = ['title' => $r['title'], 'collabs' => []];
+            $oldItems[(int)$r['id']] = [
+                'title'        => $r['title'],
+                'status'       => $r['status'],
+                'completed_at' => $r['completed_at_ts'] !== null ? (int)$r['completed_at_ts'] : null,
+                'collabs'      => [],
+            ];
         }
         $stmt = $pdo->prepare("SELECT c.item_id, c.user_id FROM list_item_collaborators c
                                WHERE c.item_id IN ($place)");
         $stmt->execute($myOwnIds);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $oldItems[(int)$r['item_id']]['collabs'][] = (int)$r['user_id'];
+        }
+    }
+
+    /* Misma snapshot para los compartidos conmigo — necesito el status
+       previo para preservar/asignar completed_at en el path de UPDATE
+       de compartido (los compartidos solo permiten editar status, no
+       todo el item). */
+    $oldShared = []; /* item_id => ['status'=>, 'completed_at'=>] */
+    if (!empty($sharedWithMe)) {
+        $sharedIds = array_keys($sharedWithMe);
+        $place2 = implode(',', array_fill(0, count($sharedIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, status, UNIX_TIMESTAMP(completed_at) AS completed_at_ts
+                               FROM list_items WHERE id IN ($place2)");
+        $stmt->execute($sharedIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $oldShared[(int)$r['id']] = [
+                'status'       => $r['status'],
+                'completed_at' => $r['completed_at_ts'] !== null ? (int)$r['completed_at_ts'] : null,
+            ];
         }
     }
 
@@ -760,6 +850,20 @@ case 'save-lists': {
             return $clean;
         };
 
+        /* Helper: decide qué valor escribir en completed_at según la
+           transición de status. Devuelve:
+             - null         → status no es completed: limpiamos timestamp
+             - int (unix)   → escribir este timestamp
+           Reglas:
+             - status NUEVO=completed && status VIEJO!=completed  → time() (ahora)
+             - status NUEVO=completed && status VIEJO=completed   → preservar el viejo
+             - status NUEVO!=completed                            → NULL */
+        $fnCompletedAt = function(?string $newStatus, ?string $oldStatus, ?int $oldTs): ?int {
+            if ($newStatus !== 'completed') return null;
+            if ($oldStatus === 'completed' && $oldTs !== null) return $oldTs;
+            return time();
+        };
+
         foreach ($items as $item) {
             $title = trim($item['title'] ?? '');
             if ($title === '') continue;
@@ -771,11 +875,17 @@ case 'save-lists': {
                 /* UPDATE de item propio */
                 $id = (int)$rawId;
                 $touchedOwnIds[] = $id;
+                $oldStatus = $oldItems[$id]['status']       ?? null;
+                $oldCompTs = $oldItems[$id]['completed_at'] ?? null;
+                $newCompletedAt = !$isMusic
+                    ? $fnCompletedAt($clean['status'], $oldStatus, $oldCompTs)
+                    : null;
                 $sql = "UPDATE list_items SET
                             title = ?, image = ?, status = ?, music_type = ?, artist = ?,
                             featured = ?, yt_id = ?, spotify_id = ?, yt_playlist_id = ?,
                             spotify_album_id = ?, review_stars = ?, review_comment = ?,
-                            reviewed_at = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . "
+                            reviewed_at  = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . ",
+                            completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ? AND owner_id = ?";
                 $params = [
                     $clean['title'], $clean['image'], $clean['status'], $clean['music_type'], $clean['artist'],
@@ -783,6 +893,7 @@ case 'save-lists': {
                     $clean['spotify_album_id'], $clean['review_stars'], $clean['review_comment'],
                 ];
                 if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
+                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
                 $params[] = $id; $params[] = $uid;
                 $pdo->prepare($sql)->execute($params);
             } elseif ($isNumeric && isset($sharedWithMe[(int)$rawId])) {
@@ -791,25 +902,37 @@ case 'save-lists': {
                    review compartida del item. */
                 $id = (int)$rawId;
                 $touchedShared[$id] = $sharedWithMe[$id];
+                $oldStatus = $oldShared[$id]['status']       ?? null;
+                $oldCompTs = $oldShared[$id]['completed_at'] ?? null;
+                $newCompletedAt = !$isMusic
+                    ? $fnCompletedAt($clean['status'], $oldStatus, $oldCompTs)
+                    : null;
                 $sql = "UPDATE list_items SET
                             status = ?, featured = ?, review_stars = ?, review_comment = ?,
-                            reviewed_at = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . "
+                            reviewed_at  = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . ",
+                            completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ?";
                 $params = [
                     $clean['status'], $clean['featured'],
                     $clean['review_stars'], $clean['review_comment'],
                 ];
                 if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
+                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
                 $params[] = $id;
                 $pdo->prepare($sql)->execute($params);
             } else {
-                /* INSERT (item nuevo) */
+                /* INSERT (item nuevo) — si entra ya marcado como completed,
+                   completed_at se setea ahora. */
+                $newCompletedAt = !$isMusic
+                    ? $fnCompletedAt($clean['status'], null, null)
+                    : null;
                 $sql = "INSERT INTO list_items
                         (owner_id, category, title, image, status, music_type, artist, featured,
                          yt_id, spotify_id, yt_playlist_id, spotify_album_id,
-                         review_stars, review_comment, reviewed_at)
+                         review_stars, review_comment, reviewed_at, completed_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
-                        ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
+                        ($clean['reviewed_at']   === null ? "NULL" : "FROM_UNIXTIME(?)") . ", " .
+                        ($newCompletedAt        === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
                 $params = [
                     $uid, $category, $clean['title'], $clean['image'], $clean['status'],
                     $clean['music_type'], $clean['artist'], $clean['featured'],
@@ -817,6 +940,7 @@ case 'save-lists': {
                     $clean['review_stars'], $clean['review_comment'],
                 ];
                 if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
+                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
                 $pdo->prepare($sql)->execute($params);
                 $newId = (int)$pdo->lastInsertId();
                 $touchedOwnIds[] = $newId;

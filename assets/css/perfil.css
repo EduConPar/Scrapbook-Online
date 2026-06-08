@@ -1802,6 +1802,7 @@
     color: var(--accent-text);
 }
 
+
 .profile-gallery-tb-stars {
     font-size: 8px;
     color: var(--c-star);
@@ -1845,6 +1846,72 @@
     transform: translate(-50%, -50%);
     z-index: 5000;
     width: 300px;
+}
+
+/* Dropdown de sugerencias bajo el input "Nombre" — autocompleta con
+   titles que ya existen en la categoría (creados por otros usuarios).
+   Se ancla al wrapper relativo del input. Border estilo Win98 inset. */
+.profile-add-name-wrap {
+    position: relative;
+}
+.profile-add-suggest {
+    position: absolute;
+    left: 0; right: 0;
+    top: 100%;
+    margin-top: 1px;
+    background: var(--win-bg);
+    border: 1px solid var(--border);
+    box-shadow:
+        inset -1px -1px 0 var(--bezel-light-1),
+        inset  1px  1px 0 var(--bezel-dark-1),
+        2px 3px 6px rgba(0, 0, 0, 0.18);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 9999;
+}
+.profile-add-suggest[hidden] { display: none; }
+.profile-add-suggest-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text);
+    user-select: none;
+    line-height: 1.2;
+}
+.profile-add-suggest-row:hover,
+.profile-add-suggest-row.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+.profile-add-suggest-thumb {
+    width: 22px; height: 22px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--bezel-dark-2);
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+}
+.profile-add-suggest-thumb.empty {
+    color: var(--text-faint);
+}
+.profile-add-suggest-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.profile-add-suggest-empty {
+    padding: 5px 8px;
+    font-size: 10px;
+    color: var(--text-faint);
+    font-style: italic;
+    text-align: center;
+    cursor: default;
+    user-select: none;
 }
 
 /* Estado del diálogo de invitación de colaboradores (perfil) */

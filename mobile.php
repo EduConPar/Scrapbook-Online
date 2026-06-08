@@ -525,6 +525,26 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             animation: mu-spin 6s linear infinite;
         }
         .mu-vinyl.paused { animation-play-state: paused; }
+        /* Battery-saver: cuando el tab está oculto (pantalla bloqueada
+           o app en background), pausamos TODAS las animaciones de
+           transformación visible (vinyl spin, blink del hint, glow
+           pulses). Sin esto, Chrome móvil y PWAs Android pueden seguir
+           recompositando los GPU layers cuando la pantalla está apagada.
+           CPU+GPU savings sin impacto en UX (nada se ve). */
+        body.mu-hidden .mu-vinyl,
+        body.mu-hidden .mu-lock-hint,
+        body.mu-hidden .mu-vinyl-label {
+            animation-play-state: paused !important;
+        }
+        /* Cuando el lock screen está visible, ralentizamos el vinyl
+           drásticamente (6s → 30s por vuelta). El usuario lo está mirando
+           justo antes de bloquear el móvil — 5× menos work compositor
+           por segundo, el ojo no nota la lentitud sutil. La rotación
+           sigue siendo continua, no es estática. */
+        .mu-lock.visible #mu-lock-vinyl,
+        .mu-lock.visible .mu-vinyl-label {
+            animation-duration: 30s !important;
+        }
         .mu-vinyl::after {
             content: '';
             position: absolute; inset: 6px;
@@ -1582,15 +1602,44 @@ window.MuShell = (function(){
         return m + ':' + (s < 10 ? '0' + s : s);
     }
 
-    /* ── YT IFrame API ── */
+    /* ── YT IFrame API ──
+       Battery-saver: como en el móvil el iframe está oculto (1×1 px en
+       offscreen) y solo necesitamos el AUDIO, sugerimos calidad mínima
+       (240p / 'small'). El decodificador de video gasta menos CPU
+       cuando trabaja con frames pequeños. YT igual respeta su política
+       (puede negar la sugerencia si el server prefiere otra), pero la
+       diferencia con hardware decoder común es ~10-25% menos uso CPU
+       en background. No afecta a la calidad del audio. */
     window.onYouTubeIframeAPIReady = function() {
         YT_PLAYER = new window.YT.Player('yt-iframe', {
             height: '1', width: '1',
-            playerVars: { playsinline: 1, autoplay: 0 },
+            playerVars: {
+                playsinline: 1,
+                autoplay: 0,
+                /* iv_load_policy=3 oculta anotaciones (otro paint).
+                   modestbranding y rel=0 reducen UI propia del player. */
+                iv_load_policy: 3,
+                modestbranding: 1,
+                rel: 0,
+            },
             events: {
-                'onReady':       function(){ YT_READY = true; if (pendingLoadId) { YT_PLAYER.loadVideoById(pendingLoadId); pendingLoadId = null; } },
-                'onStateChange': onYTState,
-                'onError':       function(){ next(); }
+                'onReady': function(){
+                    YT_READY = true;
+                    /* Forzar 240p tras ready — la sugerencia se aplica
+                       en cada video cargado. Best-effort, errores callados. */
+                    try { YT_PLAYER.setPlaybackQuality && YT_PLAYER.setPlaybackQuality('small'); } catch (_) {}
+                    if (pendingLoadId) { YT_PLAYER.loadVideoById(pendingLoadId); pendingLoadId = null; }
+                },
+                'onStateChange': function(e){
+                    /* Re-aplicar calidad 'small' cuando un video nuevo
+                       arranca (state 1 = playing tras buffer). YT a veces
+                       resetea la calidad entre tracks. */
+                    if (e.data === 1) {
+                        try { YT_PLAYER.setPlaybackQuality && YT_PLAYER.setPlaybackQuality('small'); } catch (_) {}
+                    }
+                    onYTState(e);
+                },
+                'onError': function(){ next(); }
             }
         });
     };
@@ -1661,10 +1710,15 @@ window.MuShell = (function(){
                 title:  tr.title  || 'Track',
                 artist: tr.artist || 'Melon Hub',
                 album:  'Melon Hub',
+                /* Battery-saver: solo dos resoluciones de artwork.
+                   Antes incluíamos también maxresdefault (1280×720, ~70-200 KB)
+                   pero ningún SO realmente la usa para la notificación de
+                   media — Android pinta como mucho 480×480 px en la
+                   pantalla bloqueada. Cada track ahorra una descarga grande
+                   y el SO elige hq/mq según necesite. */
                 artwork: tr.videoId ? [
-                    { src: 'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg',     sizes: '320x180',  type: 'image/jpeg' },
-                    { src: 'https://i.ytimg.com/vi/' + tr.videoId + '/hqdefault.jpg',     sizes: '480x360',  type: 'image/jpeg' },
-                    { src: 'https://i.ytimg.com/vi/' + tr.videoId + '/maxresdefault.jpg', sizes: '1280x720', type: 'image/jpeg' }
+                    { src: 'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg', sizes: '320x180', type: 'image/jpeg' },
+                    { src: 'https://i.ytimg.com/vi/' + tr.videoId + '/hqdefault.jpg', sizes: '480x360', type: 'image/jpeg' }
                 ] : []
             });
         } catch (_) {}
@@ -2165,29 +2219,65 @@ window.MuShell = (function(){
         else          YT_PLAYER.playVideo();
     }
 
-    /* ── Progress timer ── */
+    /* ── Progress timer ──
+       Battery-saver: cuando el tab está oculto (pantalla bloqueada o app
+       en background), reducimos drásticamente el ritmo del timer porque:
+         - La UI no se está renderizando → updates al DOM son inútiles.
+         - getCurrentTime() del YT iframe IPCs entre frames cuestan CPU.
+         - LT publish y todo el flujo de progreso pueden ir más espaciados.
+       Cuando visible volvemos al rate alto (500ms) para que el slider sea
+       fluido. La música sigue sonando porque la mantiene el iframe + la
+       MediaSession del SO, no nuestro JS. */
+    var PROGRESS_INTERVAL_VISIBLE = 500;
+    var PROGRESS_INTERVAL_HIDDEN  = 2500;
     function startProgressTimer() {
         if (progressTimer) return;
-        progressTimer = setInterval(tickProgress, 500);
+        var iv = (document.visibilityState === 'hidden')
+            ? PROGRESS_INTERVAL_HIDDEN : PROGRESS_INTERVAL_VISIBLE;
+        progressTimer = setInterval(tickProgress, iv);
         tickProgress();
+    }
+    function restartProgressTimer() {
+        if (!progressTimer) return;
+        clearInterval(progressTimer);
+        progressTimer = null;
+        startProgressTimer();
     }
     var __NP_TICK = 0;
     function tickProgress() {
         if (!YT_READY || !YT_PLAYER) return;
         var cur = 0, tot = 0;
         try { cur = YT_PLAYER.getCurrentTime() || 0; tot = YT_PLAYER.getDuration() || 0; } catch (_) {}
-        var pct = tot > 0 ? Math.min(100, (cur / tot) * 100) : 0;
-        var fillEl = document.getElementById('mu-full-progress-fill');
-        if (fillEl) fillEl.style.width = pct + '%';
-        var c1 = document.getElementById('mu-full-time-cur'); if (c1) c1.textContent = fmt(cur);
-        var t1 = document.getElementById('mu-full-time-tot'); if (t1) t1.textContent = fmt(tot);
-        /* Sync periódico de posición con la TV cada ~2s para corregir
-           drift. Antes era 5s → la TV podía acumular hasta 5s+lag de
-           desfase antes de tener data fresca. 2s acerca la "última
-           posición conocida" del móvil y, combinado con `age` que
-           devuelve el servidor, mantiene a la TV dentro de ~1-2s del
-           móvil. publishNowPlaying tiene su propio throttle. */
-        if (Date.now() - __NP_TICK > 2000) {
+        var hidden = (document.visibilityState === 'hidden');
+        /* DOM updates SOLO cuando visible — si está oculto no hay nada
+           que repintar, evitamos style recalcs y layout invalidations. */
+        if (!hidden) {
+            var pct = tot > 0 ? Math.min(100, (cur / tot) * 100) : 0;
+            var fillEl = document.getElementById('mu-full-progress-fill');
+            if (fillEl) fillEl.style.width = pct + '%';
+            var c1 = document.getElementById('mu-full-time-cur'); if (c1) c1.textContent = fmt(cur);
+            var t1 = document.getElementById('mu-full-time-tot'); if (t1) t1.textContent = fmt(tot);
+        }
+        /* Informa al SO la posición del track — Android usa esto para
+           mantener actualizado el progreso en la notificación de media
+           SIN que nuestro JS tenga que poll constantemente. Es gratis
+           para nosotros (delegación al SO), y mejora la experiencia en
+           lock screen incluso si nuestro intervalo es alto. */
+        if (tot > 0 && 'mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+            try {
+                var playRate = 1;
+                try { playRate = YT_PLAYER.getPlaybackRate() || 1; } catch (_) {}
+                navigator.mediaSession.setPositionState({
+                    duration:     tot,
+                    position:     Math.min(cur, tot),
+                    playbackRate: playRate,
+                });
+            } catch (_) {}
+        }
+        /* Sync periódico con la TV cada ~2s visible, ~10s oculto.
+           publishNowPlaying tiene su propio throttle. */
+        var npGap = hidden ? 10000 : 2000;
+        if (Date.now() - __NP_TICK > npGap) {
             __NP_TICK = Date.now();
             var playing = false;
             try { playing = YT_PLAYER.getPlayerState() === 1; } catch (_) {}
@@ -2405,6 +2495,63 @@ window.MuShell = (function(){
                 }
                 wasActiveOnHide = false;
             }
+        });
+    })();
+
+    /* ── Battery saver — throttle de TODOS los timers cuando el tab
+       está oculto (pantalla bloqueada o app en background).
+       La música no la mantiene nuestro JS: la mantiene el iframe de YT
+       + la MediaSession del SO. Nuestro JS solo actualiza UI y sincroniza
+       Listen Together. Cuando hidden, podemos espaciar drásticamente:
+         - progressTimer: 500ms → 2500ms (UI invisible, basta para
+           que setPositionState mantenga la notificación al día)
+         - LT_GUEST_POLL: 2s → 10s (el host sigue tocando, podemos
+           tolerar 10s de drift que se corrige al volver)
+         - LT_HOST_BCAST: 5s → 15s
+         - LT_INVITES_POLL: 5s → 30s (invitaciones no son urgentes)
+       Al volver visible, restauramos. */
+    (function attachBatterySaver(){
+        function reschedule(timerVar, fn, ivVisible, ivHidden) {
+            /* Closure helper para reiniciar un setInterval con nuevo
+               ritmo. Devuelve el nuevo handle. */
+            if (!window[timerVar]) return null;
+            clearInterval(window[timerVar]);
+            var iv = (document.visibilityState === 'hidden') ? ivHidden : ivVisible;
+            return setInterval(fn, iv);
+        }
+        function applyHiddenClass(){
+            /* Toggle body.mu-hidden — el CSS pausa todas las animaciones
+               cuando el tab no es visible. Chrome móvil y PWAs Android
+               no siempre las pausan automáticamente (a diferencia de
+               desktop), así que lo forzamos explícitamente. */
+            document.body.classList.toggle('mu-hidden', document.visibilityState === 'hidden');
+        }
+        applyHiddenClass();
+        document.addEventListener('visibilitychange', function(){
+            applyHiddenClass();
+            /* Progress timer — reusa la función helper que ya respeta visibility. */
+            if (typeof restartProgressTimer === 'function') restartProgressTimer();
+            /* LT polls — guard porque podrían estar inactivos según rol.
+               IMPORTANTE: NO los paramos, solo los espaciamos. Eso garantiza
+               que el host móvil sigue avisando a la TV de cambios cada
+               15s aunque esté hidden (en lugar de cada 5s). El guest móvil
+               sigue recibiendo updates del host cada 10s. La música y el
+               handoff a TV NO se rompen. */
+            try {
+                if (typeof LT_GUEST_POLL_T !== 'undefined' && LT_GUEST_POLL_T) {
+                    LT_GUEST_POLL_T = reschedule('LT_GUEST_POLL_T', ltGuestPoll, 2000, 10000);
+                }
+            } catch (_) {}
+            try {
+                if (typeof LT_HOST_BCAST_INTERVAL !== 'undefined' && LT_HOST_BCAST_INTERVAL) {
+                    LT_HOST_BCAST_INTERVAL = reschedule('LT_HOST_BCAST_INTERVAL', ltHostBroadcast, 5000, 15000);
+                }
+            } catch (_) {}
+            try {
+                if (typeof LT_INVITES_POLL_T !== 'undefined' && LT_INVITES_POLL_T) {
+                    LT_INVITES_POLL_T = reschedule('LT_INVITES_POLL_T', ltPollInvites, 5000, 30000);
+                }
+            } catch (_) {}
         });
     })();
 
@@ -3206,9 +3353,20 @@ window.MuShell = (function(){
         }
     }
 
+    /* AbortController para fetches en vuelo. Cuando la app va a hidden,
+       cancelamos lo que esté en marcha para liberar la radio del móvil
+       (lo más caro energéticamente — antenas en TX consumen mucho). El
+       siguiente poll arrancará fresco al volver visible. */
+    var POLL_CTRL = null;
     function fetchJSON(url, opts) {
         opts = opts || {};
-        var init = { credentials: 'same-origin', method: opts.method || 'GET' };
+        if (POLL_CTRL) { try { POLL_CTRL.abort(); } catch (_) {} }
+        POLL_CTRL = new AbortController();
+        var init = {
+            credentials: 'same-origin',
+            method: opts.method || 'GET',
+            signal: POLL_CTRL.signal,
+        };
         if (opts.body) {
             init.headers = { 'Content-Type': 'application/json' };
             init.body    = JSON.stringify(opts.body);
@@ -3216,6 +3374,13 @@ window.MuShell = (function(){
         return fetch(url, init).then(function(r){ return r.json(); })
                                .catch(function(){ return { ok: false }; });
     }
+    /* Al ocultarse, aborta fetch en vuelo si lo hay. */
+    document.addEventListener('visibilitychange', function(){
+        if (document.visibilityState === 'hidden' && POLL_CTRL) {
+            try { POLL_CTRL.abort(); } catch (_) {}
+            POLL_CTRL = null;
+        }
+    });
 
     /* Handlers por fuente. Cada uno define icono, mensaje y acciones. */
     var HANDLERS = {
@@ -3335,26 +3500,41 @@ window.MuShell = (function(){
         + 'padding: 14px 18px !important; }';
     document.head.appendChild(st);
 
-    /* Arranque: poll inmediato + cada 15s.
+    /* Arranque: poll inmediato + cada 15s visible / 60s hidden.
        hashchange: si llega un #notif=<source> mientras la app está
        abierta (lo dispara el SW al navegar tras tap en push), re-poll
        con detección de deep-link para sacar la sheet. */
     poll(true);
-    POLL_T = setInterval(function(){ poll(false); }, 15000);
+    function startNotifPoll(){
+        if (POLL_T) clearInterval(POLL_T);
+        var iv = (document.visibilityState === 'hidden') ? 60000 : 15000;
+        POLL_T = setInterval(function(){ poll(false); }, iv);
+    }
+    startNotifPoll();
+    document.addEventListener('visibilitychange', startNotifPoll);
     window.addEventListener('hashchange', function(){
         if (/#notif=/i.test(location.hash)) poll(true);
     });
 })();
 
-/* Heartbeat de presencia — móvil, mismo endpoint que desktop. */
+/* Heartbeat de presencia — móvil, mismo endpoint que desktop.
+   30s visible / 90s hidden. La presencia no es time-sensitive en
+   background; basta con avisar cada minuto y medio. */
 (function mPresenceHeartbeat(){
+    var PING_T = null;
     function ping(){
         fetch('assets/profile/api.php?action=heartbeat', {
             method: 'POST', credentials: 'same-origin'
         }).catch(function(){});
     }
+    function startPing(){
+        if (PING_T) clearInterval(PING_T);
+        var iv = (document.visibilityState === 'hidden') ? 90000 : 30000;
+        PING_T = setInterval(ping, iv);
+    }
     ping();
-    setInterval(ping, 30000);
+    startPing();
+    document.addEventListener('visibilitychange', startPing);
 })();
 
 /* ════════════════════════════════════════════════════════════════
@@ -3497,18 +3677,38 @@ window.MuShell = (function(){
         return -1;
     }
 
+    /* Battery-saver: cuando el tab está oculto el tick no sirve para nada
+       (lyrics no se renderizan sin pantalla). 250ms × N minutos en
+       background es de los mayores drenajes del módulo. Si hidden NO
+       arrancamos el interval; cuando vuelve visible se reactiva. */
+    function startLyrTick() {
+        if (LYR_TIMER) return;
+        if (document.visibilityState === 'hidden') return;  /* skip mientras hidden */
+        LYR_TIMER = setInterval(tick, 250);
+    }
+    function stopLyrTick() {
+        if (!LYR_TIMER) return;
+        clearInterval(LYR_TIMER);
+        LYR_TIMER = null;
+    }
     function openLyr() {
         if (muFull) muFull.classList.add('lyrics-active');
         LYR_OPEN = true;
         fetchForCurrent();
-        if (LYR_TIMER) clearInterval(LYR_TIMER);
-        LYR_TIMER = setInterval(tick, 250);
+        startLyrTick();
     }
     function closeLyr() {
         if (muFull) muFull.classList.remove('lyrics-active');
         LYR_OPEN = false;
-        if (LYR_TIMER) { clearInterval(LYR_TIMER); LYR_TIMER = null; }
+        stopLyrTick();
     }
+    /* Suspende tick cuando la pantalla del móvil se apaga / app va a
+       background. Reanuda al volver. Idempotente. */
+    document.addEventListener('visibilitychange', function(){
+        if (!LYR_OPEN) return;
+        if (document.visibilityState === 'hidden') stopLyrTick();
+        else startLyrTick();
+    });
     window.mLyricsOpen = openLyr;
     /* Botón del micrófono: solo ABRE. El cierre vive en el overlay
        (doble-tap sobre el panel oscuro). Si el panel ya está abierto
@@ -3523,10 +3723,19 @@ window.MuShell = (function(){
         linesEl.innerHTML = '';
     }
 
+    /* Controller del fetch activo — se aborta al cambiar de canción
+       para no pisar el estado nuevo con respuestas viejas. */
+    var LYR_FETCH_CTRL = null;
+
     function fetchForCurrent() {
         var tr = curTrack();
         if (!tr || !tr.videoId) { setEmpty('No hay canción en reproducción.'); return; }
         if (tr.videoId === LYR_VID && (LYR_LINES || LYR_PLAIN)) return;
+        /* Aborta fetch previo si seguía en vuelo — su respuesta sería
+           para la canción anterior y pisaría el estado de la nueva. */
+        if (LYR_FETCH_CTRL) { try { LYR_FETCH_CTRL.abort(); } catch(_){} }
+        var ctrl = new AbortController();
+        LYR_FETCH_CTRL = ctrl;
         LYR_VID = tr.videoId; LYR_LINES = null; LYR_PLAIN = null; LYR_LAST = -1;
         trackEl.textContent = (tr.title || '') + (tr.artist ? ' — ' + tr.artist : '');
         setEmpty('Buscando letra…');
@@ -3536,11 +3745,19 @@ window.MuShell = (function(){
         var qs = new URLSearchParams({
             title: tr.title || '', artist: tr.artist || '', duration: String(dur),
         });
-        fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), { credentials: 'same-origin' })
+        fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), {
+            credentials: 'same-origin',
+            signal: ctrl.signal,
+        })
             .then(function(r){ return r.json(); })
             .then(function(d){
+                /* GUARD STALE — antes de cualquier render. Si el track
+                   cambió o el fetch fue abortado, este response es de la
+                   canción vieja: no pisar el "Buscando letra…" del track
+                   nuevo con un mensaje de "no encontrada". */
+                if (ctrl.signal.aborted) return;
+                if (LYR_VID !== tr.videoId) return;
                 if (!d || !d.ok || !d.found) { setEmpty('🥲 No se encontró letra para esta canción.'); return; }
-                if (LYR_VID !== tr.videoId) return;   // cambió de track mid-fetch
                 if (d.synced) {
                     LYR_LINES = parseLRC(d.synced);
                     if (LYR_LINES.length) {
@@ -3563,7 +3780,14 @@ window.MuShell = (function(){
                 }
                 setEmpty('🥲 No se encontró letra para esta canción.');
             })
-            .catch(function(){ setEmpty('Error de red al buscar la letra.'); });
+            .catch(function(e){
+                /* Abort no es error — track cambió a propósito. */
+                if (e && e.name === 'AbortError') return;
+                if (LYR_VID === tr.videoId) setEmpty('Error de red al buscar la letra.');
+            })
+            .finally(function(){
+                if (LYR_FETCH_CTRL === ctrl) LYR_FETCH_CTRL = null;
+            });
     }
 
     function tick() {
@@ -3590,17 +3814,25 @@ window.MuShell = (function(){
         }
     }
 
-    /* Watcher de cambio de track: cada 500ms revisa si el idx cambió.
-       Usamos curIdx() porque CUR_IDX está dentro del IIFE de MuShell. */
+    /* Watcher de cambio de track: cada 500ms visible, 2500ms hidden.
+       Cuando hidden no necesitamos pillar cambios rápido — el usuario
+       no está viendo las letras. */
     var __lastCurIdx = -1;
-    setInterval(function(){
-        if (!LYR_OPEN) return;
-        var idx = curIdx();
-        if (idx !== __lastCurIdx) {
-            __lastCurIdx = idx;
-            fetchForCurrent();
-        }
-    }, 500);
+    var LYR_WATCH_T = null;
+    function startLyrWatcher() {
+        if (LYR_WATCH_T) clearInterval(LYR_WATCH_T);
+        var iv = (document.visibilityState === 'hidden') ? 2500 : 500;
+        LYR_WATCH_T = setInterval(function(){
+            if (!LYR_OPEN) return;
+            var idx = curIdx();
+            if (idx !== __lastCurIdx) {
+                __lastCurIdx = idx;
+                fetchForCurrent();
+            }
+        }, iv);
+    }
+    startLyrWatcher();
+    document.addEventListener('visibilitychange', startLyrWatcher);
 })();
 
 /* Polling de recordatorios próximos (7/2/1 días). Mismo endpoint que

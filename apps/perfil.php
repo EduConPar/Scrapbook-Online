@@ -279,9 +279,14 @@ require_once dirname(__DIR__) . '/assets/config.php';
         </div>
     </div>
     <div class="window-body">
-        <div class="field-row-stacked">
+        <div class="field-row-stacked profile-add-name-wrap">
             <label for="profile-add-name">Nombre</label>
-            <input type="text" id="profile-add-name" placeholder="Nombre...">
+            <input type="text" id="profile-add-name" placeholder="Nombre..." autocomplete="off">
+            <!-- Dropdown de autocomplete: aparece debajo del input
+                 cuando hay sugerencias (titles ya creados en esa categoría
+                 por otros usuarios). Click en una opción autocompleta
+                 el input + image. -->
+            <div id="profile-add-suggest" class="profile-add-suggest" hidden></div>
         </div>
         <div class="field-row-stacked" style="margin-top:8px;">
             <label for="profile-add-image">Imagen (URL)</label>
@@ -529,6 +534,28 @@ var PROFILE_USERS = <?php
         'completed':   '● Completado'
     };
 
+    /* Formatea un unix-ts como "DD MMM YYYY" (ej: "8 jun 2026") — corto
+       y legible, suficiente para el footer del item. */
+    var SHORT_MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    function fmtShortDate(ts) {
+        if (!ts) return '';
+        var d = new Date(ts * 1000);
+        return d.getDate() + ' ' + SHORT_MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    /* Renderiza el contenido del footer del item. Para los items
+       completados con fecha, mostramos SOLO la fecha (la sección
+       "Completados" del catview ya identifica que está completado, así
+       que la etiqueta sería redundante). Para los otros estados,
+       devolvemos la etiqueta — solo se ve momentáneamente justo tras
+       un cambio de status antes del re-render. */
+    function renderStatusFooter(item) {
+        var status = item.status || 'pending';
+        if (status === 'completed' && item.completedAt) {
+            return fmtShortDate(item.completedAt);
+        }
+        return STATUS_LABELS[status];
+    }
+
     var confirmFn = window.win98Confirm || function(msg, title, cb) { if (confirm(msg)) cb(); };
 
     /* ──── Data ──── */
@@ -709,6 +736,9 @@ var PROFILE_USERS = <?php
                                 var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
                                     lists[cat][idx].status = 'completed';
+                                    if (!lists[cat][idx].completedAt) {
+                                        lists[cat][idx].completedAt = Math.floor(Date.now() / 1000);
+                                    }
                                     saveCategory(cat);
                                     renderCatView(cat);
                                     renderCatEncurso(cat);
@@ -720,6 +750,7 @@ var PROFILE_USERS = <?php
                                 var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
                                     lists[cat][idx].status = 'pending';
+                                    delete lists[cat][idx].completedAt;
                                     saveCategory(cat);
                                     renderCatView(cat);
                                     renderCatEncurso(cat);
@@ -1297,8 +1328,12 @@ var PROFILE_USERS = <?php
                 })(item.review);
                 tb.appendChild(bubbleBtn);
             }
+            /* Misma decisión que abajo (forceShowFooter) — necesario aquí
+               porque el className diferente ajusta cómo se reparte el
+               espacio interno cuando hay/no hay footer. */
+            var imgWrapWillHaveFooter = showFooter || (item.status === 'completed' && !!item.completedAt);
             var imgWrap = document.createElement('div');
-            imgWrap.className = showFooter ? 'profile-gallery-img-wrap' : 'profile-gallery-img-wrap profile-gallery-img-slot';
+            imgWrap.className = imgWrapWillHaveFooter ? 'profile-gallery-img-wrap' : 'profile-gallery-img-wrap profile-gallery-img-slot';
             imgWrap.style.position = 'relative';
             if (item.image) {
                 var img = document.createElement('img');
@@ -1350,7 +1385,7 @@ var PROFILE_USERS = <?php
             var footer = document.createElement('div');
             footer.className = 'profile-gallery-footer';
             footer.dataset.status = item.status || 'pending';
-            footer.textContent = STATUS_LABELS[item.status || 'pending'];
+            footer.innerHTML = renderStatusFooter(item);
             (function(it, el) {
                 el.addEventListener('click', function() {
                     if (viewingUser) return;
@@ -1359,8 +1394,18 @@ var PROFILE_USERS = <?php
                     var cur  = el.dataset.status;
                     var next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(cur) + 1) % STATUS_CYCLE.length];
                     el.dataset.status    = next;
-                    el.textContent       = STATUS_LABELS[next];
                     lists[cat][i].status = next;
+                    /* Setea / limpia completedAt al cruzar el estado completed.
+                       Coincide con la lógica del backend para que la UI muestre
+                       la fecha al instante (sin esperar refresh). */
+                    if (next === 'completed') {
+                        if (!lists[cat][i].completedAt) {
+                            lists[cat][i].completedAt = Math.floor(Date.now() / 1000);
+                        }
+                    } else {
+                        delete lists[cat][i].completedAt;
+                    }
+                    el.innerHTML = renderStatusFooter(lists[cat][i]);
                     saveCategory(cat);
                     renderCatView(cat);
                     renderCatEncurso(cat);
@@ -1370,7 +1415,14 @@ var PROFILE_USERS = <?php
 
             card.appendChild(tb);
             card.appendChild(imgWrap);
-            if (showFooter) card.appendChild(footer);
+            /* Footer visible si el caller lo pide explícitamente O si
+               el item es completado CON fecha. Antes el footer estaba
+               siempre `showFooter=false` desde catview → la etiqueta de
+               estado nunca aparecía. Para items completados queremos
+               mostrar al menos la fecha (la sección ya identifica que
+               es "Completado", pero la fecha es info NUEVA). */
+            var forceShowFooter = (item.status === 'completed' && !!item.completedAt);
+            if (showFooter || forceShowFooter) card.appendChild(footer);
 
             if (withCtx) {
                 (function(it) {
@@ -1444,6 +1496,95 @@ var PROFILE_USERS = <?php
     var addDlgTitle  = document.getElementById('profile-add-dialog-title');
     var addNameInput = document.getElementById('profile-add-name');
     var addImgInput  = document.getElementById('profile-add-image');
+    var addSuggest   = document.getElementById('profile-add-suggest');
+
+    /* ── Autocomplete del nombre ──
+       Busca titles existentes en la categoría (por otros usuarios) que
+       matchen lo que vas escribiendo. Debounce 200ms para no spamear al
+       backend con un fetch por keystroke. AbortController cancela
+       fetches en vuelo si llega uno nuevo (race con typing rápido). */
+    var addSuggestTimer = null;
+    var addSuggestCtrl  = null;
+    var addSuggestActiveIdx = -1;  /* índice resaltado para navegación con teclado */
+
+    function hideSuggest() {
+        addSuggest.hidden = true;
+        addSuggest.innerHTML = '';
+        addSuggestActiveIdx = -1;
+    }
+
+    function renderSuggest(suggestions) {
+        addSuggest.innerHTML = '';
+        if (!suggestions || !suggestions.length) {
+            /* Mostrar el dropdown VACÍO con un placeholder — confirma
+               visualmente que la búsqueda corrió aunque no haya match,
+               y deja claro al usuario que está libre para inventar. */
+            var empty = document.createElement('div');
+            empty.className = 'profile-add-suggest-empty';
+            empty.textContent = 'Sin sugerencias — escribe libre.';
+            addSuggest.appendChild(empty);
+            addSuggest.hidden = false;
+            addSuggestActiveIdx = -1;
+            return;
+        }
+        suggestions.forEach(function(s, i) {
+            var row = document.createElement('div');
+            row.className = 'profile-add-suggest-row';
+            row.dataset.idx = i;
+            if (s.image) {
+                var im = document.createElement('img');
+                im.className = 'profile-add-suggest-thumb';
+                im.src = s.image;
+                im.alt = '';
+                im.onerror = function(){ im.style.display = 'none'; };
+                row.appendChild(im);
+            } else {
+                var ph = document.createElement('div');
+                ph.className = 'profile-add-suggest-thumb empty';
+                ph.textContent = '🖼';
+                row.appendChild(ph);
+            }
+            var t = document.createElement('span');
+            t.className = 'profile-add-suggest-title';
+            t.textContent = s.title;
+            row.appendChild(t);
+            row.addEventListener('mousedown', function(e) {
+                /* mousedown (no click) → previene blur del input antes
+                   de que el value se actualice si el input pierde foco. */
+                e.preventDefault();
+                addNameInput.value = s.title;
+                if (s.image && !addImgInput.value.trim()) addImgInput.value = s.image;
+                hideSuggest();
+                addNameInput.focus();
+            });
+            addSuggest.appendChild(row);
+        });
+        addSuggest.hidden = false;
+        addSuggestActiveIdx = -1;
+    }
+
+    function fetchSuggestions() {
+        var q = addNameInput.value.trim();
+        if (q.length < 1 || !addDialogCat) { hideSuggest(); return; }
+        if (addSuggestCtrl) { try { addSuggestCtrl.abort(); } catch(_){} }
+        addSuggestCtrl = new AbortController();
+        var ctrl = addSuggestCtrl;
+        var cat = addDialogCat;
+        fetch('assets/profile/api.php?action=search-titles&category=' +
+              encodeURIComponent(cat) + '&q=' + encodeURIComponent(q), {
+            credentials: 'same-origin', signal: ctrl.signal
+        })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (ctrl.signal.aborted) return;
+                /* Guard contra stale: si el user cambió de categoría o
+                   vació el input mientras llegaba la respuesta, ignora. */
+                if (cat !== addDialogCat) return;
+                if (addNameInput.value.trim() !== q) return;
+                renderSuggest((d && d.ok) ? (d.suggestions || []) : []);
+            })
+            .catch(function(){});
+    }
 
     function openAddDialog(cat) {
         addDialogCat = cat;
@@ -1468,6 +1609,9 @@ var PROFILE_USERS = <?php
     function closeAddDialog() {
         addDlg.style.display = 'none';
         addDialogCat = null;
+        hideSuggest();
+        if (addSuggestTimer) { clearTimeout(addSuggestTimer); addSuggestTimer = null; }
+        if (addSuggestCtrl)  { try { addSuggestCtrl.abort(); } catch(_){} addSuggestCtrl = null; }
     }
 
     function submitAdd() {
@@ -1495,11 +1639,55 @@ var PROFILE_USERS = <?php
     document.getElementById('profile-add-dialog-submit').addEventListener('click', submitAdd);
     document.getElementById('profile-add-dialog-cancel').addEventListener('click', closeAddDialog);
     document.getElementById('profile-add-dialog-close').addEventListener('click', closeAddDialog);
-    [addNameInput, addImgInput].forEach(function(inp) {
-        inp.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter')  submitAdd();
-            if (e.key === 'Escape') closeAddDialog();
-        });
+
+    /* Autocomplete: debounce 200ms al teclear → pide sugerencias. */
+    addNameInput.addEventListener('input', function() {
+        if (addSuggestTimer) clearTimeout(addSuggestTimer);
+        addSuggestTimer = setTimeout(fetchSuggestions, 200);
+    });
+    addNameInput.addEventListener('blur', function() {
+        /* Pequeño delay para permitir click en row (handled por mousedown). */
+        setTimeout(hideSuggest, 120);
+    });
+    addNameInput.addEventListener('focus', function() {
+        /* Re-mostrar sugerencias si el input tiene contenido. */
+        if (addNameInput.value.trim().length >= 1) fetchSuggestions();
+    });
+
+    /* Teclado en addNameInput: Enter submit, Escape cierra, flechas
+       navegan el dropdown si está visible. */
+    addNameInput.addEventListener('keydown', function(e) {
+        var rows = addSuggest.querySelectorAll('.profile-add-suggest-row');
+        var open = !addSuggest.hidden && rows.length > 0;
+        if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            addSuggestActiveIdx += (e.key === 'ArrowDown') ? 1 : -1;
+            if (addSuggestActiveIdx < 0) addSuggestActiveIdx = rows.length - 1;
+            if (addSuggestActiveIdx >= rows.length) addSuggestActiveIdx = 0;
+            for (var i = 0; i < rows.length; i++) {
+                rows[i].classList.toggle('active', i === addSuggestActiveIdx);
+            }
+            rows[addSuggestActiveIdx].scrollIntoView({ block: 'nearest' });
+            return;
+        }
+        if (e.key === 'Enter') {
+            if (open && addSuggestActiveIdx >= 0 && addSuggestActiveIdx < rows.length) {
+                /* Seleccionar fila resaltada del dropdown en lugar de submit. */
+                e.preventDefault();
+                rows[addSuggestActiveIdx].dispatchEvent(new MouseEvent('mousedown'));
+                return;
+            }
+            submitAdd();
+        }
+        if (e.key === 'Escape') {
+            if (open) { hideSuggest(); return; }
+            closeAddDialog();
+        }
+    });
+    /* Image input mantiene el comportamiento simple (Enter/Escape). */
+    addImgInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter')  submitAdd();
+        if (e.key === 'Escape') closeAddDialog();
     });
 
     /* ──── Category view buttons ──── */

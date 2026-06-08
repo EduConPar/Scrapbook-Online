@@ -2908,6 +2908,11 @@ function relTime(sentAt) {
 
     function setStatus(s) { if (statusEl) statusEl.textContent = s || ''; }
 
+    /* Controller del fetch activo del reproductor pequeño — se aborta
+       al cambiar de canción para no sobreescribir el estado nuevo con
+       respuestas viejas. */
+    let LYR_SMALL_FETCH_CTRL = null;
+
     async function fetchForCurrent() {
         const tr = getCurrentTrack();
         if (!tr || !tr.videoId) {
@@ -2916,6 +2921,13 @@ function relTime(sentAt) {
         }
         /* Si ya tenemos la letra de esta canción, no re-fetchear. */
         if (tr.videoId === LYR_CURRENT_VID && (LYR_LINES || LYR_PLAIN)) return;
+        /* Cancela el fetch previo si sigue en vuelo — su respuesta
+           sería para otra canción y no debe pisar el estado nuevo. */
+        if (LYR_SMALL_FETCH_CTRL) {
+            try { LYR_SMALL_FETCH_CTRL.abort(); } catch (_) {}
+        }
+        const ctrl = new AbortController();
+        LYR_SMALL_FETCH_CTRL = ctrl;
         LYR_CURRENT_VID = tr.videoId;
         LYR_LINES = null;
         LYR_PLAIN = null;
@@ -2931,14 +2943,21 @@ function relTime(sentAt) {
             duration: String(dur),
         });
         try {
-            const r = await fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), { credentials: 'same-origin' });
+            const r = await fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), {
+                credentials: 'same-origin',
+                signal: ctrl.signal,
+            });
             const d = await r.json();
+            /* GUARD STALE — antes de renderizar NADA. Si el track cambió
+               mientras esperábamos, este response es para una canción
+               vieja: no debe pisar el "Buscando letra…" del track nuevo
+               con un "🥲 No se encontró". */
+            if (ctrl.signal.aborted) return;
+            if (LYR_CURRENT_VID !== tr.videoId) return;
             if (!d || !d.ok || !d.found) {
                 renderEmpty('🥲 No se encontró letra para esta canción.');
                 return;
             }
-            /* Asegúrate de que aún es la canción actual (race en cambio rápido). */
-            if (LYR_CURRENT_VID !== tr.videoId) return;
             if (d.synced) {
                 LYR_LINES = parseLRC(d.synced);
                 if (LYR_LINES.length) renderSynced();
@@ -2953,7 +2972,12 @@ function relTime(sentAt) {
                 setStatus(LYR_LINES ? '⏱ sincronizada' : 'sin sync');
             }
         } catch (e) {
-            renderEmpty('Error de red al buscar la letra.');
+            /* Abort no es error, es señal de track-change. */
+            if (e && e.name === 'AbortError') return;
+            /* Solo render error si seguimos en el track que pidió. */
+            if (LYR_CURRENT_VID === tr.videoId) renderEmpty('Error de red al buscar la letra.');
+        } finally {
+            if (LYR_SMALL_FETCH_CTRL === ctrl) LYR_SMALL_FETCH_CTRL = null;
         }
     }
 
@@ -3136,11 +3160,15 @@ function relTime(sentAt) {
     }
     function closeFullscreen() {
         if (!isOpen) return;
+        /* Apaga letras COMPLETAMENTE antes de salir: pfCloseLyrics se
+           encarga de cancelar el fetch en vuelo, limpiar el DOM del
+           lyrStage, resetear todos los flags de estado (counters,
+           repeatGroup, multiState…) y — clave — quitar la clase .is-on
+           del botón micrófono para matar su glow pulsante.
+           pfCloseLyrics() en sí ya chequea !pfLyricsOpen, pero el
+           guard aquí evita trabajo innecesario. */
+        if (pfLyricsOpen) pfCloseLyrics();
         root.classList.remove('pf-active');
-        /* Cierra el overlay de letras también. */
-        root.classList.remove('pf-lyrics-active');
-        pfLyricsOpen = false;
-        if (pfLyrTimer) { clearInterval(pfLyrTimer); pfLyrTimer = null; }
         isOpen = false;
         if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
     }
@@ -3343,6 +3371,21 @@ function relTime(sentAt) {
     let pfMultiState = null;        /* {mode, total, slot, holdMs, startedAt} */
     let pfFastStackCounter = 0;
     let pfFastStackStartedAt = 0;   /* ms timestamp del primer fast-line en curso */
+    /* Cache de estilo por línea — key = texto normalizado, value =
+       descriptor del estilo elegido en la primera aparición. Si la
+       misma línea ("Everybody, everybody, everybody living now")
+       reaparece más adelante en la canción, reusamos su estilo para
+       que el coro tenga consistencia visual.
+       Tipos guardados:
+         { kind: 'repeat-inline', layout: 'h'|'v' }   → fast-repeat inline
+         { kind: 'repeat-scatter' }                   → scatter normal
+         { kind: 'normal', mode: '<modeName>' }       → modo single-line
+       Multi-mode (fill-vert/fill-stack/fast-stack) NO se cachean —
+       dependen del estado de grupo y romperían el flow. */
+    let pfLineStyleCache = {};
+    function pfLineKey(text) {
+        return text ? text.toLowerCase().replace(/\s+/g, ' ').trim() : '';
+    }
 
     /* Devuelve la duración de la línea actual en segundos (tiempo
        hasta el siguiente verso). Si es la última, devuelve un valor
@@ -3572,6 +3615,44 @@ function relTime(sentAt) {
             wrap.classList.add('leaving');
             setTimeout(() => { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 600);
         }, 2500);
+    }
+
+    /* Render INLINE para repeticiones DEMASIADO RÁPIDAS para scatter.
+       REUSAMOS los modos multi-line ya existentes — mismo color, fondo,
+       animaciones y tipografía que el resto:
+         layout='v' → cada frase es un wrap fill-stack (fila horizontal
+                      en su slot vertical) → apiladas verticalmente.
+         layout='h' → cada frase es un wrap fill-vert (columna vertical
+                      en su slot horizontal) → alineadas lado a lado.
+       delaysSec: array de delays absolutos por slot — cada wrap recibe
+       su animationDelay para entrar escalonadamente al ritmo de la
+       música, no todas a la vez. */
+    function pfRenderInlineRepeat(texts, layout, delaysSec) {
+        if (!lyrStage || !texts || !texts.length) return;
+        const mode = layout === 'v' ? 'fill-stack' : 'fill-vert';
+        const total = texts.length;
+        texts.forEach((text, slot) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'pf-lyr-line-wrap pf-lyr-mode-' + mode;
+            wrap.style.setProperty('--slot', String(slot));
+            wrap.style.setProperty('--total', String(total));
+            wrap.setAttribute('data-pf-slot', String(slot));
+            const delay = (delaysSec && delaysSec[slot] !== undefined) ? delaysSec[slot] : 0;
+            if (delay > 0) {
+                /* Pre-oculta el wrap mientras espera su delay: las reglas
+                   base de fill-stack/fill-vert no traen opacity:0, así
+                   que durante el animation-delay el wrap es VISIBLE a
+                   opacidad normal y solo se aplica la animación cuando
+                   arranca → todas aparecían "ya puestas" antes de
+                   animarse. Inline opacity:0 + animation forwards arregla
+                   esto: invisible durante el delay, la animación llega y
+                   anima 0→1, al terminar el frame 100% sostiene opacity:1. */
+                wrap.style.opacity = '0';
+                wrap.style.animationDelay = delay.toFixed(2) + 's';
+            }
+            wrap.innerHTML = pfRenderLine(text);
+            lyrStage.appendChild(wrap);
+        });
     }
 
     /* Detecta repeticiones de palabra o FRASE dentro de una línea:
@@ -3855,14 +3936,80 @@ function relTime(sentAt) {
         if (repeated && repeated.triggerCount >= 3) {
             const outliers = repeated.outliers || [];
             const ordered = repeated.orderedPhrases || [];
+            const lineKey = pfLineKey(mainText);
+            const cached = pfLineStyleCache[lineKey];
+            /* lineDurMs = duración del verso actual en ms (gap hasta el
+               siguiente verso del LRC). Usado para decidir si hay tiempo
+               para el scatter o si hay que fallback a inline. */
+            const lineDurMs = Math.max(500, pfGetCurLineDuration() * 1000);
             /* ── Sincronización por LONGITUD DE FRASE ──
                El tiempo de cada frase se estima como (chars × SEC_PER_CHAR).
                Tomamos longitud antes que duración del verso porque a veces
                el verso es largo en tiempo pero las frases cortas (silencio
-               final, como "oh, oh, right"). Cada frase aparece en el offset
-               acumulado de las anteriores. Clamps: 0.15s mínimo por frase
-               (visibilidad), 1.8s máximo (no esperas absurdas). */
+               final, como "oh, oh, right"). */
             const SEC_PER_CHAR = 0.1;
+            /* Calcula span total estimado del scatter (cumChars × SEC_PER_CHAR).
+               Si la línea no llega a cubrir ese span con buffer suficiente
+               para la animación de entrada (0.7s), el scatter se buguea:
+               las últimas copias no terminan de entrar antes de que llegue
+               la siguiente línea → solo se ven sus fades de salida fantasma.
+               En esos casos, render INLINE (horizontal o vertical según
+               cantidad), sin destacar outliers — todo en línea. */
+            let totalChars = 0;
+            ordered.forEach(p => { totalChars += Math.max(2, p.length); });
+            const lineDurSec = lineDurMs / 1000;
+            const estimatedSpan = totalChars * SEC_PER_CHAR;
+            const ENTRY_BUFFER_SEC = 0.7;
+            /* Decisión cacheable: si la línea YA apareció antes con un
+               estilo, lo reusamos para consistencia visual del coro.
+               Si no, decidimos por isTooFast y guardamos. */
+            let useInline;
+            if (cached && cached.kind === 'repeat-inline') {
+                useInline = true;
+            } else if (cached && cached.kind === 'repeat-scatter') {
+                useInline = false;
+            } else {
+                useInline = estimatedSpan + ENTRY_BUFFER_SEC > lineDurSec;
+            }
+            if (useInline) {
+                /* INLINE MODE — todas las frases en wraps fill-stack o
+                   fill-vert con delays escalonados → aparecen al ritmo
+                   de la música, una tras otra, no todas a la vez. Sin
+                   emphasis para outliers — todo al mismo nivel. */
+                const allTexts = ordered.map(p => p.text);
+                const layout = allTexts.length >= 4 ? 'v' : 'h';
+                /* Cachea decisión para próximas apariciones del mismo verso. */
+                if (!cached) pfLineStyleCache[lineKey] = { kind: 'repeat-inline', layout };
+                /* Delays por longitud de frase. Mismo principio que el
+                   scatter (chars × SEC_PER_CHAR) pero con compresión
+                   para que el último entre antes del final de la línea.
+                   Buffer 0.4s: la entrada del fill-* dura 0.85s con
+                   opacity 1 al 60% = 0.51s — el último necesita ese
+                   tiempo desde su delay hasta el final del verso. */
+                let cumChars2 = 0;
+                const rawDelays = ordered.map(p => {
+                    const d = cumChars2 * SEC_PER_CHAR;
+                    cumChars2 += Math.max(2, p.length);
+                    return d;
+                });
+                const INLINE_BUFFER = 0.4;
+                const maxSpan2 = Math.max(0.15, lineDurSec - INLINE_BUFFER);
+                const lastRaw = rawDelays[rawDelays.length - 1] || 0;
+                const inlineDelays = (lastRaw > maxSpan2 && lastRaw > 0)
+                    ? rawDelays.map(d => d * (maxSpan2 / lastRaw))
+                    : rawDelays;
+                pfLog('  fast-repeat (inline-' + layout + '): ' + allTexts.length
+                    + ' phrases, lineDur=' + lineDurSec.toFixed(2)
+                    + 's delays=[' + inlineDelays.map(d => d.toFixed(2)).join(',') + ']');
+                pfLineCounter++;
+                root.classList.remove('pf-lyr-blurred');
+                pfFadeOutWraps('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
+                pfRenderInlineRepeat(allTexts, layout, inlineDelays);
+                parens.asides.forEach(a => pfRenderAsideCorner(a));
+                return;
+            }
+            /* Modo scatter normal — la línea tiene tiempo suficiente. */
+            if (!cached) pfLineStyleCache[lineKey] = { kind: 'repeat-scatter' };
             let cumChars = 0;
             const scatterDelays = [];
             const outlierTimings = [];
@@ -3873,7 +4020,7 @@ function relTime(sentAt) {
                 } else {
                     scatterDelays.push(startTimeSec);
                 }
-                cumChars += Math.max(2, p.length);  /* min 2 chars para frases super cortas */
+                cumChars += Math.max(2, p.length);
             });
             pfLog('  scatter: word="' + repeated.word + '" copies=' + repeated.count
                 + ' outliers=' + outliers.length
@@ -3902,10 +4049,27 @@ function relTime(sentAt) {
              - avoidStacking: para multi-modes (fill-vert/stack, fast).
                40 chars máx — el font es más chico, caben más. */
         const lineDur = pfGetCurLineDuration();
-        const choice = pfPickMode({
-            avoidVertical: mainText.length > 20 || lineDur > 6,
-            avoidStacking: mainText.length > 40 || lineDur > 6,
-        });
+        let choice;
+        const normalKey = pfLineKey(mainText);
+        const normalCached = pfLineStyleCache[normalKey];
+        if (normalCached && normalCached.kind === 'normal') {
+            /* Repetición de un verso ya visto en modo single-line →
+               reusamos su mode exacto para que el coro siempre se vea
+               igual. Forzamos blur=false para no interferir con el
+               intro/outro auto-toggle del picker. */
+            choice = { mode: normalCached.mode, blur: false };
+        } else {
+            choice = pfPickMode({
+                avoidVertical: mainText.length > 20 || lineDur > 6,
+                avoidStacking: mainText.length > 40 || lineDur > 6,
+            });
+            /* Solo cacheamos modos SINGLE-LINE (los multi y fast-stack
+               dependen del estado de grupo — no son seguros de reusar
+               por línea aislada). choice.slot está sólo en multi/fast. */
+            if (choice.slot === undefined) {
+                pfLineStyleCache[normalKey] = { kind: 'normal', mode: choice.mode };
+            }
+        }
         pfLineCounter++;
         const isMulti     = (choice.slot !== undefined) && !choice.isFastStack;
         const isFastStack = !!choice.isFastStack;
@@ -4157,12 +4321,24 @@ function relTime(sentAt) {
         pfUpdateBtnState();
         pfLyrCurIdx = -2;
         const tr = pfCurTrack();
+        /* Captura videoId al abrir — el .then() compara contra esto para
+           descartar callbacks de fetches abortados de canciones previas
+           (que devuelven igual via Promise resolution). */
+        const openedFor = tr && tr.videoId;
         try { console.log('[pf-lyrics] open. track=', tr && tr.title, 'videoId=', tr && tr.videoId, 'cached=', tr && tr.videoId === pfLyrVid && !!pfLyrLines); } catch(_){}
         if (!pfLyrLines || !tr || tr.videoId !== pfLyrVid) {
             pfFlashLoading('🎤 Buscando letra', 60000);   /* persiste hasta cambio */
         }
         pfFetchForCurrent().then(() => {
             if (!pfLyricsOpen) return;
+            /* Guard contra stale callback: si el track cambió mientras
+               el fetch estaba en vuelo, este callback es de la canción
+               vieja — el reload de la nueva ya está corriendo. */
+            const tNow = pfCurTrack();
+            if (!tNow || tNow.videoId !== openedFor) {
+                try { console.log('[pf-lyrics] open.then: stale (track changed)'); } catch(_){}
+                return;
+            }
             try { console.log('[pf-lyrics] fetch done. lines=', (pfLyrLines||[]).length); } catch(_){}
             if (!pfLyrLines || !pfLyrLines.length) {
                 pfFlashStatus('🥲 Sin letra sincronizada para esta canción', 8000);
@@ -4198,6 +4374,7 @@ function relTime(sentAt) {
         pfFastStackStartedAt = 0;
         pfAsideCounter = 0;
         pfRepeatLineGroup = null;
+        pfLineStyleCache = {};  /* cache vacío por canción */
         /* Cancela cualquier fetch en vuelo al cerrar. */
         if (pfFetchController) { try { pfFetchController.abort(); } catch(_){} pfFetchController = null; }
         /* Cancela debounce de reload pendiente. */
@@ -4259,6 +4436,7 @@ function relTime(sentAt) {
         pfFastStackCounter = 0;
         pfFastStackStartedAt = 0;
         pfRepeatLineGroup = null;
+        pfLineStyleCache = {};  /* cada canción tiene su propio cache */
         root.classList.remove('pf-lyr-blurred');
         /* DOM cleanup INSTANTÁNEO (sin animación). */
         pfQuickClearStage();
@@ -4278,8 +4456,20 @@ function relTime(sentAt) {
                 if (st) st.remove();
                 return;
             }
+            /* Captura videoId — el .then() compara contra esto para
+               descartar callbacks stale si el usuario salta otra vez
+               durante el fetch. */
+            const reloadFor = tr.videoId;
             pfFetchForCurrent().then(() => {
                 if (!pfLyricsOpen) return;
+                /* Guard stale callback: si saltaron a otra canción mientras
+                   el fetch estaba en vuelo, este callback es de la vieja —
+                   un reload nuevo está en camino, no spameamos el toast. */
+                const tNow = pfCurTrack();
+                if (!tNow || tNow.videoId !== reloadFor) {
+                    pfLog('reloadForTrack.then: stale (track changed)');
+                    return;
+                }
                 if (!pfLyrLines || !pfLyrLines.length) {
                     pfFlashStatus('🥲 Sin letra sincronizada para esta canción', 8000);
                 } else {
@@ -4288,8 +4478,7 @@ function relTime(sentAt) {
                        mitad de un verso). */
                     const lineVisible = lyrStage && lyrStage.querySelector('.pf-lyr-line-wrap:not(.pf-lyr-mode-aside)');
                     if (!lineVisible) {
-                        const tCur = pfCurTrack();
-                        pfFlashTrack(tCur && tCur.title || 'Canción', tCur && tCur.artist || '', 2800);
+                        pfFlashTrack(tNow.title || 'Canción', tNow.artist || '', 2800);
                     } else {
                         const st = lyrStage.querySelector('.pf-lyr-status');
                         if (st) st.remove();
