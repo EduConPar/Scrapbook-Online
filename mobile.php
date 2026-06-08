@@ -1328,6 +1328,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                         <line x1="12" y1="18" x2="12" y2="22"/>
                     </svg>
                 </button>
+                <button class="button mu-full-extra" id="mu-full-lyrics" type="button" aria-label="Letra">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="2" width="6" height="12" rx="3"/>
+                        <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="22"/>
+                        <line x1="8" y1="22" x2="16" y2="22"/>
+                    </svg>
+                </button>
             </div>
 
         </div>
@@ -2243,6 +2251,14 @@ window.MuShell = (function(){
         this.setAttribute('aria-pressed', SHUFFLE_ON ? 'true' : 'false');
     });
 
+    /* Letra: 1 tap → abre panel sobre el player; doble-tap rápido (<400ms)
+       → cierra. Esto se delega a window.mLyricsHandleTap expuesto por
+       el módulo mLyricsModule más abajo. */
+    var lyricsBtn = document.getElementById('mu-full-lyrics');
+    if (lyricsBtn) lyricsBtn.addEventListener('click', function(){
+        if (typeof window.mLyricsHandleTap === 'function') window.mLyricsHandleTap();
+    });
+
     /* (mu-full-add eliminado — la opción "Añadir a playlist" ahora vive
        solo en el menú long-press del vinilo, evitando duplicidad.) */
 
@@ -2888,9 +2904,22 @@ window.MuShell = (function(){
         subscribers.forEach(function(w){ try { w.postMessage(msg, '*'); } catch (_) {} });
     }
 
+    /* Acceso a tiempo de reproducción del player — usado por el módulo
+       de letras para sincronizar el highlight con el audio. Devuelve 0
+       si el player aún no está listo. */
+    function getCurrentTime() {
+        try { return (YT_PLAYER && YT_PLAYER.getCurrentTime) ? (YT_PLAYER.getCurrentTime() || 0) : 0; }
+        catch(_) { return 0; }
+    }
+    function getDuration() {
+        try { return (YT_PLAYER && YT_PLAYER.getDuration) ? (YT_PLAYER.getDuration() || 0) : 0; }
+        catch(_) { return 0; }
+    }
+
     return {
         loadQueue: loadQueue, next: next, prev: prev, toggle: togglePlay,
-        openFullscreen: openFullscreen, openLock: openLock, getState: getState
+        openFullscreen: openFullscreen, openLock: openLock, getState: getState,
+        getCurrentTime: getCurrentTime, getDuration: getDuration,
     };
 })();
 
@@ -3326,6 +3355,252 @@ window.MuShell = (function(){
     }
     ping();
     setInterval(ping, 30000);
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   LETRAS (LRCLIB) — overlay full-screen sobre el reproductor móvil.
+   ════════════════════════════════════════════════════════════════ */
+(function mLyricsModule() {
+    /* Panel de letras montado DENTRO del fullscreen player (#mu-full).
+       No es overlay full-screen — solo aparece sobre el contenido del
+       player y oscurece ligeramente lo que hay detrás. */
+    var muFull = document.getElementById('mu-full');
+    var muFullWin = muFull ? muFull.querySelector('.mu-full-window') : null;
+    var overlay = document.createElement('div');
+    overlay.id = 'm-lyrics-overlay';
+    overlay.innerHTML =
+        '<div id="m-lyr-scroll">' +
+            '<div id="m-lyr-empty">Cargando…</div>' +
+            '<div id="m-lyr-lines"></div>' +
+        '</div>';
+    /* Lo inyectamos dentro del .mu-full-window para que respete sus
+       bordes y bezels Win98. Posicionamiento absoluto via CSS. */
+    if (muFullWin) muFullWin.appendChild(overlay);
+    else document.body.appendChild(overlay);
+
+    /* CSS del overlay + dim del player subyacente. */
+    var st = document.createElement('style');
+    st.textContent =
+        /* Overlay extra transparente — apenas un tinte oscuro para que
+           el contenido del reproductor siga siendo claramente visible
+           detrás, con un blur suave que da el efecto vidrio.
+           USAMOS visibility + opacity en lugar de display:none para
+           que las transiciones de los HIJOS (letra) funcionen — con
+           display:none los hijos no están en el render tree y CSS no
+           dispara su transición al cambiar el display. */
+        '#m-lyrics-overlay { position: absolute; inset: 0; ' +
+            'background: rgba(0,0,0,0.12); ' +
+            'backdrop-filter: blur(4px) saturate(1.05); ' +
+            '-webkit-backdrop-filter: blur(4px) saturate(1.05); ' +
+            'color: #fff; display: flex; flex-direction: column; z-index: 20; ' +
+            'opacity: 0; visibility: hidden; pointer-events: none; ' +
+            'transition: opacity 2.4s ease, backdrop-filter 2.4s ease, visibility 0s linear 2.4s; }' +
+        '.mu-full.lyrics-active #m-lyrics-overlay { opacity: 1; visibility: visible; pointer-events: auto; ' +
+            'transition: opacity 2.4s ease, backdrop-filter 2.4s ease, visibility 0s linear 0s; }' +
+        /* Dim suave del contenido subyacente — sigue siendo claramente
+           visible (45% opacidad, blur mínimo) para que se vea el
+           reproductor original a través de las letras. */
+        '.mu-full .title-bar, .mu-full-display, .mu-full-info, .mu-full-progress-row, .mu-full-controls, .mu-full-extras { ' +
+            'transition: opacity 2.4s ease, filter 2.4s ease; }' +
+        '.mu-full.lyrics-active .title-bar, ' +
+        '.mu-full.lyrics-active .mu-full-display, ' +
+        '.mu-full.lyrics-active .mu-full-info, ' +
+        '.mu-full.lyrics-active .mu-full-progress-row, ' +
+        '.mu-full.lyrics-active .mu-full-controls, ' +
+        '.mu-full.lyrics-active .mu-full-extras { opacity: 0.45; filter: blur(1px); }' +
+        '#m-lyr-scroll { flex: 1; overflow-y: auto; padding: 26px 22px; font-size: 17px; line-height: 1.8; text-align: center; -webkit-overflow-scrolling: touch; ' +
+            /* Scrollbar invisible (Firefox + Chrome/Safari/Edge) — scroll
+               sigue funcionando con touch/wheel pero no se ve la barra. */
+            'scrollbar-width: none; -ms-overflow-style: none; ' +
+            /* Entrada: empieza translucida y desplazada un poco abajo;
+               cierra → vuelve a ese estado. Transición 2s. */
+            'opacity: 0; transform: translateY(24px); ' +
+            'transition: opacity 2s ease, transform 2s ease; }' +
+        '#m-lyr-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }' +
+        /* Cuando el overlay está activo, la letra entra con un pequeño
+           DELAY (0.5s) para que el efecto se sienta "después" del fondo. */
+        '.mu-full.lyrics-active #m-lyr-scroll { opacity: 1; transform: translateY(0); ' +
+            'transition: opacity 2s ease 0.5s, transform 2s ease 0.5s; }' +
+        '#m-lyr-empty { opacity: 0.65; padding-top: 35%; font-size: 15px; }' +
+        '.m-lyr-line { padding: 8px 0; color: rgba(255,255,255,0.5); transition: color 0.25s, transform 0.25s, opacity 0.25s, font-weight 0.25s; opacity: 0.7; }' +
+        '.m-lyr-line.active { color: var(--accent, #1db954); font-weight: bold; opacity: 1; transform: scale(1.1); text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent); }' +
+        '.m-lyr-line.past { opacity: 0.3; }';
+    document.head.appendChild(st);
+
+    /* Double-tap detection: cuando el overlay está activo, dos taps en
+       <400ms en cualquier parte → cierra. El scroll de las letras no
+       dispara click (touchmove cancela el click), así que esto NO
+       interfiere con el scrolling. */
+    var __overlayLastTap = 0;
+    overlay.addEventListener('click', function() {
+        if (!LYR_OPEN) return;
+        var now = Date.now();
+        if (now - __overlayLastTap < 400) {
+            closeLyr();
+            __overlayLastTap = 0;
+        } else {
+            __overlayLastTap = now;
+        }
+    });
+
+    var LYR_VID = null, LYR_LINES = null, LYR_PLAIN = null;
+    var LYR_LAST = -1, LYR_OPEN = false, LYR_TIMER = null;
+
+    var linesEl  = overlay.querySelector('#m-lyr-lines');
+    var emptyEl  = overlay.querySelector('#m-lyr-empty');
+    var scrollEl = overlay.querySelector('#m-lyr-scroll');
+    /* Stubs no-op para el código de fetch que antes actualizaba header
+       (header eliminado per UX request — solo lyrics centradas). */
+    var trackEl  = { textContent: '' };
+    var statusEl = { textContent: '' };
+    /* Sin botón close — el cierre es exclusivo por doble-tap sobre el
+       overlay (handler en línea más arriba). */
+
+    function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function parseLRC(lrc) {
+        var lines = [];
+        if (!lrc) return lines;
+        lrc.split(/\r?\n/).forEach(function(raw){
+            var stamps = []; var rest = raw;
+            var re = /^\s*\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/;
+            var m;
+            while ((m = re.exec(rest))) {
+                var min = +m[1], sec = +m[2], frac = m[3] ? +m[3] / Math.pow(10, m[3].length) : 0;
+                stamps.push(min * 60 + sec + frac);
+                rest = rest.slice(m[0].length);
+            }
+            var text = rest.trim();
+            if (stamps.length && text) stamps.forEach(function(t){ lines.push({ time:t, text:text }); });
+        });
+        lines.sort(function(a,b){ return a.time - b.time; });
+        return lines;
+    }
+
+    function curTrack() {
+        /* QUEUE/CUR_IDX viven dentro del IIFE de MuShell y no son visibles
+           aquí. Usamos su API pública. */
+        try {
+            if (window.MuShell && typeof window.MuShell.getState === 'function') {
+                return window.MuShell.getState().track || null;
+            }
+        } catch(_){}
+        return null;
+    }
+    function curIdx() {
+        try {
+            if (window.MuShell && typeof window.MuShell.getState === 'function') {
+                var s = window.MuShell.getState();
+                return (typeof s.idx === 'number') ? s.idx : -1;
+            }
+        } catch(_){}
+        return -1;
+    }
+
+    function openLyr() {
+        if (muFull) muFull.classList.add('lyrics-active');
+        LYR_OPEN = true;
+        fetchForCurrent();
+        if (LYR_TIMER) clearInterval(LYR_TIMER);
+        LYR_TIMER = setInterval(tick, 250);
+    }
+    function closeLyr() {
+        if (muFull) muFull.classList.remove('lyrics-active');
+        LYR_OPEN = false;
+        if (LYR_TIMER) { clearInterval(LYR_TIMER); LYR_TIMER = null; }
+    }
+    window.mLyricsOpen = openLyr;
+    /* Botón del micrófono: solo ABRE. El cierre vive en el overlay
+       (doble-tap sobre el panel oscuro). Si el panel ya está abierto
+       y se vuelve a tocar el botón → no hace nada. */
+    window.mLyricsHandleTap = function() {
+        if (!LYR_OPEN) openLyr();
+    };
+
+    function setEmpty(msg) {
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = msg;
+        linesEl.innerHTML = '';
+    }
+
+    function fetchForCurrent() {
+        var tr = curTrack();
+        if (!tr || !tr.videoId) { setEmpty('No hay canción en reproducción.'); return; }
+        if (tr.videoId === LYR_VID && (LYR_LINES || LYR_PLAIN)) return;
+        LYR_VID = tr.videoId; LYR_LINES = null; LYR_PLAIN = null; LYR_LAST = -1;
+        trackEl.textContent = (tr.title || '') + (tr.artist ? ' — ' + tr.artist : '');
+        setEmpty('Buscando letra…');
+        statusEl.textContent = '';
+        var dur = 0;
+        try { dur = Math.floor((window.MuShell ? window.MuShell.getDuration() : 0) || 0); } catch(_){}
+        var qs = new URLSearchParams({
+            title: tr.title || '', artist: tr.artist || '', duration: String(dur),
+        });
+        fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok || !d.found) { setEmpty('🥲 No se encontró letra para esta canción.'); return; }
+                if (LYR_VID !== tr.videoId) return;   // cambió de track mid-fetch
+                if (d.synced) {
+                    LYR_LINES = parseLRC(d.synced);
+                    if (LYR_LINES.length) {
+                        emptyEl.style.display = 'none';
+                        linesEl.innerHTML = LYR_LINES.map(function(ln, i){
+                            return '<div class="m-lyr-line" data-i="' + i + '">' + escHtml(ln.text) + '</div>';
+                        }).join('');
+                        statusEl.textContent = '⏱ sincronizada';
+                        return;
+                    }
+                    LYR_PLAIN = d.plain;
+                }
+                if (d.plain || LYR_PLAIN) {
+                    LYR_PLAIN = LYR_PLAIN || d.plain;
+                    emptyEl.style.display = 'none';
+                    linesEl.innerHTML = '<div style="text-align:center;">' +
+                        escHtml(LYR_PLAIN).replace(/\n/g, '<br>') + '</div>';
+                    statusEl.textContent = 'sin sync';
+                    return;
+                }
+                setEmpty('🥲 No se encontró letra para esta canción.');
+            })
+            .catch(function(){ setEmpty('Error de red al buscar la letra.'); });
+    }
+
+    function tick() {
+        if (!LYR_OPEN || !LYR_LINES || !LYR_LINES.length) return;
+        var t = 0;
+        try { t = (window.MuShell ? window.MuShell.getCurrentTime() : 0) || 0; } catch(_){}
+        var lo = 0, hi = LYR_LINES.length - 1, idx = -1;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            if (LYR_LINES[mid].time <= t) { idx = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        if (idx === LYR_LAST) return;
+        LYR_LAST = idx;
+        var all = linesEl.querySelectorAll('.m-lyr-line');
+        for (var i = 0; i < all.length; i++) {
+            all[i].classList.remove('active', 'past');
+            if (i < idx) all[i].classList.add('past');
+            if (i === idx) all[i].classList.add('active');
+        }
+        var activeEl = all[idx];
+        if (activeEl) {
+            var top = activeEl.offsetTop - scrollEl.clientHeight / 2 + activeEl.clientHeight / 2;
+            scrollEl.scrollTo({ top: top, behavior: 'smooth' });
+        }
+    }
+
+    /* Watcher de cambio de track: cada 500ms revisa si el idx cambió.
+       Usamos curIdx() porque CUR_IDX está dentro del IIFE de MuShell. */
+    var __lastCurIdx = -1;
+    setInterval(function(){
+        if (!LYR_OPEN) return;
+        var idx = curIdx();
+        if (idx !== __lastCurIdx) {
+            __lastCurIdx = idx;
+            fetchForCurrent();
+        }
+    }, 500);
 })();
 
 /* Polling de recordatorios próximos (7/2/1 días). Mismo endpoint que

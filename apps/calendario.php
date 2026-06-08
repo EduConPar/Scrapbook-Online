@@ -500,10 +500,45 @@ const parejaId = <?php echo $parejaId; ?>;
 const fechaInicio = '<?php echo $fechaInicio; ?>';
 const hoy = new Date();
 
+/* ── Helpers de fecha — SIEMPRE LOCAL, NUNCA UTC ──
+   Bug histórico: `new Date('YYYY-MM-DD')` se interpreta como UTC
+   midnight, no como medianoche local. En zonas horarias negativas
+   (Américas) sale el día anterior → "días restantes" off-by-one,
+   contador de días juntos incorrecto, etc. */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function parseISODate(s) {
+    if (!s || typeof s !== 'string' || !ISO_DATE_RE.test(s)) return null;
+    const parts = s.split('-');
+    /* Date(y, mIdx, d) → midnight LOCAL. */
+    const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+    return isNaN(d.getTime()) ? null : d;
+}
+function toISODate(d) {
+    if (!d || isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+}
+function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+/* Helper de escape HTML — antes se metían valores del usuario crudos
+   en `innerHTML` (XSS vulnerable). */
+function escHTML(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+const hoyMidnight = startOfDay(hoy);
+
 <?php if ($pareja): ?>
-const inicio = new Date(fechaInicio);
-const dias = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24));
-document.getElementById('dias-contador').textContent = dias;
+const inicio = parseISODate(fechaInicio);
+if (inicio) {
+    const dias = Math.floor((hoyMidnight - inicio) / (1000 * 60 * 60 * 24));
+    document.getElementById('dias-contador').textContent = dias;
+}
 <?php endif; ?>
 
 let currentYear = hoy.getFullYear();
@@ -515,73 +550,131 @@ const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 const diasSemana = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
 
 function expandirRecordatorios(lista) {
+    /* Acotamos a ventana ±1 mes alrededor del mes visible + 14 días
+       hacia delante (sidebar). Antes expandía 3 años por recordatorio
+       (~156 ocurrencias semanales × N recordatorios → MBs de memoria).
+       Re-llamar tras navegar de mes. */
     const expandidos = [];
-    const desde = new Date(hoy); desde.setFullYear(desde.getFullYear() - 1);
-    const hasta = new Date(hoy); hasta.setFullYear(hasta.getFullYear() + 2);
+    const desde = new Date(currentYear, currentMonth - 1, 1);
+    const hasta = new Date(currentYear, currentMonth + 2, 0);
+    /* Garantiza que cubrimos sidebar (hoy + 14 días). */
+    const sidebarLimit = new Date(hoyMidnight);
+    sidebarLimit.setDate(sidebarLimit.getDate() + 14);
+    if (sidebarLimit > hasta) hasta.setTime(sidebarLimit.getTime());
 
     lista.forEach(r => {
-        const p = r.periodicidad || 'ninguna';
+        const p = (r.periodicidad || 'ninguna');
+        const base = parseISODate(r.fecha);
+        if (!base) return;       /* fecha inválida → descarta silencioso */
         if (p === 'ninguna') {
             expandidos.push(r);
             return;
         }
-        const base = new Date(r.fecha);
-        let cursor = new Date(base);
-
-        while (cursor > desde) {
-            if (p === 'anual')        cursor.setFullYear(cursor.getFullYear() - 1);
-            else if (p === 'mensual') cursor.setMonth(cursor.getMonth() - 1);
-            else if (p === 'semanal') cursor.setDate(cursor.getDate() - 7);
+        /* Calcular DIRECTAMENTE la primera ocurrencia >= desde sin loop
+           lento (antes iteraba desde la base original años hacia atrás). */
+        let cursor;
+        if (p === 'anual') {
+            /* Mismo mes/día, año = desde.year. Si pasó → siguiente año. */
+            cursor = new Date(desde.getFullYear(), base.getMonth(), base.getDate());
+            if (cursor < desde) cursor.setFullYear(cursor.getFullYear() + 1);
+        } else if (p === 'mensual') {
+            /* Mismo día del mes. Con clamp para meses cortos
+               (día 31 en febrero → último día de febrero). */
+            const dayBase = base.getDate();
+            cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
+            while (cursor < desde) cursor.setMonth(cursor.getMonth() + 1);
+            /* Asegurar que el día efectivo refleja el ORIGINAL clampeado. */
+            const lastDayOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+            cursor.setDate(Math.min(dayBase, lastDayOfMonth));
+            if (cursor < desde) cursor.setMonth(cursor.getMonth() + 1);
+        } else if (p === 'semanal') {
+            /* Mismo día de la semana que base, primer >= desde. */
+            cursor = new Date(desde);
+            const dowBase = base.getDay();
+            const dowDesde = cursor.getDay();
+            let diff = (dowBase - dowDesde + 7) % 7;
+            cursor.setDate(cursor.getDate() + diff);
+        } else {
+            return;
         }
 
+        /* Iterar emitiendo hasta `hasta`. */
         while (cursor <= hasta) {
-            const fechaOcurrencia = cursor.toISOString().split('T')[0];
-            expandidos.push({ ...r, fecha: fechaOcurrencia, _periodico: true });
+            expandidos.push(Object.assign({}, r, { fecha: toISODate(cursor), _periodico: true }));
             if (p === 'anual')        cursor.setFullYear(cursor.getFullYear() + 1);
-            else if (p === 'mensual') cursor.setMonth(cursor.getMonth() + 1);
+            else if (p === 'mensual') {
+                /* Re-clampear: para mensual día 31, después de enero=31,
+                   febrero debe ser 28/29, no marzo 3. */
+                const targetDay = base.getDate();
+                cursor.setDate(1);
+                cursor.setMonth(cursor.getMonth() + 1);
+                const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+                cursor.setDate(Math.min(targetDay, lastDay));
+            }
             else if (p === 'semanal') cursor.setDate(cursor.getDate() + 7);
+            else break;
         }
     });
     return expandidos;
 }
 
-function cargarTodo() {
-    Promise.all([
-        fetch(API_BASE + '?action=get-momentos&pareja_id=' + parejaId).then(r => r.json()),
-        fetch(API_BASE + '?action=get-recordatorios&pareja_id=' + parejaId).then(r => r.json())
-    ]).then(([momentos, recordatorios]) => {
-        todosMomentos = momentos;
-        momentosPorFecha = {};
-        momentos.forEach(m => {
-            if (!momentosPorFecha[m.fecha]) momentosPorFecha[m.fecha] = [];
-            momentosPorFecha[m.fecha].push(m);
-        });
+/* Wrapper centralizado de fetch JSON — verifica response.ok + JSON
+   parse, devuelve {ok, data} para que el caller decida. Antes cada
+   fetch sin .catch dejaba la UI colgada en "Guardando..." si fallaba
+   la red o el servidor devolvía HTML de error. */
+async function apiFetch(url, opts) {
+    try {
+        const r = await fetch(url, opts);
+        if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('json')) return { ok: false, error: 'Non-JSON response' };
+        return { ok: true, data: await r.json() };
+    } catch (e) {
+        return { ok: false, error: e && e.message ? e.message : 'Network error' };
+    }
+}
 
-        const recordatoriosExpandidos = expandirRecordatorios(recordatorios);
-        recordatoriosPorFecha = {};
-        recordatoriosExpandidos.forEach(r => {
-            if (!recordatoriosPorFecha[r.fecha]) recordatoriosPorFecha[r.fecha] = [];
-            recordatoriosPorFecha[r.fecha].push(r);
-        });
-
+async function cargarTodo() {
+    const [mResp, rResp] = await Promise.all([
+        apiFetch(API_BASE + '?action=get-momentos&pareja_id=' + parejaId),
+        apiFetch(API_BASE + '?action=get-recordatorios&pareja_id=' + parejaId),
+    ]);
+    if (!mResp.ok || !rResp.ok) {
+        /* Renderizar el grid aunque haya fallo — vista útil con la última data. */
         renderCalendario();
-        renderRecordatorios(recordatoriosExpandidos);
-        /* Sidebar de "Momentos" eliminado — la sidebar derecha solo
-           muestra recordatorios próximos. */
-    }).catch(() => renderCalendario());
+        return;
+    }
+    const momentos = Array.isArray(mResp.data) ? mResp.data : [];
+    const recordatorios = Array.isArray(rResp.data) ? rResp.data : [];
+    todosMomentos = momentos;
+    momentosPorFecha = {};
+    momentos.forEach(m => {
+        if (!m || !m.fecha) return;
+        if (!momentosPorFecha[m.fecha]) momentosPorFecha[m.fecha] = [];
+        momentosPorFecha[m.fecha].push(m);
+    });
+    const recordatoriosExpandidos = expandirRecordatorios(recordatorios);
+    recordatoriosPorFecha = {};
+    recordatoriosExpandidos.forEach(r => {
+        if (!r || !r.fecha) return;
+        if (!recordatoriosPorFecha[r.fecha]) recordatoriosPorFecha[r.fecha] = [];
+        recordatoriosPorFecha[r.fecha].push(r);
+    });
+    renderCalendario();
+    renderRecordatorios(recordatoriosExpandidos);
 }
 
 function renderRecordatorios(lista) {
     const div = document.getElementById('recordatorios-lista');
+    if (!div) return;
 
-    /* Solo mostrar los que sean dentro de los próximos 14 días
-       (hoy incluido). Cualquier fecha pasada o más allá de 2 semanas
-       queda fuera de la sidebar — siguen viéndose en el grid del mes. */
-    const hoyStr = hoy.toISOString().split('T')[0];
-    const limite = new Date(hoy);
+    /* Solo recordatorios dentro de [hoy, hoy+14d]. Pasados y lejanos
+       siguen siendo visibles como puntos en el grid del mes. */
+    const hoyStr = toISODate(hoyMidnight);
+    const limite = new Date(hoyMidnight);
     limite.setDate(limite.getDate() + 14);
-    const limiteStr = limite.toISOString().split('T')[0];
-    lista = lista.filter(r => r.fecha >= hoyStr && r.fecha <= limiteStr);
+    const limiteStr = toISODate(limite);
+    lista = lista.filter(r => r && r.fecha >= hoyStr && r.fecha <= limiteStr);
 
     if (!lista.length) {
         div.innerHTML = '<p style="font-size:11px;color:#808080;">Sin recordatorios en las próximas 2 semanas.</p>';
@@ -591,18 +684,19 @@ function renderRecordatorios(lista) {
     lista.sort((a,b) => a.fecha.localeCompare(b.fecha));
     div.innerHTML = '';
     lista.forEach(r => {
-        /* La lista ya viene filtrada al rango hoy..hoy+14, así que no
-           hay "pasado" — todo es 0..14 días. */
+        const recDate = parseISODate(r.fecha);
+        if (!recDate) return;
         const item = document.createElement('div');
         item.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;';
-        const diasRestantes = Math.ceil((new Date(r.fecha) - hoy) / (1000*60*60*24));
+        const diasRestantes = Math.round((recDate - hoyMidnight) / 86400000);
         const cuandoStr = diasRestantes === 0 ? '¡Hoy!' : 'En ' + diasRestantes + ' día' + (diasRestantes === 1 ? '' : 's');
-        const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' · 🔁 ' + r.periodicidad : '';
+        const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' · 🔁 ' + escHTML(r.periodicidad) : '';
         const texto = document.createElement('div');
         texto.style.cssText = 'flex: 1;';
-        texto.innerHTML = '<strong>' + r.titulo + '</strong><br>' +
-            '<span style="color:#808080;">' + r.fecha + ' · ' + cuandoStr + periodicoLabel + (r.autor ? ' · ' + r.autor : '') + '</span>' +
-            (r.descripcion ? '<br>' + r.descripcion : '');
+        texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong><br>' +
+            '<span style="color:#808080;">' + escHTML(r.fecha) + ' · ' + cuandoStr + periodicoLabel +
+            (r.autor ? ' · ' + escHTML(r.autor) : '') + '</span>' +
+            (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
         const btns = document.createElement('div');
         btns.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
         const btnVer = document.createElement('button');
@@ -652,7 +746,14 @@ let countdownTitulo = '';
 })();
 
 function abrirCountdown(rec) {
-    countdownTargetMs = new Date(rec.fecha + 'T00:00:00').getTime();
+    /* Parse local-safe — antes `new Date('...T00:00:00')` aún caía en UTC
+       en algunos motores antiguos. parseISODate fuerza Date(y,m,d). */
+    const target = parseISODate(rec.fecha);
+    countdownTargetMs = target ? target.getTime() : NaN;
+    if (isNaN(countdownTargetMs)) {
+        alert('Fecha del recordatorio inválida.');
+        return;
+    }
     countdownTitulo = rec.titulo || 'Recordatorio';
     document.getElementById('countdown-title-text').textContent = '⏳ ' + countdownTitulo;
     const bigTitle = document.getElementById('countdown-titulo-big');
@@ -838,6 +939,17 @@ function abrirPopupDia(fecha) {
         contenido.innerHTML = '<p style="font-size:11px;color:#808080;">No hay nada este día.</p>';
     }
 
+    /* Helper interno: valida `foto` para evitar atributo `src` con
+       protocolos peligrosos (javascript:, data:) o saltos de atributo. */
+    function safeFotoSrc(foto) {
+        if (!foto || typeof foto !== 'string') return '';
+        if (/^https?:\/\//i.test(foto)) return foto;
+        /* Si es un nombre de archivo guardado, validar que no salga
+           del directorio (sin slashes, sin ..). */
+        if (!/^[\w.\-]+$/.test(foto)) return '';
+        return '../uploads/momentos/' + foto;
+    }
+
     if (momentos.length) {
         const h = document.createElement('p');
         h.style.cssText = 'font-size:11px; font-weight:bold; color:#ff69b4; margin-bottom:6px;';
@@ -846,18 +958,32 @@ function abrirPopupDia(fecha) {
         momentos.forEach(m => {
             const div = document.createElement('div');
             div.style.cssText = 'border: 1px solid #ff69b4; padding: 8px; margin-bottom: 8px; font-size: 11px; border-radius: 2px;';
+            const fotoSrc = safeFotoSrc(m.foto);
             let html = '';
-            if (m.foto) {
-               html += '<img src="' + (m.foto.startsWith('http') ? m.foto : '../uploads/momentos/' + m.foto) + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
+            if (fotoSrc) {
+                html += '<img src="' + escHTML(fotoSrc) + '" style="width:100%; max-height:180px; object-fit:cover; border-radius:2px; margin-bottom:6px; display:block;">';
             }
             html += '<div style="display:flex; justify-content:space-between; align-items:flex-start;">';
-            html += '<div><strong>' + m.titulo + '</strong>';
-            if (m.autor) html += ' <span style="color:#808080;">(' + m.autor + ')</span>';
-            if (m.descripcion) html += '<br>' + m.descripcion;
-            html += '</div>';
-            html += '<button class="button" onclick="eliminarMomento(' + m.id + ')" style="font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;">✕</button>';
-            html += '</div>';
+            html += '<div><strong>' + escHTML(m.titulo) + '</strong>';
+            if (m.autor) html += ' <span style="color:#808080;">(' + escHTML(m.autor) + ')</span>';
+            if (m.descripcion) html += '<br>' + escHTML(m.descripcion);
+            html += '</div></div>';
             div.innerHTML = html;
+            /* Botón eliminar como nodo aparte → addEventListener (antes
+               onclick=eliminarMomento(id) inline). */
+            const btnDel = document.createElement('button');
+            btnDel.className = 'button';
+            btnDel.textContent = '✕';
+            btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;position:absolute;';
+            /* Re-insertarlo dentro del wrapper flex (último div del html). */
+            const wrap = div.querySelector('div');
+            if (wrap) {
+                btnDel.style.cssText = 'font-size:10px;padding:1px 4px;flex-shrink:0;margin-left:6px;';
+                wrap.appendChild(btnDel);
+            } else {
+                div.appendChild(btnDel);
+            }
+            btnDel.addEventListener('click', () => eliminarMomento(m.id));
             contenido.appendChild(div);
         });
     }
@@ -870,10 +996,10 @@ function abrirPopupDia(fecha) {
         recordatorios.forEach(r => {
             const div = document.createElement('div');
             div.style.cssText = 'border: 1px solid #4a90d9; padding: 6px; margin-bottom: 6px; font-size: 11px; border-radius: 2px; display:flex; justify-content:space-between; align-items:flex-start;';
-            const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' <span style="color:#808080;">· 🔁 ' + r.periodicidad + '</span>' : '';
+            const periodicoLabel = r.periodicidad && r.periodicidad !== 'ninguna' ? ' <span style="color:#808080;">· 🔁 ' + escHTML(r.periodicidad) + '</span>' : '';
             const texto = document.createElement('div');
-            texto.innerHTML = '<strong>' + r.titulo + '</strong>' + periodicoLabel +
-                (r.descripcion ? '<br>' + r.descripcion : '');
+            texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong>' + periodicoLabel +
+                (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
             const btnDel = document.createElement('button');
             btnDel.className = 'button';
             btnDel.textContent = '✕';
@@ -900,21 +1026,25 @@ document.getElementById('popup-dia').addEventListener('click', function(e) {
 document.getElementById('prev-month').addEventListener('click', () => {
     currentMonth--;
     if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-    renderCalendario();
+    /* expandirRecordatorios acota al mes visible — re-cargar para refrescar
+       la ventana de expansión. */
+    cargarTodo();
 });
 
 document.getElementById('next-month').addEventListener('click', () => {
     currentMonth++;
     if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-    renderCalendario();
+    cargarTodo();
 });
 
-document.getElementById('btn-guardar-momento').addEventListener('click', function() {
+document.getElementById('btn-guardar-momento').addEventListener('click', async function() {
     const titulo = document.getElementById('momento-titulo').value.trim();
     const fecha  = document.getElementById('momento-fecha').value;
     const desc   = document.getElementById('momento-desc').value.trim();
-    const foto   = document.getElementById('momento-foto-url').value.trim();
+    const fotoEl = document.getElementById('momento-foto-url');
+    const foto   = fotoEl ? fotoEl.value.trim() : '';
     const status = document.getElementById('momento-status');
+    const btn    = this;
 
     if (!titulo || !fecha) {
         status.style.color = 'red';
@@ -922,81 +1052,78 @@ document.getElementById('btn-guardar-momento').addEventListener('click', functio
         return;
     }
 
+    btn.disabled = true;
     status.style.color = '#808080';
     status.textContent = 'Guardando...';
 
-    fetch(API_BASE + '?action=save-momento', {
+    const resp = await apiFetch(API_BASE + '?action=save-momento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, foto })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { status.style.color = 'red'; status.textContent = data.error; return; }
-        status.style.color = 'green';
-        status.textContent = '✅ Guardado';
-        document.getElementById('momento-titulo').value = '';
-        document.getElementById('momento-desc').value  = '';
-        document.getElementById('momento-foto-url').value = '';
-        cargarTodo();
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, foto }),
     });
+    btn.disabled = false;
+    if (!resp.ok) { status.style.color = 'red'; status.textContent = 'Error de red. Inténtalo de nuevo.'; return; }
+    if (resp.data && resp.data.error) { status.style.color = 'red'; status.textContent = resp.data.error; return; }
+    status.style.color = 'green';
+    status.textContent = '✅ Guardado';
+    document.getElementById('momento-titulo').value = '';
+    document.getElementById('momento-desc').value  = '';
+    if (fotoEl) fotoEl.value = '';
+    cargarTodo();
 });
 
-document.getElementById('btn-guardar-rec').addEventListener('click', function() {
+document.getElementById('btn-guardar-rec').addEventListener('click', async function() {
     const titulo = document.getElementById('rec-titulo').value.trim();
     const fecha = document.getElementById('rec-fecha').value;
     const desc = document.getElementById('rec-desc').value.trim();
     const periodicidad = document.getElementById('rec-periodicidad').value;
     const status = document.getElementById('rec-status');
+    const btn = this;
 
     if (!titulo || !fecha) { status.style.color = 'red'; status.textContent = 'Título y fecha son obligatorios.'; return; }
 
-    fetch(API_BASE + '?action=save-recordatorio', {
+    btn.disabled = true;
+    status.style.color = '#808080';
+    status.textContent = 'Guardando...';
+    const resp = await apiFetch(API_BASE + '?action=save-recordatorio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, periodicidad })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { status.style.color = 'red'; status.textContent = data.error; return; }
-        status.style.color = 'green'; status.textContent = '✅ Guardado';
-        document.getElementById('rec-titulo').value = '';
-        document.getElementById('rec-desc').value = '';
-        document.getElementById('rec-periodicidad').value = 'ninguna';
-        cargarTodo();
+        body: JSON.stringify({ pareja_id: parejaId, titulo, fecha, descripcion: desc, periodicidad }),
     });
+    btn.disabled = false;
+    if (!resp.ok) { status.style.color = 'red'; status.textContent = 'Error de red. Inténtalo de nuevo.'; return; }
+    if (resp.data && resp.data.error) { status.style.color = 'red'; status.textContent = resp.data.error; return; }
+    status.style.color = 'green';
+    status.textContent = '✅ Guardado';
+    document.getElementById('rec-titulo').value = '';
+    document.getElementById('rec-desc').value = '';
+    document.getElementById('rec-periodicidad').value = 'ninguna';
+    cargarTodo();
 });
 
 function eliminarMomento(id) {
-    window._calConfirm('¿Eliminar este <strong>momento</strong>?', function(){
-        fetch(API_BASE + '?action=delete-momento', {
+    window._calConfirm('¿Eliminar este <strong>momento</strong>?', async function() {
+        const resp = await apiFetch(API_BASE + '?action=delete-momento', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) { alert(data.error); return; }
-            document.getElementById('popup-dia').classList.remove('active');
-            cargarTodo();
+            body: JSON.stringify({ id: id }),
         });
+        if (!resp.ok) { alert('Error de red. Inténtalo de nuevo.'); return; }
+        if (resp.data && resp.data.error) { alert(resp.data.error); return; }
+        document.getElementById('popup-dia').classList.remove('active');
+        cargarTodo();
     });
 }
 
 function eliminarRecordatorio(id) {
-    window._calConfirm('¿Eliminar este <strong>recordatorio</strong>?', function(){
-        _doEliminarRecordatorio(id);
-    });
-}
-function _doEliminarRecordatorio(id) {
-    fetch(API_BASE + '?action=delete-recordatorio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: id })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) { alert(data.error); return; }
+    window._calConfirm('¿Eliminar este <strong>recordatorio</strong>?', async function() {
+        const resp = await apiFetch(API_BASE + '?action=delete-recordatorio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id }),
+        });
+        if (!resp.ok) { alert('Error de red. Inténtalo de nuevo.'); return; }
+        if (resp.data && resp.data.error) { alert(resp.data.error); return; }
         document.getElementById('popup-dia').classList.remove('active');
         cargarTodo();
     });
@@ -1080,15 +1207,61 @@ document.getElementById('partner-accept').addEventListener('click', () => respon
 document.getElementById('partner-reject').addEventListener('click', () => respondInvite('reject'));
 
 checkPartnerInvites();
-setInterval(checkPartnerInvites, 5000);
+/* Polling cada 5s + cleanup al cerrar/ocultar el iframe. Pausa cuando
+   la pestaña está oculta para no machacar el server. */
+var __invitePollId = setInterval(function() {
+    if (document.visibilityState === 'visible') checkPartnerInvites();
+}, 5000);
+window.addEventListener('beforeunload', function() {
+    if (__invitePollId) clearInterval(__invitePollId);
+    /* Para evitar que el countdown timer + el player YT sigan corriendo
+       si el iframe se descarga (recarga, navegación). */
+    try { cerrarCountdown(); } catch(_){}
+});
+
+/* Escape global cierra la ventana visible de mayor z-index — UX
+   estándar Win98 ausente antes. Orden: confirm modal → countdown →
+   popup-dia → invite-window. */
+document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    const confirmEl  = document.getElementById('cal-confirm-modal');
+    if (confirmEl && confirmEl.classList.contains('active')) {
+        confirmEl.classList.remove('active');
+        return;
+    }
+    const cdEl = document.getElementById('countdown-window');
+    if (cdEl && cdEl.style.display !== 'none' && cdEl.style.display !== '') {
+        cerrarCountdown();
+        return;
+    }
+    const popupEl = document.getElementById('popup-dia');
+    if (popupEl && popupEl.classList.contains('active')) {
+        popupEl.classList.remove('active');
+        return;
+    }
+    const inviteEl = document.getElementById('invite-window');
+    if (inviteEl && inviteEl.style.display === 'block') {
+        inviteEl.style.display = 'none';
+        return;
+    }
+});
 <?php endif; ?>
 
-document.getElementById('momento-foto-browse').addEventListener('click', function() {
-    document.getElementById('momento-foto').click();
-});
-document.getElementById('momento-foto').addEventListener('change', function() {
-    document.getElementById('momento-foto-nombre').value = this.files.length ? this.files[0].name : '';
-});
+/* Listeners guardados — los inputs `momento-foto-browse` y
+   `momento-foto-nombre` se eliminaron en un refactor previo; los
+   referencia rota provocaba TypeError silencioso que rompía TODO el
+   script posterior (drag, postMessage listener, confirm modal). */
+var __momFotoBrowse = document.getElementById('momento-foto-browse');
+var __momFotoInput  = document.getElementById('momento-foto');
+var __momFotoNombre = document.getElementById('momento-foto-nombre');
+if (__momFotoBrowse && __momFotoInput) {
+    __momFotoBrowse.addEventListener('click', function() { __momFotoInput.click(); });
+}
+if (__momFotoInput && __momFotoNombre) {
+    __momFotoInput.addEventListener('change', function() {
+        __momFotoNombre.value = this.files.length ? this.files[0].name : '';
+    });
+}
 
 /* Purgar recordatorios no periódicos ya pasados antes de cargar */
 fetch(API_BASE + '?action=purge-recordatorios&pareja_id=' + parejaId, { method: 'POST' })

@@ -806,6 +806,29 @@ case 'save-now-playing': {
     jsonResponse(['ok' => true]);
 }
 
+/* ─── Letras (LRCLIB) ───────────────────────────────────── */
+case 'get-lyrics': {
+    require_once __DIR__ . '/lyrics-helpers.php';
+    $title    = trim($_GET['title']    ?? '');
+    $artist   = trim($_GET['artist']   ?? '');
+    $duration = max(0, (int)($_GET['duration'] ?? 0));
+    if ($title === '') jsonError('Falta title', 400);
+    $r = getLyrics($title, $artist, $duration);
+    if (!$r) {
+        jsonResponse(['ok' => true, 'found' => false]);
+    }
+    jsonResponse([
+        'ok'       => true,
+        'found'    => true,
+        'plain'    => $r['plain'],
+        'synced'   => $r['synced'],
+        'matched'  => [
+            'title'  => $r['matched_title'],
+            'artist' => $r['matched_artist'],
+        ],
+    ]);
+}
+
 case 'get-now-playing': {
     /* Connection: close se setea al inicio del script (antes de
        requireAuth) para que aplique también a 401. */

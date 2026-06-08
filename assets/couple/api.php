@@ -128,15 +128,22 @@ case 'get-recordatorios': {
     $userId = getCurrentUserId($pdo, $userKey);
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
+    /* COALESCE para que filas legacy con periodicidad NULL no exploten
+       en el frontend (que esperaba 'ninguna' por default). */
     if ($parejaId) {
-        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion, r.periodicidad, u.username AS autor
+        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion,
+                               COALESCE(r.periodicidad, 'ninguna') AS periodicidad,
+                               u.username AS autor
                                FROM recordatorios r JOIN usuarios u ON r.usuario_id = u.id
                                WHERE r.pareja_id = ? ORDER BY r.fecha ASC");
         $stmt->execute([$parejaId]);
     } else {
-        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion, r.periodicidad, u.username AS autor
+        $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion,
+                               COALESCE(r.periodicidad, 'ninguna') AS periodicidad,
+                               u.username AS autor
                                FROM recordatorios r JOIN usuarios u ON r.usuario_id = u.id
-                               WHERE r.usuario_id = ? AND r.pareja_id = 0 ORDER BY r.fecha ASC");
+                               WHERE r.usuario_id = ? AND (r.pareja_id = 0 OR r.pareja_id IS NULL)
+                               ORDER BY r.fecha ASC");
         $stmt->execute([$userId]);
     }
     jsonResponse($stmt->fetchAll(PDO::FETCH_ASSOC));

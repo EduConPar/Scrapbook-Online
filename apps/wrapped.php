@@ -1364,7 +1364,11 @@ $year  = (int)($_GET['year'] ?? date('Y'));
     /* Gráfica de barras por mes — 12 columnas a igual ancho. */
     .months-chart {
         display: flex;
-        align-items: flex-end;
+        /* stretch en lugar de flex-end → los .month-col ocupan toda la
+           altura del chart, así .month-bar-wrap puede usar height:100%
+           con un valor real (antes resolvía a 0 porque el padre era
+           content-sized). */
+        align-items: stretch;
         justify-content: center;
         gap: 6px;
         width: min(700px, 92vw);
@@ -1377,10 +1381,12 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         align-items: center;
         gap: 6px;
         max-width: 56px;
+        height: 100%;
     }
     .month-bar-wrap {
         width: 100%;
-        height: 100%;
+        flex: 1;
+        min-height: 0;
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
@@ -1392,7 +1398,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         border-radius: 6px 6px 0 0;
         min-height: 2px;
         position: relative;
-        transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transition: height 1.4s cubic-bezier(0.05, 0.85, 0.15, 1);
         z-index: 2;
     }
     .month-bar.top-month {
@@ -1423,7 +1429,7 @@ $year  = (int)($_GET['year'] ?? date('Y'));
         border-bottom: none;
         border-radius: 6px 6px 0 0;
         min-height: 2px;
-        transition: height 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s;
+        transition: height 1.5s cubic-bezier(0.05, 0.85, 0.15, 1) 0.2s;
         z-index: 1;
         pointer-events: none;
     }
@@ -1706,25 +1712,22 @@ function buildSlides(data) {
     songForGroup.album   = __topAlbum  ? pickUnique(__topAlbum.top_songs)  : null;
     songForGroup.genre   = __topGenre  ? pickUnique(__topGenre.top_songs)  : null;
 
-    /* Buddies (listen-together top): canción random "considerable" que
-       NO haya salido en grupos anteriores. Fallback al pool de songs. */
+    /* Buddies (listen-together): UNA canción random "considerable"
+       compartida entre el slide HERO (top 1 buddy) y el slide de
+       ranking (top 5 buddies). Así suena la misma transición musical
+       en ambos slides — narrativa más cohesiva. */
     const buddyConsPool = (data.considerable_songs || data.songs || [])
         .filter(s => s.video_id);
     songForGroup.buddyTop = pickUnique(buddyConsPool);
-    songForGroup.buddyList = pickUnique(buddyConsPool);
-    if (!songForGroup.buddyTop || !songForGroup.buddyList) {
-        const fallback = (data.songs || []).filter(s => s.video_id && !usedVids.has(s.video_id));
-        if (!songForGroup.buddyTop && fallback.length) {
-            const s = fallback.shift();
-            songForGroup.buddyTop = { video_id: s.video_id, title: s.title, artist: s.artist };
-            usedVids.add(s.video_id);
-        }
-        if (!songForGroup.buddyList && fallback.length) {
-            const s = fallback.shift();
-            songForGroup.buddyList = { video_id: s.video_id, title: s.title, artist: s.artist };
-            usedVids.add(s.video_id);
+    if (!songForGroup.buddyTop) {
+        const fallback = (data.songs || []).find(s => s.video_id && !usedVids.has(s.video_id));
+        if (fallback) {
+            songForGroup.buddyTop = { video_id: fallback.video_id, title: fallback.title, artist: fallback.artist };
+            usedVids.add(fallback.video_id);
         }
     }
+    /* buddyList comparte el mismo track que buddyTop. */
+    songForGroup.buddyList = songForGroup.buddyTop;
 
     const groupSong = (g) => {
         const s = songForGroup[g];
@@ -1836,29 +1839,56 @@ function buildSlides(data) {
         }
     });
 
-    /* Max para normalizar: incluye proyección si es mayor que actual.
-       Así la barra TOP del chart siempre llega al 100% del contenedor,
-       independiente de si el usuario tiene 100 o 1000 min. */
-    const maxMin = months.reduce(
-        (mx, m) => Math.max(mx, m.minutes, m.projection || 0),
-        0
-    );
+    /* Alturas RANK-BASED: ordenamos los meses con plays > 0 por minutos
+       descendentes y asignamos altura proporcional al puesto. El #1
+       siempre llega al 100% del contenedor; el último al 1/N. Los
+       meses sin plays quedan a 0 (sin barra). Empates comparten altura.
+       Así evitamos que un mes outlier aplaste a los demás cuando el
+       usuario tiene varios meses con minutos muy distintos. */
+    const monthsWithPlays = months
+        .filter(m => m.minutes > 0)
+        .map(m => ({ ...m, _origMin: m.minutes }));
+    /* Asigna rangos descendentes con manejo de empates. */
+    const monthsRanked = monthsWithPlays.slice().sort((a, b) => b._origMin - a._origMin);
+    let __prevMin = -1, __prevRank = 0;
+    monthsRanked.forEach((mm, i) => {
+        if (mm._origMin === __prevMin) { mm._rank = __prevRank; }
+        else { mm._rank = i + 1; __prevMin = mm._origMin; __prevRank = mm._rank; }
+    });
+    const __totalRanks = monthsRanked.length;
+    /* Mapa mes_num → pct para look-up rápido al renderizar Ene→Dic. */
+    const __rankPct = {};
+    monthsRanked.forEach(mm => {
+        __rankPct[mm.m] = __totalRanks === 1 ? 100
+            : ((__totalRanks - mm._rank + 1) / __totalRanks) * 100;
+    });
+    const maxMin = months.reduce((mx, m) => Math.max(mx, m.minutes, m.projection || 0), 0);
     if (maxMin > 0) {
         const topMonthNum = topMonth ? topMonth.month_num : -1;
         slides.push(makeSlide('monthsChart', `
             <h1 class="slide-title" style="font-size:clamp(24px,4vw,44px);">Tu año mes a mes</h1>
-            <p class="slide-subtitle" style="margin-top:-8px;">Minutos escuchados</p>
+            <p class="slide-subtitle" style="margin-top:-8px;">Ranking por minutos</p>
             <div class="months-chart">
                 ${months.map(m => {
-                    const pct  = (m.minutes / maxMin) * 100;
-                    const projPct = m.projection ? (m.projection / maxMin) * 100 : 0;
+                    const pct = __rankPct[m.m] || 0;
+                    /* La proyección también va proporcional al ranking:
+                       si la proyección rebasaría al actual #1, la
+                       dibujamos al 100% (top virtual); si no, a la
+                       altura que correspondería si fuera ese rango. */
+                    let projPct = 0;
+                    if (m.projection && m.projection > m._origMin) {
+                        const projRank = monthsRanked.filter(mm => mm._origMin > m.projection).length + 1;
+                        projPct = __totalRanks === 0 ? 100
+                            : ((__totalRanks + 1 - projRank) / Math.max(__totalRanks, 1)) * 100;
+                        projPct = Math.min(100, projPct);
+                    }
                     const isTop = m.m === topMonthNum;
                     const isCur = __isCurYear && m.m === __curMonth;
                     return `
                         <div class="month-col">
                             <div class="month-bar-wrap">
-                                ${projPct > pct ? `<div class="month-bar-proj" data-h="${projPct}" style="height:0%;" title="Proyección: ${m.projection.toLocaleString('es-ES')} min"></div>` : ''}
-                                <div class="month-bar ${isTop ? 'top-month' : ''} ${isCur ? 'current-month' : ''}" data-h="${pct}" style="height:0%;">
+                                ${projPct > pct ? `<div class="month-bar-proj" data-h="${projPct.toFixed(1)}" style="height:0%;" title="Proyección: ${m.projection.toLocaleString('es-ES')} min"></div>` : ''}
+                                <div class="month-bar ${isTop ? 'top-month' : ''} ${isCur ? 'current-month' : ''}" data-h="${pct.toFixed(1)}" style="height:0%;">
                                     ${m.minutes > 0 ? `<span class="month-bar-val">${m.minutes.toLocaleString('es-ES')}</span>` : ''}
                                 </div>
                             </div>
@@ -2174,7 +2204,7 @@ function buildSlides(data) {
                 <button type="button" class="wc-share-btn" id="wc-btn-copy">📋 Copiar</button>
             </div>
         </div>
-    `, groupSong('genre'), { bare: true }));
+    `, groupSong('topSong'), { bare: true }));
 
     /* Reemplazar __TOTAL__ por el número final de slides en el status bar. */
     root.innerHTML = slides.join('').replace(/__TOTAL__/g, String(slides.length));
@@ -2503,16 +2533,18 @@ function initWrappedPlayer() {
                 e.target.playVideo();
             },
             onStateChange: (e) => {
-                /* PLAYING: seek al ~30% si no lo hemos hecho ya para este
-                   video. Es la mejor aproximación heurística a "una parte
-                   más movida" — suele caer cerca del primer chorus en
-                   tracks pop, y evita los típicos intros lentos. */
+                /* PLAYING: seek a un punto aleatorio entre el 20% y el 50%
+                   de la canción — abarca el primer verse → primer chorus
+                   en la mayoría de tracks pop. Random distribuye la
+                   selección para que no suene siempre el mismo cacho.
+                   Solo lo hacemos UNA vez por video (wrappedSeekedSet). */
                 if (e.data === YT.PlayerState.PLAYING) {
                     const vid = wrappedNowPlayingMeta.videoId;
                     if (vid && !wrappedSeekedSet.has(vid)) {
                         const dur = e.target.getDuration();
                         if (dur > 60) {
-                            const target = Math.max(30, dur * 0.30);
+                            const pct = 0.20 + Math.random() * 0.30;   /* 0.20 .. 0.50 */
+                            const target = dur * pct;
                             try { e.target.seekTo(target, true); } catch (_) {}
                         }
                         wrappedSeekedSet.add(vid);

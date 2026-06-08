@@ -61,6 +61,7 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
         </div>
         <button class="button" id="btn-shuffle" title="Reproducción aleatoria">⇄</button>
         <button class="button" id="btn-edit-playlist" title="Ver playlist">☰</button>
+        <button class="button" id="btn-lyrics" title="Letra"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin:auto;"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg></button>
         <div id="player-volume-wrap">
             <div id="volume-track-outer">
                 <input type="range" id="player-volume" min="0" max="100" value="100" step="1" orient="vertical">
@@ -70,6 +71,47 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
 </div>
 <?php endif; ?>
+
+<!-- LYRICS WINDOW — panel con letra plana o sincronizada (LRCLIB). -->
+<div class="window" id="lyrics-window" data-no-auto-z
+     style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(420px,92vw); height:min(560px,86vh); z-index:10004; flex-direction:column;">
+    <div class="title-bar" id="lyrics-titlebar">
+        <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg><span id="lyrics-title-text">Letra</span></div>
+        <div class="title-bar-controls">
+            <button aria-label="Minimize" id="lyrics-min"></button>
+            <button aria-label="Maximize" id="lyrics-max"></button>
+            <button aria-label="Close" id="lyrics-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="lyrics-body" style="flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0;">
+        <div id="lyrics-meta" style="padding:8px 10px;border-bottom:1px solid var(--bezel-dark-2,#808080);font-size:11px;display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span id="lyrics-track" style="font-weight:bold;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">—</span>
+            <span id="lyrics-status" style="font-size:10px;color:var(--text-muted,#888);flex-shrink:0;"></span>
+        </div>
+        <div id="lyrics-scroll" style="flex:1;overflow-y:auto;padding:14px 16px;font-size:13px;line-height:1.6;text-align:center;white-space:pre-wrap;">
+            <div id="lyrics-empty" style="opacity:0.6;padding-top:30%;">Cargando…</div>
+            <div id="lyrics-lines"></div>
+        </div>
+    </div>
+</div>
+<style>
+    .lyrics-line {
+        padding: 4px 0;
+        color: var(--text-muted, rgba(0,0,0,0.55));
+        transition: color 0.25s, transform 0.25s, opacity 0.25s, font-weight 0.25s;
+        opacity: 0.7;
+    }
+    .lyrics-line.active {
+        color: var(--accent, #1db954);
+        font-weight: bold;
+        opacity: 1;
+        transform: scale(1.06);
+        text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+    .lyrics-line.past {
+        opacity: 0.4;
+    }
+</style>
 
 <!-- PLAYLIST EDITOR -->
 <div class="window" id="playlist-editor">
@@ -2628,6 +2670,240 @@ function relTime(sentAt) {
     }
 
     connectSSE();
+})();
+
+/* ════════════════════════════════════════════════════════════════
+   LETRAS (LRCLIB) — botón + panel + sincronización con ytPlayer.
+   Estado:
+     LYR_CURRENT_VID  → videoId de la canción cuya letra está cargada.
+     LYR_LINES        → array { time:number, text:string } si synced.
+     LYR_PLAIN        → string plana si no hay synced.
+     LYR_LAST_ACTIVE  → índice del último .lyrics-line activo (evita
+                        re-querys cada tick si no cambió).
+     LYR_OPEN         → true cuando la ventana está visible.
+     LYR_SYNC_TIMER   → setInterval que actualiza el highlight.
+   ════════════════════════════════════════════════════════════════ */
+(function lyricsModule() {
+    let LYR_CURRENT_VID = null;
+    let LYR_LINES       = null;
+    let LYR_PLAIN       = null;
+    let LYR_LAST_ACTIVE = -1;
+    let LYR_OPEN        = false;
+    let LYR_SYNC_TIMER  = null;
+
+    const win   = document.getElementById('lyrics-window');
+    const btn   = document.getElementById('btn-lyrics');
+    const close = document.getElementById('lyrics-close');
+    const linesEl  = document.getElementById('lyrics-lines');
+    const emptyEl  = document.getElementById('lyrics-empty');
+    const trackEl  = document.getElementById('lyrics-track');
+    const statusEl = document.getElementById('lyrics-status');
+    const scrollEl = document.getElementById('lyrics-scroll');
+
+    /* Drag + resize vía WindowManager del desktop. Si aún no existe
+       (reproductor partial cargado antes que WindowManager) reintenta
+       hasta que esté listo. setup(id, false) → drag por title-bar +
+       resize por las 8 esquinas/lados. */
+    var __lyricsWmTries = 0;
+    function setupLyricsWindowManager() {
+        if (window.WindowManager && typeof window.WindowManager.setup === 'function') {
+            window.WindowManager.setup('lyrics-window', false);
+            return;
+        }
+        if (__lyricsWmTries++ < 30) setTimeout(setupLyricsWindowManager, 200);
+    }
+    setupLyricsWindowManager();
+
+    /* Minimize / Maximize / Close: wire UI controls.
+         - Minimize → taskbarManager.minimize (oculta + queda en la taskbar).
+         - Maximize → toggle .win-maximized (full-viewport CSS de base.css).
+         - Close   → ocultar + unregister + parar sync. */
+    var minBtn = document.getElementById('lyrics-min');
+    var maxBtn = document.getElementById('lyrics-max');
+    if (minBtn) minBtn.addEventListener('click', function() {
+        if (window.taskbarManager) window.taskbarManager.minimize('lyrics-window');
+    });
+    if (maxBtn) maxBtn.addEventListener('click', function() {
+        if (win.classList.contains('win-maximized')) {
+            win.classList.remove('win-maximized');
+            maxBtn.setAttribute('aria-label', 'Maximize');
+        } else {
+            win.classList.add('win-maximized');
+            maxBtn.setAttribute('aria-label', 'Restore');
+        }
+    });
+
+    function open() {
+        win.style.display = 'flex';
+        LYR_OPEN = true;
+        /* Registra en la taskbar (o restaura si estaba minimizada). */
+        if (window.taskbarManager) {
+            if (window.taskbarManager.isRegistered('lyrics-window')) {
+                window.taskbarManager.restore('lyrics-window');
+            } else {
+                window.taskbarManager.register('lyrics-window', 'Letra', '🎤', 'flex');
+            }
+        }
+        fetchForCurrent();
+        startSync();
+    }
+    function close_() {
+        win.style.display = 'none';
+        LYR_OPEN = false;
+        if (window.taskbarManager && window.taskbarManager.isRegistered('lyrics-window')) {
+            window.taskbarManager.unregister('lyrics-window');
+        }
+        stopSync();
+    }
+    if (btn)   btn.addEventListener('click', open);
+    if (close) close.addEventListener('click', close_);
+
+    /* Parser LRC: cada línea "[mm:ss.xx]texto". Soporta multi-timestamp
+       por línea ("[01:00.50][02:30.20]coro"). */
+    function parseLRC(lrc) {
+        if (!lrc) return [];
+        const lines = [];
+        lrc.split(/\r?\n/).forEach(raw => {
+            const stamps = [];
+            let rest = raw;
+            const re = /^\s*\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/;
+            let m;
+            while ((m = re.exec(rest))) {
+                const min = +m[1], sec = +m[2], ms = +(m[3] || 0);
+                stamps.push(min * 60 + sec + ms / Math.pow(10, (m[3] || '').length));
+                rest = rest.slice(m[0].length);
+            }
+            const text = rest.trim();
+            if (stamps.length && text) {
+                stamps.forEach(t => lines.push({ time: t, text }));
+            }
+        });
+        lines.sort((a, b) => a.time - b.time);
+        return lines;
+    }
+
+    function getCurrentTrack() {
+        if (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number') {
+            return playlist[currentTrack];
+        }
+        return null;
+    }
+
+    function setStatus(s) { if (statusEl) statusEl.textContent = s || ''; }
+
+    async function fetchForCurrent() {
+        const tr = getCurrentTrack();
+        if (!tr || !tr.videoId) {
+            renderEmpty('No hay canción en reproducción.');
+            return;
+        }
+        /* Si ya tenemos la letra de esta canción, no re-fetchear. */
+        if (tr.videoId === LYR_CURRENT_VID && (LYR_LINES || LYR_PLAIN)) return;
+        LYR_CURRENT_VID = tr.videoId;
+        LYR_LINES = null;
+        LYR_PLAIN = null;
+        LYR_LAST_ACTIVE = -1;
+        trackEl.textContent = (tr.title || '') + (tr.artist ? ' — ' + tr.artist : '');
+        renderEmpty('Buscando letra…');
+        setStatus('');
+        let dur = 0;
+        try { dur = (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getDuration) ? Math.floor(ytPlayer.getDuration() || 0) : 0; } catch (_) {}
+        const qs = new URLSearchParams({
+            title: tr.title || '',
+            artist: tr.artist || '',
+            duration: String(dur),
+        });
+        try {
+            const r = await fetch('assets/music/api.php?action=get-lyrics&' + qs.toString(), { credentials: 'same-origin' });
+            const d = await r.json();
+            if (!d || !d.ok || !d.found) {
+                renderEmpty('🥲 No se encontró letra para esta canción.');
+                return;
+            }
+            /* Asegúrate de que aún es la canción actual (race en cambio rápido). */
+            if (LYR_CURRENT_VID !== tr.videoId) return;
+            if (d.synced) {
+                LYR_LINES = parseLRC(d.synced);
+                if (LYR_LINES.length) renderSynced();
+                else { LYR_PLAIN = d.plain; renderPlain(); }
+            } else if (d.plain) {
+                LYR_PLAIN = d.plain;
+                renderPlain();
+            } else {
+                renderEmpty('🥲 No se encontró letra para esta canción.');
+            }
+            if (d.matched) {
+                setStatus(LYR_LINES ? '⏱ sincronizada' : 'sin sync');
+            }
+        } catch (e) {
+            renderEmpty('Error de red al buscar la letra.');
+        }
+    }
+
+    function renderEmpty(msg) {
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = msg;
+        linesEl.innerHTML = '';
+    }
+    function renderSynced() {
+        emptyEl.style.display = 'none';
+        linesEl.innerHTML = LYR_LINES.map((ln, i) =>
+            `<div class="lyrics-line" data-i="${i}">${escapeHtmlSimple(ln.text)}</div>`
+        ).join('');
+    }
+    function renderPlain() {
+        emptyEl.style.display = 'none';
+        linesEl.innerHTML = '<div style="text-align:center;">' +
+            escapeHtmlSimple(LYR_PLAIN).replace(/\n/g, '<br>') + '</div>';
+    }
+    function escapeHtmlSimple(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* SYNC: cada 250ms busca la línea actual según ytPlayer.currentTime
+       y aplica .active. Auto-scroll para mantenerla a la vista. */
+    function tick() {
+        if (!LYR_OPEN || !LYR_LINES || !LYR_LINES.length) return;
+        let t = 0;
+        try {
+            if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.getCurrentTime) {
+                t = ytPlayer.getCurrentTime() || 0;
+            }
+        } catch (_) {}
+        /* Búsqueda binaria de la última línea cuyo time <= t. */
+        let lo = 0, hi = LYR_LINES.length - 1, idx = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (LYR_LINES[mid].time <= t) { idx = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        if (idx === LYR_LAST_ACTIVE) return;
+        LYR_LAST_ACTIVE = idx;
+        const all = linesEl.querySelectorAll('.lyrics-line');
+        all.forEach((el, i) => {
+            el.classList.remove('active', 'past');
+            if (i < idx) el.classList.add('past');
+            if (i === idx) el.classList.add('active');
+        });
+        const activeEl = all[idx];
+        if (activeEl) {
+            const top = activeEl.offsetTop - scrollEl.clientHeight / 2 + activeEl.clientHeight / 2;
+            scrollEl.scrollTo({ top, behavior: 'smooth' });
+        }
+    }
+    function startSync() { stopSync(); LYR_SYNC_TIMER = setInterval(tick, 250); }
+    function stopSync()  { if (LYR_SYNC_TIMER) { clearInterval(LYR_SYNC_TIMER); LYR_SYNC_TIMER = null; } }
+
+    /* Hook al cambio de track: si el panel está abierto, re-fetch. */
+    const _origUpdateTrackUI = (typeof updateTrackUI === 'function') ? updateTrackUI : null;
+    if (_origUpdateTrackUI) {
+        window.updateTrackUI = function(idx) {
+            _origUpdateTrackUI(idx);
+            if (LYR_OPEN) fetchForCurrent();
+        };
+    }
 })();
 <?php endif; ?>
 </script>
