@@ -184,13 +184,17 @@ case 'save-recordatorio': {
     if (!$titulo || !$fecha) jsonError('Datos incompletos');
     $periodicidad = in_array($b['periodicidad'] ?? '', ['anual','mensual','semanal'])
                     ? $b['periodicidad'] : 'ninguna';
-    /* A4: unificamos parejaId con NULL como hace `momentos`. Antes
-       guardaba 0 literal y rompía joins / queries consistentes. */
+    /* `recordatorios.pareja_id` es `NOT NULL DEFAULT 0`. Si pasamos NULL,
+       MySQL con sql_mode=STRICT_TRANS_TABLES (default en Hostinger y la
+       mayoría de hosts gestionados) rechaza el INSERT y devuelve 500.
+       En local sin strict mode el NULL se coercía a 0 → bug invisible.
+       Las queries SELECT (get-recordatorios, purge) ya cubren ambos casos
+       con `pareja_id = 0 OR pareja_id IS NULL`, así que pasar 0 es safe. */
     $pid = (int)($b['pareja_id'] ?? 0);
     $stmt = $pdo->prepare("INSERT INTO recordatorios (usuario_id, pareja_id, titulo, fecha, descripcion, periodicidad)
                            VALUES (?, ?, ?, ?, ?, ?)");
     $stmt->execute([
-        $userId, $pid > 0 ? $pid : null, $titulo, $fecha,
+        $userId, $pid > 0 ? $pid : 0, $titulo, $fecha,
         trim($b['descripcion'] ?? ''), $periodicidad,
     ]);
     jsonResponse(['ok' => true]);
