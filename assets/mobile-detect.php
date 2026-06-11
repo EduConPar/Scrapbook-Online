@@ -25,6 +25,27 @@ if (!function_exists('isMobileDevice')) {
     }
 }
 
+if (!function_exists('isTabletDevice')) {
+    /* Detección de tablet (iPad, Android tablet, Kindle, Surface no-touch…).
+       Las tablets entran al MISMO escritorio que el PC pero se les sirve un
+       viewport responsive + tablet.css. NO redirige a mobile.
+       Override:
+         - ?tablet=1 / ?tablet=0 en la URL    → fuerza on/off
+         - cookie force_tablet=1              → fuerza on
+       Útil para depurar en PC. */
+    function isTabletDevice(): bool {
+        if (isset($_GET['tablet'])) return $_GET['tablet'] === '1';
+        if (!empty($_COOKIE['force_tablet']) && $_COOKIE['force_tablet'] === '1') return true;
+        $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+        if ($ua === '') return false;
+        /* iPad/Android tablet/Kindle/Silk/PlayBook. "Android" sin "Mobile" en
+           el UA es la convención que Google indica para tablets. */
+        if (preg_match('/iPad|Tablet|Kindle|Silk|PlayBook/i', $ua)) return true;
+        if (preg_match('/Android/i', $ua) && !preg_match('/Mobile/i', $ua)) return true;
+        return false;
+    }
+}
+
 if (!function_exists('setLongSessionCookie')) {
     /* Llamar SIEMPRE antes de session_start(). Marca la cookie de sesión
        como persistente 30 días para que, una vez logueado en PWA o

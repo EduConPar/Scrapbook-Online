@@ -148,11 +148,16 @@ if ($activeTheme !== '') {
     if ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) $startIcon = $tSi;
 }
 
+/* URL absoluta del proyecto. Los stubs viven en /desktops/<label>-desktop.php,
+   así que dirname(dirname(SCRIPT_NAME)) sube un nivel hasta la raíz. La
+   necesitamos porque las url() en inline style del <body> NO respetan
+   <base href> de forma consistente (Chrome resuelve contra location.href
+   → /desktops/assets/... → 404). Con URL absoluta el navegador no tiene
+   que adivinar. */
+$_projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_NAME']))), '/') . '/';
 $bodyStyles = [];
-if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
-/* URL relativa para que el <base href="../"> del <head> la resuelva contra
-   la raíz del proyecto, no contra /desktops/ donde vive el stub. */
-if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$startIcon}')";
+if ($wallpaper) $bodyStyles[] = "background-image:url('{$_projectBaseUrl}{$wallpaper}')";
+if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$_projectBaseUrl}{$startIcon}')";
 $wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $_iconTheme = 'default';
@@ -188,16 +193,26 @@ function _appIconExists(string $rel): bool {
     $melon = preg_replace('#/appIcons/#', '/appIcons/Melon/', $rel, 1);
     return file_exists(__DIR__ . '/' . $melon);
 }
+
+/* Flag global: lo leen tanto <html data-tablet>, el <meta viewport> como
+   el <link rel="stylesheet" href="tablet.css">. Calculado UNA vez aquí. */
+$_isTablet = isTabletDevice();
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es"<?php echo $_isTablet ? ' data-tablet="1"' : ''; ?>>
 <head>
     <meta charset="UTF-8">
-    <!-- Tablets: layout fijo a 1280 → el navegador lo escala para encajar
+    <?php if ($_isTablet): ?>
+    <!-- Tablet: viewport responsive al ancho real del dispositivo. La shell
+         + ventanas se adaptan vía body.is-tablet + assets/css/tablet.css. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <?php else: ?>
+    <!-- PC: layout fijo a 1280 → el navegador lo escala para encajar
          en el ancho del dispositivo. Pinch-zoom queda habilitado para
          que el usuario amplíe los elementos pequeños de Win98 si los
          dedos no caben. -->
     <meta name="viewport" content="width=1280, user-scalable=yes">
+    <?php endif; ?>
     <title><?php echo htmlspecialchars($desktopLabel); ?> - Escritorio</title>
     <!-- Los stubs <label>-desktop.php viven en /desktops/ pero todas las
          rutas relativas (assets/, apps/, logout.php) apuntan a la raíz.
@@ -228,9 +243,19 @@ function _appIconExists(string $rel): bool {
     <!-- Swap de packs de iconos (lee localStorage.iconPack). DEBE cargar
          antes de cualquier render que dependa de iconos. -->
     <script src="assets/js/icon-pack.js"></script>
+    <?php if ($_isTablet): ?>
+    <!-- En tablet, los iconos del escritorio y mascota usan long-press
+         para abrir su menú contextual (sustituto del click derecho). -->
+    <script src="assets/js/longpress.js"></script>
+    <?php endif; ?>
     <link rel="stylesheet" href="assets/css/reproductor.css">
     <link rel="stylesheet" href="assets/css/perfil.css">
     <link rel="stylesheet" href="assets/css/themes.css">
+    <?php if ($_isTablet): ?>
+    <!-- Overrides para tablets (taskbar, ventanas, hit-targets). Va DESPUÉS
+         de themes.css para que sus reglas ganen sin !important. -->
+    <link rel="stylesheet" href="assets/css/tablet.css">
+    <?php endif; ?>
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
@@ -319,13 +344,41 @@ function _appIconExists(string $rel): bool {
     $bodyClasses = [];
     if ($activeThemeClass) $bodyClasses[] = $activeThemeClass;
     if ($startIcon) $bodyClasses[] = 'has-start-icon';
+    if ($_isTablet)  $bodyClasses[] = 'is-tablet';
     echo htmlspecialchars(implode(' ', $bodyClasses));
 ?>"<?php echo $wallpaperStyle ? " style=\"{$wallpaperStyle}\"" : ''; ?>>
 
 <div id="page-enter"></div>
 
+<?php if ($_isTablet): ?>
+<script>
+/* --vh-fix: arregla el 100vh "saltarín" de iOS Safari (la barra de URL
+   aparece/desaparece y cambia innerHeight). tablet.css usa svh nativo
+   donde puede; este sync es el fallback. */
+(function() {
+    function syncVh() {
+        document.documentElement.style.setProperty('--vh-fix', (window.innerHeight * 0.01) + 'px');
+    }
+    syncVh();
+    window.addEventListener('resize', syncVh, { passive: true });
+    window.addEventListener('orientationchange', syncVh, { passive: true });
+})();
+/* Marca tablet en JS para que las apps en iframe puedan detectar a
+   través de parent (cuando son same-origin). */
+window.__IS_TABLET__ = true;
+</script>
+<?php endif; ?>
+
 <script>
     window.DesktopParejaId = <?php echo (int)$parejaId; ?>;
+/* Helper: añade `tablet=1` al iframe src cuando el shell está en modo
+   tablet. Los apps en iframe heredan así la señal y pueden decidir su
+   propio viewport/layout sin volver a olfatear el UA. */
+window.appSrc = function(path) {
+    if (!window.__IS_TABLET__) return path;
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return path + sep + 'tablet=1';
+};
 window.DesktopState = { icons: {}, folders: [], player: null, loaded: false, _readyCbs: [] };
 window.DesktopState.whenReady = function(cb){
     if (this.loaded) cb();
@@ -344,7 +397,7 @@ window.DesktopState.whenReady = function(cb){
 </ul>
 
 <!-- FOLDER WINDOW TEMPLATE -->
-<div class="window" id="folder-window-template" data-no-auto-z style="display:none; position:fixed; width:460px; height:340px; flex-direction:column;">
+<div class="window win-folder-template" id="folder-window-template" data-no-auto-z style="display:none; position:fixed; flex-direction:column;">
     <div class="title-bar">
         <div class="title-bar-text"><?php echo appTitleIcon('folderIcon', '📁'); ?>Carpeta</div>
         <div class="title-bar-controls">
@@ -375,7 +428,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL cambiar contraseña -->
-<div class="window" id="change-password-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed; width:340px;">
+<div class="window win-modal-narrow" id="change-password-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed;">
     <div class="title-bar">
         <div class="title-bar-text">🔑 Cambiar contraseña</div>
         <div class="title-bar-controls">
@@ -532,8 +585,8 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MASCOTA WINDOW -->
-<div class="window" id="mascota-window"
-     style="display:none; position:fixed; left:15vw; top:8vh; width:380px; height:480px; z-index:550; flex-direction:column;">
+<div class="window win-mascota" id="mascota-window"
+     style="display:none; position:fixed; left:15vw; top:8vh; z-index:550; flex-direction:column;">
     <div class="title-bar" id="mascota-titlebar">
         <div class="title-bar-text"><?php echo appTitleIcon('mascotaIcon', '🐾'); ?>Mascota</div>
         <div class="title-bar-controls">
@@ -680,7 +733,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- KO-FI WINDOW (lo abre la app de Tienda vía postMessage; sin icono propio) -->
-<div class="window" id="kofi-window" style="display:none; position:fixed; left:32vw; top:8vh; width:36vw; height:80vh; min-width:380px; z-index:560; flex-direction:column;">
+<div class="window win-kofi" id="kofi-window" style="display:none; position:fixed; left:32vw; top:8vh; z-index:560; flex-direction:column;">
     <div class="title-bar" id="kofi-titlebar">
         <div class="title-bar-text">☕ Donar (Ko-fi)</div>
         <div class="title-bar-controls">
@@ -835,7 +888,12 @@ window.addEventListener('message', function(e) {
     } else if (e.data.type === 'wallpaper-changed') {
         var wp = e.data.wallpaper || '';
         if (wp) {
-            document.body.style.backgroundImage = "url('" + wp + "?t=" + Date.now() + "')";
+            /* Mismo motivo que en start-icon-changed: resolver contra
+               document.baseURI (respeta <base href="../">) — si dejamos
+               la URL relativa, el navegador la resuelve contra
+               location.href que apunta a /desktops/ y da 404. */
+            var wpAbs = new URL(wp, document.baseURI).href;
+            document.body.style.backgroundImage = "url('" + wpAbs + "?t=" + Date.now() + "')";
         } else {
             document.body.style.backgroundImage = '';
         }
@@ -1490,7 +1548,7 @@ window.notifSystem = (function() {
     var archLoaded = false;
 
     document.getElementById('archive-icon').addEventListener('dblclick', function() {
-        if (!archLoaded) { archFrame.src = 'apps/melonarchive.php'; archLoaded = true; }
+        if (!archLoaded) { archFrame.src = appSrc('apps/melonarchive.php'); archLoaded = true; }
         if (taskbarManager.isRegistered('archive-window')) {
             taskbarManager.restore('archive-window');
         } else {
@@ -1512,7 +1570,7 @@ window.notifSystem = (function() {
     var calLoaded = false;
 
     document.getElementById('calendar-icon').addEventListener('dblclick', function() {
-        if (!calLoaded) { calIframe.src = 'apps/calendario.php'; calLoaded = true; }
+        if (!calLoaded) { calIframe.src = appSrc('apps/calendario.php'); calLoaded = true; }
         if (taskbarManager.isRegistered('calendar-window')) {
             taskbarManager.restore('calendar-window');
         } else {
@@ -1532,7 +1590,7 @@ window.notifSystem = (function() {
     var temasFrame  = document.getElementById('temas-frame');
     var temasLoaded = false;
     function openTemas() {
-        if (!temasLoaded) { temasFrame.src = 'apps/temas.php'; temasLoaded = true; }
+        if (!temasLoaded) { temasFrame.src = appSrc('apps/temas.php'); temasLoaded = true; }
         if (taskbarManager.isRegistered('temas-window')) {
             taskbarManager.restore('temas-window');
         } else {
@@ -1579,7 +1637,7 @@ window.notifSystem = (function() {
     var dndLoaded = false;
 
     document.getElementById('dnd-icon').addEventListener('dblclick', function() {
-        if (!dndLoaded) { dndIframe.src = 'apps/dnd.php'; dndLoaded = true; }
+        if (!dndLoaded) { dndIframe.src = appSrc('apps/dnd.php'); dndLoaded = true; }
         if (taskbarManager.isRegistered('dnd-window')) {
             taskbarManager.restore('dnd-window');
         } else {
@@ -1600,7 +1658,7 @@ window.notifSystem = (function() {
     var galLoaded = false;
 
     document.getElementById('galeria-icon').addEventListener('dblclick', function() {
-        if (!galLoaded) { galIframe.src = 'apps/galeria.php'; galLoaded = true; }
+        if (!galLoaded) { galIframe.src = appSrc('apps/galeria.php'); galLoaded = true; }
         if (taskbarManager.isRegistered('galeria-window')) {
             taskbarManager.restore('galeria-window');
         } else {
@@ -1650,7 +1708,7 @@ window.notifSystem = (function() {
 
     document.getElementById('tienda-icon').addEventListener('dblclick', function() {
         if (!tiendaLoaded) {
-            tiendaIframe.src = 'apps/tienda.php';
+            tiendaIframe.src = appSrc('apps/tienda.php');
             tiendaLoaded = true;
         } else {
             /* Iframe ya estaba cargado: pedimos al iframe que refresque su
@@ -3106,7 +3164,7 @@ window.notifSystem = (function() {
     /* Abre la ventana de gestión */
     function openMascotaWindow() {
         if (!mascotaLoaded) {
-            mascotaFrame.src = 'apps/mascota.php';
+            mascotaFrame.src = appSrc('apps/mascota.php');
             mascotaLoaded = true;
         }
         if (taskbarManager.isRegistered('mascota-window')) {
@@ -3124,7 +3182,7 @@ window.notifSystem = (function() {
         mascotaLoaded = false;
         var win = document.getElementById('mascota-window');
         if (win && win.style.display && win.style.display !== 'none') {
-            mascotaFrame.src = 'apps/mascota.php?_=' + Date.now();
+            mascotaFrame.src = appSrc('apps/mascota.php?_=' + Date.now());
             mascotaLoaded = true;
         }
     }
@@ -3165,7 +3223,7 @@ window.notifSystem = (function() {
     /** Abre la ventana del Wrapped cargando el iframe.
      *  @param {boolean} dev - si true, carga con ?dev=1 (todas las plays). */
     function openWrappedWindow(dev) {
-        wrappedFrame.src = 'apps/wrapped.php?_=' + Date.now() + (dev ? '&dev=1' : '');
+        wrappedFrame.src = appSrc('apps/wrapped.php?_=' + Date.now() + (dev ? '&dev=1' : ''));
         if (taskbarManager.isRegistered('wrapped-window')) {
             taskbarManager.restore('wrapped-window');
         } else {
@@ -3528,6 +3586,18 @@ window.notifSystem = (function() {
     document.head.appendChild(script);
 })();
 
+<?php if ($_isTablet): ?>
+/* Long-press → contextmenu en escritorio + mascota. Como el contextmenu
+   sintético burbujea, alcanza todos los handlers registrados (iconos,
+   carpetas, area-vacía-de-desktop, mascota inline-ctx). */
+(function () {
+    if (!window.longPressMenu) return;
+    var desk    = document.getElementById('desktop');
+    var mascota = document.getElementById('mascota-window');
+    if (desk)    longPressMenu.attach(desk);
+    if (mascota) longPressMenu.attach(mascota);
+})();
+<?php endif; ?>
 </script>
 
 </body>

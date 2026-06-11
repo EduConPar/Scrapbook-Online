@@ -88,6 +88,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <script src="../../assets/js/icon-pack.js"></script>
+    <script src="../../assets/js/notif-sound.js"></script>
     <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
     <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">

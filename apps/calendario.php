@@ -1662,23 +1662,27 @@ window.addEventListener('message', function(e) {
             winEl.style.left = nx + 'px';
             winEl.style.top  = ny + 'px';
         }
-        function onMouseUp() { dragging = false; }
-        titleBar.addEventListener('mousedown', onMouseDown);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup',   onMouseUp);
-        /* Soporte táctil básico. */
-        titleBar.addEventListener('touchstart', function(e) {
-            if (e.touches.length !== 1) return;
-            var t = e.touches[0];
-            onMouseDown({ clientX: t.clientX, clientY: t.clientY, button: 0, target: t.target, preventDefault: function(){ e.preventDefault(); } });
-        }, { passive: false });
-        document.addEventListener('touchmove', function(e) {
-            if (!dragging || e.touches.length !== 1) return;
-            var t = e.touches[0];
-            onMouseMove({ clientX: t.clientX, clientY: t.clientY });
-            e.preventDefault();
-        }, { passive: false });
-        document.addEventListener('touchend', onMouseUp);
+        function onMouseUp() { dragging = false; pid = -1; }
+        /* Unificamos mouse + touch via Pointer Events: una sola ruta,
+           setPointerCapture mantiene los moves aunque el dedo salga del
+           título. touch-action:none evita que iOS Safari haga pan/zoom
+           durante el drag. */
+        var pid = -1;
+        titleBar.style.touchAction = 'none';
+        titleBar.addEventListener('pointerdown', function(e) {
+            pid = e.pointerId;
+            try { titleBar.setPointerCapture(pid); } catch (_) {}
+            onMouseDown(e);
+        });
+        titleBar.addEventListener('pointermove', function(e) {
+            if (e.pointerId !== pid) return;
+            onMouseMove(e);
+        });
+        titleBar.addEventListener('pointerup', function(e) {
+            if (e.pointerId !== pid) return;
+            onMouseUp();
+        });
+        titleBar.addEventListener('pointercancel', onMouseUp);
     }
     window._calMakeDraggable = makeDraggable;
 

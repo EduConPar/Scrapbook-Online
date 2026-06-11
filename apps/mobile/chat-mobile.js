@@ -135,10 +135,25 @@ function displayName(uKey, meta) {
 }
 
 /* ── Carga lista (get-recent-chats) ── */
+/* Baseline para detectar mensajes nuevos. -1 = primer load (no suena). */
+let _prevRecentsTotalUnread = -1;
 async function loadRecents() {
     const d = await apiGet('get-recent-chats');
     if (d && Array.isArray(d.chats)) {
         STATE.chats = d.chats;
+        /* Sumar unread excluyendo el chat abierto — los mensajes que llegan
+           a la conversación activa no deben hacer "ding", el usuario los
+           está viendo. */
+        let total = 0;
+        for (const c of d.chats) {
+            if (STATE.view === 'chat' && c.userKey === STATE.chatWith) continue;
+            total += (c.unread | 0);
+        }
+        if (_prevRecentsTotalUnread >= 0 && total > _prevRecentsTotalUnread
+            && typeof window.playNotifSound === 'function') {
+            window.playNotifSound();
+        }
+        _prevRecentsTotalUnread = total;
     }
     if (STATE.view === 'list') renderList();
     /* Si estoy en chat, refrescar la cabecera (online/nickname). */

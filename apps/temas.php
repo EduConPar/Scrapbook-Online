@@ -35,12 +35,16 @@ if (is_dir($appIconsDir)) {
 }
 
 /* Detecta interfaces instaladas en assets/interfaces/. Cada una es
-   una carpeta con style.css + meta.json + (opcional) preview.png. */
+   una carpeta con style.css + meta.json + (opcional) preview.png.
+   Las interfaces "premium" (con fila en tienda_items categoria='interfaces'
+   y precio>0) se ocultan al usuario hasta que las compre en la tienda. */
 require_once dirname(__DIR__) . '/assets/php/active-interface.php';
-$interfacePacks = listInterfaces();
+require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+require_once dirname(__DIR__) . '/db.php';
+/** @var PDO $pdo */
+$interfacePacks = listInterfacesForUser($pdo, userIdByKey($userKey));
 
 /* Tema activo del usuario */
-require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';

@@ -241,6 +241,42 @@ html, .mh-body {
 .mh-row:active .mh-row-chev { color: var(--accent-text, #fff); }
 .mh-row.active .mh-row-chev { color: var(--accent-text, #fff); }
 
+/* Badge de notificaciones sin leer al lado del nombre de la app del
+   launcher. Pintado por JS de mobile.php a partir de get-unread-chats.
+   Hidden por defecto — pasa a display:inline-flex cuando hay > 0.
+
+   Colores: --accent / --accent-text del tema activo del usuario. Si el
+   tema no los define (poco probable), caemos al rojo clásico para que
+   el badge no se pierda. */
+.mh-row-badge {
+    display: none;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 6px;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent, #c00);
+    color: var(--accent-text, #fff);
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 1;
+    border-radius: 9px;
+    flex-shrink: 0;
+    /* Pequeño contorno con el bezel oscuro del tema para que destaque
+       sobre fondos del mismo tono que el accent. */
+    box-shadow: 0 0 0 1px var(--bezel-dark-2, rgba(0,0,0,0.3));
+}
+.mh-row-badge.is-on { display: inline-flex; }
+/* En el row pulsado el fondo pasa al accent → el badge queda mismo color
+   que el fondo. Invertimos: badge usa --win-bg / --text para destacar. */
+.mh-row:active .mh-row-badge,
+.mh-row.active .mh-row-badge {
+    background: var(--win-bg, #fff);
+    color: var(--text, #000);
+    box-shadow: 0 0 0 1px var(--bezel-dark-2, rgba(0,0,0,0.3));
+}
+
 /* ── Status bar Win98 al pie con accesos rápidos ── */
 .mh-statusbar {
     display: flex;

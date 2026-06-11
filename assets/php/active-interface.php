@@ -64,6 +64,50 @@ function listInterfaces(): array {
     return $out;
 }
 
+/* Variante per-user: oculta las interfaces "premium" (con fila en
+   `tienda_items` categoria='interfaces' y precio>0) que el usuario NO
+   haya comprado todavía.
+
+   Lógica del gate:
+     - Sin fila en tienda_items para ese slug → interfaz LIBRE, siempre se ve.
+     - Fila con precio=0 → libre, siempre se ve.
+     - Fila con precio>0 y compra en tienda_compras → se ve.
+     - Fila con precio>0 y SIN compra → oculta.
+
+   `win98` (no tiene fila) sigue siempre disponible. `kawaii` ("MelonOS
+   Overdose") es premium: solo aparece tras comprarla. La que el user
+   tenga activa cuando se gatea (active_interface_slug = 'kawaii') sigue
+   funcionando — el shell la carga vía getActiveInterface(); solo deja
+   de ofrecerse en la app de Temas. */
+function listInterfacesForUser(PDO $pdo, ?int $userId): array {
+    $all = listInterfaces();
+    if ($userId === null) return $all;
+    /* Slugs con fila premium activa en la tienda. */
+    $stmt = $pdo->prepare("SELECT slug, precio FROM tienda_items
+                           WHERE categoria = 'interfaces' AND activo = 1 AND slug <> ''");
+    $stmt->execute();
+    $shopRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$shopRows) return $all;
+    /* Compras del usuario indexadas por slug. */
+    $stmt = $pdo->prepare("SELECT i.slug
+                           FROM tienda_compras c
+                           JOIN tienda_items i ON i.id = c.item_id
+                           WHERE c.user_id = ? AND i.categoria = 'interfaces'");
+    $stmt->execute([$userId]);
+    $owned = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $s) $owned[$s] = true;
+    /* Indexar items por slug para decidir gating. */
+    $premiumBySlug = [];
+    foreach ($shopRows as $r) {
+        if ((int)$r['precio'] > 0) $premiumBySlug[$r['slug']] = true;
+    }
+    return array_values(array_filter($all, function($p) use ($premiumBySlug, $owned) {
+        $slug = $p['name'];
+        if (!isset($premiumBySlug[$slug])) return true; /* libre */
+        return isset($owned[$slug]);
+    }));
+}
+
 /* Devuelve el nombre de la interfaz activa (de la cookie o el default).
    Valida que la carpeta exista en disco; si no, cae a 'win98'. */
 function getActiveInterface(): string {

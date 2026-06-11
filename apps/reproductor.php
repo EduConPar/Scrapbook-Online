@@ -1474,13 +1474,16 @@ const ytScript = document.createElement('script');
 ytScript.src = 'https://www.youtube.com/iframe_api';
 document.head.appendChild(ytScript);
 
-/* Arrastrar ventana */
+/* Arrastrar ventana del reproductor — Pointer Events para mouse+touch. */
 (function() {
     const titlebar = document.getElementById('player-titlebar');
-    let dragging = false, ox, oy;
-    titlebar.addEventListener('mousedown', function(e) {
+    let dragging = false, ox, oy, pid = -1;
+    titlebar.style.touchAction = 'none';
+    titlebar.addEventListener('pointerdown', function(e) {
         if (e.target.tagName === 'BUTTON') return;
         dragging = true;
+        pid = e.pointerId;
+        try { titlebar.setPointerCapture(pid); } catch (_) {}
         const rect = playerWindow.getBoundingClientRect();
         playerWindow.style.left   = rect.left + 'px';
         playerWindow.style.top    = rect.top  + 'px';
@@ -1489,12 +1492,14 @@ document.head.appendChild(ytScript);
         ox = e.clientX - rect.left;
         oy = e.clientY - rect.top;
     });
-    document.addEventListener('mousemove', function(e) {
-        if (!dragging) return;
+    titlebar.addEventListener('pointermove', function(e) {
+        if (!dragging || e.pointerId !== pid) return;
         playerWindow.style.left = (e.clientX - ox) + 'px';
         playerWindow.style.top  = (e.clientY - oy) + 'px';
     });
-    document.addEventListener('mouseup', () => { dragging = false; });
+    function end(e){ if (e && e.pointerId !== pid) return; dragging = false; pid = -1; }
+    titlebar.addEventListener('pointerup', end);
+    titlebar.addEventListener('pointercancel', end);
 })();
 
 var openAddDialog = null;
@@ -2707,24 +2712,29 @@ var addTrackCallback = null;
         document.getElementById('collab-cancel').addEventListener('click', function() { collabDlg.style.display = 'none'; });
     })();
 
-    /* Drag window */
+    /* Drag window (Pointer Events para tablet/mouse). */
     (function() {
         var tb = document.getElementById('pl-titlebar');
-        var dragging = false, ox, oy;
-        tb.addEventListener('mousedown', function(e) {
+        var dragging = false, ox, oy, pid = -1;
+        tb.style.touchAction = 'none';
+        tb.addEventListener('pointerdown', function(e) {
             if (e.target.tagName === 'BUTTON') return;
             dragging = true;
+            pid = e.pointerId;
+            try { tb.setPointerCapture(pid); } catch (_) {}
             var r = editor.getBoundingClientRect();
             editor.style.left = r.left + 'px'; editor.style.top = r.top + 'px';
             editor.style.transform = 'none';
             ox = e.clientX - r.left; oy = e.clientY - r.top;
         });
-        document.addEventListener('mousemove', function(e) {
-            if (!dragging) return;
+        tb.addEventListener('pointermove', function(e) {
+            if (!dragging || e.pointerId !== pid) return;
             editor.style.left = (e.clientX - ox) + 'px';
             editor.style.top  = (e.clientY - oy) + 'px';
         });
-        document.addEventListener('mouseup', function() { dragging = false; });
+        function end(e){ if (e && e.pointerId !== pid) return; dragging = false; pid = -1; }
+        tb.addEventListener('pointerup', end);
+        tb.addEventListener('pointercancel', end);
     })();
 
     refreshPlaylists = loadPlaylists;

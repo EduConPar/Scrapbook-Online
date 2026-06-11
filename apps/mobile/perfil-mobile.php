@@ -171,6 +171,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         window.__ICON_PACK_OVERRIDE = <?= json_encode($_mobileViewingKey !== '' ? $_lookIconPack : null) ?>;
     </script>
     <script src="../../assets/js/icon-pack.js"></script>
+    <script src="../../assets/js/notif-sound.js"></script>
     <?php
         require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php";
         emitInterfaceCss("../../");
@@ -3597,12 +3598,22 @@ function togglePostLike(post, postEl) {
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
-        if (d && d.ok && Array.isArray(d.likes)) {
-            post.likes = d.likes;
-            var btn = postEl.querySelector('[data-act="like"]');
-            var liked = d.likes.indexOf(USER_KEY) !== -1;
+        /* La API responde { ok, liked: bool, count: int }, no un array
+           `likes`. El check antiguo Array.isArray(d.likes) siempre fallaba
+           y el UI no se refrescaba. Reconstruimos post.likes localmente
+           a partir de `liked` para que el próximo re-render mantenga el
+           estado. */
+        if (!d || !d.ok) return;
+        var liked = !!d.liked;
+        var count = d.count | 0;
+        if (!Array.isArray(post.likes)) post.likes = [];
+        var idx = post.likes.indexOf(USER_KEY);
+        if (liked && idx === -1)        post.likes.push(USER_KEY);
+        else if (!liked && idx !== -1)  post.likes.splice(idx, 1);
+        var btn = postEl.querySelector('[data-act="like"]');
+        if (btn) {
             btn.classList.toggle('is-liked', liked);
-            btn.textContent = (liked ? '❤' : '♡') + ' ' + d.likes.length;
+            btn.textContent = (liked ? '❤' : '♡') + ' ' + count;
         }
     })
     .catch(function(){});
@@ -4168,6 +4179,9 @@ document.getElementById('pf-chat-btn').addEventListener('click', function(){
    cada avatar de amigo en Social (per-user). "9+" si supera 9. */
 
 var UNREAD_POLL_MS = 10000;
+/* Baseline para detectar mensajes NUEVOS. -1 = primer load → no suena
+   por la cuenta inicial. Solo subidas posteriores hacen play. */
+var _prevChatUnreadTotal = -1;
 
 function loadUnreadChats() {
     fetch(API + '?action=get-unread-chats', { credentials: 'same-origin' })
@@ -4180,6 +4194,17 @@ function loadUnreadChats() {
                last_seen, pero localmente lo elimino ya para feedback inmediato. */
             if (CHAT.withUser && counts[CHAT.withUser]) delete counts[CHAT.withUser];
             STATE.unreadChats = counts;
+            /* Sonido al subir el total (excluido el chat abierto, ya borrado
+               arriba). El chat abierto no dispara sonido — está en vivo. */
+            var total = 0;
+            for (var k in counts) {
+                if (Object.prototype.hasOwnProperty.call(counts, k)) total += counts[k] | 0;
+            }
+            if (_prevChatUnreadTotal >= 0 && total > _prevChatUnreadTotal
+                && typeof window.playNotifSound === 'function') {
+                window.playNotifSound();
+            }
+            _prevChatUnreadTotal = total;
             renderUnreadBadges();
         })
         .catch(function(){});
@@ -4330,13 +4355,23 @@ loadUnreadChats = function() {
             var counts = d.counts || {};
             if (CHAT.withUser && counts[CHAT.withUser]) delete counts[CHAT.withUser];
             /* Detect deltas — solo nuevos mensajes desde el último poll. */
+            var anyNew = false;
             Object.keys(counts).forEach(function(k){
                 var prev = LAST_UNREAD[k] || 0;
                 var curr = counts[k] || 0;
-                if (curr > prev && document.visibilityState !== 'visible') {
-                    showForegroundNotification(k, curr - prev);
+                if (curr > prev) {
+                    anyNew = true;
+                    if (document.visibilityState !== 'visible') {
+                        showForegroundNotification(k, curr - prev);
+                    }
                 }
             });
+            /* Sonido aunque la pestaña sí esté visible — el throttle del
+               helper colapsa con el del polling original si ambos disparan. */
+            if (anyNew && Object.keys(LAST_UNREAD).length
+                && typeof window.playNotifSound === 'function') {
+                window.playNotifSound();
+            }
             LAST_UNREAD = Object.assign({}, counts);
             STATE.unreadChats = counts;
             renderUnreadBadges();

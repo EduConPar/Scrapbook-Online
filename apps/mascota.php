@@ -8,8 +8,11 @@
 @ini_set('display_errors', '0');
 session_start();
 require_once __DIR__ . '/../assets/config.php';
+require_once __DIR__ . '/../assets/mobile-detect.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../assets/themes/theme-helpers.php';
+
+$_mascotaIsTablet = isTabletDevice();
 
 /* ── Auth ─────────────────────────────────────────────────────── */
 if (empty($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
@@ -117,7 +120,11 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <?php if ($_mascotaIsTablet): ?>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <?php else: ?>
     <meta name="viewport" content="width=1024, user-scalable=yes">
+    <?php endif; ?>
     <title>Mascota</title>
     <script src="../assets/js/icon-pack.js"></script>
     <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>

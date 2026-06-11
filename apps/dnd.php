@@ -94,26 +94,32 @@ body{
     border:1px inset var(--bezel-dark-2);padding:1px 2px;
 }
 
-/* Tooltip global */
+/* Tooltip global. En tablet (@media hover:none), el :hover se "pega" tras
+   tap → el tooltip quedaba clavado. Lo gateamos para puntero fino y dejamos
+   que la app inserte la etiqueta visible de otro modo en táctil. */
 .has-tip{position:relative;}
-.has-tip:hover::after{
-    content:attr(data-tip);position:absolute;
-    bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);
-    background:var(--warning-bg);color:var(--warning-text);
-    font-size:10px;padding:3px 7px;border-radius:3px;
-    white-space:nowrap;z-index:9999;pointer-events:none;
-    border:1px solid var(--bezel-dark-2);
+@media (hover: hover) and (pointer: fine) {
+    .has-tip:hover::after{
+        content:attr(data-tip);position:absolute;
+        bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);
+        background:var(--warning-bg);color:var(--warning-text);
+        font-size:10px;padding:3px 7px;border-radius:3px;
+        white-space:nowrap;z-index:9999;pointer-events:none;
+        border:1px solid var(--bezel-dark-2);
+    }
 }
 /* Botones pegados al borde superior del iframe → tooltip BAJO el botón
    (si quedan arriba se recortan fuera de la ventana) */
-#dnd-toolbar .has-tip:hover::after,
-#mf-toolbar  .has-tip:hover::after{
-    bottom:auto;
-    top:calc(100% + 4px);
-    /* permitir que tooltips largos hagan wrap en lugar de extenderse a los lados */
-    white-space:normal;
-    max-width:260px;
-    text-align:center;
+@media (hover: hover) and (pointer: fine) {
+    #dnd-toolbar .has-tip:hover::after,
+    #mf-toolbar  .has-tip:hover::after{
+        bottom:auto;
+        top:calc(100% + 4px);
+        /* permitir que tooltips largos hagan wrap en lugar de extenderse a los lados */
+        white-space:normal;
+        max-width:260px;
+        text-align:center;
+    }
 }
 /* Tooltips de los primeros botones de la izquierda → anclar al borde izquierdo
    del botón (en vez de centrar) para que no se corten por la ventana */
@@ -2328,30 +2334,42 @@ function toggleDicePanel(force){
     }
 }
 
-/* Arrastrar la ventana de dados por su barra de título */
+/* Arrastrar la ventana de dados por su barra de título.
+   Pointer Events: una sola ruta para ratón Y touch. setPointerCapture
+   garantiza que pointermove sigue llegando aunque el dedo salga del
+   título (clave en tablets). */
 (function(){
     var panel = document.getElementById('dice-panel');
     var bar   = document.getElementById('dice-titlebar');
     if(!panel || !bar) return;
-    var dragging = false, ox = 0, oy = 0;
-    bar.addEventListener('mousedown', function(e){
+    /* Sin esto, el browser hace pan/zoom durante el drag en táctil. */
+    bar.style.touchAction = 'none';
+    var dragging = false, ox = 0, oy = 0, pid = -1;
+    bar.addEventListener('pointerdown', function(e){
         if(e.target.id === 'dice-close') return;
         dragging = true;
+        pid = e.pointerId;
         var r = panel.getBoundingClientRect();
         ox = e.clientX - r.left; oy = e.clientY - r.top;
         panel.style.right = 'auto';
         panel.style.left = r.left + 'px';
         panel.style.top  = r.top + 'px';
+        try { bar.setPointerCapture(pid); } catch (_) {}
         e.preventDefault();
     });
-    document.addEventListener('mousemove', function(e){
-        if(!dragging) return;
+    bar.addEventListener('pointermove', function(e){
+        if(!dragging || e.pointerId !== pid) return;
         var nx = Math.max(0, Math.min(window.innerWidth  - 60, e.clientX - ox));
         var ny = Math.max(0, Math.min(window.innerHeight - 30, e.clientY - oy));
         panel.style.left = nx + 'px';
         panel.style.top  = ny + 'px';
     });
-    document.addEventListener('mouseup', function(){ dragging = false; });
+    function end(e){
+        if (e && e.pointerId !== pid) return;
+        dragging = false; pid = -1;
+    }
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
 })();
 
 /* ── INIT ── */

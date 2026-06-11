@@ -69,9 +69,12 @@ if (is_dir($appIconsDir)) {
 }
 
 /* Detecta interfaces instaladas en assets/interfaces/. Cada una con
-   style.css + meta.json + (opcional) preview.png. */
+   style.css + meta.json + (opcional) preview.png. Las "premium" se
+   ocultan hasta que se compren en la tienda. */
 require_once dirname(__DIR__, 2) . '/assets/php/active-interface.php';
-$interfacePacks = listInterfaces();
+require_once dirname(__DIR__, 2) . '/db.php';
+/** @var PDO $pdo */
+$interfacePacks = listInterfacesForUser($pdo, userIdByKey($userKey));
 ?>
 <!DOCTYPE html>
 <html lang="es">

@@ -187,6 +187,10 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <!-- Login responsivo: el formulario y el grid de usuarios usan flex/grid
+         y caben tanto en móvil-tablet como en PC. Sin esto, móvil/tablet
+         heredan el viewport default del browser (~980px) y se descuajan. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Scrapbook Melon</title>
     <!-- Favicon vacío para evitar 404 automático cuando el host no tiene
          /favicon.ico (InfinityFree intercepta esos 404 con su redirect). -->

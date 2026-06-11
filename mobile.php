@@ -261,6 +261,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
     <!-- Icon pack swap — debe cargar antes del primer render. -->
     <script src="assets/js/icon-pack.js"></script>
+    <script src="assets/js/notif-sound.js"></script>
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($activeThemeCss); ?>">
@@ -1136,7 +1137,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     ? ' target="_blank" rel="noopener"'
                     : ' data-app-url="' . htmlspecialchars($app['url']) . '" data-app-name="' . htmlspecialchars($app['name']) . '"';
             ?>
-                <a class="mh-row<?= $external ? '' : ' shell-launch' ?>" href="<?= $href ?>"<?= $extra ?>>
+                <a class="mh-row<?= $external ? '' : ' shell-launch' ?>" href="<?= $href ?>"<?= $extra ?> data-app-id="<?= htmlspecialchars(strtolower($app['name'])) ?>">
                     <div class="mh-row-icon">
                         <?php if ($hasIcon): ?>
                             <img src="<?= htmlspecialchars($app['icon']) ?>" alt="">
@@ -1145,6 +1146,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                         <?php endif; ?>
                     </div>
                     <div class="mh-row-name"><?= htmlspecialchars($app['name']) ?></div>
+                    <?php if ($app['name'] === 'Chat'): ?>
+                        <!-- Badge de mensajes sin leer. JS de mobile.php hace
+                             polling a get-unread-chats y le pone .is-on +
+                             texto cuando hay > 0. -->
+                        <span class="mh-row-badge" id="mh-chat-unread-badge" aria-label="mensajes sin leer">0</span>
+                    <?php endif; ?>
                     <div class="mh-row-chev"><?= htmlspecialchars($chev) ?></div>
                 </a>
             <?php endforeach; ?>
@@ -4026,6 +4033,51 @@ window.MuShell = (function(){
     document.addEventListener('visibilitychange', startLyrWatcher);
 })();
 
+/* Polling de mensajes sin leer del chat → badge rojo en la fila "Chat"
+   del launcher. Vive aquí (no en chat-mobile.php) para que el badge esté
+   actualizado siempre que el usuario vuelva al menú, esté donde esté.
+   Reutiliza el mismo endpoint que perfil-mobile (assets/profile/api.php). */
+(function mChatUnreadPoll(){
+    var badge = document.getElementById('mh-chat-unread-badge');
+    if (!badge) return;
+    function setBadge(n) {
+        if (n > 0) {
+            badge.textContent = n > 99 ? '99+' : String(n);
+            badge.classList.add('is-on');
+        } else {
+            badge.classList.remove('is-on');
+        }
+    }
+    var _prevTotal = -1;
+    function poll(){
+        fetch('assets/profile/api.php?action=get-unread-chats', { credentials: 'same-origin' })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok) return;
+                var counts = d.counts || {};
+                var total = 0;
+                for (var k in counts) {
+                    if (Object.prototype.hasOwnProperty.call(counts, k)) total += counts[k] | 0;
+                }
+                /* notif-sound.js: si subió respecto al baseline anterior,
+                   suena (con throttle interno). Salta el primer load. */
+                if (_prevTotal >= 0 && total > _prevTotal
+                    && typeof window.playNotifSound === 'function') {
+                    window.playNotifSound();
+                }
+                _prevTotal = total;
+                setBadge(total);
+            })
+            .catch(function(){});
+    }
+    poll();
+    setInterval(poll, 10000);
+    /* Refresca al volver a la pestaña — bfcache deja el contador stale. */
+    document.addEventListener('visibilitychange', function(){
+        if (document.visibilityState === 'visible') poll();
+    });
+})();
+
 /* Polling de recordatorios próximos (7/2/1 días). Mismo endpoint que
    desktop. Aquí no tenemos notifSystem; reusamos el estilo de toast
    Win98 inferior creando una instancia local con la misma CSS class
@@ -4047,6 +4099,7 @@ window.MuShell = (function(){
             '<div class="toast-title">🔔 Recordatorio</div>' +
             '<div class="toast-msg">' + (rm.titulo || '') + ' ' + whenLabel(rm.threshold) + '</div>';
         document.body.appendChild(t);
+        if (typeof window.playNotifSound === 'function') window.playNotifSound();
         setTimeout(function(){ if (t.parentNode) t.remove(); }, 8000);
     }
     function poll(){

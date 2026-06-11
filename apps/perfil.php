@@ -11,8 +11,10 @@
 // En modo standalone emitimos un documento HTML completo con las CSS
 // del shell. En modo include, sólo el bloque .window#profile-window.
 require_once dirname(__DIR__) . '/assets/config.php';
+require_once dirname(__DIR__) . '/assets/mobile-detect.php';
 
 $_perfilStandalone = !empty($_GET['standalone']) && !isset($desktopLabel);
+$_perfilIsTablet   = isTabletDevice();
 if ($_perfilStandalone) {
     @ini_set('display_errors', '0');
     error_reporting(E_ALL);
@@ -130,7 +132,11 @@ if ($_perfilStandalone) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <?php if ($_perfilIsTablet): ?>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <?php else: ?>
     <meta name="viewport" content="width=1280, user-scalable=yes">
+    <?php endif; ?>
     <title>Perfil<?= $_perfilViewingKey ? ' — ' . htmlspecialchars($loginUsers[$_perfilViewingKey]['label']) : '' ?></title>
     <!-- <base> hace que TODAS las URLs relativas (en HTML, CSS y JS)
          se resuelvan desde la raíz del proyecto. Sin esto, los cientos
@@ -1139,6 +1145,9 @@ var PROFILE_USERS = <?php
 
     function pushItemNotif(notif) {
         if (!window.notifSystem || window.notifSystem.isShown(notif.id) || window.notifSystem.isDismissed(notif.id)) return;
+        /* SSE recibió una notif nueva → sonido inmediato. El throttle
+           interno colapsa con el play del polling si llegan a la vez. */
+        if (typeof playProfileNotifSound === 'function') playProfileNotifSound();
         var isAction = notif.type === 'invite';
         var verb = CAT_VERBS[notif.category] || 'ver';
         var msg;
@@ -2169,6 +2178,31 @@ var PROFILE_USERS = <?php
 
     /* ──── Profile notifications ──── */
     var profileNotifs = [];
+    /* Sonido de notif del perfil. Suena cuando llega una nueva (SSE o
+       polling), tenga o no abierta la ventana de perfil. Throttle de 1.5s
+       para que varios eventos seguidos no se acumulen.
+
+       - _prevProfileUnread = -1 marca "primer load" → NO suena el contador
+         inicial; solo subidas posteriores.
+       - El play() puede fallar si el navegador bloqueó autoplay antes de
+         cualquier interacción del usuario; lo ignoramos silenciosamente. */
+    var _notifAudio = null;
+    var _lastNotifSoundAt = 0;
+    var _prevProfileUnread = -1;
+    function playProfileNotifSound() {
+        var now = Date.now();
+        if (now - _lastNotifSoundAt < 1500) return;
+        _lastNotifSoundAt = now;
+        try {
+            if (!_notifAudio) {
+                _notifAudio = new Audio('assets/sound/notificacion.wav');
+                _notifAudio.preload = 'auto';
+            }
+            _notifAudio.currentTime = 0;
+            var p = _notifAudio.play();
+            if (p && typeof p.catch === 'function') p.catch(function(){});
+        } catch (_) {}
+    }
 
     function loadProfileNotifs(cb) {
         fetch('assets/profile/api.php?action=get-profile-notifs')
@@ -2176,7 +2210,16 @@ var PROFILE_USERS = <?php
             .then(function(data) {
                 if (data && data.ok) {
                     profileNotifs = Array.isArray(data.notifs) ? data.notifs : [];
-                    updateNotifBadge(data.unread || 0);
+                    var unread = data.unread || 0;
+                    /* Suena solo si subió respecto al baseline anterior.
+                       En el primer load (_prevProfileUnread === -1) NO
+                       suena — no queremos disparar el sonido por notifs
+                       ya existentes al abrir la sesión. */
+                    if (_prevProfileUnread >= 0 && unread > _prevProfileUnread) {
+                        playProfileNotifSound();
+                    }
+                    _prevProfileUnread = unread;
+                    updateNotifBadge(unread);
                 }
                 if (cb) cb();
             })
@@ -3618,6 +3661,12 @@ var PROFILE_USERS = <?php
         }, 50);
     }
 
+    /* Total acumulado de mensajes sin leer en la respuesta previa. -1 =
+       primer load (baseline) → no suena por la cuenta inicial. Solo subidas
+       posteriores hacen play. Reutilizamos playProfileNotifSound() — está
+       throttled a 1.5s, así que si entran mensaje + notif a la vez, solo
+       suena una. */
+    var _prevChatUnread = -1;
     function loadUnreadChats() {
         fetch('assets/profile/api.php?action=get-unread-chats')
             .then(function(r) { return r.json(); })
@@ -3626,6 +3675,20 @@ var PROFILE_USERS = <?php
                 unreadChats = d.counts || {};
                 /* No mostrar contador para el chat actualmente abierto */
                 if (chatWithUser && unreadChats[chatWithUser]) delete unreadChats[chatWithUser];
+                /* Sumar todos los unread (excluido el chat abierto, ya
+                   borrado arriba). Sonido solo si subió respecto al
+                   baseline anterior y no es el primer load. */
+                var total = 0;
+                for (var k in unreadChats) {
+                    if (Object.prototype.hasOwnProperty.call(unreadChats, k)) {
+                        total += unreadChats[k] | 0;
+                    }
+                }
+                if (_prevChatUnread >= 0 && total > _prevChatUnread
+                    && typeof playProfileNotifSound === 'function') {
+                    playProfileNotifSound();
+                }
+                _prevChatUnread = total;
                 renderFollowedNav();
             }).catch(function() {});
     }
@@ -5362,7 +5425,12 @@ var PROFILE_USERS = <?php
             'background: transparent;';
 
         var iframe = document.createElement('iframe');
-        iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey);
+        /* Propagar la señal de tablet al iframe child para que use el
+           mismo viewport responsive. Detectamos buscando ?tablet=1 en
+           nuestra URL (lo añade appSrc() del shell padre cuando es tablet)
+           o el flag global window.__IS_TABLET__. */
+        var _isTab = window.__IS_TABLET__ === true || /[?&]tablet=1/.test(location.search);
+        iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey) + (_isTab ? '&tablet=1' : '');
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: transparent;';
         iframe.setAttribute('title', 'Perfil de ' + visitedLabel);
         iframe.setAttribute('allowtransparency', 'true');
@@ -5427,7 +5495,7 @@ var PROFILE_USERS = <?php
                 iframe.contentWindow.addEventListener('focus', function() {
                     if (window.windowZ) windowZ.bringToFront(winId);
                 });
-                iframe.contentDocument.addEventListener('mousedown', function() {
+                iframe.contentDocument.addEventListener('pointerdown', function() {
                     if (window.windowZ) windowZ.bringToFront(winId);
                 });
             } catch (_) {}
