@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user'] = $matchedKey;
             $target = isMobileDevice()
                 ? 'mobile.php'
-                : strtolower($loginUsers[$matchedKey]['label']) . '-desktop.php';
+                : 'desktops/' . strtolower($loginUsers[$matchedKey]['label']) . '-desktop.php';
             header('Location: ' . $target);
             exit;
         }

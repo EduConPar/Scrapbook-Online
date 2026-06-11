@@ -33,7 +33,7 @@ $safeLabel  = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
 
 /* Numeración de secciones (1..5) — coherente con el flujo original */
 /* 1) Borrar stub de escritorio */
-@unlink(__DIR__ . '/' . $labelLower . '-desktop.php');
+@unlink(__DIR__ . '/desktops/' . $labelLower . '-desktop.php');
 
 /* 2) Borrar avatar, wallpaper e icono de inicio */
 foreach (['jpg', 'jpeg', 'png', 'gif', 'webp'] as $ext) {

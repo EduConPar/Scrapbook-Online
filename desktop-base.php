@@ -33,6 +33,7 @@ if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
 
 // Tras validar sesión: averiguar la pareja del usuario (0 si no tiene).
 require_once __DIR__ . '/db.php';
+/** @var PDO $pdo */
 $stmtP = $pdo->prepare("
     SELECT p.id FROM parejas p
     JOIN usuarios u1 ON p.usuario1_id = u1.id
@@ -42,8 +43,6 @@ $stmtP = $pdo->prepare("
 $stmtP->execute([strtolower($desktopLabel), strtolower($desktopLabel)]);
 $rowP = $stmtP->fetch(PDO::FETCH_ASSOC);
 $parejaId = $rowP ? (int)$rowP['id'] : 0;
-
-$projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/') . '/';
 
 $hasPlayer = true;
 
@@ -57,6 +56,7 @@ require_once __DIR__ . '/assets/php/active-interface.php';
    caemos al default 'win98'. Sin este reseteo, un user heredaría la
    cookie del user anterior. */
 (function() use (&$pdo, $desktopUserKey) {
+    /** @var PDO $pdo */
     $slug = 'win98';
     $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
     $stmt->execute([$desktopUserKey]);
@@ -94,6 +94,7 @@ require_once __DIR__ . '/assets/php/active-interface.php';
    al que tú estás viendo. */
 $_shellIconPack = 'Melon';
 (function() use (&$pdo, $desktopUserKey, &$_shellIconPack) {
+    /** @var PDO $pdo */
     $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
     $stmt->execute([$desktopUserKey]);
     $uid = (int)($stmt->fetchColumn() ?: 0);
@@ -128,6 +129,7 @@ $startIcon = getUserStartIcon($desktopLabel);
    al haro 'green' (base que todos los usuarios tienen). */
 require_once __DIR__ . '/assets/personalize/haro-paths.php';
 $haroUid       = userIdByKey($desktopUserKey);
+/** @var PDO $pdo */
 $haroSlug      = $haroUid ? activeHaroSlug($pdo, $haroUid) : 'green';
 $haroAssets    = haroPaths($haroSlug);
 if ($activeTheme !== '') {
@@ -148,7 +150,9 @@ if ($activeTheme !== '') {
 
 $bodyStyles = [];
 if ($wallpaper) $bodyStyles[] = "background-image:url('{$wallpaper}')";
-if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$projectBaseUrl}{$startIcon}')";
+/* URL relativa para que el <base href="../"> del <head> la resuelva contra
+   la raíz del proyecto, no contra /desktops/ donde vive el stub. */
+if ($startIcon) $bodyStyles[] = "--start-icon-url:url('{$startIcon}')";
 $wallpaperStyle = $bodyStyles ? implode(';', $bodyStyles) : '';
 
 $_iconTheme = 'default';
@@ -195,6 +199,11 @@ function _appIconExists(string $rel): bool {
          dedos no caben. -->
     <meta name="viewport" content="width=1280, user-scalable=yes">
     <title><?php echo htmlspecialchars($desktopLabel); ?> - Escritorio</title>
+    <!-- Los stubs <label>-desktop.php viven en /desktops/ pero todas las
+         rutas relativas (assets/, apps/, logout.php) apuntan a la raíz.
+         Sin este <base> el browser resolvería contra /desktops/ y rompería
+         CSS/JS/iframes. Debe ir ANTES del primer href/src del head. -->
+    <base href="../">
     <link rel="icon" href="assets/img/mobile/icon.png" type="image/png">
     <link rel="stylesheet" href="assets/css/98.css">
     <link rel="stylesheet" href="assets/css/tokens.css">
@@ -837,7 +846,10 @@ window.addEventListener('message', function(e) {
     } else if (e.data.type === 'start-icon-changed') {
         var si = e.data.icon || '';
         if (si) {
-            var abs = new URL(si, location.href).href;
+            /* Resolver contra document.baseURI (respeta <base href="../">)
+               y NO contra location.href, que apunta a /desktops/ y rompería
+               el src de la imagen. */
+            var abs = new URL(si, document.baseURI).href;
             document.body.style.setProperty('--start-icon-url', "url('" + abs + "?t=" + Date.now() + "')");
             document.body.classList.add('has-start-icon');
         } else {

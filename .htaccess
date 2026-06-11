@@ -1,7 +1,7 @@
 # ─── Seguridad mínima para hosting compartido ─────────────────────────
 # Bloquea acceso web a ficheros con credenciales y a fuentes PHP que no
 # deben llamarse directamente (db.php, config.php, helpers, etc.).
-# Los endpoints reales (index.php, register-user.php, *-desktop.php,
+# Los endpoints reales (index.php, register-user.php, desktops/*-desktop.php,
 # assets/*/api.php, assets/*/notifications-stream.php) sí son accesibles.
 
 <FilesMatch "^\.env|^\.htaccess$|^\.gitignore$|^\.git">

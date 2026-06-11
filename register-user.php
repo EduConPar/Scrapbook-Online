@@ -96,11 +96,11 @@ foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $key) {
 }
 $newKey = 'user' . ($maxNum + 1);
 
-/* Stub de escritorio (<label-lowercase>-desktop.php) — se crea ANTES del INSERT
-   para no dejar un usuario sin escritorio si falla la escritura del fichero. */
-$desktopStub = __DIR__ . '/' . strtolower($username) . '-desktop.php';
+/* Stub de escritorio (desktops/<label-lowercase>-desktop.php) — se crea ANTES
+   del INSERT para no dejar un usuario sin escritorio si falla la escritura. */
+$desktopStub = __DIR__ . '/desktops/' . strtolower($username) . '-desktop.php';
 if (!file_exists($desktopStub)) {
-    $stubContent = "<?php \$desktopLabel = " . var_export($username, true) . "; require 'desktop-base.php';\n";
+    $stubContent = "<?php \$desktopLabel = " . var_export($username, true) . "; require __DIR__ . '/../desktop-base.php';\n";
     if (@file_put_contents($desktopStub, $stubContent) === false) {
         echo json_encode(['error' => 'No se pudo crear el escritorio del usuario']); exit;
     }

@@ -1,1 +1,1 @@
-<?php $desktopLabel = 'Capi'; require 'desktop-base.php';
+<?php $desktopLabel = 'Capi'; require __DIR__ . '/../desktop-base.php';
