@@ -1404,10 +1404,15 @@ function sanitizeFilename(s) {
 
 document.getElementById('theme-export').addEventListener('click', function() {
     var name = nameInput.value.trim() || 'tema';
+    /* Embebemos la interfaz activa en el JSON — al reimportar este
+       fichero lo dirigimos a ESA interfaz (no a la actual). */
+    var iface = (typeof window.getActiveInterface === 'function')
+        ? window.getActiveInterface() : 'win98';
     var payload = {
         format:     'melon-theme',
-        version:    1,
+        version:    2,
         name:       name,
+        interface:  iface,
         exportedAt: new Date().toISOString(),
         colors:     getEditorColors()
     };
@@ -1418,7 +1423,7 @@ document.getElementById('theme-export').addEventListener('click', function() {
     a.download = sanitizeFilename(name) + '.melon-theme.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
-    statusEl.textContent = '✔ "' + name + '" descargado.';
+    statusEl.textContent = '✔ "' + name + '" descargado (' + iface + ').';
 });
 
 document.getElementById('theme-import').addEventListener('click', function() {
@@ -1467,14 +1472,30 @@ document.getElementById('theme-import-file').addEventListener('change', function
         setActiveItem(null);
 
         /* Auto-save + auto-activate */
+        /* Determinar interfaz destino: la del JSON si la trae (v2+), o la
+           actual si no (legacy). Solo auto-activamos si coincide. */
+        var currentIface = (typeof window.getActiveInterface === 'function')
+            ? window.getActiveInterface() : 'win98';
+        var targetIface  = (typeof data.interface === 'string' && data.interface)
+            ? data.interface.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)
+            : currentIface;
+        var samePack = (targetIface === currentIface);
+
         statusEl.textContent = 'Importando "' + name + '"…';
         fetch('../../assets/themes/api.php?action=save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name, colors: clean })
+            body: JSON.stringify({ name: name, colors: clean, interface: targetIface })
         }).then(function(r) { return r.json(); })
           .then(function(d) {
               if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
+              if (!samePack) {
+                  loadThemes();
+                  statusEl.textContent = '✔ "' + name + '" importado en interfaz "'
+                      + targetIface + '". Cámbiate a esa interfaz para usarlo'
+                      + (bad ? ' (' + bad + ' valores inválidos descartados)' : '') + '.';
+                  return;
+              }
               persistThemeForInterface(name);
               return fetch('../../assets/themes/api.php?action=set-active', {
                   method: 'POST',

@@ -72,8 +72,12 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
       padding: 10px 8px;
       border-top: 1px solid var(--border);
       box-shadow: 0 -1px 0 var(--bezel-light-1);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
-    #tienda-donar-btn {
+    #tienda-donar-btn,
+    #tienda-help-btn {
       width: 100%;
       min-height: 28px;
       padding: 0 10px;
@@ -89,6 +93,72 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         inset  2px  2px var(--bezel-dark-2);
     }
 
+    /* ═══ MODAL DE AYUDA — estilos base (win98). El override kawaii
+       de .window viene de assets/interfaces/kawaii/style.css. ═══ */
+    .th-help-body { font-size: 12px; line-height: 1.55; color: var(--text); }
+    .th-help-intro {
+      margin-bottom: 12px;
+      padding: 8px 10px;
+      background: var(--surface-deep);
+      box-shadow:
+        inset -1px -1px var(--bezel-light-1),
+        inset  1px  1px var(--bezel-dark-1);
+      border-radius: 2px;
+    }
+    .th-help-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .th-help-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px;
+      background: var(--win-bg);
+      border: 1px solid var(--border);
+      box-shadow:
+        inset -1px -1px var(--bezel-light-1),
+        inset  1px  1px var(--bezel-light-1);
+    }
+    .th-help-icon {
+      font-size: 22px;
+      line-height: 1;
+      flex-shrink: 0;
+      width: 32px;
+      text-align: center;
+    }
+    .th-help-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .th-help-amt {
+      display: inline-block;
+      margin-top: 2px;
+      padding: 1px 6px;
+      background: var(--accent, #000080);
+      color: var(--accent-text, #fff);
+      font-weight: bold;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .th-help-sub {
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted, #555);
+    }
+    .th-help-foot {
+      margin-top: 6px;
+      padding-top: 8px;
+      border-top: 1px dotted var(--border);
+      font-size: 11px;
+      color: var(--text-muted, #555);
+    }
+
     /* Área principal */
     #tienda-main-area {
       flex: 1; display: flex; flex-direction: column;
@@ -98,6 +168,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     /* Wallet — balance prominente en la sidebar, siempre visible en
        cualquier pestaña. Marco hundido de 4 capas, como las thumbs. */
     #tienda-wallet {
+      position: relative;
       margin: 8px; padding: 10px 12px;
       background: var(--inset-bg); color: var(--text);
       text-align: center;
@@ -107,6 +178,51 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         inset  2px  2px var(--bezel-dark-2),
         inset -2px -2px var(--bezel-light-2);
     }
+    /* Botón de ayuda anclado a la esquina sup-izq del wallet. Solo un
+       interrogante dentro de un círculo, sin fondo, mismo color que
+       "Tu balance" → no roba protagonismo al número. */
+    /* Botón Ayuda — pixel art puro. La forma (círculo + ?) está dibujada
+       en un único SVG con rectángulos 1×1; usamos `mask-image` para que
+       `currentColor` pinte solo donde hay pixel, y `image-rendering:pixelated`
+       para que el escalado 13px→22px mantenga el escalón sin antialias. */
+    #tienda-help-btn {
+      position: absolute;
+      top: 6px; left: 6px;
+      width: 22px; height: 22px;
+      /* 98.css fuerza min 75×23 y color:transparent en cualquier button. */
+      min-width: 0; min-height: 0; max-width: 22px; max-height: 22px;
+      aspect-ratio: 1 / 1;
+      box-sizing: border-box;
+      flex: 0 0 22px;
+      padding: 0; margin: 0;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      text-shadow: none;
+      cursor: pointer;
+      box-shadow: none;
+      line-height: 0;
+      font-size: 0;
+    }
+    #tienda-help-btn::before {
+      content: "";
+      display: block;
+      width: 100%;
+      height: 100%;
+      background-color: currentColor;
+      -webkit-mask:
+        url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13' shape-rendering='crispEdges'%3E%3Cpath d='M5,0h3v1H5zM3,1h2v1H3zM8,1h2v1H8zM2,2h1v1H2zM10,2h1v1H10zM1,3h1v1H1zM11,3h1v1H11zM1,4h1v1H1zM11,4h1v1H11zM0,5h1v1H0zM12,5h1v1H12zM0,6h1v1H0zM12,6h1v1H12zM0,7h1v1H0zM12,7h1v1H12zM1,8h1v1H1zM11,8h1v1H11zM1,9h1v1H1zM11,9h1v1H11zM2,10h1v1H2zM10,10h1v1H10zM3,11h2v1H3zM8,11h2v1H8zM5,12h3v1H5zM5,3h3v1H5zM4,4h1v1H4zM8,4h1v1H8zM8,5h1v1H8zM7,6h1v1H7zM6,7h1v1H6zM6,8h1v1H6zM6,10h1v1H6z'/%3E%3C/svg%3E")
+        center / contain no-repeat;
+              mask:
+        url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13' shape-rendering='crispEdges'%3E%3Cpath d='M5,0h3v1H5zM3,1h2v1H3zM8,1h2v1H8zM2,2h1v1H2zM10,2h1v1H10zM1,3h1v1H1zM11,3h1v1H11zM1,4h1v1H1zM11,4h1v1H11zM0,5h1v1H0zM12,5h1v1H12zM0,6h1v1H0zM12,6h1v1H12zM0,7h1v1H0zM12,7h1v1H12zM1,8h1v1H1zM11,8h1v1H11zM1,9h1v1H1zM11,9h1v1H11zM2,10h1v1H2zM10,10h1v1H10zM3,11h2v1H3zM8,11h2v1H8zM5,12h3v1H5zM5,3h3v1H5zM4,4h1v1H4zM8,4h1v1H8zM8,5h1v1H8zM7,6h1v1H7zM6,7h1v1H6zM6,8h1v1H6zM6,10h1v1H6z'/%3E%3C/svg%3E")
+        center / contain no-repeat;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+    #tienda-help-btn:hover  { color: var(--text); }
+    #tienda-help-btn:active { transform: translateY(1px); }
+    #tienda-help-btn:focus  { outline: none; }
     #tienda-wallet-label {
       font-size: 9px; color: var(--text-muted);
       text-transform: uppercase; letter-spacing: 0.12em;
@@ -412,6 +528,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <div id="tienda-main">
     <aside id="tienda-sidebar">
         <div id="tienda-wallet">
+            <button type="button" id="tienda-help-btn" title="Cómo conseguir puntos de Autismo" aria-label="Ayuda">?</button>
             <div id="tienda-wallet-label">Tu balance</div>
             <div id="tienda-wallet-amount">
                 <span class="ic"><img src="../assets/img/appIcons/puntosAutismo.png" alt=""></span>
@@ -851,7 +968,94 @@ document.querySelectorAll('[data-view]').forEach(function(el){
 
 loadState();
 })();
+
+/* =========================================================
+   VENTANA DE AYUDA — Cómo conseguir puntos de Autismo
+   ─────────────────────────────────────────────────────────
+   El markup del modal vive DESPUÉS de este <script>; sin el
+   guard de DOMContentLoaded los getElementById devuelven null
+   y el botón no haría nada.
+   ========================================================= */
+function initTiendaHelp() {
+    var btn      = document.getElementById('tienda-help-btn');
+    var modal    = document.getElementById('tienda-help-modal');
+    var backdrop = document.getElementById('tienda-help-backdrop');
+    var closeBtn = document.getElementById('tienda-help-close');
+    if (!btn || !modal) return;
+    function open()  { backdrop.style.display = 'flex'; }
+    function close() { backdrop.style.display = 'none'; }
+    btn.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', function(e) {
+        if (e.target === backdrop) close();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && backdrop.style.display === 'flex') close();
+    });
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTiendaHelp);
+} else {
+    initTiendaHelp();
+}
 </script>
+
+<!-- ═════════════════════════════════════════════════════════
+     MODAL DE AYUDA — usa la clase .window estándar, por lo que
+     la interfaz activa decide el look:
+       · win98 → ventana 98.css clásica (bezel, title-bar azul).
+       · kawaii (MelonOS Overdose) → flat lavanda/rosa pastel,
+         título Pixelify Sans (override en interfaces/kawaii/
+         style.css aplicado a TODO .window).
+     ═════════════════════════════════════════════════════════ -->
+<div id="tienda-help-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:center; justify-content:center;">
+    <div class="window" id="tienda-help-modal" style="width: min(520px, 92vw); max-height: 86vh; display:flex; flex-direction:column;">
+        <div class="title-bar">
+            <div class="title-bar-text">
+                <img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">
+                Cómo conseguir puntos de Autismo
+            </div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="tienda-help-close"></button>
+            </div>
+        </div>
+        <div class="window-body th-help-body" style="padding:14px; overflow-y:auto;">
+            <p class="th-help-intro">
+                Los puntos de Autismo (<img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;">) se ganan participando en el Discord :melonduagua: 3.0. El bot los reparte automáticamente — solo tienes que vincular tu cuenta de Discord desde el panel de aquí al lado.
+            </p>
+            <ul class="th-help-list">
+                <li class="th-help-item">
+                    <span class="th-help-icon"><img src="../assets/img/appIcons/chatIcon.png" alt="" style="width:20px;height:20px;object-fit:contain;image-rendering:pixelated;"></span>
+                    <div>
+                        <strong>Mensajes en cualquier canal</strong>
+                        <span class="th-help-amt">+1 <img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-1px;"></span>
+                        <div class="th-help-sub">Cooldown anti-spam de 2 s por usuario.</div>
+                    </div>
+                </li>
+                <li class="th-help-item">
+                    <span class="th-help-icon">🎙</span>
+                    <div>
+                        <strong>Tiempo en canales de voz</strong>
+                        <span class="th-help-amt">+1 <img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-1px;"> cada 2 min</span>
+                        <div class="th-help-sub">Se contabiliza al salir del canal; intervalos sueltos no cuentan.</div>
+                    </div>
+                </li>
+                <li class="th-help-item">
+                    <span class="th-help-icon">❤</span>
+                    <div>
+                        <strong>Reacciones de corazón en tus posts</strong>
+                        <span class="th-help-amt">+10 <img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-1px;"></span>
+                        <div class="th-help-sub">Solo cuentan reacciones ❤ en posts que publiques desde la app (Galería → Publicar a Discord). Una persona = un corazón por post.</div>
+                    </div>
+                </li>
+            </ul>
+            <p class="th-help-foot">
+                ¿Tu balance no sube? Asegúrate de que has vinculado tu Discord desde la sección
+                <strong>Discord</strong> de la izquierda. Sin vincular, el bot no sabe quién eres.
+            </p>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

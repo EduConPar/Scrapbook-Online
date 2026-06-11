@@ -1208,10 +1208,16 @@ function sanitizeFilename(s) {
 
 document.getElementById('theme-export').addEventListener('click', function() {
     var name = nameInput.value.trim() || 'tema';
+    /* Embebemos la interfaz activa en el JSON. Al reimportar este fichero
+       lo dirigimos a ESA interfaz (no a la actual del que importa) — un
+       tema de win98 no tiene sentido en kawaii (paletas/tokens distintos). */
+    var iface = (typeof window.getActiveInterface === 'function')
+        ? window.getActiveInterface() : 'win98';
     var payload = {
         format:     'melon-theme',
-        version:    1,
+        version:    2,
         name:       name,
+        interface:  iface,
         exportedAt: new Date().toISOString(),
         colors:     getEditorColors()
     };
@@ -1222,7 +1228,7 @@ document.getElementById('theme-export').addEventListener('click', function() {
     a.download = sanitizeFilename(name) + '.melon-theme.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
-    statusEl.textContent = '✔ "' + name + '" descargado.';
+    statusEl.textContent = '✔ "' + name + '" descargado (' + iface + ').';
 });
 
 document.getElementById('theme-import').addEventListener('click', function() {
@@ -1270,15 +1276,38 @@ document.getElementById('theme-import-file').addEventListener('change', function
         setEditorColors(clean);
         setActiveItem(null);
 
-        /* Auto-save + auto-activate */
+        /* Determinar interfaz destino:
+            - JSON con `interface` (v2+) → respetar el origen del tema.
+            - JSON sin campo (v1 / legacy) → asumir interfaz actual.
+           El tema solo se auto-activa si su interfaz coincide con la
+           activa; si no, lo guardamos y dejamos al usuario que cambie
+           de interfaz para usarlo. */
+        var currentIface = (typeof window.getActiveInterface === 'function')
+            ? window.getActiveInterface() : 'win98';
+        var targetIface  = (typeof data.interface === 'string' && data.interface)
+            ? data.interface.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 30)
+            : currentIface;
+        var samePack = (targetIface === currentIface);
+
         statusEl.textContent = 'Importando "' + name + '"…';
+        var savePayload = { name: name, colors: clean, interface: targetIface };
         fetch('../assets/themes/api.php?action=save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name, colors: clean })
+            body: JSON.stringify(savePayload)
         }).then(function(r) { return r.json(); })
           .then(function(d) {
               if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
+              if (!samePack) {
+                  /* No auto-activamos: el tema está guardado en otra
+                     interfaz y activarlo desde aquí pintaría tokens que
+                     no aplican. */
+                  loadThemes();
+                  statusEl.textContent = '✔ "' + name + '" importado en interfaz "'
+                      + targetIface + '". Cámbiate a esa interfaz para usarlo'
+                      + (bad ? ' (' + bad + ' valores inválidos descartados)' : '') + '.';
+                  return;
+              }
               persistThemeForInterface(name);
               return fetch('../assets/themes/api.php?action=set-active', {
                   method: 'POST',

@@ -500,17 +500,39 @@ if (introOverlay) {
 
         const introVideo = document.getElementById('intro-video');
 
+        /* Cierra y marca como visto. Lo dispara tanto el final natural
+           del vídeo como el click de skip durante la reproducción. */
+        function finishIntro() {
+            if (sessionStorage.getItem('introSeen')) return;
+            sessionStorage.setItem('introSeen', '1');
+            try { introVideo.pause(); } catch (_) {}
+            introOverlay.classList.add('oculto');
+            setTimeout(function() { introOverlay.style.display = 'none'; }, 800);
+        }
+
         introStart.addEventListener('click', function() {
             introStart.style.display = 'none';
             introVideo.muted = false;
             introVideo.play();
+            /* A partir de aquí, click en el overlay = skip. Lo
+               registramos en el NEXT tick para no atrapar el mismo
+               click que arrancó la reproducción. */
+            setTimeout(function() {
+                introOverlay.addEventListener('click', finishIntro, { once: true });
+                /* Pista visual no-intrusiva en la esquina. */
+                const skipHint = document.createElement('div');
+                skipHint.id = 'intro-skip-hint';
+                skipHint.textContent = 'Click para saltar';
+                skipHint.style.cssText = 'position:absolute;bottom:20px;right:24px;' +
+                    'color:#fff;font-family:monospace;font-size:14px;' +
+                    'text-shadow:0 0 6px rgba(0,0,0,0.9);opacity:0;' +
+                    'transition:opacity .4s ease;pointer-events:none;z-index:2;';
+                introOverlay.appendChild(skipHint);
+                requestAnimationFrame(function(){ skipHint.style.opacity = '0.85'; });
+            }, 0);
         }, { once: true });
 
-        introVideo.addEventListener('ended', function() {
-            sessionStorage.setItem('introSeen', '1');
-            introOverlay.classList.add('oculto');
-            setTimeout(function() { introOverlay.style.display = 'none'; }, 800);
-        });
+        introVideo.addEventListener('ended', finishIntro);
 
         introVideo.addEventListener('error', function() {
             sessionStorage.setItem('introSeen', '1');

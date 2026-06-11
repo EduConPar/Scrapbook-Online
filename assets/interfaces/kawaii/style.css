@@ -4621,3 +4621,81 @@ a:not(.button):not(.start-app-item):focus:not(:focus-visible) {
    desde index.php (via JS applyUserInterfaceLogin) sin tocar nada más
    del shell ni del selector de usuarios. */
 
+/* ════════════════════════════════════════════════════════════════════
+   MODAL "AYUDA" DE LA TIENDA — estilo Needy Streamer Overload
+   ────────────────────────────────────────────────────────────────────
+   Las clases .th-help-* viven dentro del iframe de tienda.php; éste
+   carga assets/interfaces/kawaii/style.css cuando la interfaz activa
+   es kawaii, así que estos overrides aplican solo a usuarias de
+   MelonOS Overdose. Sustituyen el look bezel 3D de la versión win98
+   por flat rosa con borde dark-purple y acentos #FF66B2.
+   ════════════════════════════════════════════════════════════════════ */
+.th-help-body {
+    background: var(--win-body-bg, #F0E8F3) !important;
+    color: var(--text, #472CC7) !important;
+    font-family: "ms_sans_serif", sans-serif;
+}
+.th-help-intro {
+    background: #FFE3F1 !important;
+    border: 2px solid var(--border, #49388B) !important;
+    box-shadow: 3px 3px 0 0 var(--accent, #FF66B2) !important;
+    border-radius: 0 !important;
+    padding: 10px 12px !important;
+}
+.th-help-item {
+    background: #FFF !important;
+    border: 2px solid var(--border, #49388B) !important;
+    box-shadow: 3px 3px 0 0 var(--accent, #FF66B2) !important;
+    border-radius: 0 !important;
+    padding: 12px !important;
+    position: relative;
+}
+.th-help-item::before {
+    /* Estrellita rosa en la esquina — guiño NSO. */
+    content: "✦";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    color: var(--accent, #FF66B2);
+    background: var(--win-body-bg, #F0E8F3);
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.th-help-icon {
+    background: var(--accent, #FF66B2);
+    color: var(--accent-text, #fff);
+    border: 2px solid var(--border, #49388B);
+    border-radius: 50%;
+    width: 38px !important;
+    height: 38px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px !important;
+}
+.th-help-item strong {
+    color: var(--text, #472CC7) !important;
+    font-family: "Pixelify Sans", "ms_sans_serif", sans-serif;
+    letter-spacing: 0.5px;
+}
+.th-help-amt {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+    border: 1.5px solid var(--border, #49388B);
+    border-radius: 999px !important;
+    padding: 2px 9px !important;
+    font-family: "Pixelify Sans", "ms_sans_serif", sans-serif;
+    letter-spacing: 0.5px;
+}
+.th-help-sub {
+    color: var(--text-muted, #6B5BA8) !important;
+}
+.th-help-foot {
+    border-top: 1px dashed var(--accent, #FF66B2) !important;
+    color: var(--text-muted, #6B5BA8) !important;
+    font-style: italic;
+}
+.th-help-foot strong { color: var(--accent-deep, #CC4499) !important; }
+

@@ -64,6 +64,18 @@ case 'save': {
     if ($name === '' || mb_strlen($name) > 30) jsonError('Nombre inválido (1-30, letras/números/_/-)');
     if (!validateThemeColors($colors))         jsonError('Colores inválidos');
 
+    /* Override de interfaz por payload: lo usa el import de temas para
+       guardar el tema en SU interfaz de origen aunque el usuario esté
+       en otra. Validamos contra la carpeta de interfaces para evitar
+       interface_name arbitrarios en la BD. Si el slug no existe o no
+       se pasó, $iface mantiene el valor de la cookie. */
+    if (isset($body['interface'])) {
+        $reqIface = preg_replace('/[^A-Za-z0-9_-]/', '', (string)$body['interface']);
+        if ($reqIface !== '' && is_dir(dirname(__DIR__) . '/interfaces/' . $reqIface)) {
+            $iface = $reqIface;
+        }
+    }
+
     /* Al descargar un tema de la biblioteca NO se duplican archivos: se guarda
        una referencia validada al asset original del autor. Si el autor lo
        borra, el render cae al wallpaper/icono global del descargador. */
