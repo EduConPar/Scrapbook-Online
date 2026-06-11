@@ -1670,6 +1670,14 @@ window.addEventListener('message', function(e) {
         var pid = -1;
         titleBar.style.touchAction = 'none';
         titleBar.addEventListener('pointerdown', function(e) {
+            /* Bail-out ANTES de capturar el puntero: si capturamos sobre la
+               title-bar mientras el usuario está pulsando un botón de
+               .title-bar-controls (close/min/max), el pointerup se queda en
+               la title-bar y el browser nunca dispara `click` en el botón
+               → la X "no cierra". Mismo gate también para botón secundario
+               del ratón. */
+            if (e.target.closest('.title-bar-controls')) return;
+            if (e.button !== undefined && e.button !== 0) return;
             pid = e.pointerId;
             try { titleBar.setPointerCapture(pid); } catch (_) {}
             onMouseDown(e);
