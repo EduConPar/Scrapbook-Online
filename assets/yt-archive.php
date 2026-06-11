@@ -273,6 +273,46 @@ if ($action === 'playlists') {
                 );
             }
         }
+
+        /* lockupViewModel — estructura nueva que YouTube está desplegando
+           (2024-2025) para reemplazar los renderers clásicos. Cuando
+           `contentType === LOCKUP_CONTENT_TYPE_VIDEO` y `contentId` es el
+           videoId, parseamos título y duración del nuevo árbol. Sin esto,
+           muchas playlists ya devuelven 0 vídeos. */
+        $locks = array();
+        ytFindKeys($data, 'lockupViewModel', $locks, 0);
+        foreach ($locks as $l) {
+            if (!isset($l['contentType']) || $l['contentType'] !== 'LOCKUP_CONTENT_TYPE_VIDEO') continue;
+            $vid = isset($l['contentId']) ? $l['contentId'] : '';
+            if (!$vid || isset($seenIds[$vid])) continue;
+            $seenIds[$vid] = true;
+            $title = '';
+            if (isset($l['metadata']['lockupMetadataViewModel']['title']['content'])) {
+                $title = $l['metadata']['lockupMetadataViewModel']['title']['content'];
+            }
+            $thumb = '';
+            if (isset($l['contentImage']['thumbnailViewModel']['image']['sources'][0]['url'])) {
+                $thumb = $l['contentImage']['thumbnailViewModel']['image']['sources'][0]['url'];
+            } elseif (isset($l['contentImage']['collectionThumbnailViewModel']['primaryThumbnail']['thumbnailViewModel']['image']['sources'][0]['url'])) {
+                $thumb = $l['contentImage']['collectionThumbnailViewModel']['primaryThumbnail']['thumbnailViewModel']['image']['sources'][0]['url'];
+            }
+            /* Duración: viene en thumbnailBadgeViewModel.text dentro del
+               overlay del thumbnail (formato "12:34"). */
+            $duration = '';
+            $badges = array();
+            ytFindKeys($l, 'thumbnailBadgeViewModel', $badges, 0);
+            foreach ($badges as $b) {
+                if (isset($b['text']) && preg_match('/^\d+:\d{2}(:\d{2})?$/', $b['text'])) {
+                    $duration = $b['text']; break;
+                }
+            }
+            $videos[] = array(
+                'id'       => $vid,
+                'title'    => $title,
+                'thumb'    => $thumb,
+                'duration' => $duration,
+            );
+        }
     }
     _ytCollect($videos, $seenIds, $data);
 
