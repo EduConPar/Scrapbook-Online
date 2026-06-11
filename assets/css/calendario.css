@@ -147,6 +147,19 @@ body.angie {
     flex-shrink: 0;
     margin-left: 6px;
 }
+/* Wrap de los botones de acción de cada recordatorio en el popup-día.
+   La .rec-row usa space-between → con este wrap los botones son UN
+   bloque a la derecha (en lugar de 2 elementos repartidos), pegados
+   uno al otro con un pequeño gap. */
+.rec-row-btns {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+.rec-row-btns .btn-del-row {
+    margin-left: 0;          /* el gap del wrap maneja el espacio */
+}
 .muted { color: #808080; }
 
 /* Sidebar derecha — items de recordatorios próximos. */

@@ -242,17 +242,62 @@ if ($action === 'playlists') {
     $data = innertubePost(array('browseId' => 'VL' . $playlistId));
     if (!$data) { echo json_encode(array('error' => 'No se pudo obtener los vídeos')); exit; }
 
-    $videos = array(); $rv = array();
-    ytFindKeys($data, 'playlistVideoRenderer', $rv, 0);
-    foreach ($rv as $r) {
-        if (!isset($r['videoId'])) continue;
-        $videos[] = array(
-            'id'       => $r['videoId'],
-            'title'    => ytGetText(isset($r['title']) ? $r['title'] : null),
-            'thumb'    => ytBestThumb(isset($r['thumbnail']['thumbnails']) ? $r['thumbnail']['thumbnails'] : array()),
-            'duration' => ytGetText(isset($r['lengthText']) ? $r['lengthText'] : null),
+    /* Recolecta videos. Algunas playlists no usan playlistVideoRenderer
+       (la convención clásica de playlists "regulares") sino otros
+       renderers según el tipo:
+         · playlistVideoRenderer → playlists públicas estándar
+         · gridVideoRenderer     → algunas vistas grid (canales, mixes)
+         · videoRenderer         → search-like results y algunos mixes
+         · musicResponsiveListItemRenderer → playlists de YT Music
+       Para no perder playlists especiales, recolectamos de todos. */
+    $videos = array(); $seenIds = array();
+    function _ytCollect(&$videos, &$seenIds, $data) {
+        $renderers = array(
+            'playlistVideoRenderer',
+            'gridVideoRenderer',
+            'videoRenderer',
+            'compactVideoRenderer',
         );
+        foreach ($renderers as $rk) {
+            $hits = array();
+            ytFindKeys($data, $rk, $hits, 0);
+            foreach ($hits as $r) {
+                $vid = isset($r['videoId']) ? $r['videoId'] : null;
+                if (!$vid || isset($seenIds[$vid])) continue;
+                $seenIds[$vid] = true;
+                $videos[] = array(
+                    'id'       => $vid,
+                    'title'    => ytGetText(isset($r['title']) ? $r['title'] : (isset($r['headline']) ? $r['headline'] : null)),
+                    'thumb'    => ytBestThumb(isset($r['thumbnail']['thumbnails']) ? $r['thumbnail']['thumbnails'] : array()),
+                    'duration' => ytGetText(isset($r['lengthText']) ? $r['lengthText'] : null),
+                );
+            }
+        }
     }
+    _ytCollect($videos, $seenIds, $data);
+
+    /* Continuation: YouTube devuelve max ~100 videos en la primera
+       respuesta. Si la playlist tiene más, hay tokens de continuación
+       en el JSON. Los seguimos en bucle (max 20 páginas como guard
+       razonable para no colgar el endpoint en playlists enormes). */
+    $maxPages = 20;
+    while ($maxPages-- > 0) {
+        $tokens = array();
+        ytFindKeys($data, 'continuationCommand', $tokens, 0);
+        $token = null;
+        foreach ($tokens as $t) {
+            if (isset($t['token'])) { $token = $t['token']; break; }
+        }
+        if (!$token) break;
+        $data = innertubeCall('browse', array('continuation' => $token));
+        if (!$data) break;
+        $before = count($videos);
+        _ytCollect($videos, $seenIds, $data);
+        /* Si una página no añade nada nuevo, paramos para evitar loops
+           infinitos por tokens redundantes. */
+        if (count($videos) === $before) break;
+    }
+
     echo json_encode(array('videos' => $videos));
 
 /* ── INFO DE UN VÍDEO (descripción, autor, vistas) ── */

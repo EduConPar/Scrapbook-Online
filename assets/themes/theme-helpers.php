@@ -34,17 +34,21 @@ $THEME_COLOR_KEYS = [
     'titlebarIconColor', 'titlebarIconBg',
     'titlebarIconBezelLight', 'titlebarIconBezelDark',
     /* Bordes */
-    'border', 'borderStrong',
+    'border',
     /* Bezels */
     'bezelLight1', 'bezelLight2', 'bezelDark1', 'bezelDark2',
     /* Escritorio */
     'desktopBg',
     /* Estados */
     'linkText', 'errorText', 'warningBg', 'warningText',
-    /* Selección / badges */
-    'selectionBg', 'selectionText', 'badgeBg', 'badgeText',
+    /* Badges */
+    'badgeBg', 'badgeText',
     /* Decorativos */
     'starColor',
+    /* Kawaii-only — solo las vars semánticas clave. Las variantes
+       internas (rose-50, accent-coral, button-blue, etc.) viven en
+       :root de kawaii como detalles de implementación, no se exponen. */
+    'hoverBg', 'activeRose', 'inactiveBg', 'linkHover', 'paleRose', 'shadowColor',
 ];
 
 /* Mapeo key → variable CSS */
@@ -74,7 +78,6 @@ $THEME_TOKEN_MAP = [
     'accentText'    => '--accent-text',
     'accentDeep'    => '--accent-deep',
     'border'        => '--border',
-    'borderStrong'  => '--border-strong',
     'bezelLight1'   => '--bezel-light-1',
     'bezelLight2'   => '--bezel-light-2',
     'bezelDark1'    => '--bezel-dark-1',
@@ -84,11 +87,16 @@ $THEME_TOKEN_MAP = [
     'errorText'     => '--error-text',
     'warningBg'     => '--warning-bg',
     'warningText'   => '--warning-text',
-    'selectionBg'   => '--selection-bg',
-    'selectionText' => '--selection-text',
     'badgeBg'       => '--badge-bg',
     'badgeText'     => '--badge-text',
     'starColor'     => '--star-color',
+    /* Kawaii-only */
+    'hoverBg'       => '--hover-bg',
+    'activeRose'    => '--active-rose',
+    'inactiveBg'    => '--inactive-bg',
+    'linkHover'     => '--link-hover',
+    'paleRose'      => '--pale-rose',
+    'shadowColor'   => '--shadow-color',
 ];
 
 /* Valores por defecto Win98 (usados si el usuario no fija el token). */
@@ -118,7 +126,6 @@ $THEME_DEFAULTS = [
     'accentText'    => '#ffffff',
     'accentDeep'    => '#00004a',
     'border'        => '#808080',
-    'borderStrong'  => '#404040',
     'bezelLight1'   => '#ffffff',
     'bezelLight2'   => '#dfdfdf',
     'bezelDark1'    => '#0a0a0a',
@@ -128,11 +135,16 @@ $THEME_DEFAULTS = [
     'errorText'     => '#c00000',
     'warningBg'     => '#fffbe6',
     'warningText'   => '#444444',
-    'selectionBg'   => '#000080',
-    'selectionText' => '#ffffff',
     'badgeBg'       => '#d72638',
     'badgeText'     => '#ffffff',
     'starColor'     => '#ffd700',
+    /* Kawaii-only — defaults coinciden con :root de kawaii/style.css */
+    'hoverBg'       => '#CCE7F7',
+    'activeRose'    => '#FCE7F5',
+    'inactiveBg'    => '#E8DEEB',
+    'linkHover'     => '#6B3A6B',
+    'paleRose'      => '#FFF4F9',
+    'shadowColor'   => '#2D2052',
 ];
 
 /* ── Compat: claves antiguas (themes guardados antes del refactor) ── */
@@ -177,7 +189,6 @@ $CAPI_THEME_COLORS = [
     'accentText'    => '#000000',
     'accentDeep'    => '#c8a000',
     'border'        => '#3a3a3a',
-    'borderStrong'  => '#555555',
     'bezelLight1'   => '#555555',
     'bezelLight2'   => '#444444',
     'bezelDark1'    => '#111111',
@@ -187,8 +198,6 @@ $CAPI_THEME_COLORS = [
     'errorText'     => '#ff4f6e',
     'warningBg'     => '#2a2200',
     'warningText'   => '#e8cc80',
-    'selectionBg'   => '#EDC001',
-    'selectionText' => '#000000',
     'badgeBg'       => '#ff4f6e',
     'badgeText'     => '#ffffff',
     'starColor'     => '#EDC001',
@@ -220,7 +229,6 @@ $ANGIE_THEME_COLORS = [
     'accentText'    => '#F9DDD8',
     'accentDeep'    => '#5B744B',
     'border'        => '#F3BABA',
-    'borderStrong'  => '#5B744B',
     'bezelLight1'   => '#F9DDD8',
     'bezelLight2'   => '#F8D0C8',
     'bezelDark1'    => '#35522B',
@@ -230,8 +238,6 @@ $ANGIE_THEME_COLORS = [
     'errorText'     => '#c8456e',
     'warningBg'     => '#F3BABA',
     'warningText'   => '#35522B',
-    'selectionBg'   => '#799567',
-    'selectionText' => '#F9DDD8',
     'badgeBg'       => '#c8456e',
     'badgeText'     => '#F9DDD8',
     'starColor'     => '#c8a000',
@@ -260,15 +266,18 @@ function seedDefaultTheme($userKey, $label) {
     $uid = userIdByKey($userKey);
     if (!$uid) return;
     $pdo = themesPdo();
-    /* ¿Ya tiene algún tema (cualquiera)? Si sí, respetamos su estado. */
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM themes WHERE user_id = ?");
-    $stmt->execute([$uid]);
+    /* Seed para la interfaz actual. Cada (user, interface) tiene su
+       propio espacio: el usuario puede tener "Capi" en win98 y "Capi"
+       en win7 con paletas diferentes. */
+    $iface = preg_replace('/[^A-Za-z0-9_-]/', '', $_COOKIE['activeInterface'] ?? '') ?: 'win98';
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM themes WHERE user_id = ? AND interface_name = ?");
+    $stmt->execute([$uid, $iface]);
     if ((int)$stmt->fetchColumn() > 0) return;
 
-    $pdo->prepare("INSERT INTO themes (user_id, name, colors, is_active, updated_at)
-                   VALUES (?, ?, ?, 0, NOW())")
+    $pdo->prepare("INSERT INTO themes (user_id, interface_name, name, colors, is_active, updated_at)
+                   VALUES (?, ?, ?, ?, 0, NOW())")
         ->execute([
-            $uid, $def['name'],
+            $uid, $iface, $def['name'],
             json_encode($def['colors'], JSON_UNESCAPED_UNICODE),
         ]);
     $cssPath = themeCssFile($def['name'], $label);
@@ -287,11 +296,35 @@ function themesDir() {
    llamadas a esta función) lo recuperen vía `global $pdo`. */
 function themesPdo(): PDO {
     if (isset($GLOBALS['pdo']) && $GLOBALS['pdo'] instanceof PDO) {
+        _ensureThemesInterfaceColumn($GLOBALS['pdo']);
         return $GLOBALS['pdo'];
     }
     require_once dirname(__DIR__, 2) . '/db.php';
     $GLOBALS['pdo'] = $pdo;
+    _ensureThemesInterfaceColumn($pdo);
     return $pdo;
+}
+
+/* Migración idempotente: añade la columna interface_name a la tabla
+   themes y cambia el UNIQUE de (user_id, name) a (user_id, interface_name,
+   name) para que cada usuario pueda tener el MISMO nombre de tema en
+   interfaces distintas. Default 'win98' para todos los themes existentes
+   (era la única interfaz antes del sistema de packs). */
+function _ensureThemesInterfaceColumn(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $col = $pdo->query("SHOW COLUMNS FROM themes LIKE 'interface_name'")->fetch();
+        if ($col) return;
+        $pdo->exec("ALTER TABLE themes ADD COLUMN interface_name VARCHAR(32) NOT NULL DEFAULT 'win98' AFTER user_id");
+        /* Reemplaza el UNIQUE viejo por uno que también considere interface_name. */
+        try { $pdo->exec("ALTER TABLE themes DROP INDEX uq_themes_user_name"); } catch (Throwable $_) {}
+        $pdo->exec("ALTER TABLE themes ADD UNIQUE KEY uq_themes_user_iface_name (user_id, interface_name, name)");
+    } catch (Throwable $_) {
+        /* Si la migración falla (permisos, BD legacy), seguimos. El resto
+           del código maneja la ausencia de la columna con fallback a 'win98'. */
+    }
 }
 
 /* Resuelve user_key (string) → usuarios.id (int). Cachea por petición. */
@@ -305,15 +338,37 @@ function userIdByKey(string $userKey): ?int {
 }
 
 /**
- * Carga TODOS los temas del usuario desde SQL en la misma forma que el
- * antiguo JSON: ['themes' => {name: {colors, updatedAt}}, 'active' => string].
+ * Carga los temas del usuario PARA UNA INTERFAZ CONCRETA.
+ *
+ * Cada (user, interface) tiene su propio espacio de temas: crear "Blue"
+ * en win98 NO lo hace visible en win7. La interfaz se pasa explícitamente
+ * o se infiere de la cookie 'activeInterface' (default 'win98').
+ *
+ * Devuelve la misma forma que antes:
+ *   ['themes' => {name: {colors, updatedAt}}, 'active' => string]
+ *
+ * Pasa $interfaceName = '*' para listar de TODAS las interfaces (uso
+ * interno de retrocompat — p.ej. helpers que regeneran CSS antiguos).
  */
-function loadUserThemes($userKey) {
+function loadUserThemes($userKey, string $interfaceName = '') {
     $uid = userIdByKey($userKey);
     if (!$uid) return ['themes' => new stdClass(), 'active' => ''];
-    $rows = themesPdo()->prepare("SELECT name, colors, is_active, UNIX_TIMESTAMP(updated_at) AS updated_ts
-                                  FROM themes WHERE user_id = ?");
-    $rows->execute([$uid]);
+
+    /* Resuelve la interfaz si no se pasó. */
+    if ($interfaceName === '') {
+        $cookie = $_COOKIE['activeInterface'] ?? '';
+        $interfaceName = preg_replace('/[^A-Za-z0-9_-]/', '', $cookie) ?: 'win98';
+    }
+
+    if ($interfaceName === '*') {
+        $rows = themesPdo()->prepare("SELECT name, colors, is_active, UNIX_TIMESTAMP(updated_at) AS updated_ts
+                                      FROM themes WHERE user_id = ?");
+        $rows->execute([$uid]);
+    } else {
+        $rows = themesPdo()->prepare("SELECT name, colors, is_active, UNIX_TIMESTAMP(updated_at) AS updated_ts
+                                      FROM themes WHERE user_id = ? AND interface_name = ?");
+        $rows->execute([$uid, $interfaceName]);
+    }
     $themes = [];
     $active = '';
     foreach ($rows->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -327,9 +382,11 @@ function loadUserThemes($userKey) {
 }
 
 /**
- * Sustituye TODOS los temas del usuario por los del array $data.
- * Mantiene compat con el contrato JSON antiguo. Usa transacción para que
- * un fallo no deje el estado a medias.
+ * Sustituye los temas del usuario PARA UNA INTERFAZ CONCRETA por los
+ * del array $data. La interfaz se infiere de la cookie 'activeInterface'.
+ *
+ * IMPORTANTE: solo borra/upserta dentro del scope de la interfaz actual.
+ * Los temas de OTRAS interfaces se quedan intactos.
  */
 function saveUserThemes($userKey, $data) {
     $uid = userIdByKey($userKey);
@@ -337,26 +394,28 @@ function saveUserThemes($userKey, $data) {
     $pdo = themesPdo();
     $active  = isset($data['active']) ? (string)$data['active'] : '';
     $themes  = (array)($data['themes'] ?? []);
+    $iface   = preg_replace('/[^A-Za-z0-9_-]/', '', $_COOKIE['activeInterface'] ?? '') ?: 'win98';
     $pdo->beginTransaction();
     try {
-        /* Borra los que ya no están en $themes */
+        /* Borra los que ya no están en $themes (SOLO de esta interfaz) */
         $names = array_keys($themes);
         if (empty($names)) {
-            $pdo->prepare("DELETE FROM themes WHERE user_id = ?")->execute([$uid]);
+            $pdo->prepare("DELETE FROM themes WHERE user_id = ? AND interface_name = ?")
+                ->execute([$uid, $iface]);
         } else {
             $place = implode(',', array_fill(0, count($names), '?'));
-            $params = array_merge([$uid], $names);
-            $pdo->prepare("DELETE FROM themes WHERE user_id = ? AND name NOT IN ($place)")
+            $params = array_merge([$uid, $iface], $names);
+            $pdo->prepare("DELETE FROM themes WHERE user_id = ? AND interface_name = ? AND name NOT IN ($place)")
                 ->execute($params);
         }
-        /* Inserta o actualiza cada uno */
-        $upsert = $pdo->prepare("INSERT INTO themes (user_id, name, colors, is_active, updated_at)
-            VALUES (?, ?, ?, ?, FROM_UNIXTIME(?))
+        /* Inserta o actualiza cada uno con interface_name */
+        $upsert = $pdo->prepare("INSERT INTO themes (user_id, interface_name, name, colors, is_active, updated_at)
+            VALUES (?, ?, ?, ?, ?, FROM_UNIXTIME(?))
             ON DUPLICATE KEY UPDATE colors=VALUES(colors), is_active=VALUES(is_active), updated_at=VALUES(updated_at)");
         foreach ($themes as $name => $info) {
             $ts = isset($info['updatedAt']) && is_numeric($info['updatedAt']) ? (int)$info['updatedAt'] : time();
             $upsert->execute([
-                $uid, $name,
+                $uid, $iface, $name,
                 json_encode($info['colors'] ?? [], JSON_UNESCAPED_UNICODE),
                 ($name === $active) ? 1 : 0,
                 $ts,
@@ -559,4 +618,55 @@ function refreshActiveThemeCss($userKey, $label) {
     $cssPath = themeCssFile($active, $label);
     $css     = generateThemeCss(themeCssClassName($active, $label), $themes[$active]['colors']);
     @file_put_contents($cssPath, $css);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   getActiveThemeForInterface
+   ──────────────────────────────────────────────────────────────────────
+   Resuelve qué tema debe estar activo PARA UNA INTERFAZ CONCRETA.
+   Cada usuario puede tener un tema activo distinto por interfaz; la
+   selección se persiste en cookies `themeFor_<interfaceName>`.
+
+   Orden de resolución:
+     1) Cookie `themeFor_<interface>` → si apunta a un tema del usuario
+        que existe, lo devuelve.
+     2) `loadUserThemes()['active']` → el tema global (retrocompat).
+     3) '' (sin tema → la interfaz usa sus tokens default de :root).
+
+   Refresca también el CSS del tema activo en disco para que el browser
+   tenga la versión vigente.
+   ────────────────────────────────────────────────────────────────────── */
+function getActiveThemeForInterface(string $userKey, string $label, string $interfaceName = ''): array {
+    $iface = preg_replace('/[^A-Za-z0-9_-]/', '', $interfaceName);
+    if ($iface === '') $iface = 'win98';
+    /* Filtra estrictamente por la interfaz actual. Crear "Blue" en
+       win98 NO lo muestra en win7, y vice versa. */
+    $data   = loadUserThemes($userKey, $iface);
+    $themes = (array)$data['themes'];
+    $name   = '';
+    /* 1. Cookie por interfaz (la fuente principal de verdad). */
+    $cookieKey = 'themeFor_' . $iface;
+    if (!empty($_COOKIE[$cookieKey])) {
+        $cand = sanitizeThemeName((string)$_COOKIE[$cookieKey]);
+        if ($cand !== '' && isset($themes[$cand])) $name = $cand;
+    }
+    /* 2. is_active del DB para esta interfaz (retrocompat para
+       usuarios viejos sin cookie todavía). */
+    if ($name === '' && !empty($data['active'])) {
+        $cand = sanitizeThemeName($data['active']);
+        if ($cand !== '' && isset($themes[$cand])) $name = $cand;
+    }
+    /* 3. Sin tema → la interfaz usa los tokens default del :root de
+       su style.css. No buscamos en otras interfaces. */
+    if ($name !== '' && isset($themes[$name]['colors']) && validateThemeColors($themes[$name]['colors'])) {
+        $cssPath = themeCssFile($name, $label);
+        $css     = generateThemeCss(themeCssClassName($name, $label), $themes[$name]['colors']);
+        @file_put_contents($cssPath, $css);
+        return [
+            'name'      => $name,
+            'cssRel'    => themeCssRelPath($name, $label),
+            'className' => themeCssClassName($name, $label),
+        ];
+    }
+    return ['name' => '', 'cssRel' => '', 'className' => ''];
 }

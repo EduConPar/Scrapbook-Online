@@ -4,7 +4,7 @@
    ──────────────────────────────────────────────────────────────────────
    Centrada en los dos casos de uso útiles en móvil:
      1. 🎲 Lanzador de dados Three.js (mismo motor que el escritorio).
-     2. 📁 Mis Fichas — lista de PDFs guardados en Google Drive con
+     2. <img src="../../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Mis Fichas — lista de PDFs guardados en Google Drive con
         visor (PDF.js, página a página, pinch-zoom nativo).
    La EDICIÓN de campos del PDF queda fuera — es inviable en pantalla
    pequeña. Para editar el usuario sigue usando la versión escritorio.
@@ -71,6 +71,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -765,7 +768,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <span style="display:block;font-size:10px;color:var(--text-muted,#666);margin-top:2px;">Ficha estándar D&amp;D 5e (5 páginas)</span>
                 </button>
                 <button class="button" id="new-sheet-melon" style="min-height:40px;font-size:13px;text-align:left;padding:6px 12px;">
-                    🎨 <strong>Melon</strong>
+                    <img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> <strong>Melon</strong>
                     <span style="display:block;font-size:10px;color:var(--text-muted,#666);margin-top:2px;">Versión alternativa con fuente Allison</span>
                 </button>
             </div>
@@ -826,7 +829,7 @@ var SHEETS = {
     melon: {
         pdfUrl:      '../../assets/pdf/Hoja DND.pdf',
         defaultFont: "'Allison', cursive",
-        label:       '🎨 Melon'
+        label:       '<img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Melon'
     }
 };
 
@@ -1281,12 +1284,12 @@ function renderFichasList(){
                  : 'otro';
         var nombreLimpio = f.name.replace(/_(oficial|melon)\.pdf$/i,'').replace(/\.pdf$/i,'').replace(/_/g,' ');
         var fecha = new Date(f.modifiedTime).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'});
-        var tipoLbl = tipo==='oficial'?'📜 Oficial':tipo==='melon'?'🎨 Melon':'❓ Otro';
+        var tipoLbl = tipo==='oficial'?'📜 Oficial':tipo==='melon'?'<img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Melon':'❓ Otro';
         var card = document.createElement('div'); card.className = 'ficha-card-m';
         card.innerHTML =
             '<div class="fc-tipo-m">'+tipoLbl+'</div>'+
             '<div class="fc-nombre-m">'+esc(nombreLimpio)+'</div>'+
-            '<div class="fc-fecha-m">📅 '+esc(fecha)+'</div>'+
+            '<div class="fc-fecha-m"><img src="../../assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> '+esc(fecha)+'</div>'+
             '<div class="fc-actions-m">'+
                 '<button class="button" data-a="ver">👁 Ver</button>'+
                 '<button class="button danger" data-a="del">✕</button>'+
@@ -1348,7 +1351,7 @@ async function openPdfViewer(f){
     var v = document.getElementById('pdf-viewer');
     v.classList.add('is-open');
     document.getElementById('pdf-viewer-title').textContent = (
-        _detectSheetType(f.name) === 'melon' ? '🎨 ' :
+        _detectSheetType(f.name) === 'melon' ? '<img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> ' :
         _detectSheetType(f.name) === 'oficial' ? '📜 ' : '📄 '
     ) + f.name;
     document.getElementById('pdf-viewer-loading').style.display = 'flex';

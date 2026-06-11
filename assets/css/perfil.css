@@ -367,7 +367,14 @@
     align-items: center;
 }
 .profile-nav-chat:hover { background: rgba(255,255,255,0.25); }
-.profile-nav-chat-ico { font-size: 13px; line-height: 1; }
+.profile-nav-chat-ico {
+    width: 13px;
+    height: 13px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    display: inline-block;
+    vertical-align: middle;
+}
 .profile-nav-chat-badge {
     position: absolute;
     top: -4px;
@@ -524,6 +531,99 @@
     color: var(--text-faint);
     margin-top: 1px;
     padding: 0 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+/* Ticks WhatsApp-style: ✓ enviado, ✓✓ entregado, ✓✓ accent leído. */
+.chat-ticks {
+    display: inline-flex;
+    font-family: 'ms_sans_serif', Tahoma, sans-serif;
+    letter-spacing: -3px;
+    font-size: 11px;
+    line-height: 1;
+}
+.chat-ticks.is-sent      { opacity: 0.55; }
+.chat-ticks.is-delivered { opacity: 0.85; }
+.chat-ticks.is-read      {
+    color: var(--accent);
+    opacity: 1;
+    text-shadow: 0 0 4px var(--accent);
+}
+/* Indicador "(editado)" debajo del texto, MISMA línea que la hora. */
+.chat-edited-tag {
+    font-style: italic;
+    opacity: 0.7;
+    font-size: 9px;
+}
+/* Mensaje soft-deleted: italicized, faded, sin context menu posible. */
+.chat-bubble.is-deleted {
+    font-style: italic;
+    opacity: 0.6;
+    color: var(--text-faint) !important;
+}
+.chat-msg-mine .chat-bubble.is-deleted {
+    background: var(--win-bg) !important;
+    color: var(--text-faint) !important;
+}
+/* Status en el header del chat (En línea / Última vez X). */
+#profile-chat-status {
+    font-size: 9px;
+    color: var(--text-faint);
+    margin-left: 4px;
+    font-weight: normal;
+}
+#profile-chat-status.is-online {
+    color: var(--accent);
+    font-weight: bold;
+}
+
+/* Menu contextual para edit/delete (mismo tema Win98). */
+.chat-msg-menu {
+    position: fixed;
+    z-index: 10010;
+    background: var(--win-bg);
+    box-shadow:
+        inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
+        inset -2px -2px var(--bezel-dark-2), inset 2px 2px var(--bezel-light-2);
+    padding: 2px;
+    min-width: 100px;
+    font-size: 11px;
+}
+.chat-msg-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+}
+.chat-msg-menu button:hover {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+.chat-msg-menu button.danger { color: var(--error-text, #800000); }
+
+/* Edit-in-place box: input que reemplaza la bubble. */
+.chat-edit-row {
+    display: flex;
+    gap: 3px;
+    width: 100%;
+    align-items: center;
+}
+.chat-edit-row input {
+    flex: 1;
+    font-size: 11px;
+    padding: 3px 5px;
+}
+.chat-edit-row button {
+    font-size: 10px;
+    padding: 2px 6px;
+    min-width: 22px;
 }
 
 #profile-chat-input-row {
@@ -1139,9 +1239,9 @@
 }
 
 .pinfo-social {
-    font-size: 16px;
+    font-size: 22px;
     line-height: 1;
-    padding: 4px;
+    padding: 5px 6px;
     color: inherit;
     text-decoration: none;
     cursor: pointer;
@@ -1795,11 +1895,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
-}
-
-.profile-gallery-footer:hover {
-    background: var(--accent);
-    color: var(--accent-text);
+    /* Sin :hover: el footer dejó de ser clickable cuando contiene la
+       fecha de completado (antes ciclaba el status, lo que devolvía
+       el item a "pendiente" al tocar la fecha por error). */
 }
 
 

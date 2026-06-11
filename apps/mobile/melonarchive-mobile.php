@@ -58,6 +58,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -434,7 +437,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <!-- Sub-ventana Win98: título + meta del vídeo. -->
                 <div class="window ma-sub-window">
                     <div class="title-bar">
-                        <div class="title-bar-text">📼 Vídeo</div>
+                        <div class="title-bar-text"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Vídeo</div>
                     </div>
                     <div class="window-body">
                         <div class="ma-video-title" id="ma-video-title">—</div>
@@ -445,7 +448,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <!-- Sub-ventana Win98: descripción + toggle. -->
                 <div class="window ma-sub-window">
                     <div class="title-bar">
-                        <div class="title-bar-text">📝 Descripción</div>
+                        <div class="title-bar-text"><img src="../../assets/img/appIcons/newsIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Descripción</div>
                     </div>
                     <div class="window-body ma-video-desc-box" id="ma-video-desc-box" data-overflow="0">
                         <div class="ma-video-desc" id="ma-video-desc"></div>
@@ -534,7 +537,7 @@ function renderPlaylists(list) {
     list.forEach(function(pl, i){
         var thumbHtml = pl.thumb
             ? '<img src="' + esc(pl.thumb) + '" alt="" loading="lazy">'
-            : '<span class="ma-card-thumb-ph">📂</span>';
+            : '<span class="ma-card-thumb-ph"><img src="../../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
         html +=
             '<div class="ma-card" data-act="open-pl" data-idx="' + i + '" role="button" tabindex="0">' +
                 '<div class="ma-card-thumb">' + thumbHtml + '</div>' +

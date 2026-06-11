@@ -9,6 +9,36 @@ if (!$userKey || !isset($loginUsers[$userKey])) {
 }
 $userLabel = $loginUsers[$userKey]['label'];
 
+/* Detecta packs de iconos: subcarpetas de assets/img/appIcons/.
+   Cada carpeta = un pack. El default 'Melon' debería existir siempre. */
+$iconPacks = [];
+$appIconsDir = dirname(__DIR__) . '/assets/img/appIcons';
+if (is_dir($appIconsDir)) {
+    foreach (scandir($appIconsDir) as $entry) {
+        if ($entry === '.' || $entry === '..') continue;
+        if (!is_dir($appIconsDir . '/' . $entry)) continue;
+        /* Coge un icono representativo del pack para el preview (el
+           primer .png que encuentre). */
+        $previewIcon = '';
+        foreach (scandir($appIconsDir . '/' . $entry) as $f) {
+            if (preg_match('/\.(png|jpg|gif|webp)$/i', $f)) {
+                $previewIcon = '../assets/img/appIcons/' . $entry . '/' . $f;
+                break;
+            }
+        }
+        $iconPacks[] = [
+            'name'    => $entry,
+            'preview' => $previewIcon,
+        ];
+    }
+    usort($iconPacks, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+}
+
+/* Detecta interfaces instaladas en assets/interfaces/. Cada una es
+   una carpeta con style.css + meta.json + (opcional) preview.png. */
+require_once dirname(__DIR__) . '/assets/php/active-interface.php';
+$interfacePacks = listInterfaces();
+
 /* Tema activo del usuario */
 require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
 refreshActiveThemeCss($userKey, $userLabel);
@@ -32,6 +62,10 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <!-- Icon pack swap — debe cargar antes del primer render. -->
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
@@ -91,8 +125,14 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         }
         .temas-item.active .temas-item-badge,
         .temas-item:hover .temas-item-badge { color: var(--accent-text); }
-        .temas-item-pub { font-size: 10px; flex-shrink: 0; }
-        .temas-item-dl  { font-size: 10px; flex-shrink: 0; }
+        .temas-item-pub,
+        .temas-item-dl {
+            width: 14px;
+            height: 14px;
+            object-fit: contain;
+            image-rendering: pixelated;
+            flex-shrink: 0;
+        }
         /* Menú contextual de tema (publicar/quitar) */
         .temas-ctx-menu {
             position: fixed; z-index: 99999;
@@ -222,7 +262,22 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             margin:2px;
         }
         .lib-author-name { font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        #temas-library-empty { text-align:center; color:var(--text-faint); font-size:11px; padding:30px 10px; }
+        /* Empty state: ocupa el ancho completo del grid (no cae a una
+           celda) y se centra vertical+horizontalmente dentro del área
+           visible de la biblioteca. */
+        #temas-library-empty {
+            grid-column: 1 / -1;
+            min-height: 60vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--text-faint);
+            font-size: 12px;
+            padding: 20px;
+            line-height: 1.6;
+        }
 
         /* ── Vista de Personalización (Temas / Haros / Mascotas) ── */
         #temas-personalize { flex:1; overflow-y:auto; padding:12px; background:var(--win-bg); color:var(--text); }
@@ -426,7 +481,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                 <p id="temas-starticon-status" style="font-size:10px;margin:3px 0 0;color:var(--text-faint);min-height:13px;"></p>
             </div>
 
-            <div class="temas-side-head" style="border-top:1px solid var(--border);">📺 Efectos visuales</div>
+            <div class="temas-side-head" style="border-top:1px solid var(--border);"><img src="../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Efectos visuales</div>
             <div id="temas-effects-area" style="padding:6px 4px;">
                 <div class="field-row">
                     <input type="checkbox" id="lcd-filter-toggle">
@@ -470,11 +525,15 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="temas-library" hidden>
             <div id="temas-library-grid"></div>
         </div>
-        <!-- Personalización (Temas / Haros / Mascotas con cosas que tienes) -->
+        <!-- Personalización (Interfaces / Iconos / Haros / Mascotas) -->
         <div id="temas-personalize" hidden>
             <section class="pers-section">
                 <h3 class="pers-section-title"><img src="../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</h3>
                 <div class="pers-grid" id="pers-themes-grid"></div>
+            </section>
+            <section class="pers-section">
+                <h3 class="pers-section-title"><img src="../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Iconos</h3>
+                <div class="pers-grid" id="pers-icons-grid"></div>
             </section>
             <section class="pers-section">
                 <h3 class="pers-section-title"><img src="../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</h3>
@@ -489,60 +548,125 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 </div>
 
 <script>
+/* Lista de INTERFACES instaladas — escaneadas desde assets/interfaces/.
+   Cada item tiene { name, label, description, isDefault, preview }. */
+window.__INTERFACE_PACKS__ = <?= json_encode($interfacePacks, JSON_UNESCAPED_UNICODE) ?>;
+/* Lista de packs de iconos detectados por PHP (scandir de
+   assets/img/appIcons/). El usuario puede crear más packs creando
+   carpetas con los mismos nombres de archivo. */
+window.__ICON_PACKS__ = <?= json_encode($iconPacks, JSON_UNESCAPED_UNICODE) ?>;
+</script>
+<script>
+/* `hideIn: ['kawaii']` esconde la variable del editor cuando la interfaz
+   activa NO la usa. Kawaii sólo lee 11 vars de su style.css (verificado
+   con `grep var(--`):
+       winBg, winBodyBg, border, text, textMuted, textFaint,
+       titlebarStart, titlebarText, accent, accentDeep, linkText
+   Las demás las DEFINE en su :root para mantener compat con shells que
+   las leen (98.css, themes.css), pero las USA hardcoded en sus propias
+   reglas — editarlas no produce cambio visual en kawaii. */
 const COLOR_DEFS = [
     /* — Superficies — */
     { key: 'winBg',         label: 'Fondo de ventana',          def: '#c0c0c0', group: 'Superficies' },
     { key: 'winBodyBg',     label: 'Fondo del cuerpo',          def: '#c0c0c0', group: 'Superficies' },
-    { key: 'surfaceDeep',   label: 'Taskbar / paneles',         def: '#c0c0c0', group: 'Superficies' },
-    { key: 'insetBg',       label: 'Fondo hundido (placeholder)', def: '#808080', group: 'Superficies' },
+    { key: 'surfaceDeep',   label: 'Taskbar / paneles',         def: '#c0c0c0', group: 'Superficies', hideIn: ['kawaii'] },
+    /* insetBg → en kawaii es el bg blanco de inputs/scrollbar/cards.
+       VISIBLE en kawaii — el user quiere editarlo. */
+    { key: 'insetBg',       label: 'Fondo hundido (inputs, scroll, cards)', def: '#808080', group: 'Superficies' },
     /* — Inputs — */
-    { key: 'inputBg',       label: 'Fondo del input',           def: '#ffffff', group: 'Inputs' },
-    { key: 'inputText',     label: 'Texto del input',           def: '#000000', group: 'Inputs' },
+    { key: 'inputBg',       label: 'Fondo del input/textbox',   def: '#ffffff', group: 'Inputs' },
+    { key: 'inputText',     label: 'Texto del input',           def: '#000000', group: 'Inputs', hideIn: ['kawaii'] },
     /* — Botones — */
-    { key: 'btnBg',         label: 'Fondo del botón',           def: '#c0c0c0', group: 'Botones' },
-    { key: 'btnText',       label: 'Texto del botón',           def: '#000000', group: 'Botones' },
-    { key: 'startBtnBg',    label: 'Fondo del botón Inicio',    def: '#c0c0c0', group: 'Botones' },
-    { key: 'startBtnText',  label: 'Texto del botón Inicio',    def: '#000000', group: 'Botones' },
+    { key: 'btnBg',         label: 'Fondo del botón',           def: '#c0c0c0', group: 'Botones', hideIn: ['kawaii'] },
+    { key: 'btnText',       label: 'Texto del botón',           def: '#000000', group: 'Botones', hideIn: ['kawaii'] },
+    { key: 'startBtnBg',    label: 'Fondo del botón Inicio',    def: '#c0c0c0', group: 'Botones', hideIn: ['kawaii'] },
+    { key: 'startBtnText',  label: 'Texto del botón Inicio',    def: '#000000', group: 'Botones', hideIn: ['kawaii'] },
     /* — Texto — */
     { key: 'text',          label: 'Texto principal',           def: '#000000', group: 'Texto' },
     { key: 'textMuted',     label: 'Texto secundario',          def: '#666666', group: 'Texto' },
-    { key: 'textFaint',     label: 'Texto terciario',           def: '#808080', group: 'Texto' },
-    { key: 'textInset',     label: 'Texto sobre hundido',       def: '#808080', group: 'Texto' },
+    { key: 'textFaint',     label: 'Texto terciario / disabled',def: '#808080', group: 'Texto' },
+    { key: 'textInset',     label: 'Texto sobre hundido',       def: '#808080', group: 'Texto', hideIn: ['kawaii'] },
     /* — Acento / barra de título — */
     { key: 'titlebarStart', label: 'Título — gradiente inicio', def: '#000080', group: 'Acento' },
-    { key: 'titlebarEnd',   label: 'Título — gradiente final',  def: '#1084d0', group: 'Acento' },
+    { key: 'titlebarEnd',   label: 'Título — gradiente final',  def: '#1084d0', group: 'Acento', hideIn: ['kawaii'] },
     { key: 'titlebarText',  label: 'Título — texto',            def: '#ffffff', group: 'Acento' },
     { key: 'accent',        label: 'Acento (hover/activo)',     def: '#000080', group: 'Acento' },
-    { key: 'accentText',    label: 'Texto sobre acento',        def: '#ffffff', group: 'Acento' },
+    /* accentText → blanco sobre fondos accent (rosa kawaii). VISIBLE
+       en kawaii. */
+    { key: 'accentText',    label: 'Texto sobre acento (blanco)', def: '#ffffff', group: 'Acento' },
     { key: 'accentDeep',    label: 'Acento profundo (hover²)',  def: '#00004a', group: 'Acento' },
-    /* — Iconos de ventana (close / minimize / maximize) — */
-    { key: 'titlebarIconColor',      label: 'Color del dibujo del icono', def: '#000000', group: 'Iconos de ventana' },
-    { key: 'titlebarIconBg',         label: 'Fondo del botón del icono',  def: '#c0c0c0', group: 'Iconos de ventana' },
-    { key: 'titlebarIconBezelLight', label: 'Borde 3D claro (top-left)',  def: '#ffffff', group: 'Iconos de ventana' },
-    { key: 'titlebarIconBezelDark',  label: 'Borde 3D oscuro (bot-right)', def: '#0a0a0a', group: 'Iconos de ventana' },
+    /* — Iconos de ventana (close / minimize / maximize) — kawaii hardcoded */
+    { key: 'titlebarIconColor',      label: 'Color del dibujo del icono', def: '#000000', group: 'Iconos de ventana', hideIn: ['kawaii'] },
+    { key: 'titlebarIconBg',         label: 'Fondo del botón del icono',  def: '#c0c0c0', group: 'Iconos de ventana', hideIn: ['kawaii'] },
+    { key: 'titlebarIconBezelLight', label: 'Borde 3D claro (top-left)',  def: '#ffffff', group: 'Iconos de ventana', hideIn: ['kawaii'] },
+    { key: 'titlebarIconBezelDark',  label: 'Borde 3D oscuro (bot-right)', def: '#0a0a0a', group: 'Iconos de ventana', hideIn: ['kawaii'] },
     /* — Bordes — */
     { key: 'border',        label: 'Borde general',             def: '#808080', group: 'Bordes' },
-    { key: 'borderStrong',  label: 'Borde fuerte',              def: '#404040', group: 'Bordes' },
-    /* — Bezels Win98 (4 capas) — */
-    { key: 'bezelLight1',   label: 'Bezel claro (1px)',         def: '#ffffff', group: 'Bezels' },
-    { key: 'bezelLight2',   label: 'Bezel claro (2px)',         def: '#dfdfdf', group: 'Bezels' },
-    { key: 'bezelDark1',    label: 'Bezel oscuro (1px)',        def: '#0a0a0a', group: 'Bezels' },
-    { key: 'bezelDark2',    label: 'Bezel oscuro (2px)',        def: '#808080', group: 'Bezels' },
-    /* — Escritorio — */
-    { key: 'desktopBg',     label: 'Fondo del escritorio',      def: '#008080', group: 'Escritorio' },
+    /* — Bezels — bezelLight1 (#FFFFFF en kawaii) se usa para sombras
+       blancas de algunos botones. VISIBLE para editar. */
+    { key: 'bezelLight1',   label: 'Sombra clara (bezel 1px)',  def: '#ffffff', group: 'Bezels' },
+    { key: 'bezelLight2',   label: 'Sombra clara (bezel 2px)',  def: '#dfdfdf', group: 'Bezels' },
+    { key: 'bezelDark1',    label: 'Sombra oscura (bezel 1px)', def: '#0a0a0a', group: 'Bezels', hideIn: ['kawaii'] },
+    { key: 'bezelDark2',    label: 'Sombra oscura (bezel 2px)', def: '#808080', group: 'Bezels', hideIn: ['kawaii'] },
+    /* — Escritorio — kawaii pinta su propio wallpaper SVG */
+    { key: 'desktopBg',     label: 'Fondo del escritorio',      def: '#008080', group: 'Escritorio', hideIn: ['kawaii'] },
     /* — Estados — */
     { key: 'linkText',      label: 'Hipervínculos',             def: '#0000ff', group: 'Estados' },
     { key: 'errorText',     label: 'Texto de error',            def: '#c00000', group: 'Estados' },
-    { key: 'warningBg',     label: 'Fondo de aviso',            def: '#fffbe6', group: 'Estados' },
-    { key: 'warningText',   label: 'Texto de aviso',            def: '#444444', group: 'Estados' },
+    { key: 'warningBg',     label: 'Fondo de aviso',            def: '#fffbe6', group: 'Estados', hideIn: ['kawaii'] },
+    { key: 'warningText',   label: 'Texto de aviso',            def: '#444444', group: 'Estados', hideIn: ['kawaii'] },
     /* — Selección / badges — */
-    { key: 'selectionBg',   label: 'Fondo de selección',        def: '#000080', group: 'Selección' },
-    { key: 'selectionText', label: 'Texto en selección',        def: '#ffffff', group: 'Selección' },
-    { key: 'badgeBg',       label: 'Fondo del badge',           def: '#d72638', group: 'Selección' },
-    { key: 'badgeText',     label: 'Texto del badge',           def: '#ffffff', group: 'Selección' },
+    { key: 'badgeBg',       label: 'Fondo del badge',           def: '#d72638', group: 'Selección', hideIn: ['kawaii'] },
+    { key: 'badgeText',     label: 'Texto del badge',           def: '#ffffff', group: 'Selección', hideIn: ['kawaii'] },
     /* — Decorativos — */
-    { key: 'starColor',     label: 'Estrellas (rating)',        def: '#ffd700', group: 'Decorativos' }
+    { key: 'starColor',     label: 'Estrellas (rating)',        def: '#ffd700', group: 'Decorativos', hideIn: ['kawaii'] },
+    /* — Kawaii-only — solo las vars SEMÁNTICAS clave que el user
+       querría editar. Las variantes de tono internas (rose-50,
+       accent-coral, button-blue, etc.) viven en :root pero NO se
+       exponen aquí — quedan como detalles de implementación. */
+    { key: 'hoverBg',        label: 'Fondo hover (botones/items)',     def: '#CCE7F7', group: 'Kawaii', hideIn: ['win98'] },
+    { key: 'activeRose',     label: 'Fondo :active (touch)',           def: '#FCE7F5', group: 'Kawaii', hideIn: ['win98'] },
+    { key: 'inactiveBg',     label: 'Title-bar inactiva / disabled',   def: '#E8DEEB', group: 'Kawaii', hideIn: ['win98'] },
+    { key: 'linkHover',      label: 'Hover de hipervínculo',           def: '#6B3A6B', group: 'Kawaii', hideIn: ['win98'] },
+    { key: 'paleRose',       label: 'Rose muy claro (fondos sutiles)', def: '#FFF4F9', group: 'Kawaii', hideIn: ['win98'] },
+    { key: 'shadowColor',    label: 'Color base de sombras',           def: '#2D2052', group: 'Kawaii', hideIn: ['win98'] }
 ];
+
+/* ── Defaults dinámicos por interfaz activa ──────────────────────────
+   Los `def` de arriba son fallback Win98. En runtime los reemplazamos
+   con los VALORES REALES del :root de la interfaz activa (definido en
+   assets/interfaces/<active>/style.css). Así al entrar a Temas en Win7
+   los color pickers muestran los azules Aero, no los grises Win98. */
+(function() {
+    var rootStyle = getComputedStyle(document.documentElement);
+    /* Convierte camelCase → kebab-case con guion también ANTES de los
+       dígitos (bezelLight1 → bezel-light-1). */
+    function keyToVar(key) {
+        return '--' + key
+            .replace(/([A-Z])/g, '-$1')
+            .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+            .toLowerCase();
+    }
+    /* Resuelve var() y color-mix() si están encadenados — getComputedStyle
+       devuelve el valor calculado de :root, así que ya viene resuelto. */
+    function normalizeColor(v) {
+        v = (v || '').trim();
+        if (!v) return '';
+        /* Solo aceptamos hex de 3/6 dígitos para los pickers. rgba/color-mix
+           se quedan como string y se ignoran (cae al `def` hardcoded). */
+        if (/^#[0-9a-f]{3}$/i.test(v)) {
+            return '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+        }
+        if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+        if (/^#[0-9a-f]{8}$/i.test(v)) return v.substring(0, 7).toLowerCase();
+        return '';
+    }
+    COLOR_DEFS.forEach(function(d) {
+        var raw  = rootStyle.getPropertyValue(keyToVar(d.key));
+        var live = normalizeColor(raw);
+        if (live) d.def = live;
+    });
+})();
 
 /* Mapeo de claves legacy → nuevas (para temas guardados antes del refactor) */
 const LEGACY_KEY_MAP = {
@@ -581,6 +705,20 @@ var editingOriginalName = null;
    - Icono  → '' (sin imagen → logo Win98 por defecto). */
 var THEME_DEFAULT_WP = <?php echo json_encode(defaultWallpaper()); ?>;
 var THEME_DEFAULT_SI = '';
+
+/* Cookie helper: persiste qué tema usar para la interfaz ACTUALMENTE
+   activa. PHP la lee en getActiveThemeForInterface() en el siguiente
+   reload. Llamamos esto en TODAS las activaciones de tema (incluso
+   desactivación con '') para que el server siempre sepa cuál usar. */
+function persistThemeForInterface(themeName) {
+    try {
+        var iface = (typeof window.getActiveInterface === 'function')
+            ? window.getActiveInterface() : 'win98';
+        var oneYear = 60 * 60 * 24 * 365;
+        document.cookie = 'themeFor_' + iface + '=' + encodeURIComponent(themeName || '') +
+                          '; path=/; max-age=' + oneYear + '; SameSite=Lax';
+    } catch (_) {}
+}
 /* Fondo / icono GLOBAL del usuario (su baseline cuando NO hay tema activo). */
 var USER_GLOBAL_WP = <?php echo json_encode(getUserWallpaper($userLabel)); ?>;
 var USER_GLOBAL_SI = <?php echo json_encode(getUserStartIcon($userLabel)); ?>;
@@ -594,10 +732,19 @@ function applyThemeAssets(wallpaper, startIcon){
 
 function buildEditor() {
     editorEl.innerHTML = '';
-    /* Agrupar por def.group */
+    /* Interfaz activa — para filtrar variables que no pinta la interfaz
+       (e.g. kawaii es flat y no usa bezels 3D Win98). Si una def tiene
+       `hideIn: ['kawaii']` y la activa es kawaii, se omite. */
+    var activeIface = (typeof window.getActiveInterface === 'function')
+        ? window.getActiveInterface()
+        : 'win98';
+    var visibleDefs = COLOR_DEFS.filter(function(def) {
+        return !def.hideIn || def.hideIn.indexOf(activeIface) === -1;
+    });
+    /* Agrupar por def.group — solo grupos con al menos 1 var visible */
     var groups = {};
     var groupOrder = [];
-    COLOR_DEFS.forEach(function(def) {
+    visibleDefs.forEach(function(def) {
         var g = def.group || 'Otros';
         if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
         groups[g].push(def);
@@ -627,9 +774,42 @@ function buildEditor() {
             hex.maxLength = 9;
             hex.dataset.key = def.key;
             hex.id = 'hex-' + def.key;
-            picker.addEventListener('input', function() { hex.value = picker.value; });
+            /* Convierte camelCase de la def.key a kebab-case CSS var
+               (winBg → --win-bg, bezelLight1 → --bezel-light-1). */
+            var cssVar = '--' + def.key
+                .replace(/([A-Z])/g, '-$1')
+                .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+                .toLowerCase();
+            /* Live preview: aplica el color al body local (iframe de
+               Temas) Y propaga al shell padre via postMessage para que
+               el escritorio entero refleje el cambio en tiempo real,
+               sin necesidad de guardar. */
+            function _applyLivePreview(val) {
+                if (!/^#[0-9a-f]{6}$/i.test(val)) return;
+                /* Usamos !important porque algunas interfaces (kawaii)
+                   declaran sus vars con !important en :root/body[class].
+                   Sin !important, el setProperty inline pierde contra
+                   esas reglas. Con !important sí gana. */
+                try { document.body.style.setProperty(cssVar, val, 'important'); } catch(_){}
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'theme-color-preview',
+                            cssVar: cssVar,
+                            value: val
+                        }, '*');
+                    }
+                } catch(_){}
+            }
+            picker.addEventListener('input', function() {
+                hex.value = picker.value;
+                _applyLivePreview(picker.value);
+            });
             hex.addEventListener('input', function() {
-                if (/^#[0-9a-f]{6}$/i.test(hex.value)) picker.value = hex.value;
+                if (/^#[0-9a-f]{6}$/i.test(hex.value)) {
+                    picker.value = hex.value;
+                    _applyLivePreview(hex.value);
+                }
             });
             row.appendChild(picker);
             row.appendChild(hex);
@@ -639,10 +819,26 @@ function buildEditor() {
     });
 }
 
+/* Estas funciones soportan COLOR_DEFS filtrados: si una def fue ocultada
+   en buildEditor (porque no aplica en la interfaz activa, p.ej. bezels
+   en kawaii), su <input> no existe en el DOM. Para esos casos
+   preservamos el valor desde el último `loaded` (HIDDEN_COLORS) para
+   no perder los datos del tema cuando el user cambia entre interfaces. */
+var HIDDEN_COLORS = {};   /* { key: hex } — valores de vars ocultas */
+
 function getEditorColors() {
     var c = {};
     COLOR_DEFS.forEach(function(def) {
-        c[def.key] = document.getElementById('hex-' + def.key).value;
+        var el = document.getElementById('hex-' + def.key);
+        if (el) {
+            c[def.key] = el.value;
+        } else if (HIDDEN_COLORS[def.key]) {
+            /* Var oculta en esta interfaz — conservamos el valor cargado
+               para que al guardar el tema no perdamos los bezels Win98. */
+            c[def.key] = HIDDEN_COLORS[def.key];
+        } else {
+            c[def.key] = def.def;
+        }
     });
     return c;
 }
@@ -650,8 +846,17 @@ function getEditorColors() {
 function setEditorColors(colors) {
     COLOR_DEFS.forEach(function(def) {
         var v = (colors && colors[def.key]) ? colors[def.key] : def.def;
-        document.getElementById('hex-' + def.key).value = v;
-        if (/^#[0-9a-f]{6}$/i.test(v)) document.getElementById('col-' + def.key).value = v;
+        var hex = document.getElementById('hex-' + def.key);
+        if (hex) {
+            hex.value = v;
+            if (/^#[0-9a-f]{6}$/i.test(v)) {
+                var col = document.getElementById('col-' + def.key);
+                if (col) col.value = v;
+            }
+        } else {
+            /* Var oculta — cache para que getEditorColors() lo preserve al guardar */
+            HIDDEN_COLORS[def.key] = v;
+        }
     });
 }
 
@@ -691,17 +896,19 @@ function renderList() {
         item.appendChild(n);
         /* Indicador de tema descargado de la biblioteca */
         if (savedThemes[name] && savedThemes[name].downloaded) {
-            var dl = document.createElement('span');
+            var dl = document.createElement('img');
             dl.className = 'temas-item-dl';
-            dl.textContent = '📥';
+            dl.src = '../assets/img/appIcons/downloadIcon.png';
+            dl.alt = '';
             dl.title = 'Descargado de la biblioteca';
             item.appendChild(dl);
         }
-        /* Indicador de publicado en biblioteca */
+        /* Indicador de publicado (subido) en biblioteca */
         if (savedThemes[name] && savedThemes[name].public) {
-            var pub = document.createElement('span');
+            var pub = document.createElement('img');
             pub.className = 'temas-item-pub';
-            pub.textContent = '🌐';
+            pub.src = '../assets/img/appIcons/booksIcon.png';
+            pub.alt = '';
             pub.title = 'Publicado en la biblioteca';
             item.appendChild(pub);
         }
@@ -857,6 +1064,7 @@ function loadThemes(cb) {
 
 document.getElementById('temas-new').addEventListener('click', resetEditor);
 document.getElementById('temas-deactivate').addEventListener('click', function() {
+    persistThemeForInterface('');
     fetch('../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -910,6 +1118,7 @@ document.getElementById('theme-activate').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Selecciona un tema primero.'; return; }
     if (!savedThemes[name]) { statusEl.textContent = 'Guarda el tema antes de activarlo.'; return; }
+    persistThemeForInterface(name);
     fetch('../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1066,6 +1275,7 @@ document.getElementById('theme-import-file').addEventListener('change', function
         }).then(function(r) { return r.json(); })
           .then(function(d) {
               if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
+              persistThemeForInterface(name);
               return fetch('../assets/themes/api.php?action=set-active', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -1128,6 +1338,18 @@ loadThemes();
             if (pers) loadPersonalize();
         });
     });
+    /* Auto-restore: si tras un reload (típicamente por cambio de pack
+       de iconos) hay un flag pidiendo abrir un tab específico, lo
+       activamos simulando un click en el botón correspondiente. */
+    try {
+        var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+        var restore = topStorage.getItem('temas-restore-tab');
+        if (restore) {
+            topStorage.removeItem('temas-restore-tab');
+            var btn = document.querySelector('.temas-tab-btn[data-tab="' + restore + '"]');
+            if (btn) btn.click();
+        }
+    } catch (_) {}
 })();
 
 /* =========================================================
@@ -1148,15 +1370,146 @@ function loadPersonalize() {
         .then(function(r){ return r.json(); })
         .then(function(d){
             if (!d || !d.ok) throw new Error(d && d.error || 'error');
-            renderPersInventory('pers-themes-grid',  d.interfaces, d.activeInterface, 'interface');
             renderPersInventory('pers-haros-grid',   d.haros,      d.activeHaro,      'haro');
             renderPersInventory('pers-mascots-grid', d.mascots,    d.activeMascot,    'mascot');
         })
         .catch(function(){
-            document.getElementById('pers-themes-grid').innerHTML  = '';
             document.getElementById('pers-haros-grid').innerHTML   = '';
             document.getElementById('pers-mascots-grid').innerHTML = '';
         });
+    /* Interfaces: ahora vienen del filesystem (assets/interfaces/) en
+       lugar del inventario de la tienda. Selección persiste en cookie. */
+    renderInterfacePacks();
+    /* Iconos: lista construida desde el filesystem (scandir de
+       assets/img/appIcons/). Selección persiste en localStorage. */
+    renderIconPacks();
+}
+
+/* Render del grid de interfaces. window.__INTERFACE_PACKS__ se inyecta
+   desde PHP con listInterfaces(). Click → setActiveInterface() del
+   loader, que escribe cookie + recarga window.top. */
+function renderInterfacePacks() {
+    var grid = document.getElementById('pers-themes-grid');
+    if (!grid) return;
+    /* Escape helper local — temas.php no expone uno global. */
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    var packs = (window.__INTERFACE_PACKS__ || []);
+    var active = (typeof window.getActiveInterface === 'function')
+        ? window.getActiveInterface()
+        : 'win98';
+    if (!packs.length) {
+        grid.innerHTML = '<p style="font-size:11px;color:var(--text-faint);">No hay interfaces instaladas.</p>';
+        return;
+    }
+    grid.innerHTML = packs.map(function(p) {
+        var isActive = (p.name === active);
+        var iconHtml;
+        if (p.preview) {
+            iconHtml = '<img src="../' + esc(p.preview) + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;image-rendering:pixelated;">';
+        } else {
+            /* Sin preview: icono genérico de interfaz. */
+            iconHtml = '<img src="../assets/img/appIcons/interfaceIcon.png" alt="" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">';
+        }
+        return '<div class="pers-item' + (isActive ? ' active' : '') + '" data-iface="' + esc(p.name) + '" title="' + esc(p.description || '') + '">' +
+            '<div class="pers-item-icon">' + iconHtml + '</div>' +
+            '<div class="pers-item-name">' + esc(p.label || p.name) + '</div>' +
+            (isActive ? '<div class="pers-item-badge">ACTIVA</div>' : '') +
+        '</div>';
+    }).join('');
+    grid.querySelectorAll('[data-iface]').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var name = card.dataset.iface;
+            if (typeof window.applyInterfacePack !== 'function') return;
+            try {
+                var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+                topStorage.setItem('temas-restore-tab', 'personalize');
+            } catch (_) {}
+            /* PRIMERO persistimos la slug en BD (para que sobreviva al
+               cambio de browser/cookies y para que el sync server-side
+               en desktop-base.php / mobile.php no la sobrescriba con la
+               vieja). LUEGO disparamos applyInterfacePack que setea
+               cookie+localStorage y recarga. Usamos finally para que el
+               reload también ocurra si el POST falla (mejor que dejar
+               el user atascado). */
+            fetch('../assets/personalize/api.php?action=set-active-interface-slug', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: name })
+            }).catch(function(){}).finally(function() {
+                window.applyInterfacePack(name);
+            });
+        });
+    });
+}
+
+function renderIconPacks() {
+    var grid = document.getElementById('pers-icons-grid');
+    if (!grid) return;
+    var packs = (window.__ICON_PACKS__ || []);
+    var active = '';
+    /* Lee del namespace por interfaz para mostrar el pack activo correcto. */
+    var iface = (typeof window.getActiveInterface === 'function') ? window.getActiveInterface() : 'win98';
+    try {
+        active = localStorage.getItem('iconPack:' + iface)
+              || localStorage.getItem('iconPack')
+              || 'Melon';
+    } catch (_) { active = 'Melon'; }
+    if (!packs.length) {
+        grid.innerHTML = '<p style="font-size:11px;color:var(--text-faint);">No hay packs de iconos disponibles.</p>';
+        return;
+    }
+    grid.innerHTML = packs.map(function(p) {
+        var isActive = (p.name === active);
+        return '<div class="pers-item' + (isActive ? ' active' : '') + '" data-pack="' + p.name + '">' +
+            '<div class="pers-item-icon">' +
+                (p.preview
+                    ? '<img src="' + p.preview + '" alt="" style="image-rendering:pixelated;">'
+                    : '<span>📦</span>') +
+            '</div>' +
+            '<div class="pers-item-name">' + p.name + '</div>' +
+            (isActive ? '<div class="pers-item-badge">ACTIVO</div>' : '') +
+        '</div>';
+    }).join('');
+    grid.querySelectorAll('[data-pack]').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var name = card.dataset.pack;
+            var iface = (typeof window.getActiveInterface === 'function')
+                ? window.getActiveInterface() : 'win98';
+            try {
+                /* Guarda el icon pack en namespace por interfaz para que
+                   cada interface recuerde su propio pack. La interfaz
+                   actual viene de la cookie 'activeInterface'. */
+                localStorage.setItem('iconPack:' + iface, name);
+                /* Mantenemos también el global para retrocompat (cualquier
+                   código viejo que lo lea). */
+                localStorage.setItem('iconPack', name);
+                /* Flag para que tras el reload el shell reabra Temas y
+                   active el tab Personalización. */
+                var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+                topStorage.setItem('temas-restore-tab', 'personalize');
+            } catch (_) {}
+            /* Sync server-side: necesario para que cuando alguien visite
+               tu perfil cargue TU icon pack (no el suyo). Esperamos al
+               POST antes de recargar — sin .finally había race condition
+               donde el reload llegaba antes que la BD se actualizara, y
+               el sync server-side en desktop-base.php volvía a setear
+               localStorage al valor viejo. */
+            fetch('../assets/personalize/api.php?action=set-icon-pack', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pack: name, interface: iface })
+            }).catch(function(){}).finally(function() {
+                try { window.top.location.reload(); }
+                catch (_) { location.reload(); }
+            });
+        });
+    });
 }
 
 function renderPersInventory(gridId, items, activeId, kind) {
@@ -1324,7 +1677,18 @@ function loadLibrary(){
         .then(function(r){ return r.json(); })
         .then(function(d){
             if(!d || !d.ok || !Array.isArray(d.items) || !d.items.length){
-                grid.innerHTML = '<div id="temas-library-empty">Aún no hay temas publicados.<br>Publica uno desde «Mis temas».</div>';
+                /* El endpoint ya filtra por interfaz activa, así que un
+                   array vacío significa "no hay temas para ESTA interfaz".
+                   Mensaje contextual con el nombre de la interfaz activa. */
+                var ifaceName = (typeof window.getActiveInterface === 'function')
+                    ? window.getActiveInterface() : 'win98';
+                var ifaceLabel = ifaceName === 'kawaii' ? 'MelonOS Overdose'
+                              : ifaceName === 'win98'  ? 'MelonOS 98'
+                              : ifaceName;
+                grid.innerHTML = '<div id="temas-library-empty">' +
+                    'No hay temas publicados para <b>' + escapeHtml(ifaceLabel) + '</b>.<br>' +
+                    'Publica uno desde «Mis temas».' +
+                    '</div>';
                 return;
             }
             grid.innerHTML = '';
@@ -1451,6 +1815,7 @@ function downloadLibraryTheme(it){
           editingOriginalName = name;
           /* Activar el tema descargado para aplicar de golpe colores + fondo + icono.
              set-active devuelve los assets ya copiados al espacio del usuario. */
+          persistThemeForInterface(name);
           return fetch('../assets/themes/api.php?action=set-active', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

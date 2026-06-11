@@ -60,6 +60,42 @@ try {
     ");
 } catch (Throwable $e) { /* silencio */ }
 
+/* Auto-migración: tabla chat_mutes — silenciado de notificaciones de un
+   chat. mute_until = timestamp futuro (o muy lejano para indefinido). */
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS chat_mutes (
+            user_id      INT NOT NULL,
+            with_user_id INT NOT NULL,
+            mute_until   TIMESTAMP NOT NULL,
+            PRIMARY KEY (user_id, with_user_id),
+            INDEX idx_until (mute_until)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+} catch (Throwable $e) { /* silencio */ }
+
+/* Auto-migración: tabla chat_nicknames — apodo que MI usuario asignó al
+   otro lado del chat. Reemplaza el label visible (label original oculto). */
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS chat_nicknames (
+            user_id      INT NOT NULL,
+            with_user_id INT NOT NULL,
+            nickname     VARCHAR(60) NOT NULL,
+            PRIMARY KEY (user_id, with_user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+} catch (Throwable $e) { /* silencio */ }
+
+/* Auto-migración: columnas edited_at + deleted_at en messages para
+   soportar editar (con indicador "(editado)") y borrado soft. Se
+   intentan ALTER por separado — si ya existen lanza SQLSTATE 42S21
+   que ignoramos. */
+try { $pdo->exec("ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP NULL DEFAULT NULL"); }
+catch (Throwable $e) { /* ya existe */ }
+try { $pdo->exec("ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"); }
+catch (Throwable $e) { /* ya existe */ }
+
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
 function pf_uid(PDO $pdo, string $userKey): ?int {
     static $cache = [];
@@ -322,6 +358,18 @@ function pf_tryWebPush(PDO $pdo, int $toUid, string $fromKey, string $text): voi
     if (!file_exists($libPath)) return;     /* no instalado todavía */
     $keysPath = dirname(__DIR__) . '/push/vapid-keys.php';
     if (!file_exists($keysPath)) return;    /* corre generate-vapid.php primero */
+
+    /* Respeta el mute: si el destinatario ha silenciado el chat con el
+       remitente y mute_until aún es futuro, no enviamos push. El mensaje
+       igual queda en BD y aparece la próxima vez que abran la app. */
+    $fromUid = pf_uid($pdo, $fromKey);
+    if ($fromUid) {
+        $st = $pdo->prepare("SELECT 1 FROM chat_mutes
+                             WHERE user_id = ? AND with_user_id = ?
+                               AND mute_until > NOW()");
+        $st->execute([$toUid, $fromUid]);
+        if ($st->fetchColumn()) return;
+    }
 
     $stmt = $pdo->prepare("SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?");
     $stmt->execute([$toUid]);
@@ -1288,16 +1336,26 @@ case 'heartbeat': {
 }
 
 case 'presence': {
-    /* Devuelve los user_keys que han hecho heartbeat en los últimos 60s
-       (consideramos "online" → 2x el intervalo de ping = margen seguro
-       de un fallo de red puntual). */
+    /* Devuelve los user_keys ONLINE (heartbeat en los últimos 60s) y
+       además un mapa de "última vez visto" para TODOS los que tienen
+       row en user_presence — la app de chat (desktop y móvil) lo usa
+       para mostrar "Última vez HH:MM" cuando el otro está offline.
+       Retro-compat: el campo `online` (array de user_keys) sigue ahí
+       como antes — los clientes viejos no se rompen. */
     $st = $pdo->query("
-        SELECT u.user_key
+        SELECT u.user_key,
+               UNIX_TIMESTAMP(p.last_at) AS lastAt,
+               (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline
           FROM user_presence p
           JOIN usuarios u ON u.id = p.user_id
-         WHERE p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)
     ");
-    jsonResponse(['ok' => true, 'online' => $st->fetchAll(PDO::FETCH_COLUMN)]);
+    $online   = [];
+    $lastSeen = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        if ((int)$r['isOnline']) $online[] = $r['user_key'];
+        $lastSeen[$r['user_key']] = (int)$r['lastAt'];
+    }
+    jsonResponse(['ok' => true, 'online' => $online, 'lastSeen' => $lastSeen]);
 }
 
 case 'mark-notifs-read': {
@@ -1390,8 +1448,23 @@ case 'get-messages': {
     $col = ($uid < $withUid) ? 'last_seen_a' : 'last_seen_b';
     $pdo->prepare("UPDATE chats SET $col = NOW() WHERE id = ?")->execute([$chatId]);
 
-    $stmt = $pdo->prepare("SELECT m.id, fu.user_key AS `from`, m.text,
-                                  UNIX_TIMESTAMP(m.sent_at) AS sentAt
+    /* last_seen del OTRO usuario en este chat → necesario para read receipts. */
+    $otherCol = ($uid < $withUid) ? 'last_seen_b' : 'last_seen_a';
+    $stmt = $pdo->prepare("SELECT UNIX_TIMESTAMP($otherCol) AS otherSeen FROM chats WHERE id = ?");
+    $stmt->execute([$chatId]);
+    $otherSeen = (int)($stmt->fetchColumn() ?: 0);
+
+    /* Presencia del otro usuario → para "delivered" (recipient online
+       después de que enviara el mensaje). */
+    $stmt = $pdo->prepare("SELECT UNIX_TIMESTAMP(last_at) FROM user_presence WHERE user_id = ?");
+    $stmt->execute([$withUid]);
+    $otherLastActive = (int)($stmt->fetchColumn() ?: 0);
+
+    $stmt = $pdo->prepare("SELECT m.id, fu.user_key AS `from`,
+                                  CASE WHEN m.deleted_at IS NOT NULL THEN '' ELSE m.text END AS text,
+                                  UNIX_TIMESTAMP(m.sent_at)   AS sentAt,
+                                  UNIX_TIMESTAMP(m.edited_at) AS editedAt,
+                                  (m.deleted_at IS NOT NULL)  AS isDeleted
                            FROM messages m
                            JOIN usuarios fu ON m.from_user_id = fu.id
                            WHERE m.chat_id = ?
@@ -1399,11 +1472,229 @@ case 'get-messages': {
     $stmt->execute([$chatId]);
     $msgs = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
-        $m['id']     = (int)$m['id'];
-        $m['sentAt'] = (int)$m['sentAt'];
+        $m['id']      = (int)$m['id'];
+        $m['sentAt']  = (int)$m['sentAt'];
+        $m['edited']  = $m['editedAt'] !== null && $m['editedAt'] !== '';
+        $m['editedAt'] = $m['edited'] ? (int)$m['editedAt'] : 0;
+        $m['deleted'] = (bool)(int)$m['isDeleted'];
+        unset($m['isDeleted']);
+        /* read/delivered solo aplican a MIS mensajes; el cliente
+           ignora estos campos en los del otro lado. */
+        if ($m['from'] === $userKey) {
+            $m['read']      = ($otherSeen > 0 && $otherSeen >= $m['sentAt']);
+            $m['delivered'] = ($otherLastActive > 0 && $otherLastActive >= $m['sentAt']);
+        }
         $msgs[] = $m;
     }
     jsonResponse(['ok' => true, 'messages' => $msgs]);
+}
+
+/* ── edit-message ──
+   Reemplaza el texto de un mensaje del usuario actual y marca edited_at.
+   Solo el AUTOR puede editar. Mensajes ya borrados no se pueden editar. */
+case 'edit-message': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b   = jsonBody();
+    $mid = (int)($b['messageId'] ?? 0);
+    $txt = mb_substr(trim($b['text'] ?? ''), 0, 2000);
+    if ($mid <= 0)  jsonError('messageId inválido');
+    if ($txt === '') jsonError('Texto vacío');
+    /* Verifica autoría + que no esté borrado. */
+    $st = $pdo->prepare("SELECT from_user_id, deleted_at FROM messages WHERE id = ?");
+    $st->execute([$mid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) jsonError('Mensaje no encontrado', 404);
+    if ((int)$row['from_user_id'] !== $uid) jsonError('No autorizado', 403);
+    if ($row['deleted_at']) jsonError('No se puede editar un mensaje eliminado', 400);
+    $pdo->prepare("UPDATE messages SET text = ?, edited_at = NOW() WHERE id = ?")
+        ->execute([$txt, $mid]);
+    jsonResponse(['ok' => true, 'id' => $mid, 'text' => $txt, 'editedAt' => time()]);
+}
+
+/* ── delete-message ──
+   Soft-delete: deleted_at = NOW(). El texto se sigue mostrando como
+   "" en el cliente con un placeholder "(mensaje eliminado)". Solo el
+   autor puede borrar. */
+case 'delete-message': {
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b   = jsonBody();
+    $mid = (int)($b['messageId'] ?? 0);
+    if ($mid <= 0) jsonError('messageId inválido');
+    $st = $pdo->prepare("SELECT from_user_id FROM messages WHERE id = ? AND deleted_at IS NULL");
+    $st->execute([$mid]);
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$row) jsonError('Mensaje no encontrado o ya eliminado', 404);
+    if ((int)$row['from_user_id'] !== $uid) jsonError('No autorizado', 403);
+    $pdo->prepare("UPDATE messages SET deleted_at = NOW() WHERE id = ?")
+        ->execute([$mid]);
+    jsonResponse(['ok' => true, 'id' => $mid]);
+}
+
+/* ── get-recent-chats ──
+   Un endpoint todo-en-uno para el listado de la app de chat móvil:
+   por cada amigo mutual devuelve el último mensaje, contador de no
+   leídos, online status, mute hasta cuándo, y nickname (si lo asigné).
+   El frontend usa esto en lugar de get-unread-chats + N llamadas. */
+case 'get-recent-chats': {
+    global $loginUsers;
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonResponse(['ok' => true, 'chats' => []]);
+
+    /* Amigos mutuos = follows en ambas direcciones. */
+    $stmt = $pdo->prepare("
+        SELECT u.id, u.user_key
+          FROM follows f1
+          JOIN follows f2 ON f1.followee_id = f2.follower_id AND f1.follower_id = f2.followee_id
+          JOIN usuarios u ON u.id = f1.followee_id
+         WHERE f1.follower_id = ?
+    ");
+    $stmt->execute([$uid]);
+    $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$friends) jsonResponse(['ok' => true, 'chats' => []]);
+
+    /* Una pasada: último mensaje + unread por chat. */
+    $out = [];
+    foreach ($friends as $f) {
+        $withUid = (int)$f['id'];
+        $withKey = $f['user_key'];
+
+        $chatId = pf_chatId($pdo, $uid, $withUid);
+        $col       = ($uid < $withUid) ? 'last_seen_a' : 'last_seen_b';
+
+        /* Último mensaje. Si está borrado, devolvemos un placeholder en
+           lugar del texto original — WhatsApp-style. */
+        $st = $pdo->prepare("SELECT m.text, UNIX_TIMESTAMP(m.sent_at) AS sentAt,
+                                    fu.user_key AS `from`,
+                                    (m.deleted_at IS NOT NULL) AS isDeleted
+                             FROM messages m
+                             JOIN usuarios fu ON m.from_user_id = fu.id
+                             WHERE m.chat_id = ?
+                             ORDER BY m.sent_at DESC, m.id DESC LIMIT 1");
+        $st->execute([$chatId]);
+        $last = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($last && (int)$last['isDeleted']) {
+            $last['text'] = '🗑 Mensaje eliminado';
+        }
+
+        /* Unread = mensajes del otro lado posteriores a mi last_seen. */
+        $st = $pdo->prepare("SELECT COUNT(*) FROM messages m
+                             JOIN chats c ON c.id = m.chat_id
+                             WHERE m.chat_id = ?
+                               AND m.from_user_id = ?
+                               AND m.sent_at > COALESCE(c.$col, '1970-01-01')");
+        $st->execute([$chatId, $withUid]);
+        $unread = (int)$st->fetchColumn();
+
+        /* Online: presencia en los últimos 60s. lastAt: última vez que
+           el otro lado pingueó heartbeat (para mostrar "Última vez HH:MM"
+           cuando está offline). */
+        $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(last_at) FROM user_presence
+                             WHERE user_id = ?");
+        $st->execute([$withUid]);
+        $otherLastAt = (int)($st->fetchColumn() ?: 0);
+        $online = ($otherLastAt > 0 && $otherLastAt > (time() - 60));
+
+        /* Mute. */
+        $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(mute_until) FROM chat_mutes
+                             WHERE user_id = ? AND with_user_id = ?
+                               AND mute_until > NOW()");
+        $st->execute([$uid, $withUid]);
+        $mutedUntil = $st->fetchColumn();
+        $mutedUntil = $mutedUntil ? (int)$mutedUntil : 0;
+
+        /* Nickname. */
+        $st = $pdo->prepare("SELECT nickname FROM chat_nicknames
+                             WHERE user_id = ? AND with_user_id = ?");
+        $st->execute([$uid, $withUid]);
+        $nick = $st->fetchColumn() ?: '';
+
+        $out[] = [
+            'userKey'    => $withKey,
+            'lastText'   => $last ? mb_substr($last['text'], 0, 80) : '',
+            'lastAt'     => $last ? (int)$last['sentAt'] : 0,
+            'lastFromMe' => $last ? ($last['from'] === $userKey) : false,
+            'unread'     => $unread,
+            'online'     => $online,
+            /* Última vez visto del otro (presencia) — para "Última vez
+               HH:MM" en la cabecera del chat cuando NO está online. */
+            'lastSeenAt' => $otherLastAt,
+            'mutedUntil' => $mutedUntil,
+            'nickname'   => $nick,
+        ];
+    }
+    /* Sort: chats con actividad más reciente primero. Sin mensajes (lastAt=0)
+       van al final. */
+    usort($out, function($a, $b) {
+        if ($a['lastAt'] === $b['lastAt']) return 0;
+        if ($a['lastAt'] === 0) return 1;
+        if ($b['lastAt'] === 0) return -1;
+        return $b['lastAt'] - $a['lastAt'];
+    });
+    jsonResponse(['ok' => true, 'chats' => $out]);
+}
+
+/* ── set-chat-mute ──
+   Silencia (o desactiva el silencio de) un chat. duration es uno de:
+   'off' | '1h' | '8h' | '24h' | '1w' | 'forever'. */
+case 'set-chat-mute': {
+    global $loginUsers;
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $with = preg_replace('/[^a-z0-9_]/i', '', $b['with'] ?? '');
+    if (!$with || !isset($loginUsers[$with])) jsonError('Usuario inválido');
+    $withUid = pf_uid($pdo, $with);
+    if (!$withUid) jsonError('Usuario inválido');
+    $dur = (string)($b['duration'] ?? 'off');
+    $durationMap = [
+        '1h'      => '1 HOUR',
+        '8h'      => '8 HOUR',
+        '24h'     => '24 HOUR',
+        '1w'      => '7 DAY',
+        /* "forever" → mute_until = max razonable (~100 años). */
+        'forever' => '36500 DAY',
+    ];
+    if ($dur === 'off') {
+        $pdo->prepare("DELETE FROM chat_mutes WHERE user_id = ? AND with_user_id = ?")
+            ->execute([$uid, $withUid]);
+        jsonResponse(['ok' => true, 'mutedUntil' => 0]);
+    }
+    if (!isset($durationMap[$dur])) jsonError('Duración inválida');
+    $interval = $durationMap[$dur];
+    $pdo->prepare("INSERT INTO chat_mutes (user_id, with_user_id, mute_until)
+                   VALUES (?, ?, DATE_ADD(NOW(), INTERVAL $interval))
+                   ON DUPLICATE KEY UPDATE mute_until = DATE_ADD(NOW(), INTERVAL $interval)")
+        ->execute([$uid, $withUid]);
+    $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(mute_until) FROM chat_mutes
+                         WHERE user_id = ? AND with_user_id = ?");
+    $st->execute([$uid, $withUid]);
+    jsonResponse(['ok' => true, 'mutedUntil' => (int)$st->fetchColumn()]);
+}
+
+/* ── set-chat-nickname ──
+   Asigna o limpia el apodo de un chat. nickname vacío = limpiar. */
+case 'set-chat-nickname': {
+    global $loginUsers;
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $with = preg_replace('/[^a-z0-9_]/i', '', $b['with'] ?? '');
+    if (!$with || !isset($loginUsers[$with])) jsonError('Usuario inválido');
+    $withUid = pf_uid($pdo, $with);
+    if (!$withUid) jsonError('Usuario inválido');
+    $nick = mb_substr(trim($b['nickname'] ?? ''), 0, 60);
+    if ($nick === '') {
+        $pdo->prepare("DELETE FROM chat_nicknames WHERE user_id = ? AND with_user_id = ?")
+            ->execute([$uid, $withUid]);
+        jsonResponse(['ok' => true, 'nickname' => '']);
+    }
+    $pdo->prepare("INSERT INTO chat_nicknames (user_id, with_user_id, nickname)
+                   VALUES (?, ?, ?)
+                   ON DUPLICATE KEY UPDATE nickname = VALUES(nickname)")
+        ->execute([$uid, $withUid, $nick]);
+    jsonResponse(['ok' => true, 'nickname' => $nick]);
 }
 
 case 'send-message': {

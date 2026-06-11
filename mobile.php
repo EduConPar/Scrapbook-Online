@@ -117,7 +117,8 @@ $tokenForManifest = (string)($_SESSION['device_token'] ?? '');
    escritorio existen como parciales (perfil, reproductor) y todavía no
    tienen entrada standalone para móvil — apuntan al placeholder. */
 $apps = [
-    ['name' => 'Calendario',   'url' => 'apps/calendario.php',                                                  'emoji' => '📅', 'icon' => 'assets/img/appIcons/calendarioIcon.png',   'external' => false, 'wip' => false],
+    ['name' => 'Calendario',   'url' => 'apps/mobile/calendario-mobile.php',                                    'emoji' => '📅', 'icon' => 'assets/img/appIcons/calendarioIcon.png',   'external' => false, 'wip' => false],
+    ['name' => 'Chat',         'url' => 'apps/mobile/chat-mobile.php',                                          'emoji' => '💬', 'icon' => 'assets/img/appIcons/chatIcon.png',         'external' => false, 'wip' => false],
     ['name' => 'Companion',    'url' => 'apps/mobile/companion-mobile.php',                                     'emoji' => '💀', 'icon' => 'assets/img/appIcons/companionIcon.png',    'external' => false, 'wip' => false],
     ['name' => 'D&D',          'url' => 'apps/mobile/dnd-mobile.php',                                           'emoji' => '⚔',  'icon' => 'assets/img/appIcons/dndIcon.png',          'external' => false, 'wip' => false],
     ['name' => 'Dibujo',       'url' => 'apps/mobile/dibujo-mobile.php',                                        'emoji' => '✏️', 'icon' => 'assets/img/appIcons/drawingIcon.png',      'external' => false, 'wip' => false],
@@ -146,16 +147,57 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
    sobre el look base de Win98. Si no tiene tema custom, body queda con
    los tokens por defecto de tokens.css. */
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
-refreshActiveThemeCss($userKey, $userLabel);
+require_once __DIR__ . '/assets/php/active-interface.php';
+/* db.php tiene que estar requerido al SCOPE de archivo (no dentro de
+   funciones/closures) para que $pdo viva en $GLOBALS y la closure de
+   sync de interfaz lo encuentre. Antes solo se requería en el branch
+   de ?t= (token PWA) → en cargas normales $pdo era null → fatal. */
+require_once __DIR__ . '/db.php';
+
+/* INTERFAZ POR USUARIO (mismo sync que desktop-base.php):
+   SIEMPRE sincronizamos cookie ← BD. La slug vive directamente en
+   user_settings.active_interface_slug (string JSON por CHECK constraint).
+   Si no hay preferencia, fallback 'win98'. */
+(function() use (&$pdo, $userKey) {
+    $slug = 'win98';
+    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$userKey]);
+    $uid = (int)($stmt->fetchColumn() ?: 0);
+    if ($uid) {
+        $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = 'active_interface_slug'");
+        $stmt->execute([$uid]);
+        $raw = (string)$stmt->fetchColumn();
+        if ($raw !== '') {
+            $candidate = json_decode($raw, true);
+            if (is_string($candidate) && $candidate !== ''
+                && is_dir(__DIR__ . '/assets/interfaces/' . $candidate . '/')) {
+                $slug = $candidate;
+            }
+        }
+    }
+    $currentCookie = $_COOKIE['activeInterface'] ?? '';
+    if ($currentCookie !== $slug) {
+        setcookie('activeInterface', $slug, [
+            'expires'  => time() + 60 * 60 * 24 * 365,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'samesite' => 'Lax',
+        ]);
+        $_COOKIE['activeInterface'] = $slug;
+    }
+})();
+
+/* Tema por interfaz: lee cookie themeFor_<interface>, retrocompat con
+   el global. Si no hay tema activo para esta interfaz, $activeTheme = ''
+   y el browser cae a los tokens default del :root de la interfaz. */
+$_activeInterface = getActiveInterface();
+$_themeMeta       = getActiveThemeForInterface($userKey, $userLabel, $_activeInterface);
+$activeTheme      = $_themeMeta['name'];
+$activeThemeClass = $_themeMeta['className'];
+$activeThemeCss   = $_themeMeta['cssRel'];
+if ($activeThemeCss !== '' && !file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+/* Retrocompat con código que pueda leer $_userThemes después. */
 $_userThemes = loadUserThemes($userKey);
-$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
-$activeThemeClass = '';
-$activeThemeCss   = '';
-if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
-    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
-    $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
-    if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
-}
 $wallpaper = getUserWallpaper($userLabel);
 
 /* Color de fondo del tema del usuario para inyectar en
@@ -217,11 +259,19 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/base.css?v=<?= filemtime(__DIR__ . '/assets/css/base.css') ?>">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <!-- Icon pack swap — debe cargar antes del primer render. -->
+    <script src="assets/js/icon-pack.js"></script>
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
     <link rel="stylesheet" href="assets/css/mobile-theme.css?v=<?= filemtime(__DIR__ . '/assets/css/mobile-theme.css') ?>">
+    <!-- INTERFACE CSS: al final del head para sobreescribir Win98 base. -->
+    <?php
+        require_once __DIR__ . '/assets/php/active-interface.php';
+        emitInterfaceCss('');
+    ?>
+    <script src="assets/js/interface-loader.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         /* Tweaks específicos de mobile.php — todo lo común vive en
@@ -1065,8 +1115,18 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Lista de aplicaciones (sunken panel) -->
         <div class="mh-panel mh-apps">
-            <?php foreach ($apps as $app):
-                $hasIcon = $app['icon'] && file_exists(__DIR__ . '/' . $app['icon']);
+            <?php
+            /* Inline helper: comprueba si el icono existe en raíz o en
+               la carpeta Melon (donde viven todos los iconos por
+               defecto desde el sistema de packs). */
+            $_iconExists = function($rel) {
+                if (!$rel) return false;
+                if (file_exists(__DIR__ . '/' . $rel)) return true;
+                $melon = preg_replace('#/appIcons/#', '/appIcons/Melon/', $rel, 1);
+                return file_exists(__DIR__ . '/' . $melon);
+            };
+            foreach ($apps as $app):
+                $hasIcon = $app['icon'] && $_iconExists($app['icon']);
                 $external = $app['external'];
                 $chev = $external ? '↗' : '›';
                 /* Apps internas: cargan en el iframe shell (sin navegar).
@@ -1109,6 +1169,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             </div>
         </div>
         <div class="window-body">
+            <button class="mh-set-btn" type="button" id="mh-set-notifications">
+                <span class="mh-set-emoji"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;"></span>
+                <span class="mh-set-text" id="mh-set-notif-text">Activar notificaciones
+                    <small id="mh-set-notif-sub">Recibe avisos de chats e invitaciones</small>
+                </span>
+            </button>
             <button class="mh-set-btn" type="button" id="mh-set-change-password">
                 <span class="mh-set-emoji">🔑</span>
                 <span class="mh-set-text">Cambiar contraseña
@@ -1480,12 +1546,21 @@ if ('serviceWorker' in navigator) {
 
     /* Abrir una app: empuja un estado al history para que el back del
        teléfono nos devuelva al estado anterior (sea otra app abierta o
-       el menú). */
-    function openApp(url, name) {
+       el menú).
+       replaceHistory=true → usa history.replaceState en lugar de
+       pushState. Útil cuando reabrimos la app tras un reload (p.ej.
+       cambio de pack de iconos): la entrada previa ya está en el
+       history, no hace falta apilar otra. Sin esto, cada cambio de
+       pack acumula una entrada y "‹ Menú" requiere N taps para volver. */
+    function openApp(url, name, replaceHistory) {
         if (!url) return;
         showApp(url);
-        try { history.pushState({ app: url, name: name }, '', '#app=' + encodeURIComponent(name || url)); }
-        catch (_) {}
+        try {
+            var state = { app: url, name: name };
+            var hash  = '#app=' + encodeURIComponent(name || url);
+            if (replaceHistory) history.replaceState(state, '', hash);
+            else                history.pushState(state, '', hash);
+        } catch (_) {}
     }
 
     /* Apps que piden volver vía postMessage (botón "cerrar" interno).
@@ -1556,22 +1631,37 @@ if ('serviceWorker' in navigator) {
     });
 
     /* Deep-link desde notificación push: #chat=USERKEY
-       Carga el perfil con el mismo hash → perfil-mobile lo lee y abre
-       el modal de chat directamente con esa persona. Limpia el hash del
+       Carga la app de Chat con el mismo hash → chat-mobile lo lee al
+       cargar y abre la conversación con esa persona. Limpia el hash del
        shell para que no se vuelva a disparar tras navegar.
        Re-evaluado en cada hashchange: el SW llama Client.navigate(url)
        cuando ya hay una pestaña abierta, lo que cambia el hash sin
        recargar; sin el listener, el deep-link solo funcionaba en
-       pestaña nueva. */
+       pestaña nueva.
+       (Antes apuntaba a perfil-mobile.php; ahora hay una app dedicada
+       de Chat — chat-mobile.php — y el deep-link la abre directamente.) */
     function dispatchChatHash(){
         var m = /#chat=([a-z0-9_-]+)/i.exec(location.hash);
         if (!m) return;
         var k = encodeURIComponent(m[1]);
         try { history.replaceState(null, '', location.pathname); } catch (_) {}
-        openApp('apps/mobile/perfil-mobile.php#chat=' + k, 'Perfil');
+        openApp('apps/mobile/chat-mobile.php#chat=' + k, 'Chat');
     }
     dispatchChatHash();
     window.addEventListener('hashchange', dispatchChatHash);
+
+    /* Auto-open de la app Temas si hay flag 'temas-restore-tab' en
+       sessionStorage (la pone temas-mobile.php antes de un reload por
+       cambio de pack de iconos). Al abrir Temas, temas-mobile leerá la
+       misma flag y activará el tab correspondiente.
+       3er arg `true` → REPLACE (no PUSH) en history. Sin esto, cada
+       cambio de pack apila otra entrada y "‹ Menú" requiere N taps
+       para volver al menú. */
+    try {
+        if (sessionStorage.getItem('temas-restore-tab')) {
+            openApp('apps/mobile/temas-mobile.php', 'Temas', true);
+        }
+    } catch (_) {}
 })();
 
 /* ════════════════════════════════════════════════════════════════
@@ -3185,6 +3275,55 @@ window.MuShell = (function(){
             .catch(function(){});
     }
 
+    /* Helper público para que las apps iframe (perfil-mobile,
+       calendario-mobile…) limpien notificaciones cuando el usuario
+       responde abriendo el chat o aceptando una invitación. Enruta al
+       SW por postMessage. Acepta:
+         · { tag: 'chat:user1' }       — cierra solo ese tag
+         · { tagPrefix: 'chat:' }      — cierra todos los chat:*
+         · { urlContains: '/calendario' } — por URL del payload
+         · { all: true }               — TODAS */
+    window.mhClearNotifications = function(opts) {
+        if (!('serviceWorker' in navigator)) return;
+        var ctrl = navigator.serviceWorker.controller;
+        var msg = Object.assign({ type: 'clear-notifications' }, opts || {});
+        if (ctrl) { ctrl.postMessage(msg); return; }
+        /* Si el SW aún no controla la página, esperamos al ready. */
+        navigator.serviceWorker.ready.then(function(reg){
+            if (reg && reg.active) reg.active.postMessage(msg);
+        }).catch(function(){});
+    };
+
+    /* Expuesto al panel de Ajustes — el botón "Activar notificaciones"
+       lo invoca cuando el usuario lo toca. Si el permiso ya está
+       concedido se re-suscribe (idempotente vía UPSERT en backend).
+       Si está 'default', pide permiso. Si está 'denied', no se puede
+       reabrir el prompt del browser → resolve(false) para que el
+       caller muestre el aviso correspondiente. */
+    window.mhRequestNotifications = function() {
+        return new Promise(function(resolve) {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+                resolve({ ok: false, reason: 'unsupported' });
+                return;
+            }
+            if (Notification.permission === 'denied') {
+                resolve({ ok: false, reason: 'denied' });
+                return;
+            }
+            function done() {
+                regPromise.then(function(reg){
+                    subscribeToPush(reg);
+                    resolve({ ok: true, reason: 'granted' });
+                }).catch(function(){ resolve({ ok: false, reason: 'sw-error' }); });
+            }
+            if (Notification.permission === 'granted') { done(); return; }
+            Notification.requestPermission().then(function(perm){
+                if (perm === 'granted') done();
+                else resolve({ ok: false, reason: perm });
+            }).catch(function(){ resolve({ ok: false, reason: 'prompt-error' }); });
+        });
+    };
+
     function urlBase64ToUint8Array(b64) {
         var padding = '='.repeat((4 - b64.length % 4) % 4);
         var base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -3216,6 +3355,10 @@ window.MuShell = (function(){
     function openSettings(e){
         if (e) e.preventDefault();
         settingsBp.classList.add('is-open');
+        /* Refresca el texto del botón de notificaciones cada vez que se
+           abre el panel — el permiso pudo cambiar fuera de la PWA
+           (revocado por el usuario en Ajustes del SO, etc.). */
+        refreshNotifLabel();
     }
     function closeSettings(){ settingsBp.classList.remove('is-open'); }
 
@@ -3225,6 +3368,54 @@ window.MuShell = (function(){
     if (settingsBp) settingsBp.addEventListener('click', function(e){
         if (e.target === settingsBp) closeSettings();
     });
+
+    /* ── botón Activar notificaciones ──
+       Estado del label según Notification.permission:
+         · default → "Activar notificaciones"
+         · granted → "✓ Notificaciones activas"
+         · denied  → "Notificaciones bloqueadas — habilítalas en Ajustes del SO"
+       Tap dispara mhRequestNotifications() expuesto por el setupPush IIFE. */
+    var notifBtn  = document.getElementById('mh-set-notifications');
+    var notifText = document.getElementById('mh-set-notif-text');
+    var notifSub  = document.getElementById('mh-set-notif-sub');
+    function refreshNotifLabel() {
+        if (!notifBtn || !('Notification' in window)) {
+            if (notifBtn) notifBtn.style.display = 'none';
+            return;
+        }
+        var p = Notification.permission;
+        if (p === 'granted') {
+            notifText.childNodes[0].nodeValue = '✓ Notificaciones activas';
+            notifSub.textContent = 'Tu dispositivo recibe avisos';
+            notifBtn.classList.remove('danger');
+        } else if (p === 'denied') {
+            notifText.childNodes[0].nodeValue = 'Notificaciones bloqueadas';
+            notifSub.textContent = 'Permítelas desde los ajustes del sistema';
+            notifBtn.classList.add('danger');
+        } else {
+            notifText.childNodes[0].nodeValue = 'Activar notificaciones';
+            notifSub.textContent = 'Recibe avisos de chats e invitaciones';
+            notifBtn.classList.remove('danger');
+        }
+    }
+    if (notifBtn) {
+        notifBtn.addEventListener('click', function() {
+            if (typeof window.mhRequestNotifications !== 'function') return;
+            notifSub.textContent = 'Procesando…';
+            window.mhRequestNotifications().then(function(res){
+                refreshNotifLabel();
+                if (res && res.ok) {
+                    notifSub.textContent = '✓ Activadas';
+                    setTimeout(refreshNotifLabel, 1500);
+                } else if (res && res.reason === 'denied') {
+                    notifSub.textContent = 'Bloqueadas — habilítalas en Ajustes del SO';
+                } else if (res && res.reason === 'unsupported') {
+                    notifSub.textContent = 'No soportado en este navegador';
+                }
+            });
+        });
+        refreshNotifLabel();
+    }
 
     /* ── modal cambiar contraseña ── */
     var cpOpen   = document.getElementById('mh-set-change-password');
@@ -3410,7 +3601,7 @@ window.MuShell = (function(){
             mToast({
                 id:    'partner-' + inv.id,
                 sheet: asSheet,
-                title: '💌 ' + (inv.fromLabel || '?') + ' quiere ser tu pareja',
+                title: (inv.fromLabel || '?') + ' te ha invitado a compartir calendario',
                 message: 'Acepta para vincular vuestros calendarios.',
                 actions: [
                     { label: 'Rechazar', fn: function(){

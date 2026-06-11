@@ -45,7 +45,6 @@ body.user1 {
     --accent-text:         #000000;
     --accent-deep:         #c8a000;
     --border:              #3a3a3a;
-    --border-strong:       #555555;
     --bezel-light-1:       #555555;
     --bezel-light-2:       #444444;
     --bezel-dark-1:        #111111;
@@ -55,8 +54,6 @@ body.user1 {
     --error-text:          #ff4f6e;
     --warning-bg:          #2a2200;
     --warning-text:        #e8cc80;
-    --selection-bg:        #EDC001;
-    --selection-text:      #000000;
     --badge-bg:            #ff4f6e;
     --badge-text:          #ffffff;
     --star-color:          #EDC001;
@@ -99,7 +96,6 @@ body.user2 {
     --accent-text:         #F9DDD8;
     --accent-deep:         #5B744B;
     --border:              #F3BABA;
-    --border-strong:       #5B744B;
     --bezel-light-1:       #F9DDD8;
     --bezel-light-2:       #F8D0C8;
     --bezel-dark-1:        #35522B;
@@ -109,8 +105,6 @@ body.user2 {
     --error-text:          #c8456e;
     --warning-bg:          #F3BABA;
     --warning-text:        #35522B;
-    --selection-bg:        #799567;
-    --selection-text:      #F9DDD8;
     --badge-bg:            #c8456e;
     --badge-text:          #F9DDD8;
     --star-color:          #c8a000;

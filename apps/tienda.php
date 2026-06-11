@@ -35,6 +35,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <link rel="stylesheet" href="../assets/css/tokens.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/tokens.css'); ?>">
     <link rel="stylesheet" href="../assets/css/base.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/base.css'); ?>">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../assets/css/themes.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/themes.css'); ?>">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
@@ -421,7 +424,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <div id="tienda-discord-name"></div>
             <button type="button" class="button" id="tienda-discord-btn">…</button>
         </div>
-        <div class="tienda-tab active" data-view="principal" data-cat="discord">💬 Discord</div>
+        <div class="tienda-tab active" data-view="principal" data-cat="discord"><img src="../assets/img/appIcons/discordIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Discord</div>
         <div class="tienda-tab"        data-view="principal" data-cat="interfaces"><img src="../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</div>
         <div class="tienda-tab"        data-view="principal" data-cat="mascotas"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</div>
         <div class="tienda-tab"        data-view="principal" data-cat="haros"><img src="../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</div>
@@ -450,14 +453,14 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                     </div>
 
                     <div class="donar-encargos">
-                        <div class="donar-encargos-title">🎨 Encargos</div>
+                        <div class="donar-encargos-title">Encargos</div>
                         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/064181251c" target="_blank" rel="noopener"
                            data-kofi-title="Haro personalizado">
-                            <span class="ic">⚪</span><span class="label">Haro personalizado</span><span class="price">2 €</span>
+                            <span class="ic"><img src="../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Haro personalizado</span><span class="price">2 €</span>
                         </a>
                         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/4de28dd45e" target="_blank" rel="noopener"
                            data-kofi-title="Tema personalizado">
-                            <span class="ic">🎨</span><span class="label">Tema personalizado</span><span class="price">5 €</span>
+                            <span class="ic"><img src="../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Tema personalizado</span><span class="price">5 €</span>
                         </a>
                         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/16c92f9fdf" target="_blank" rel="noopener"
                            data-kofi-title="Mascota personalizada">
@@ -647,9 +650,9 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             return;
         }
         var TIPOS = {
-            donacion:    { ic: '💛', label: 'Donante'     },
-            suscripcion: { ic: '🔁', label: 'Suscriptor'  },
-            encargo:     { ic: '🎨', label: 'Encargo'     },
+            donacion:    { ic: '', label: 'Donante'     },
+            suscripcion: { ic: '', label: 'Suscriptor'  },
+            encargo:     { ic: '', label: 'Encargo'     },
         };
         grid.innerHTML = donors.map(function(d){
             var av = d.avatar_url
@@ -657,7 +660,8 @@ document.querySelectorAll('[data-view]').forEach(function(el){
                 : '👤';
             var tipo = TIPOS[d.tipo] || TIPOS.donacion;
             var tipoEl = '<div class="donar-donor-tipo ' + esc(d.tipo || 'donacion') + '">' +
-                         '<span>' + tipo.ic + '</span><span>' + tipo.label + '</span></div>';
+                         (tipo.ic ? '<span>' + tipo.ic + '</span>' : '') +
+                         '<span>' + tipo.label + '</span></div>';
             var msg = d.mensaje ? '<div class="donar-donor-msg">' + esc(d.mensaje) + '</div>' : '';
             return '<div class="donar-donor">' +
                 '<div class="donar-donor-avatar">' + av + '</div>' +
@@ -752,7 +756,7 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             btn.textContent = 'Desvincular';
         } else {
             nameEl.textContent = '';
-            btn.textContent    = '🔗 Conectar Discord';
+            btn.textContent    = 'Conectar Discord';
         }
     }
 
@@ -765,7 +769,7 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             render();
         } catch (e) {
             nameEl.textContent = '';
-            btn.textContent    = '🔗 Conectar Discord';
+            btn.textContent    = 'Conectar Discord';
         }
     }
 

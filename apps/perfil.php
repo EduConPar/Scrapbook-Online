@@ -1,12 +1,248 @@
 <?php
 // perfil.php - Profile window + all profile-related dialogs
-// Included from desktop-base.php; expects $desktopLabel already set.
+//
+// MODOS DE CARGA:
+//   1) INCLUIDO desde desktop-base.php (modo clásico — escritorio del
+//      usuario logueado, $desktopLabel ya está definido)
+//   2) STANDALONE vía iframe con ?standalone=1 (modo nuevo — usado
+//      para "visitar el perfil de otro" cargando SU interfaz/tema/iconos
+//      en una ventana separada, sin afectar al shell padre)
+//
+// En modo standalone emitimos un documento HTML completo con las CSS
+// del shell. En modo include, sólo el bloque .window#profile-window.
 require_once dirname(__DIR__) . '/assets/config.php';
+
+$_perfilStandalone = !empty($_GET['standalone']) && !isset($desktopLabel);
+if ($_perfilStandalone) {
+    @ini_set('display_errors', '0');
+    error_reporting(E_ALL);
+    session_start();
+    if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
+        header('Location: ../index.php'); exit;
+    }
+    $desktopUserKey = $_SESSION['user'];
+    $desktopLabel   = $loginUsers[$desktopUserKey]['label'];
+    require_once dirname(__DIR__) . '/db.php';
+    require_once dirname(__DIR__) . '/assets/themes/theme-helpers.php';
+
+    /* Si pasaron ?as=USERKEY o ?as=Label, esa será la persona "visitada".
+       Cargamos SU interfaz/tema/icon pack en lugar de los del viewer.
+
+       Aceptamos AMBAS formas para mejor UX:
+         · user_key directo  (e.g. ?as=user1)
+         · label              (e.g. ?as=Capi → resuelve a user1)
+       La búsqueda por label es case-insensitive. */
+    $_perfilViewingKey = isset($_GET['as']) ? (string)$_GET['as'] : '';
+    if ($_perfilViewingKey !== '') {
+        if (!isset($loginUsers[$_perfilViewingKey])) {
+            /* No match directo por key — busca por label. */
+            $needle = strtolower($_perfilViewingKey);
+            $resolved = '';
+            foreach ($loginUsers as $k => $u) {
+                if (strtolower($u['label']) === $needle) { $resolved = $k; break; }
+            }
+            $_perfilViewingKey = $resolved;   /* '' si tampoco hubo label match */
+        }
+    }
+
+    /* Resuelve el user_id en BD del "look owner" (visitado si hay ?as,
+       sino el propio viewer). Todas las queries de interfaz/tema/icon
+       pack van a este UID. */
+    $_lookUserKey   = $_perfilViewingKey ?: $desktopUserKey;
+    $_lookLabel     = $loginUsers[$_lookUserKey]['label'];
+    $_stmtLook = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $_stmtLook->execute([$_lookUserKey]);
+    $_lookUid = (int)($_stmtLook->fetchColumn() ?: 0);
+
+    /* INTERFACE: lee active_interface_slug del look owner (JSON string).
+       Fallback 'win98'. NOTA: la key vieja `active_interface` era item_id;
+       la nueva key es `active_interface_slug` con la slug como string JSON. */
+    $_lookIface = 'win98';
+    if ($_lookUid) {
+        $_st = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = 'active_interface_slug'");
+        $_st->execute([$_lookUid]);
+        $_raw = (string)$_st->fetchColumn();
+        if ($_raw !== '') {
+            $_slug = json_decode($_raw, true);
+            if (is_string($_slug) && $_slug !== ''
+                && is_dir(dirname(__DIR__) . '/assets/interfaces/' . $_slug)) {
+                $_lookIface = $_slug;
+            }
+        }
+    }
+
+    /* ICON PACK por interfaz. Fallback 'Melon' (default cliente).
+       Valor es JSON string (por CHECK json_valid en user_settings). */
+    $_lookIconPack = 'Melon';
+    if ($_lookUid) {
+        $_st = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = ?");
+        $_st->execute([$_lookUid, 'icon_pack:' . $_lookIface]);
+        $_raw = (string)$_st->fetchColumn();
+        if ($_raw !== '') {
+            $_v = json_decode($_raw, true);
+            if (is_string($_v) && $_v !== '') $_lookIconPack = $_v;
+        }
+    }
+
+    /* TEMA: el activo del look owner para SU interfaz. */
+    refreshActiveThemeCss($_lookUserKey, $_lookLabel);
+    $_userThemes = loadUserThemes($_lookUserKey, $_lookIface);
+    $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
+    $activeThemeClass = '';
+    $activeThemeCss   = '';
+    if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
+        $activeThemeClass = themeCssClassName($activeTheme, $_lookLabel);
+        $_themeRel        = themeCssRelPath($activeTheme, $_lookLabel);
+        if (file_exists(dirname(__DIR__) . '/' . $_themeRel)) $activeThemeCss = $_themeRel;
+    }
+
+    /* Override del $_COOKIE para que emitInterfaceCss() del shell emita
+       el link correcto. Restauramos luego para no afectar más PHP. */
+    $_origIfaceCookie = $_COOKIE['activeInterface'] ?? null;
+    $_COOKIE['activeInterface'] = $_lookIface;
+
+    /* Pareja del viewer (para keys de funciones que la usan). */
+    $stmtP = $pdo->prepare("SELECT p.id FROM parejas p
+        JOIN usuarios u1 ON p.usuario1_id = u1.id
+        JOIN usuarios u2 ON p.usuario2_id = u2.id
+        WHERE u1.username = ? OR u2.username = ?");
+    $stmtP->execute([strtolower($desktopLabel), strtolower($desktopLabel)]);
+    $rowP = $stmtP->fetch(PDO::FETCH_ASSOC);
+    $parejaId = $rowP ? (int)$rowP['id'] : 0;
+
+    /* appTitleIcon: helper que normalmente vive en desktop-base.php.
+       En modo include lo provee el padre; en standalone lo definimos
+       aquí. Lógica idéntica salvo el path base — usamos el de root
+       porque emitimos <base href="../"> abajo. */
+    if (!function_exists('appTitleIcon')) {
+        function appTitleIcon(string $pngName, string $emoji): string {
+            $root  = dirname(__DIR__);          // /opt/.../scrapbookOnline
+            $rel   = "assets/img/appIcons/{$pngName}.png";
+            $melon = "assets/img/appIcons/Melon/{$pngName}.png";
+            if (file_exists("{$root}/{$melon}") || file_exists("{$root}/{$rel}")) {
+                return '<img src="' . $rel . '" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;" alt="">';
+            }
+            return $emoji . ' ';
+        }
+    }
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1280, user-scalable=yes">
+    <title>Perfil<?= $_perfilViewingKey ? ' — ' . htmlspecialchars($loginUsers[$_perfilViewingKey]['label']) : '' ?></title>
+    <!-- <base> hace que TODAS las URLs relativas (en HTML, CSS y JS)
+         se resuelvan desde la raíz del proyecto. Sin esto, los cientos
+         de "<img src='assets/img/...'>" en perfil.php darían 404 porque
+         el documento standalone vive en apps/. Con base, "assets/X"
+         resuelve como si fuera /scrapbookOnline/assets/X. -->
+    <base href="../">
+    <link rel="stylesheet" href="assets/css/98.css">
+    <link rel="stylesheet" href="assets/css/tokens.css">
+    <link rel="stylesheet" href="assets/css/base.css">
+    <?php /* Override del icon pack ANTES de cargar icon-pack.js (que lee
+              window.__ICON_PACK_OVERRIDE como primera fuente). Sólo
+              aplica si visitamos a otro user → cargamos SU pack. */ ?>
+    <script>
+        window.__ICON_PACK_OVERRIDE = <?= json_encode($_perfilViewingKey !== '' ? $_lookIconPack : null) ?>;
+    </script>
+    <script src="assets/js/icon-pack.js"></script>
+    <link rel="stylesheet" href="assets/css/reproductor.css">
+    <link rel="stylesheet" href="assets/css/perfil.css">
+    <link rel="stylesheet" href="assets/css/themes.css">
+    <?php if ($activeThemeCss): ?>
+    <?php /* $activeThemeCss ya es root-relative (themeCssRelPath
+              devuelve "assets/themes/..."). Con <base href="../"> se
+              resuelve correctamente. */ ?>
+    <link rel="stylesheet" id="active-theme-link" href="<?= htmlspecialchars($activeThemeCss) ?>">
+    <?php endif; ?>
+    <?php
+        require_once dirname(__DIR__) . '/assets/php/active-interface.php';
+        emitInterfaceCss('');
+        /* Restauramos la cookie original ahora que emitInterfaceCss
+           ya tomó el override. Evita afectar otros require's posteriores. */
+        if ($_origIfaceCookie === null) unset($_COOKIE['activeInterface']);
+        else $_COOKIE['activeInterface'] = $_origIfaceCookie;
+    ?>
+    <script src="assets/js/interface-loader.js"></script>
+    <style>
+        /* Standalone: el iframe contiene 1 sola ventana que llena el
+           viewport. Sin escritorio, sin taskbar — el shell padre
+           gestiona la posición/drag de la ventana exterior. */
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--win-bg, silver); }
+        body { display: flex; }
+        #profile-window {
+            position: static !important;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            box-sizing: border-box;
+        }
+        #profile-window > .window-body { flex: 1; min-height: 0; }
+        /* En standalone (iframe del perfil ajeno), el "← Volver" no tiene
+           sentido — la única forma de salir es cerrando la ventana iframe
+           desde el shell padre. Lo ocultamos completamente. */
+        #profile-sidebar-back { display: none !important; }
+    </style>
+    <script>
+        /* Flag global para que la JS de perfil sepa que está en standalone
+           y omita registraciones de taskbar / notifSystem (que no existen
+           aquí) y cierre vía postMessage en lugar de DOM del shell. */
+        window.__PERFIL_STANDALONE = true;
+        window.__PERFIL_VIEWING_KEY = <?= json_encode($_perfilViewingKey) ?>;
+
+        /* Mocks de los globals del shell que perfil.php usa pero que no
+           existen aquí (no hay escritorio/taskbar). Stub no-op para que
+           las llamadas existentes (taskbarManager.register / restore /
+           unregister) no tiren ReferenceError. notifSystem ya tiene
+           guard `if (window.notifSystem)` en perfil.php → no requiere
+           mock; las notificaciones se delegan al shell padre vía
+           postMessage si el iframe quiere mostrarlas. */
+        window.taskbarManager = {
+            register:     function(){},
+            unregister:   function(){},
+            restore:      function(){},
+            minimize:     function(){},
+            isRegistered: function(){ return false; },
+            getButton:    function(){ return null; }
+        };
+
+        /* notifSystem: bridge a parent shell via postMessage. Las notifs
+           sí queremos verlas — las muestra el shell con su look. */
+        window.notifSystem = {
+            show: function(opts) {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage(
+                            { type: 'perfil-notif-show', opts: opts },
+                            '*'
+                        );
+                    }
+                } catch (_) {}
+            },
+            isShown:     function(){ return false; },
+            isDismissed: function(){ return false; }
+        };
+    </script>
+</head>
+<body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
+<?php
+}
 ?>
 <!-- PROFILE WINDOW -->
 <div class="window" id="profile-window">
     <div class="title-bar">
-        <div class="title-bar-text"><?php echo appTitleIcon('profileIcon', '👤'); ?><?php echo htmlspecialchars($desktopLabel); ?></div>
+        <div class="title-bar-text"><?php
+            echo appTitleIcon('profileIcon', '👤');
+            /* En standalone visitando a otro user mostramos el nombre
+               del VISITADO (no del viewer). $_lookLabel se setea arriba
+               en el bloque standalone con el label del target. */
+            if (!empty($_perfilStandalone) && !empty($_perfilViewingKey) && !empty($_lookLabel)) {
+                echo htmlspecialchars($_lookLabel);
+            } else {
+                echo htmlspecialchars($desktopLabel);
+            }
+        ?></div>
         <div class="title-bar-controls">
             <button aria-label="Minimize"></button>
             <button aria-label="Maximize"></button>
@@ -48,7 +284,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
                 <div class="profile-sidebar-heading"><span>Melon reviews</span></div>
                 <div id="profile-melon-nav">
                     <div class="profile-nav-item" data-melon="year">
-                        <span class="profile-nav-icon">🏆</span>
+                        <span class="profile-nav-icon"><img src="assets/img/appIcons/bestOfTheYearIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
                         <span class="profile-nav-label">Mejor del año</span>
                     </div>
                     <div class="profile-nav-item" data-melon="recent">
@@ -73,6 +309,9 @@ require_once dirname(__DIR__) . '/assets/config.php';
                 <div id="profile-sidebar-back">
                     <button class="button" id="profile-catview-back">← Volver</button>
                 </div>
+                <?php /* Botón solo visible en standalone (iframe del perfil ajeno).
+                          Resetea la vista al perfil principal del visitado. */ ?>
+                <button class="button" id="profile-go-home" style="display:none;">Volver al perfil</button>
                 <button class="button" id="profile-info-edit-btn">✏ Editar perfil</button>
                 <button class="button" id="profile-info-edit-save-btn" style="display:none;">💾 Guardar</button>
                 <button class="button" id="profile-info-edit-cancel-btn" style="display:none;">Cancelar</button>
@@ -225,6 +464,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
         <div class="title-bar-text" id="profile-chat-title" style="display:flex;align-items:center;gap:6px;">
             <span id="profile-chat-title-av" style="width:18px;height:18px;display:inline-block;background:var(--inset-bg,#fff);overflow:hidden;box-shadow:-1px -1px 0 var(--bezel-dark-1,#0a0a0a), 1px 1px 0 var(--bezel-light-1,#fff);flex-shrink:0;"></span>
             <span id="profile-chat-title-text">Chat</span>
+            <span id="profile-chat-status"></span>
         </div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-chat-close"></button>
@@ -237,8 +477,7 @@ require_once dirname(__DIR__) . '/assets/config.php';
         <div id="profile-chat-emoji-panel" style="display:none;position:absolute;bottom:48px;left:8px;right:8px;background:var(--win-bg,silver);padding:6px;z-index:5;box-shadow:inset -1px -1px var(--bezel-dark-1,#0a0a0a),inset 1px 1px var(--bezel-light-1,#fff),inset -2px -2px var(--bezel-dark-2,grey),inset 2px 2px var(--bezel-light-2,#dfdfdf);max-height:140px;overflow-y:auto;"></div>
         <div id="profile-chat-input-row">
             <input type="text" id="profile-chat-input" maxlength="2000" placeholder="Escribe un mensaje…">
-            <button class="button" id="profile-chat-emoji-btn" type="button" title="Emotes" style="padding:3px 8px;">😀</button>
-            <button class="button" id="profile-chat-send">Enviar</button>
+            <button class="button" id="profile-chat-emoji-btn"  type="button" title="Emotes" style="padding:3px 8px;">😀</button>
         </div>
     </div>
 </div>
@@ -412,10 +651,10 @@ require_once dirname(__DIR__) . '/assets/config.php';
         <div class="field-row-stacked">
             <label for="profile-social-add-platform" style="font-size:10px;">Plataforma</label>
             <select id="profile-social-add-platform" style="width:100%;box-sizing:border-box;">
-                <option value="steam">🎮 Steam</option>
-                <option value="discord">💬 Discord</option>
-                <option value="twitter">🐦 Twitter / X</option>
-                <option value="instagram">📷 Instagram</option>
+                <option value="steam">Steam</option>
+                <option value="discord">Discord</option>
+                <option value="twitter">Twitter / X</option>
+                <option value="instagram">Instagram</option>
             </select>
         </div>
         <div class="field-row-stacked" style="margin-top:6px;">
@@ -516,13 +755,73 @@ var PROFILE_USERS = <?php
     var currentCat   = null;
     var currentMusicTab = 'albums';
 
+    /* EXPOSE EL INIT TEMPRANO — antes de los IIFE internos que pueden
+       crashear con "null is not an object" en standalone (DOM parcial).
+       Las funciones referenciadas adentro (loadLists, loadProfile, etc.)
+       son `function` declarations → hoisted, accesibles aunque su
+       definición esté más abajo en este IIFE. */
+    window.__perfilStandaloneInit = function() {
+        loaded = true;
+        console.log('[PERFIL standalone] init, viewingKey:', window.__PERFIL_VIEWING_KEY);
+        if (typeof loadLists === 'function') loadLists(typeof updateCounts === 'function' ? updateCounts : function(){});
+        if (typeof loadProfile === 'function') {
+            loadProfile(function() {
+                var asKey = window.__PERFIL_VIEWING_KEY;
+                console.log('[PERFIL standalone] loadProfile done, asKey:', asKey);
+                if (asKey && typeof viewOtherUser === 'function') {
+                    console.log('[PERFIL standalone] calling viewOtherUser:', asKey);
+                    viewOtherUser(asKey);
+                }
+            });
+        }
+        if (typeof loadProfileNotifs === 'function') loadProfileNotifs();
+
+        /* Botón "Ver perfil principal" — solo en standalone. Cuando el
+           user clica resetea la vista al perfil por defecto del visitado
+           (oculta categorías, social, melon) y muestra info+posts. */
+        var goHomeBtn = document.getElementById('profile-go-home');
+        if (goHomeBtn) {
+            goHomeBtn.style.display = '';
+            goHomeBtn.addEventListener('click', function() {
+                /* Misma lógica que viewOtherUser usa para mostrar el
+                   perfil por defecto del visitado al cargarlo. */
+                var ids = ['profile-view-cat', 'profile-view-social', 'profile-view-melon', 'profile-view-music'];
+                ids.forEach(function(id) {
+                    var el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+                var def = document.getElementById('profile-view-default');
+                if (def) def.style.display = 'flex';
+            });
+        }
+    };
+
     var CATS = {
         movies: { label: 'Películas',   icon: '<img src="assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
-        series: { label: 'Series',      icon: '📺' },
+        series: { label: 'Series',      icon: '<img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
         books:  { label: 'Libros',      icon: '<img src="assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
         games:  { label: 'Videojuegos', icon: '<img src="assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' },
-        music:  { label: 'Música',      icon: '🎵' }
+        music:  { label: 'Música',      icon: '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' }
     };
+    /* Iconos de categoría usados como PLACEHOLDER cuando un item no tiene
+       imagen — antes era 🖼 genérico para todos; ahora cada categoría
+       muestra su propio icono semitransparente. Se usa también para el
+       empty-state de cada tab (gallery sin items). */
+    var CAT_PLACEHOLDER_ICON = {
+        movies: 'assets/img/appIcons/pelisIcon.png',
+        series: 'assets/img/appIcons/melonArchiveIcon.png',
+        books:  'assets/img/appIcons/booksIcon.png',
+        games:  'assets/img/appIcons/juegosIcon.png',
+        music:  'assets/img/appIcons/musicaIcon.png'
+    };
+    function catPlaceholderHTML(cat, size) {
+        var src = CAT_PLACEHOLDER_ICON[cat];
+        var sz  = size || 48;
+        if (!src) return '<div class="profile-gallery-placeholder">🖼</div>';
+        return '<div class="profile-gallery-placeholder">' +
+            '<img src="' + src + '" alt="" style="width:' + sz + 'px;height:' + sz + 'px;object-fit:contain;image-rendering:pixelated;opacity:0.55;">' +
+            '</div>';
+    }
 
     var DONE_LABELS = { movies: 'Vistas', series: 'Vistas', books: 'Leídas', games: 'Jugadas' };
     var CAT_VERBS   = { movies: 'ver', series: 'ver', books: 'leer', games: 'jugar', music: 'escuchar' };
@@ -678,12 +977,12 @@ var PROFILE_USERS = <?php
                 var img = document.createElement('img');
                 img.src = item.image;
                 img.alt = item.title;
-                (function(b) {
-                    img.onerror = function() { b.textContent = '🖼'; };
-                })(body);
+                (function(b, ct) {
+                    img.onerror = function() { b.innerHTML = catPlaceholderHTML(ct, 42); };
+                })(body, cat);
                 body.appendChild(img);
             } else if (item) {
-                body.textContent = '🖼';
+                body.innerHTML = catPlaceholderHTML(cat, 42);
             }
             if (item && item.collaborators && item.collaborators.length) {
                 var strip = document.createElement('div');
@@ -1292,7 +1591,17 @@ var PROFILE_USERS = <?php
         if (!items.length) {
             var empty = document.createElement('div');
             empty.className = 'profile-gallery-empty';
-            empty.textContent = 'Sin elementos';
+            /* Empty state con el icono de la categoría — más visual que
+               el genérico "Sin elementos". El icono va semitransparente
+               y un texto pequeño debajo da contexto. */
+            var iconSrc = CAT_PLACEHOLDER_ICON[cat];
+            if (iconSrc) {
+                empty.innerHTML =
+                    '<img src="' + iconSrc + '" alt="" style="width:72px;height:72px;object-fit:contain;image-rendering:pixelated;opacity:0.35;display:block;margin:0 auto 8px;">' +
+                    '<div style="opacity:0.6;">Sin elementos</div>';
+            } else {
+                empty.textContent = 'Sin elementos';
+            }
             gallery.appendChild(empty);
             return;
         }
@@ -1319,7 +1628,7 @@ var PROFILE_USERS = <?php
             if (item.review && item.review.comment) {
                 var bubbleBtn = document.createElement('span');
                 bubbleBtn.className = 'profile-gallery-tb-bubble';
-                bubbleBtn.textContent = '💬';
+                bubbleBtn.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
                 (function(r) {
                     bubbleBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
@@ -1341,11 +1650,11 @@ var PROFILE_USERS = <?php
                 img.src = item.image;
                 img.alt = item.title;
                 img.onerror = function() {
-                    imgWrap.innerHTML = '<div class="profile-gallery-placeholder">🖼</div>';
+                    imgWrap.innerHTML = catPlaceholderHTML(cat, 48);
                 };
                 imgWrap.appendChild(img);
             } else {
-                imgWrap.innerHTML = '<div class="profile-gallery-placeholder">🖼</div>';
+                imgWrap.innerHTML = catPlaceholderHTML(cat, 48);
             }
             if (item.collaborators && item.collaborators.length) {
                 var collabStrip = document.createElement('div');
@@ -1386,32 +1695,13 @@ var PROFILE_USERS = <?php
             footer.className = 'profile-gallery-footer';
             footer.dataset.status = item.status || 'pending';
             footer.innerHTML = renderStatusFooter(item);
-            (function(it, el) {
-                el.addEventListener('click', function() {
-                    if (viewingUser) return;
-                    var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
-                    if (i === -1) return;
-                    var cur  = el.dataset.status;
-                    var next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(cur) + 1) % STATUS_CYCLE.length];
-                    el.dataset.status    = next;
-                    lists[cat][i].status = next;
-                    /* Setea / limpia completedAt al cruzar el estado completed.
-                       Coincide con la lógica del backend para que la UI muestre
-                       la fecha al instante (sin esperar refresh). */
-                    if (next === 'completed') {
-                        if (!lists[cat][i].completedAt) {
-                            lists[cat][i].completedAt = Math.floor(Date.now() / 1000);
-                        }
-                    } else {
-                        delete lists[cat][i].completedAt;
-                    }
-                    el.innerHTML = renderStatusFooter(lists[cat][i]);
-                    saveCategory(cat);
-                    renderCatView(cat);
-                    renderCatEncurso(cat);
-                    if (next === 'completed') crearMomentoDesdeItem(cat, lists[cat][i]);
-                });
-            })(item, footer);
+            /* El footer ya NO es clickable: antes ciclaba pending →
+               in-progress → completed → pending, lo que provocaba que
+               al pulsar sobre la fecha (que ahora vive ahí) el item se
+               devolviera a pendientes accidentalmente. Si necesitas
+               cambiar el estado, usa el menú contextual (click derecho).
+               Cambios visuales: cursor default + sin :hover de fondo. */
+            footer.style.cursor = 'default';
 
             card.appendChild(tb);
             card.appendChild(imgWrap);
@@ -1473,6 +1763,13 @@ var PROFILE_USERS = <?php
                                 confirmFn('¿Eliminar "' + it.title + '"?', 'Eliminar', function() {
                                     var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                     if (i !== -1) {
+                                        /* Capturamos el item antes del splice para que el
+                                           helper tenga el título original. Best-effort:
+                                           si nunca existió un momento, no pasa nada. */
+                                        var removed = lists[cat][i];
+                                        if (typeof window.eliminarMomentoDeItem === 'function') {
+                                            window.eliminarMomentoDeItem(cat, removed);
+                                        }
                                         lists[cat].splice(i, 1);
                                         saveCategory(cat);
                                         updateCounts();
@@ -1771,20 +2068,25 @@ var PROFILE_USERS = <?php
         if (data.country)  metaEl.appendChild(line('📍 ' + data.country));
 
         linksEl.innerHTML = '';
+        /* Iconos PNG dedicados para cada red social. */
+        var STEAM_PNG     = '<img src="assets/img/appIcons/steamIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        var DISCORD_PNG   = '<img src="assets/img/appIcons/discordIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        var TWITTER_PNG   = '<img src="assets/img/appIcons/twitterIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        var INSTAGRAM_PNG = '<img src="assets/img/appIcons/instagramIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
         var socials = [
-            { key: 'steam',     icon: '🎮', label: 'Steam',
+            { key: 'steam',     icon: STEAM_PNG,     label: 'Steam',
               url: function(v) { return /^https?:\/\//.test(v) ? v : 'https://steamcommunity.com/id/' + encodeURIComponent(v); } },
-            { key: 'discord',   icon: '💬', label: 'Discord',   url: null },
-            { key: 'twitter',   icon: '🐦', label: 'Twitter',
+            { key: 'discord',   icon: DISCORD_PNG,   label: 'Discord',   url: null },
+            { key: 'twitter',   icon: TWITTER_PNG,   label: 'Twitter',
               url: function(v) { return /^https?:\/\//.test(v) ? v : 'https://x.com/' + encodeURIComponent(v.replace(/^@/, '')); } },
-            { key: 'instagram', icon: '📷', label: 'Instagram',
+            { key: 'instagram', icon: INSTAGRAM_PNG, label: 'Instagram',
               url: function(v) { return /^https?:\/\//.test(v) ? v : 'https://instagram.com/' + encodeURIComponent(v.replace(/^@/, '')); } },
         ];
         socials.forEach(function(s) {
             if (!data[s.key]) return;
             var a = document.createElement('a');
             a.className = 'pinfo-social';
-            a.textContent = s.icon;
+            a.innerHTML = s.icon;
             a.title = s.label + ': ' + data[s.key];
             if (s.url) {
                 a.href = s.url(data[s.key]);
@@ -2002,7 +2304,14 @@ var PROFILE_USERS = <?php
             (function(uk) {
                 row.addEventListener('click', function() {
                     closeNotifsWindow();
-                    viewOtherUser(uk);
+                    /* Abre el perfil de uk como NUEVA ventana iframe
+                       (con su interfaz/tema/iconos). Si estamos en
+                       standalone, forward al shell padre vía postMessage. */
+                    if (typeof window.openProfileAtUser === 'function') {
+                        window.openProfileAtUser(uk);
+                    } else {
+                        viewOtherUser(uk);
+                    }
                 });
             })(n.fromUser);
             listEl.appendChild(row);
@@ -2066,7 +2375,7 @@ var PROFILE_USERS = <?php
             taskbarManager.restore('profile-window');
         } else {
             profileWin.style.height = Math.max(380, window.innerHeight - 80) + 'px';
-            taskbarManager.register('profile-window', 'Perfil', '👤', 'flex');
+            taskbarManager.register('profile-window', 'Perfil', '<img src="assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
             startItemNotifStream();
         }
         if (!loaded) {
@@ -2085,7 +2394,7 @@ var PROFILE_USERS = <?php
             taskbarManager.restore('profile-window');
         } else {
             profileWin.style.height = Math.max(380, window.innerHeight - 80) + 'px';
-            taskbarManager.register('profile-window', 'Perfil', '👤', 'flex');
+            taskbarManager.register('profile-window', 'Perfil', '<img src="assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
             startItemNotifStream();
         }
         function doAdd() {
@@ -2283,9 +2592,10 @@ var PROFILE_USERS = <?php
         var toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'profile-post-comments-toggle';
+        var chatImg = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">';
         var label = comments.length === 0
-            ? '💬 Comentar'
-            : '💬 ' + comments.length + ' ' + (comments.length === 1 ? 'comentario' : 'comentarios');
+            ? chatImg + 'Comentar'
+            : chatImg + comments.length + ' ' + (comments.length === 1 ? 'comentario' : 'comentarios');
         toggle.innerHTML = '<span>' + label + '</span><span class="profile-post-comments-chev">▾</span>';
         wrap.appendChild(toggle);
 
@@ -2862,7 +3172,16 @@ var PROFILE_USERS = <?php
         nameEl.className = 'profile-social-name';
         nameEl.textContent = u.label;
         card.appendChild(nameEl);
-        card.addEventListener('click', function() { viewOtherUser(userKey); });
+        card.addEventListener('click', function() {
+            /* Abre el perfil del clicked user como ventana iframe-
+               based (con su interfaz/tema/iconos) en vez de navegar
+               dentro del embedded. */
+            if (typeof window.openProfileAtUser === 'function') {
+                window.openProfileAtUser(userKey);
+            } else {
+                viewOtherUser(userKey);
+            }
+        });
         return card;
     }
 
@@ -2929,15 +3248,32 @@ var PROFILE_USERS = <?php
             label.textContent = u.label;
             item.appendChild(label);
             (function(uk) {
-                item.addEventListener('click', function() { viewOtherUser(uk); });
+                item.addEventListener('click', function() {
+                    /* Abre el perfil del seguido como ventana iframe-
+                       based con SU interfaz/tema/iconos. */
+                    if (typeof window.openProfileAtUser === 'function') {
+                        window.openProfileAtUser(uk);
+                    } else {
+                        viewOtherUser(uk);
+                    }
+                });
+                /* Click derecho → menú apodo / silenciar (solo mutuos
+                   tienen acceso al chat; en no-mutuos no tiene sentido). */
+                if (isMutual(uk)) {
+                    item.addEventListener('contextmenu', function(ev) {
+                        ev.preventDefault();
+                        openUserCtxMenu(ev.clientX, ev.clientY, uk);
+                    });
+                }
             })(k);
             if (isMutual(k)) {
                 var chatBtn = document.createElement('span');
                 chatBtn.className = 'profile-nav-chat';
                 chatBtn.title = 'Chat con ' + u.label;
-                var ico = document.createElement('span');
+                var ico = document.createElement('img');
                 ico.className = 'profile-nav-chat-ico';
-                ico.textContent = '💬';
+                ico.src = 'assets/img/appIcons/chatIcon.png';
+                ico.alt = '';
                 chatBtn.appendChild(ico);
                 var unread = unreadChats[k] || 0;
                 if (unread > 0) {
@@ -2960,13 +3296,81 @@ var PROFILE_USERS = <?php
         if (window.__applyPresence) window.__applyPresence();
     }
 
+    /* Convierte camelCase del JSON ({winBg, accentText, bezelLight1...})
+       a kebab-case CSS var (--win-bg, --accent-text, --bezel-light-1).
+       El "(\d)" extra mete guion antes de dígitos para no perder
+       separadores en keys como bezelLight1 → bezel-light-1. */
+    function _cssVarOf(camelKey) {
+        return '--' + camelKey
+            .replace(/([A-Z])/g, '-$1')
+            .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+            .toLowerCase();
+    }
+
+    /* Aplica los colores del tema activo del visitado como style inline
+       sobre #profile-window. Como son CSS vars (--win-bg, --accent, etc.)
+       sobreescriben las del shell SOLO dentro del profile-window —
+       hijos via cascada heredan automáticamente. */
+    function applyVisitedUserTheme(targetUserKey) {
+        var pw = document.getElementById('profile-window');
+        if (!pw) return;
+        fetch('assets/personalize/api.php?action=get-look&as=' + encodeURIComponent(targetUserKey), {
+            credentials: 'same-origin'
+        })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok || !d.theme || !d.theme.colors) {
+                    /* Sin tema custom: limpiamos lo previo. */
+                    clearVisitedUserTheme();
+                    return;
+                }
+                var colors = d.theme.colors;
+                var css = '';
+                Object.keys(colors).forEach(function(k){
+                    var v = colors[k];
+                    if (!v) return;
+                    css += _cssVarOf(k) + ': ' + v + ' !important; ';
+                });
+                /* Marcamos las vars con un data-attr para poder limpiarlas
+                   sin tocar otros estilos inline pre-existentes. */
+                pw.dataset.visitedTheme = '1';
+                pw.dataset.visitedThemeCss = css;
+                pw.style.cssText = (pw.style.cssText || '') + ' ' + css;
+            })
+            .catch(function(){});
+    }
+
+    /* Quita los CSS vars del visitado, restaurando el tema del viewer. */
+    function clearVisitedUserTheme() {
+        var pw = document.getElementById('profile-window');
+        if (!pw || !pw.dataset.visitedTheme) return;
+        var injected = pw.dataset.visitedThemeCss || '';
+        if (injected) {
+            /* Quita exactamente lo inyectado para no perder otros styles. */
+            pw.style.cssText = (pw.style.cssText || '').replace(injected, '');
+        }
+        delete pw.dataset.visitedTheme;
+        delete pw.dataset.visitedThemeCss;
+    }
+
     function viewOtherUser(userKey) {
         /* Al ver el perfil de otra persona, salimos de modo edición */
         document.dispatchEvent(new Event('profile-edit-cancel'));
+        console.log('[viewOtherUser] fetch', userKey);
         fetch('assets/profile/api.php?action=view-user&user=' + encodeURIComponent(userKey))
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (!data || data.error) { alert(data && data.error ? data.error : 'Error'); return; }
+                console.log('[viewOtherUser] response', data);
+                if (!data || data.error) {
+                    /* En standalone no popamos alert para no romper UX
+                       del visitante — sólo log y bail. */
+                    if (window.__PERFIL_STANDALONE) {
+                        console.error('[viewOtherUser] error', data);
+                        return;
+                    }
+                    alert(data && data.error ? data.error : 'Error');
+                    return;
+                }
                 if (!ownLists) ownLists = lists;
                 lists = data.lists;
                 viewingUser = data.userKey;
@@ -3010,6 +3414,10 @@ var PROFILE_USERS = <?php
                 if (melonSec)  melonSec.style.display  = 'none';
                 var notifBtn = document.getElementById('profile-notif-btn');
                 if (notifBtn) notifBtn.style.display = 'none';
+                /* Aplica el tema del visitado al #profile-window (colores
+                   CSS vars como style inline → cascada hacia descendientes,
+                   sin tocar el resto del shell). */
+                applyVisitedUserTheme(data.userKey);
             })
             .catch(function() { alert('No se pudo cargar el perfil'); });
     }
@@ -3055,6 +3463,10 @@ var PROFILE_USERS = <?php
         if (lastOnlineSet[userKey]) dot.classList.add('online');
     }
     window.__attachPresenceDot = attachPresenceDot;
+    /* Mapa de last-seen para mostrar "Última vez X" en la cabecera del
+       chat cuando el otro está offline. Lo devuelve el endpoint extendido
+       de presence. */
+    var lastSeenMap = {};
     function refreshPresenceDots() {
         fetch('assets/profile/api.php?action=presence', { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
@@ -3062,9 +3474,48 @@ var PROFILE_USERS = <?php
                 if (!d || !d.ok || !Array.isArray(d.online)) return;
                 lastOnlineSet = {};
                 d.online.forEach(function(k) { lastOnlineSet[k] = true; });
+                if (d.lastSeen && typeof d.lastSeen === 'object') {
+                    lastSeenMap = d.lastSeen;
+                }
                 applyPresence();
+                /* Refresca el status del chat header si hay chat abierto. */
+                if (chatWithUser) refreshChatStatus();
             })
             .catch(function() {});
+    }
+    /* "Última vez …" — formato corto en local. */
+    function formatLastSeen(ts) {
+        if (!ts) return '';
+        var d = new Date(ts * 1000);
+        if (isNaN(d.getTime())) return '';
+        var now = new Date();
+        var hh = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        if (d.toDateString() === now.toDateString()) return 'hoy ' + hh;
+        var y = new Date(now.getTime() - 86400000);
+        if (d.toDateString() === y.toDateString()) return 'ayer ' + hh;
+        var diff = (now - d) / 86400000;
+        if (diff < 7) {
+            var dows = ['dom','lun','mar','mié','jue','vie','sáb'];
+            return dows[d.getDay()] + ' ' + hh;
+        }
+        return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + hh;
+    }
+    /* Actualiza el sub-status del chat header — "· En línea" o
+       "· Última vez X". */
+    function refreshChatStatus() {
+        var stEl = document.getElementById('profile-chat-status');
+        if (!stEl) return;
+        if (!chatWithUser) { stEl.textContent = ''; stEl.classList.remove('is-online'); return; }
+        if (lastOnlineSet[chatWithUser]) {
+            stEl.textContent = '· En línea';
+            stEl.classList.add('is-online');
+        } else if (lastSeenMap[chatWithUser]) {
+            stEl.textContent = '· Última vez ' + formatLastSeen(lastSeenMap[chatWithUser]);
+            stEl.classList.remove('is-online');
+        } else {
+            stEl.textContent = '';
+            stEl.classList.remove('is-online');
+        }
     }
     /* Expone applyPresence para que las funciones de render puedan
        re-aplicar el estado al recrear los dots. */
@@ -3101,10 +3552,33 @@ var PROFILE_USERS = <?php
     var unreadChats    = {};  /* { userKey: count } — mensajes sin leer por chat */
     var unreadPollTimer = null;
 
+    /* ── Supresión de notificaciones push del chat activo ──
+       El service worker pregunta vía MessageChannel cada vez que llega
+       un push si estamos focused en ese chat. Si lo estamos Y la página
+       es visible, devolvemos true → el SW se salta showNotification.
+       Sin esto el usuario recibe ping del SO mientras lee los mensajes
+       en vivo en la ventana del escritorio. */
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', function(e) {
+            var d = e.data || {};
+            if (d.type !== 'sw:is-chat-focused') return;
+            var port = e.ports && e.ports[0];
+            if (!port) return;
+            var focused = (chatWithUser === d.fromKey)
+                       && (document.visibilityState === 'visible');
+            try { port.postMessage({ focused: focused }); } catch (_) {}
+        });
+    }
+
     function openChatWith(userKey) {
         if (!userKey || !PROFILE_USERS[userKey]) return;
         chatWithUser = userKey;
         chatLastSeenId = null;
+        chatLastSig    = '';
+        /* Pinta status (En línea / Última vez …) inmediatamente con el
+           snapshot que ya tenemos en memoria — el siguiente refresh
+           cada 20s lo actualiza si cambia. */
+        refreshChatStatus();
         var u = PROFILE_USERS[userKey];
         /* Avatar del usuario en lugar del 💬. Si no hay imagen, fallback a la inicial. */
         var avEl = document.getElementById('profile-chat-title-av');
@@ -3160,6 +3634,9 @@ var PROFILE_USERS = <?php
         var win = document.getElementById('profile-chat-window');
         if (win) win.style.display = 'none';
         chatWithUser = null;
+        chatLastSig  = '';
+        var stEl = document.getElementById('profile-chat-status');
+        if (stEl) { stEl.textContent = ''; stEl.classList.remove('is-online'); }
         if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
     }
 
@@ -3173,29 +3650,353 @@ var PROFILE_USERS = <?php
             }).catch(function() {});
     }
 
+    /* Icono PNG para placeholder de mensaje eliminado (reemplaza emoji 🗑). */
+    var CHAT_TRASH_ICON_HTML = '<img src="assets/img/appIcons/trashIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">';
+
+
+    /* Signature de los mensajes para evitar re-render cuando nada
+       cambió pero los ticks SÍ pueden variar (read/delivered). Incluye
+       max id + flags por mensaje propio. */
+    function chatMessagesSig(messages) {
+        return messages.map(function(m) {
+            if (m.from === currentSessionUser) {
+                var t = m.read ? 'R' : (m.delivered ? 'D' : 'S');
+                return m.id + ':' + t + (m.edited ? 'E' : '') + (m.deleted ? 'X' : '');
+            }
+            return m.id + (m.edited ? 'E' : '') + (m.deleted ? 'X' : '');
+        }).join(',');
+    }
+    var chatLastSig = '';
+
     function renderChatMessages(messages) {
         var listEl = document.getElementById('profile-chat-messages');
         if (!listEl) return;
-        var lastId = messages.length ? messages[messages.length - 1].id : null;
-        if (lastId === chatLastSeenId) return; /* sin cambios */
-        chatLastSeenId = lastId;
+        var sig = chatMessagesSig(messages);
+        if (sig === chatLastSig) return;
+        chatLastSig = sig;
         var atBottom = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 40;
         listEl.innerHTML = '';
         messages.forEach(function(m) {
             var mine = m.from === currentSessionUser;
             var row = document.createElement('div');
             row.className = 'chat-msg' + (mine ? ' chat-msg-mine' : ' chat-msg-theirs');
+            row.dataset.msgId = m.id;
+            row.dataset.mine  = mine ? '1' : '0';
+            row.dataset.deleted = m.deleted ? '1' : '0';
+
             var bubble = document.createElement('div');
-            bubble.className = 'chat-bubble';
-            bubble.textContent = m.text;
+            bubble.className = 'chat-bubble' + (m.deleted ? ' is-deleted' : '');
+            if (m.deleted) {
+                bubble.innerHTML = CHAT_TRASH_ICON_HTML + 'Mensaje eliminado';
+            } else {
+                bubble.textContent = m.text;
+            }
             row.appendChild(bubble);
-            var time = document.createElement('div');
-            time.className = 'chat-time';
-            time.textContent = relTime(m.sentAt || 0);
-            row.appendChild(time);
+
+            /* Línea meta: tiempo + (editado) + ticks. */
+            var meta = document.createElement('div');
+            meta.className = 'chat-time';
+            var timeStr = relTime(m.sentAt || 0);
+            var editedHtml = (m.edited && !m.deleted)
+                ? '<span class="chat-edited-tag">(editado)</span>'
+                : '';
+            var ticksHtml = '';
+            if (mine && !m.deleted) {
+                if (m.read)           ticksHtml = '<span class="chat-ticks is-read" title="Leído">✓✓</span>';
+                else if (m.delivered) ticksHtml = '<span class="chat-ticks is-delivered" title="Entregado">✓✓</span>';
+                else                  ticksHtml = '<span class="chat-ticks is-sent" title="Enviado">✓</span>';
+            }
+            meta.innerHTML = '<span>' + escHtml(timeStr) + '</span>' + editedHtml + ticksHtml;
+            row.appendChild(meta);
+
+            /* Context menu para editar/eliminar en MIS mensajes no borrados. */
+            if (mine && !m.deleted) {
+                bubble.addEventListener('contextmenu', function(ev) {
+                    ev.preventDefault();
+                    openChatMsgMenu(ev.clientX, ev.clientY, m.id, m.text);
+                });
+            }
             listEl.appendChild(row);
         });
         if (atBottom) listEl.scrollTop = listEl.scrollHeight;
+    }
+
+    /* ──────────────────────────────────────────────
+       Menu contextual del USUARIO (apodo + silenciar)
+       ────────────────────────────────────────────── */
+    var __userCtxMenu = null;
+    function closeUserCtxMenu() {
+        if (__userCtxMenu && __userCtxMenu.parentNode) __userCtxMenu.parentNode.removeChild(__userCtxMenu);
+        __userCtxMenu = null;
+        document.removeEventListener('click', closeUserCtxMenu);
+        document.removeEventListener('contextmenu', closeUserCtxMenu);
+    }
+    function openUserCtxMenu(x, y, uKey) {
+        closeUserCtxMenu();
+        __userCtxMenu = document.createElement('div');
+        __userCtxMenu.className = 'chat-msg-menu';
+        __userCtxMenu.innerHTML =
+            '<button data-act="nick" type="button">Cambiar apodo…</button>' +
+            '<button data-act="mute" type="button">Silenciar…</button>';
+        document.body.appendChild(__userCtxMenu);
+        var w = __userCtxMenu.offsetWidth, h = __userCtxMenu.offsetHeight;
+        var px = Math.min(x, window.innerWidth  - w - 4);
+        var py = Math.min(y, window.innerHeight - h - 4);
+        __userCtxMenu.style.left = px + 'px';
+        __userCtxMenu.style.top  = py + 'px';
+        __userCtxMenu.querySelector('[data-act="nick"]').addEventListener('click', function() {
+            closeUserCtxMenu();
+            openNicknameDialog(uKey);
+        });
+        __userCtxMenu.querySelector('[data-act="mute"]').addEventListener('click', function() {
+            closeUserCtxMenu();
+            openMuteDialog(uKey);
+        });
+        setTimeout(function() {
+            document.addEventListener('click', closeUserCtxMenu);
+            document.addEventListener('contextmenu', closeUserCtxMenu);
+        }, 0);
+    }
+    /* Cache local del meta del usuario (nickname + mutedUntil) — se llena
+       on-demand al abrir un menú del ctx. */
+    var __userMeta = {};
+    function fetchUserMeta(uKey, cb) {
+        /* get-recent-chats nos da todos; barato. */
+        fetch('assets/profile/api.php?action=get-recent-chats', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d && Array.isArray(d.chats)) {
+                    d.chats.forEach(function(c) { __userMeta[c.userKey] = c; });
+                }
+                cb(__userMeta[uKey] || {});
+            }).catch(function() { cb(__userMeta[uKey] || {}); });
+    }
+    function openNicknameDialog(uKey) {
+        fetchUserMeta(uKey, function(meta) {
+            var u = PROFILE_USERS[uKey] || { label: uKey };
+            var cur = meta.nickname || '';
+            var bd = document.createElement('div');
+            bd.className = 'profile-modal-backdrop';
+            bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:10020;display:flex;align-items:center;justify-content:center;';
+            bd.innerHTML =
+                '<div class="window" style="width:280px;">' +
+                    '<div class="title-bar"><div class="title-bar-text">Apodo de ' + escHtml(u.label) + '</div>' +
+                        '<div class="title-bar-controls"><button aria-label="Close" type="button" data-act="close"></button></div></div>' +
+                    '<div class="window-body" style="padding:10px;">' +
+                        '<label style="font-size:11px;display:block;margin-bottom:4px;">Apodo (vacío = quitar):</label>' +
+                        '<input type="text" maxlength="60" style="width:100%;font-size:12px;padding:4px 6px;" value="' + escHtml(cur) + '">' +
+                        '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;">' +
+                            '<button class="button" type="button" data-act="cancel">Cancelar</button>' +
+                            '<button class="button default" type="button" data-act="save">Guardar</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(bd);
+            var inp = bd.querySelector('input');
+            inp.focus(); inp.select();
+            function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+            bd.querySelector('[data-act="close"]').addEventListener('click', close);
+            bd.querySelector('[data-act="cancel"]').addEventListener('click', close);
+            bd.addEventListener('click', function(e) { if (e.target === bd) close(); });
+            function save() {
+                var v = inp.value.trim();
+                fetch('assets/profile/api.php?action=set-chat-nickname', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ with: uKey, nickname: v })
+                }).then(function(r){ return r.json(); }).then(function(d) {
+                    if (d && d.ok) {
+                        __userMeta[uKey] = __userMeta[uKey] || {};
+                        __userMeta[uKey].nickname = d.nickname || '';
+                        /* Refresca el label en la sidebar. */
+                        document.querySelectorAll('.profile-nav-item[data-user="' + uKey + '"] .profile-nav-label').forEach(function(el) {
+                            el.textContent = d.nickname || (PROFILE_USERS[uKey] && PROFILE_USERS[uKey].label) || uKey;
+                        });
+                        /* Si tengo el chat abierto con esta persona, refresca el title-bar. */
+                        if (chatWithUser === uKey) {
+                            var titleEl = document.getElementById('profile-chat-title-text');
+                            if (titleEl) titleEl.textContent = d.nickname || (PROFILE_USERS[uKey] && PROFILE_USERS[uKey].label) || uKey;
+                        }
+                        close();
+                    } else {
+                        alert((d && d.error) || 'Error al guardar el apodo');
+                    }
+                }).catch(function() { alert('Error de red'); });
+            }
+            bd.querySelector('[data-act="save"]').addEventListener('click', save);
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter')  { e.preventDefault(); save(); }
+                if (e.key === 'Escape') { close(); }
+            });
+        });
+    }
+    function openMuteDialog(uKey) {
+        fetchUserMeta(uKey, function(meta) {
+            var u = PROFILE_USERS[uKey] || { label: uKey };
+            var muted = meta.mutedUntil > 0;
+            var bd = document.createElement('div');
+            bd.className = 'profile-modal-backdrop';
+            bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:10020;display:flex;align-items:center;justify-content:center;';
+            var status = '';
+            if (muted) {
+                var until = new Date(meta.mutedUntil * 1000);
+                var diffDays = (until - new Date()) / 86400000;
+                if (diffDays > 365) status = 'Silenciado indefinidamente.';
+                else {
+                    status = 'Silenciado hasta ' +
+                        until.toLocaleDateString('es-ES', { day:'2-digit', month:'short' }) +
+                        ' ' + String(until.getHours()).padStart(2,'0') + ':' +
+                        String(until.getMinutes()).padStart(2,'0');
+                }
+            } else {
+                status = 'Notificaciones activadas.';
+            }
+            bd.innerHTML =
+                '<div class="window" style="width:280px;">' +
+                    '<div class="title-bar"><div class="title-bar-text">Silenciar ' + escHtml(u.label) + '</div>' +
+                        '<div class="title-bar-controls"><button aria-label="Close" type="button" data-act="close"></button></div></div>' +
+                    '<div class="window-body" style="padding:10px;">' +
+                        '<div style="font-size:11px;color:var(--text-faint);margin-bottom:8px;">' + escHtml(status) + '</div>' +
+                        '<button class="button" data-mute="off"     type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Activar notificaciones</button>' +
+                        '<button class="button" data-mute="1h"      type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Silenciar 1 hora</button>' +
+                        '<button class="button" data-mute="8h"      type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Silenciar 8 horas</button>' +
+                        '<button class="button" data-mute="24h"     type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Silenciar 24 horas</button>' +
+                        '<button class="button" data-mute="1w"      type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Silenciar 1 semana</button>' +
+                        '<button class="button" data-mute="forever" type="button" style="display:block;width:100%;margin-bottom:4px;text-align:left;padding:4px 8px;">Silenciar indefinidamente</button>' +
+                        '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">' +
+                            '<button class="button" type="button" data-act="close">Cerrar</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(bd);
+            function close() { if (bd.parentNode) bd.parentNode.removeChild(bd); }
+            bd.querySelectorAll('[data-act="close"]').forEach(function(b) { b.addEventListener('click', close); });
+            bd.addEventListener('click', function(e) { if (e.target === bd) close(); });
+            bd.querySelectorAll('[data-mute]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    btn.disabled = true;
+                    fetch('assets/profile/api.php?action=set-chat-mute', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ with: uKey, duration: btn.dataset.mute })
+                    }).then(function(r){ return r.json(); }).then(function(d) {
+                        if (d && d.ok) {
+                            __userMeta[uKey] = __userMeta[uKey] || {};
+                            __userMeta[uKey].mutedUntil = d.mutedUntil || 0;
+                            close();
+                        } else {
+                            btn.disabled = false;
+                            alert((d && d.error) || 'Error');
+                        }
+                    }).catch(function() { btn.disabled = false; alert('Error de red'); });
+                });
+            });
+        });
+    }
+
+    /* ── Menu contextual edit/delete ── */
+    var __chatMsgMenu = null;
+    function closeChatMsgMenu() {
+        if (__chatMsgMenu && __chatMsgMenu.parentNode) __chatMsgMenu.parentNode.removeChild(__chatMsgMenu);
+        __chatMsgMenu = null;
+        document.removeEventListener('click', closeChatMsgMenu);
+        document.removeEventListener('contextmenu', closeChatMsgMenu);
+    }
+    function openChatMsgMenu(x, y, msgId, currentText) {
+        closeChatMsgMenu();
+        __chatMsgMenu = document.createElement('div');
+        __chatMsgMenu.className = 'chat-msg-menu';
+        __chatMsgMenu.innerHTML =
+            '<button data-act="edit"  type="button">Editar mensaje</button>' +
+            '<button data-act="delete" class="danger" type="button">Eliminar mensaje</button>';
+        document.body.appendChild(__chatMsgMenu);
+        /* Posicionado fixed; clamp dentro del viewport. */
+        var w = __chatMsgMenu.offsetWidth, h = __chatMsgMenu.offsetHeight;
+        var px = Math.min(x, window.innerWidth  - w - 4);
+        var py = Math.min(y, window.innerHeight - h - 4);
+        __chatMsgMenu.style.left = px + 'px';
+        __chatMsgMenu.style.top  = py + 'px';
+        __chatMsgMenu.querySelector('[data-act="edit"]').addEventListener('click', function() {
+            closeChatMsgMenu();
+            beginEditChatMessage(msgId, currentText);
+        });
+        __chatMsgMenu.querySelector('[data-act="delete"]').addEventListener('click', function() {
+            closeChatMsgMenu();
+            deleteChatMessage(msgId);
+        });
+        /* Click fuera = cierra. defer para no capturar el mismo click. */
+        setTimeout(function() {
+            document.addEventListener('click', closeChatMsgMenu);
+            document.addEventListener('contextmenu', closeChatMsgMenu);
+        }, 0);
+    }
+
+    function beginEditChatMessage(msgId, currentText) {
+        var row = document.querySelector('.chat-msg[data-msg-id="' + msgId + '"]');
+        if (!row) return;
+        var bubble = row.querySelector('.chat-bubble');
+        if (!bubble) return;
+        var original = bubble.textContent;
+        var box = document.createElement('div');
+        box.className = 'chat-edit-row';
+        box.innerHTML =
+            '<input type="text" maxlength="2000" value="">' +
+            '<button class="button" type="button" data-act="save">✓</button>' +
+            '<button class="button" type="button" data-act="cancel">✕</button>';
+        var inp = box.querySelector('input');
+        inp.value = currentText;
+        bubble.style.display = 'none';
+        row.insertBefore(box, bubble);
+        inp.focus();
+        inp.select();
+        function cancel() {
+            if (box.parentNode) box.parentNode.removeChild(box);
+            bubble.style.display = '';
+        }
+        function save() {
+            var newText = inp.value.trim();
+            if (!newText || newText === original) { cancel(); return; }
+            fetch('assets/profile/api.php?action=edit-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId: msgId, text: newText })
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                  cancel();
+                  if (d && d.ok) {
+                      chatLastSig = '';   /* fuerza re-render */
+                      loadChatMessages();
+                  }
+              }).catch(cancel);
+        }
+        box.querySelector('[data-act="save"]').addEventListener('click', save);
+        box.querySelector('[data-act="cancel"]').addEventListener('click', cancel);
+        inp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter')   { e.preventDefault(); save(); }
+            if (e.key === 'Escape')  { e.preventDefault(); cancel(); }
+        });
+    }
+
+    function deleteChatMessage(msgId) {
+        function doDelete() {
+            fetch('assets/profile/api.php?action=delete-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messageId: msgId })
+            }).then(function(r) { return r.json(); })
+              .then(function(d) {
+                  if (d && d.ok) {
+                      chatLastSig = '';
+                      loadChatMessages();
+                  }
+              }).catch(function(){});
+        }
+        var msg = '¿Eliminar este mensaje?\n\nQuien lo haya visto verá "Mensaje eliminado".';
+        if (window.win98Confirm) {
+            window.win98Confirm(msg, 'Eliminar mensaje', doDelete, function(){});
+        } else if (confirm(msg)) {
+            doDelete();
+        }
     }
 
     function sendChatMessage() {
@@ -3222,8 +4023,8 @@ var PROFILE_USERS = <?php
     (function setupChat() {
         var closeBtn = document.getElementById('profile-chat-close');
         if (closeBtn) closeBtn.addEventListener('click', closeChat);
-        var sendBtn = document.getElementById('profile-chat-send');
-        if (sendBtn) sendBtn.addEventListener('click', sendChatMessage);
+        /* Botón "Enviar" eliminado del desktop — el envío se hace solo
+           con Enter en el input. */
         var input = document.getElementById('profile-chat-input');
         if (input) input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
@@ -3350,6 +4151,9 @@ var PROFILE_USERS = <?php
     function exitViewingUser() {
         viewingUser = null;
         if (ownLists) { lists = ownLists; ownLists = null; }
+        /* Restaura el tema del propio viewer (quita los CSS vars
+           inyectados del visitado). */
+        clearVisitedUserTheme();
         /* Restaura cabecera al usuario propio */
         var avFrame = document.querySelector('#profile-avatar-col .profile-avatar-frame');
         if (avFrame) {
@@ -3435,8 +4239,8 @@ var PROFILE_USERS = <?php
                         '<span class="profile-star-num" style="font-size:8px;margin-left:2px;vertical-align:middle;">' + item.review.stars + '</span>';
                     if (item.review.comment) {
                         var tbBubble = document.createElement('span');
-                        tbBubble.textContent = '💬';
-                        tbBubble.style.cssText = 'font-size:9px;margin-left:3px;cursor:pointer;';
+                        tbBubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:10px;height:10px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+                        tbBubble.style.cssText = 'margin-left:3px;cursor:pointer;';
                         (function(r) { tbBubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
                         tbStars.appendChild(tbBubble);
                     }
@@ -3616,7 +4420,7 @@ var PROFILE_USERS = <?php
             if (item.review && item.review.comment) {
                 var bubble = document.createElement('span');
                 bubble.className = 'profile-gallery-tb-bubble';
-                bubble.textContent = '💬'; bubble.style.fontSize = '13px';
+                bubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
                 (function(r) { bubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
                 right.appendChild(bubble);
             }
@@ -3695,6 +4499,10 @@ var PROFILE_USERS = <?php
                         menuItems.push({ label: '✕ Eliminar', action: function() {
                             confirmFn('¿Eliminar "' + it.title + '"?', 'Eliminar', function() {
                                 var i = curIdx(); if (i === -1) return;
+                                var removed = lists.music[i];
+                                if (typeof window.eliminarMomentoDeItem === 'function') {
+                                    window.eliminarMomentoDeItem('music', removed);
+                                }
                                 lists.music.splice(i, 1); saveCategory('music'); updateCounts(); renderMusicView(currentMusicTab); renderMusicDestacados();
                             });
                         }});
@@ -3782,7 +4590,9 @@ var PROFILE_USERS = <?php
 
     /* ──── Music add dialog ──── */
     (function() {
+        try {
         var dlg           = document.getElementById('music-add-dialog');
+        if (!dlg) return;
         var step1         = document.getElementById('music-add-step1');
         var step2         = document.getElementById('music-add-step2');
         var step3         = document.getElementById('music-add-step3');
@@ -3978,15 +4788,25 @@ var PROFILE_USERS = <?php
         document.querySelectorAll('.music-tab').forEach(function(btn) {
             btn.addEventListener('click', function() { renderMusicView(btn.dataset.tab); });
         });
+        } catch (e) {
+            console.warn('[perfil] music dialog IIFE error:', e);
+        }
     })();
 
     /* ──── Profile info INLINE edit mode ──── */
     (function() {
+        try {
         var editBtn   = document.getElementById('profile-info-edit-btn');
         var saveBtn   = document.getElementById('profile-info-edit-save-btn');
         var cancelBtn = document.getElementById('profile-info-edit-cancel-btn');
         var photoIn   = document.getElementById('profile-photo-input');
         var avatarCol = document.getElementById('profile-avatar-col');
+        /* Guard: si cualquiera de los elementos críticos no está en el
+           DOM (e.g. layout standalone parcial), abortamos el IIFE
+           silenciosamente. Antes esto reventaba todo el `<script>` con
+           "addEventListener on null" y bloqueaba la inicialización
+           subsiguiente del perfil. */
+        if (!editBtn || !saveBtn || !cancelBtn || !photoIn || !avatarCol) return;
 
         /* Diálogo flotante para añadir una conexión social */
         var addDlg    = document.getElementById('profile-social-add-dialog');
@@ -3998,7 +4818,13 @@ var PROFILE_USERS = <?php
 
         var FIELDS = ['bio', 'pronouns', 'age', 'country'];
         var SOCIALS = ['steam', 'discord', 'twitter', 'instagram'];
-        var SOCIAL_ICONS = { steam: '🎮', discord: '💬', twitter: '🐦', instagram: '📷' };
+        /* Iconos PNG dedicados para cada red social. */
+        var SOCIAL_ICONS = {
+            steam:     '<img src="assets/img/appIcons/steamIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">',
+            discord:   '<img src="assets/img/appIcons/discordIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">',
+            twitter:   '<img src="assets/img/appIcons/twitterIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">',
+            instagram: '<img src="assets/img/appIcons/instagramIcon.png" alt="" style="width:22px;height:22px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
+        };
         var SOCIAL_LABELS = { steam: 'Steam', discord: 'Discord', twitter: 'Twitter', instagram: 'Instagram' };
         var SOCIAL_PLACEHOLDERS = {
             steam:     'https://steamcommunity.com/id/...',
@@ -4068,7 +4894,7 @@ var PROFILE_USERS = <?php
                 wrap.style.cssText = 'position:relative;display:inline-flex;';
                 var span = document.createElement('span');
                 span.className = 'pinfo-social';
-                span.textContent = SOCIAL_ICONS[k] || '🔗';
+                span.innerHTML = SOCIAL_ICONS[k] || '🔗';
                 span.title = (SOCIAL_LABELS[k] || k) + ': ' + d[k];
                 wrap.appendChild(span);
                 var del = document.createElement('button');
@@ -4421,6 +5247,13 @@ var PROFILE_USERS = <?php
         document.addEventListener('profile-edit-cancel', function() {
             if (editing) exitEditMode(false);
         });
+        } catch (e) {
+            /* Cualquier excepción en este IIFE (e.g. un elemento del DOM
+               que falta en standalone) NO debe abortar el resto del
+               <script>. Log y seguimos — la edición de perfil simplemente
+               no funcionará en esta página. */
+            console.warn('[perfil] photo/edit IIFE error:', e);
+        }
     })();
 
     /* ──── Nav sidebar items ──── */
@@ -4449,7 +5282,7 @@ var PROFILE_USERS = <?php
             taskbarManager.restore('profile-window');
         } else {
             profileWin.style.height = Math.max(380, window.innerHeight - 80) + 'px';
-            taskbarManager.register('profile-window', 'Perfil', '👤', 'flex');
+            taskbarManager.register('profile-window', 'Perfil', '<img src="assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
             if (!loaded) {
                 loaded = true;
                 loadLists(updateCounts);
@@ -4459,17 +5292,246 @@ var PROFILE_USERS = <?php
             startItemNotifStream();
         }
     }
-    document.getElementById('profile-icon').addEventListener('dblclick', openProfileWindow);
+    /* profile-icon es el icono del escritorio (vive en desktop-base.php).
+       En standalone (iframe) no existe → guard. */
+    var profileIconEl = document.getElementById('profile-icon');
+    if (profileIconEl) profileIconEl.addEventListener('dblclick', openProfileWindow);
 
-    /* Abrir el perfil de otro usuario desde otra app (ej. biblioteca de temas).
-       Abre la ventana de perfil y navega al perfil indicado. */
+    /* Abrir el perfil de otro usuario.
+       - Modo SHELL (incluido en desktop-base.php): crea una ventana
+         iframe propia con perfil.php?standalone=1&as=USERKEY.
+       - Modo STANDALONE (este código vive en un iframe): no crea
+         iframe localmente (sería una iframe dentro de iframe); avisa
+         al shell padre vía postMessage para que cree la ventana a
+         nivel raíz del escritorio. */
     window.openProfileAtUser = function(userKey) {
         if (!userKey) return;
-        openProfileWindow();
-        if (window.windowZ) windowZ.bringToFront('profile-window');
-        /* pequeño retraso para asegurar que el perfil propio cargó primero */
-        setTimeout(function() { viewOtherUser(userKey); }, loaded ? 60 : 300);
+        if (window.__PERFIL_STANDALONE) {
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({
+                        type: 'perfil-open-at-user',
+                        userKey: userKey
+                    }, '*');
+                }
+            } catch (_) {}
+            return;
+        }
+        openProfileInIframe(userKey);
     };
+
+    function openProfileInIframe(userKey) {
+        var winId = 'profile-iframe-' + userKey;
+        var existing = document.getElementById(winId);
+        if (existing) {
+            existing.style.display = 'block';
+            if (window.windowZ) windowZ.bringToFront(winId);
+            if (window.taskbarManager && taskbarManager.isRegistered(winId)) {
+                taskbarManager.restore(winId);
+            }
+            return;
+        }
+
+        var visited = PROFILE_USERS[userKey] || {};
+        var visitedLabel = visited.label || userKey;
+
+        /* Posición: offset inicial de 60px desde el #profile-window
+           del shell (que está en 8vw, 4vh) para que la ventana del
+           ajeno NO aparezca encima. Después en cascada por cada
+           ventana iframe abierta para no superponerse entre sí. */
+        var openCount = document.querySelectorAll('[id^="profile-iframe-"]').length;
+        var offsetPx  = 60 + openCount * 28;
+
+        /* Contenedor sin chrome — el iframe es el marco. data-no-auto-z
+           para que el observer del shell no auto-traiga al frente; lo
+           manejamos manualmente vía bringToFront en clicks. */
+        var win = document.createElement('div');
+        win.id = winId;
+        win.setAttribute('data-no-auto-z', '1');
+        win.style.cssText =
+            'position: fixed;' +
+            'left: calc(8vw + ' + offsetPx + 'px);' +
+            'top:  calc(4vh + ' + offsetPx + 'px);' +
+            'width: 860px;' +
+            'height: 900px;' +
+            'z-index: 500;' +
+            'display: block;' +
+            'overflow: hidden;' +
+            'padding: 0;' +
+            'margin: 0;' +
+            'background: transparent;';
+
+        var iframe = document.createElement('iframe');
+        iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey);
+        iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: transparent;';
+        iframe.setAttribute('title', 'Perfil de ' + visitedLabel);
+        iframe.setAttribute('allowtransparency', 'true');
+        win.appendChild(iframe);
+
+        /* Resize handle en la esquina inferior-derecha.
+           Como el iframe llena el wrapper y captura pointer events,
+           necesitamos un overlay transparente con z-index encima. El
+           cursor 'nwse-resize' indica al user que se puede arrastrar. */
+        var resizeCorner = document.createElement('div');
+        resizeCorner.style.cssText =
+            'position: absolute;' +
+            'right: 0; bottom: 0;' +
+            'width: 18px; height: 18px;' +
+            'cursor: nwse-resize;' +
+            'z-index: 10;' +
+            'background: transparent;' +
+            'touch-action: none;';
+        win.appendChild(resizeCorner);
+
+        resizeCorner.addEventListener('pointerdown', function(e) {
+            if (win.dataset.maximized === '1') return;  /* no resize si maximizado */
+            e.preventDefault();
+            e.stopPropagation();
+            resizeCorner.setPointerCapture(e.pointerId);
+            var startX = e.screenX, startY = e.screenY;
+            var startW = win.offsetWidth, startH = win.offsetHeight;
+            function onMove(ev) {
+                /* Mínimos para evitar que la ventana colapse a 0. */
+                var newW = Math.max(400, startW + (ev.screenX - startX));
+                var newH = Math.max(280, startH + (ev.screenY - startY));
+                win.style.width  = newW + 'px';
+                win.style.height = newH + 'px';
+            }
+            function onUp(ev) {
+                try { resizeCorner.releasePointerCapture(ev.pointerId); } catch (_) {}
+                resizeCorner.removeEventListener('pointermove', onMove);
+                resizeCorner.removeEventListener('pointerup', onUp);
+                resizeCorner.removeEventListener('pointercancel', onUp);
+            }
+            resizeCorner.addEventListener('pointermove', onMove);
+            resizeCorner.addEventListener('pointerup', onUp);
+            resizeCorner.addEventListener('pointercancel', onUp);
+        });
+
+        document.body.appendChild(win);
+
+        if (window.windowZ) windowZ.bringToFront(winId);
+        if (window.taskbarManager) {
+            taskbarManager.register(winId, 'Perfil — ' + visitedLabel,
+                '<img src="assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">',
+                'block');
+        }
+
+        /* Click en el iframe → traer al frente. Click se detecta a
+           nivel de blur/focus (no podemos escuchar dentro del iframe
+           desde fuera por mismo-origin restrictions ... pero como SÍ
+           es mismo origin, podríamos. Aquí usamos focus listener para
+           simplificar). */
+        iframe.addEventListener('load', function() {
+            try {
+                iframe.contentWindow.addEventListener('focus', function() {
+                    if (window.windowZ) windowZ.bringToFront(winId);
+                });
+                iframe.contentDocument.addEventListener('mousedown', function() {
+                    if (window.windowZ) windowZ.bringToFront(winId);
+                });
+            } catch (_) {}
+        });
+    }
+
+    function closeProfileIframe(winId) {
+        var w = document.getElementById(winId);
+        if (!w) return;
+        if (window.taskbarManager && taskbarManager.isRegistered(winId)) {
+            taskbarManager.unregister(winId);
+        }
+        w.remove();
+    }
+
+    /* Listener postMessage: el iframe standalone manda señales al shell
+       cuando el user interactúa (cerrar, minimize, maximize, drag, notif). */
+    var _dragState = null;   /* { winId, startLeft, startTop } */
+    window.addEventListener('message', function(e) {
+        if (!e.data || typeof e.data !== 'object') return;
+        var src = e.source;
+        /* Resuelve qué iframe mandó el mensaje */
+        var iframes = document.querySelectorAll('[id^="profile-iframe-"] iframe');
+        var winId = null, winEl = null;
+        for (var i = 0; i < iframes.length; i++) {
+            if (iframes[i].contentWindow === src) {
+                winEl = iframes[i].closest('[id^="profile-iframe-"]');
+                winId = winEl.id;
+                break;
+            }
+        }
+        if (!winId) return;
+
+        switch (e.data.type) {
+            case 'perfil-close':
+                closeProfileIframe(winId);
+                return;
+
+            case 'perfil-notif-show':
+                if (window.notifSystem && e.data.opts) window.notifSystem.show(e.data.opts);
+                return;
+
+            case 'perfil-open-at-user':
+                /* Forward desde standalone iframe: queremos abrir el
+                   perfil de e.data.userKey como NUEVA ventana iframe-
+                   based a nivel del shell. Si ya está abierto, trae al
+                   frente. openProfileInIframe maneja ambos casos. */
+                if (e.data.userKey && typeof openProfileInIframe === 'function') {
+                    openProfileInIframe(e.data.userKey);
+                }
+                return;
+
+            case 'perfil-minimize':
+                /* Igual que un minimize normal — usa taskbarManager si está. */
+                if (window.taskbarManager && taskbarManager.minimize) {
+                    taskbarManager.minimize(winId);
+                } else {
+                    winEl.style.display = 'none';
+                }
+                return;
+
+            case 'perfil-maximize':
+                /* Toggle full screen. Memorizamos el bbox original para
+                   restaurar después. */
+                if (winEl.dataset.maximized === '1') {
+                    winEl.style.left   = winEl.dataset.prevLeft   || '';
+                    winEl.style.top    = winEl.dataset.prevTop    || '';
+                    winEl.style.width  = winEl.dataset.prevWidth  || '';
+                    winEl.style.height = winEl.dataset.prevHeight || '';
+                    winEl.dataset.maximized = '0';
+                } else {
+                    winEl.dataset.prevLeft   = winEl.style.left;
+                    winEl.dataset.prevTop    = winEl.style.top;
+                    winEl.dataset.prevWidth  = winEl.style.width;
+                    winEl.dataset.prevHeight = winEl.style.height;
+                    /* Llena la pantalla menos taskbar (32px aprox). */
+                    winEl.style.left   = '0';
+                    winEl.style.top    = '0';
+                    winEl.style.width  = '100vw';
+                    winEl.style.height = 'calc(100vh - 32px)';
+                    winEl.dataset.maximized = '1';
+                }
+                return;
+
+            case 'perfil-drag-start':
+                if (winEl.dataset.maximized === '1') return;   /* no drag si maximizado */
+                _dragState = {
+                    winId: winId,
+                    startLeft: parseFloat(getComputedStyle(winEl).left) || 0,
+                    startTop:  parseFloat(getComputedStyle(winEl).top)  || 0
+                };
+                return;
+
+            case 'perfil-drag-move':
+                if (!_dragState || _dragState.winId !== winId) return;
+                winEl.style.left = (_dragState.startLeft + (e.data.dx || 0)) + 'px';
+                winEl.style.top  = (_dragState.startTop  + (e.data.dy || 0)) + 'px';
+                return;
+
+            case 'perfil-drag-end':
+                _dragState = null;
+                return;
+        }
+    });
 
     /* Cargar notificaciones de perfil + polling cada 30s */
     loadProfileNotifs();
@@ -4481,8 +5543,62 @@ var PROFILE_USERS = <?php
 
     document.getElementById('profile-close').addEventListener('click', function() {
         document.dispatchEvent(new Event('profile-edit-cancel'));
+        if (window.__PERFIL_STANDALONE) {
+            /* En standalone (iframe) el shell padre cierra la ventana
+               exterior. Avisamos vía postMessage. */
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'perfil-close' }, '*');
+                }
+            } catch (_) {}
+            return;
+        }
         taskbarManager.unregister('profile-window');
     });
+
+    /* STANDALONE: handlers de minimize / maximize / drag desde el iframe
+       a la shell padre. Solo activos cuando estamos en iframe. */
+    if (window.__PERFIL_STANDALONE) {
+        var _profileTitleBar = document.querySelector('#profile-window > .title-bar');
+        var _minBtn = _profileTitleBar && _profileTitleBar.querySelector('button[aria-label="Minimize"]');
+        var _maxBtn = _profileTitleBar && _profileTitleBar.querySelector('button[aria-label="Maximize"]');
+        function _post(type, payload) {
+            try {
+                if (window.parent && window.parent !== window) {
+                    var msg = { type: type };
+                    if (payload) for (var k in payload) msg[k] = payload[k];
+                    window.parent.postMessage(msg, '*');
+                }
+            } catch (_) {}
+        }
+        if (_minBtn) _minBtn.addEventListener('click', function() { _post('perfil-minimize'); });
+        if (_maxBtn) _maxBtn.addEventListener('click', function() { _post('perfil-maximize'); });
+
+        /* Drag del title-bar: detectamos pointerdown en el title-bar
+           (excluyendo los botones de control). Mandamos un evento al
+           padre con la posición inicial; los siguientes pointermove
+           mandan deltas. El padre mueve el wrapper-div en consecuencia. */
+        if (_profileTitleBar) {
+            _profileTitleBar.addEventListener('pointerdown', function(e) {
+                /* Si pinchamos sobre un botón de control, dejamos su
+                   handler propio (close/min/max) — no iniciamos drag. */
+                if (e.target.closest('.title-bar-controls')) return;
+                e.preventDefault();
+                var startX = e.screenX, startY = e.screenY;
+                _post('perfil-drag-start');
+                function onMove(ev) {
+                    _post('perfil-drag-move', { dx: ev.screenX - startX, dy: ev.screenY - startY });
+                }
+                function onUp(ev) {
+                    _post('perfil-drag-end');
+                    window.removeEventListener('pointermove', onMove);
+                    window.removeEventListener('pointerup', onUp);
+                }
+                window.addEventListener('pointermove', onMove);
+                window.addEventListener('pointerup', onUp);
+            });
+        }
+    }
 
     // Arrancar stream aunque el perfil no se abra (para recibir notificaciones en segundo plano)
     startItemNotifStream();
@@ -4495,6 +5611,10 @@ var PROFILE_USERS = <?php
         if (viewingUser) return;
         loadProfile();
     });
+
+    /* STANDALONE INIT — ya está expuesto al inicio del IIFE (línea ~744)
+       para sobrevivir crashes en los IIFE internos. Aquí no hace falta
+       redefinirlo. */
 })();
 
 /* ─── Lightbox de imágenes de posts ───────────────────────
@@ -4531,6 +5651,37 @@ var PROFILE_USERS = <?php
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && lb.classList.contains('is-open')) close();
     });
+
+    /* Reconstruye el título exacto que crearMomentoDesdeItem usa
+       cuando crea el momento. Si el verbo de la categoría cambia, este
+       helper también debe cambiar. Expuesto en window para que el IIFE
+       principal (renderGallery, etc.) lo pueda usar al eliminar items. */
+    window.momentoTitleForItem = function(cat, item) {
+        var catVerbs = { movies: 'Vista', series: 'Vista', books: 'Leída', games: 'Jugado', music: 'Escuchado' };
+        return (catVerbs[cat] || 'Completado') + ': ' + (item && item.title ? item.title : '');
+    };
+    /* Best-effort: borra el momento que crearMomentoDesdeItem creó en
+       el calendario. Idempotente — si nunca se creó (el item nunca pasó
+       por completed) o ya se borró desde calendario, el endpoint
+       devuelve {ok:true, deleted:0}. Tras borrar, refresca el iframe. */
+    window.eliminarMomentoDeItem = function(cat, item) {
+        if (!item || !item.title) return;
+        var titulo = window.momentoTitleForItem(cat, item);
+        fetch('assets/couple/api.php?action=delete-momento-by-title', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: titulo })
+        }).then(function(r){ return r.json(); }).then(function(d){
+            if (d && d.ok && d.deleted > 0) {
+                try {
+                    var calFr = document.getElementById('calendar-iframe');
+                    if (calFr && calFr.contentWindow) {
+                        calFr.contentWindow.postMessage({ type: 'momento-saved' }, '*');
+                    }
+                } catch(_) {}
+            }
+        }).catch(function(){});
+    };
 
     /* ──── Auto-momento al completar ──── */
     window.crearMomentoDesdeItem = function(cat, item) {
@@ -4601,7 +5752,7 @@ var PROFILE_USERS = <?php
         window.notifSystem.show({
             id:      'momento_' + Date.now(),
             type:    'info',
-            title:   '📅 Añadido al calendario',
+            title:   '<img src="assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Añadido al calendario',
             message: titulo + ' guardado como momento.',
             autoDismissAfter: 4000
         });
@@ -4610,3 +5761,28 @@ var PROFILE_USERS = <?php
 
 })();
 </script>
+<?php if (!empty($_perfilStandalone)): ?>
+<script>
+    /* Init standalone en un script SEPARADO — si los IIFE de arriba
+       crashearon con "null is not an object" o similar, el motor JS
+       sigue ejecutando este script. Aquí llamamos al init expuesto
+       por el IIFE grande (si llegó a definirlo). */
+    (function() {
+        function tryInit(attempts) {
+            if (typeof window.__perfilStandaloneInit === 'function') {
+                try { window.__perfilStandaloneInit(); }
+                catch (e) { console.error('[PERFIL standalone init] error', e); }
+                return;
+            }
+            if (attempts <= 0) {
+                console.error('[PERFIL standalone] init no expuesto — el IIFE grande crasheó antes de llegar a definirlo');
+                return;
+            }
+            setTimeout(function(){ tryInit(attempts - 1); }, 50);
+        }
+        tryInit(20);  /* hasta 1s para esperar al IIFE */
+    })();
+</script>
+</body>
+</html>
+<?php endif; ?>

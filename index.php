@@ -6,6 +6,11 @@ require_once __DIR__ . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
 require_once __DIR__ . '/assets/config.php';
+/* db.php define $pdo en el scope global. CRÍTICO: hacerlo aquí (a
+   nivel de archivo) para que TODOS los helpers que necesitan PDO lo
+   encuentren via $GLOBALS['pdo']. Si lo requerimos dentro de una
+   función, $pdo se setea local y nunca llega al scope global. */
+require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 
 /* Móviles SIEMPRE entran por la landing. Es la única puerta a Melon
@@ -28,11 +33,18 @@ if ($projectBaseUrl === '/') $projectBaseUrl = '/';
    o null si el usuario no tiene tema activo. */
 function getUserActiveTheme($userKey, $label) {
     global $projectBaseUrl;
-    $data = loadUserThemes($userKey);
+    /* Resuelve la interfaz preferida del TARGET user (no del browser).
+       Sin esto, loadUserThemes lee la cookie del browser → carga el
+       tema de la interfaz del último user logueado. */
+    $iface = getUserActiveInterfaceSlug($userKey);
+    if ($iface === '') $iface = 'win98';
+    $data = loadUserThemes($userKey, $iface);
     $active = !empty($data['active']) ? sanitizeThemeName($data['active']) : '';
 
-    /* Fallback: si user1/user2 no tienen tema activo, usar el tema por
-       defecto (Capi/Angie) para que SIEMPRE veas tu paleta al loguearte. */
+    /* Si el user NO tiene tema activo para SU interfaz, devolvemos
+       null → el login se renderiza con los defaults del :root de la
+       interfaz (kawaii pastel / win98 silver). NO mezclamos temas de
+       otras interfaces — un tema de win98 se vería raro sobre kawaii. */
     if ($active === '') {
         $def = defaultThemeForUser($userKey);
         if (!$def) return null;
@@ -81,12 +93,65 @@ $selectedWallpaper = '';
 $showLogin = false;
 $loginError = false;
 
+/* Devuelve la slug de la interfaz activa del usuario (lee BD), o ''
+   si no tiene preferencia. Usa user_settings.active_interface_slug
+   con CHECK(json_valid(value)) → decodificar JSON. */
+function getUserActiveInterfaceSlug($userKey) {
+    try {
+        require_once __DIR__ . '/db.php';
+        global $pdo;
+        if (!$pdo instanceof PDO) return '';
+        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+        $stmt->execute([$userKey]);
+        $uid = (int)($stmt->fetchColumn() ?: 0);
+        if (!$uid) return '';
+        $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = 'active_interface_slug'");
+        $stmt->execute([$uid]);
+        $raw = (string)$stmt->fetchColumn();
+        if ($raw === '') return '';
+        $slug = json_decode($raw, true);
+        if (!is_string($slug) || $slug === '') return '';
+        if (!is_dir(__DIR__ . '/assets/interfaces/' . $slug . '/')) return '';
+        return $slug;
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+/* Devuelve el icon pack activo del usuario para una interfaz, o
+   'Melon' como fallback. */
+function getUserActiveIconPack($userKey, $iface) {
+    try {
+        require_once __DIR__ . '/db.php';
+        global $pdo;
+        if (!$pdo instanceof PDO) return 'Melon';
+        $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+        $stmt->execute([$userKey]);
+        $uid = (int)($stmt->fetchColumn() ?: 0);
+        if (!$uid) return 'Melon';
+        $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = ?");
+        $stmt->execute([$uid, 'icon_pack:' . $iface]);
+        $raw = (string)$stmt->fetchColumn();
+        if ($raw === '') return 'Melon';
+        $pack = json_decode($raw, true);
+        return (is_string($pack) && $pack !== '') ? $pack : 'Melon';
+    } catch (Throwable $e) {
+        return 'Melon';
+    }
+}
+
 $selectedTheme = null;  /* ['class'=>..., 'css'=>...] del usuario seleccionado */
+$selectedInterface = ''; /* slug — '' si no selecciona o no tiene preferencia */
+$selectedIconPack  = 'Melon';
 if ($selectedUser && isset($users[$selectedUser])) {
     $selectedLabel = $users[$selectedUser]['label'];
     $selectedImage = getUserImage($selectedLabel);
     $selectedWallpaper = getUserEffectiveWallpaper($selectedUser, $selectedLabel);
     $selectedTheme = getUserActiveTheme($selectedUser, $selectedLabel);
+    $selectedInterface = getUserActiveInterfaceSlug($selectedUser);
+    if ($selectedInterface !== '') {
+        $selectedIconPack = getUserActiveIconPack($selectedUser, $selectedInterface);
+    }
     $showLogin = true;
 
     if (isset($_POST['password'])) {
@@ -248,6 +313,15 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
     <?php if ($selectedTheme): ?>
     <link rel="stylesheet" id="user-theme-link" href="<?php echo htmlspecialchars($selectedTheme['css']); ?>">
     <?php endif; ?>
+    <?php if ($selectedInterface !== '' && is_file(__DIR__ . '/assets/interfaces/' . $selectedInterface . '/login.css')): ?>
+    <?php /* Interfaz del user seleccionado: SOLO cargamos su login.css
+              (overrides scoped a #userPreview). El style.css completo
+              afectaría globalmente — selector de usuarios incluido — lo
+              cual no queremos. login.css contiene solo lo necesario
+              para que la ventana de password tenga el look del user. */ ?>
+    <link rel="stylesheet" id="user-interface-link"
+          href="assets/interfaces/<?php echo htmlspecialchars($selectedInterface); ?>/login.css?v=<?php echo filemtime(__DIR__ . '/assets/interfaces/' . $selectedInterface . '/login.css'); ?>">
+    <?php endif; ?>
 </head>
 
 <body class="<?php echo $bodyClass; ?>">
@@ -294,6 +368,17 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                 <?php endif; ?>
                 <?php foreach ($users as $key => $user):
                     $_theme = getUserActiveTheme($key, $user['label']);
+                    /* Slug de la interfaz del user — string vacío si no
+                       tiene preferencia o si su interfaz no tiene
+                       login.css (en cuyo caso no aplicamos nada). */
+                    $_userIface = getUserActiveInterfaceSlug($key);
+                    $_userIfaceLoginCss = '';
+                    if ($_userIface !== '') {
+                        $_loginCssAbs = __DIR__ . '/assets/interfaces/' . $_userIface . '/login.css';
+                        if (is_file($_loginCssAbs)) {
+                            $_userIfaceLoginCss = 'assets/interfaces/' . $_userIface . '/login.css?v=' . filemtime($_loginCssAbs);
+                        }
+                    }
                 ?>
                     <button
                         class="button user-button select-user"
@@ -303,6 +388,7 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                         data-wallpaper="<?php echo htmlspecialchars(getUserEffectiveWallpaper($key, $user['label'])); ?>"
                         data-theme-class="<?php echo htmlspecialchars($_theme['class'] ?? ''); ?>"
                         data-theme-css="<?php echo htmlspecialchars($_theme['css'] ?? ''); ?>"
+                        data-interface-login-css="<?php echo htmlspecialchars($_userIfaceLoginCss); ?>"
                         type="button"
                     ><?php echo htmlspecialchars($user['label']); ?></button>
                 <?php endforeach; ?>
@@ -526,8 +612,32 @@ document.querySelectorAll('.select-user').forEach(button => {
             this.dataset.themeClass,
             this.dataset.themeCss
         );
+        /* Aplica el login.css de la interfaz del user — scoped a
+           #userPreview, NO afecta al resto del index.php. */
+        applyUserInterfaceLogin(this.dataset.interfaceLoginCss || '');
     });
 });
+
+/* ─── INTERFAZ DEL USUARIO (login.css scoped) ────────────────────────
+   Carga/quita dinámicamente el login.css de la interfaz del usuario
+   seleccionado. Aplica solo dentro de #userPreview (la ventana de
+   password) — el resto del index.php queda intacto en Win98.
+   Mismo patrón que applyUserTheme. */
+function applyUserInterfaceLogin(cssUrl) {
+    var link = document.getElementById('user-interface-link');
+    if (!cssUrl) {
+        if (link) link.remove();
+        return;
+    }
+    if (!link) {
+        link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.id  = 'user-interface-link';
+        document.head.appendChild(link);
+    }
+    /* Cache-buster por si el CSS cambió */
+    link.href = cssUrl + (cssUrl.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
+}
 
 /* =========================
    CAMBIAR USUARIO
@@ -538,6 +648,7 @@ document.getElementById('changeUser').addEventListener('click', function(){
     userPreview.classList.remove('visible');
     body.classList.remove('user-selected', ...userKeys);
     applyUserTheme('', '');
+    applyUserInterfaceLogin('');   /* quita el login.css de la interfaz */
     setWallpaper('');
     if (adPopup) adPopup.style.display = 'none';
     setTimeout(() => {

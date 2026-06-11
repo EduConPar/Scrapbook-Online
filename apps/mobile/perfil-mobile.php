@@ -49,19 +49,78 @@ foreach (['png','jpg','jpeg','gif'] as $ext) {
     }
 }
 
-/* ── TEMA ACTIVO DEL USUARIO ──
-   Misma estrategia que mobile.php: el look hereda 98.css + tokens.css
-   + tema del usuario, y el inline CSS solo refina lo específico de
-   esta pantalla con variables del tema. */
+/* ── VIEWING OTHER USER (?as=USERKEY) ──
+   Si la query lleva ?as=USERKEY, estamos visitando el perfil de OTRA
+   persona. Resolvemos su interfaz/tema/icon pack y los aplicamos
+   server-side para que el HTML emitido tenga SU look (no el del viewer).
+   Misma filosofía que el standalone de desktop. */
+$_mobileViewingKey = '';
+if (isset($_GET['as'])) {
+    $_cand = (string)$_GET['as'];
+    /* Acepta user_key directo o label (case-insensitive) — UX consistente
+       con el desktop standalone. */
+    if (isset($loginUsers[$_cand])) {
+        $_mobileViewingKey = $_cand;
+    } else {
+        $needle = strtolower($_cand);
+        foreach ($loginUsers as $k => $u) {
+            if (strtolower($u['label']) === $needle) { $_mobileViewingKey = $k; break; }
+        }
+    }
+}
+
+/* Determina el "look owner" — el visitado si hay ?as, sino el viewer. */
+$_lookUserKey = $_mobileViewingKey ?: $userKey;
+$_lookLabel   = $loginUsers[$_lookUserKey]['label'];
+
+/* Resolver interfaz del look owner. Lee active_interface_slug (JSON
+   string) en user_settings. Fallback 'win98'. */
+$_lookIface = 'win98';
+$stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+$stmt->execute([$_lookUserKey]);
+$_lookUid = (int)($stmt->fetchColumn() ?: 0);
+if ($_lookUid) {
+    $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = 'active_interface_slug'");
+    $stmt->execute([$_lookUid]);
+    $raw = (string)$stmt->fetchColumn();
+    if ($raw !== '') {
+        $slug = json_decode($raw, true);
+        if (is_string($slug) && $slug !== ''
+            && is_dir(dirname(__DIR__, 2) . '/assets/interfaces/' . $slug)) {
+            $_lookIface = $slug;
+        }
+    }
+}
+
+/* Icon pack del look owner para su interfaz. Fallback 'Melon'. */
+$_lookIconPack = 'Melon';
+if ($_lookUid) {
+    $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = ?");
+    $stmt->execute([$_lookUid, 'icon_pack:' . $_lookIface]);
+    $raw = (string)$stmt->fetchColumn();
+    if ($raw !== '') {
+        $v = json_decode($raw, true);
+        if (is_string($v) && $v !== '') $_lookIconPack = $v;
+    }
+}
+
+/* Override de cookie para que emitInterfaceCss lea la interfaz del
+   look owner (sin esto leería la del viewer del browser). */
+$_origIfaceCookie = $_COOKIE['activeInterface'] ?? null;
+$_COOKIE['activeInterface'] = $_lookIface;
+
+/* ── TEMA ACTIVO DEL LOOK OWNER ──
+   Si visitamos a otro user, su tema. Sino, el del viewer. Filtra por
+   la interfaz del look owner (themes son por interfaz). */
 require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
-refreshActiveThemeCss($userKey, $userLabel);
-$_userThemes = loadUserThemes($userKey);
+refreshActiveThemeCss($_lookUserKey, $_lookLabel);
+$_userThemes = loadUserThemes($_lookUserKey, $_lookIface);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
 $activeThemeClass = '';
 $activeThemeCss   = '';
 if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
-    $activeThemeClass = themeCssClassName($activeTheme, $userLabel);
-    $activeThemeCss   = themeCssRelPath($activeTheme, $userLabel);
+    $activeThemeClass = themeCssClassName($activeTheme, $_lookLabel);
+    $activeThemeCss   = themeCssRelPath($activeTheme, $_lookLabel);
     if ($activeThemeCss !== '' && !file_exists(dirname(__DIR__, 2) . '/' . $activeThemeCss)) {
         $activeThemeCss = '';
     }
@@ -106,6 +165,21 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <?php /* Override del icon pack ANTES de cargar icon-pack.js. Sólo
+              cuando visitamos a otro user. */ ?>
+    <script>
+        window.__ICON_PACK_OVERRIDE = <?= json_encode($_mobileViewingKey !== '' ? $_lookIconPack : null) ?>;
+    </script>
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php
+        require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php";
+        emitInterfaceCss("../../");
+        /* Restauramos la cookie original ahora que emitInterfaceCss
+           ya tomó el override. Evita afectar otros require posteriores. */
+        if ($_origIfaceCookie === null) unset($_COOKIE['activeInterface']);
+        else $_COOKIE['activeInterface'] = $_origIfaceCookie;
+    ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -538,6 +612,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             padding: 16px;
             box-sizing: border-box;
         }
+        /* [hidden] necesita !important para vencer al display:flex de
+           arriba (specificity tie + UA stylesheet pierde sin esto). */
+        .pf-modal-backdrop[hidden] { display: none !important; }
         .pf-modal {
             width: 100%;
             max-width: 380px;
@@ -1117,6 +1194,134 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             min-height: 22px; padding: 0 8px;
             font-size: 10px;
         }
+
+        /* ════════════════════════════════════════════════════════
+           MELON REVIEWS (ranking comunidad) — vista mobile
+           ════════════════════════════════════════════════════════
+           Layout vertical: period filter + category filter +
+           lista (grid de slots) + paginación. Reusa los .pf-tabs /
+           .pf-subtabs ya definidos para los filtros, así heredamos
+           el styling Win98 (y kawaii vía overrides). */
+        .pf-melon-status {
+            padding: 14px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-faint, #808080);
+        }
+        /* Lista vertical igual que "Mis listas" — usa .pf-item directly,
+           heredando el styling (poster 40×56 + info + sub con stars).
+           Solo definimos el contenedor y los extras Melon-only
+           (badge "must" y count entre paréntesis). */
+        .pf-melon-list {
+            flex: 1; min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+        }
+        /* Count "(12)" — número de reseñas, gris al lado del rating */
+        .pf-melon-count {
+            font-size: 11px;
+            color: var(--text-faint, #888);
+            margin-left: 2px;
+        }
+        /* Badge "Melon must" inline (sólo cuando avg > 4.4) — placa
+           gold con gradient + relieve (highlight superior + sombra
+           inferior interna + drop shadow + borde oscuro). Estética
+           tipo "trofeo" / medal pin. */
+        .pf-melon-must-tag {
+            display: inline-block;
+            font-family: 'Arial', 'Helvetica', sans-serif;
+            font-size: 10px;
+            font-weight: bold;
+            line-height: 1.2;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #fff;
+            background: linear-gradient(to bottom, #f5d245 0%, #d4a017 55%, #b88810 100%);
+            padding: 2px 8px;
+            border: 1px solid #8a5800;
+            white-space: nowrap;
+            text-shadow: 0 1px 0 rgba(120, 70, 0, 0.55);
+            box-shadow:
+                inset 0  1px 0 rgba(255, 255, 255, 0.5),
+                inset 0 -1px 0 rgba(140, 80, 0, 0.5),
+                 0 1px 2px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Paginación */
+        .pf-melon-pager {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 6px 8px;
+            background: var(--win-bg, silver);
+            border-top: 1px solid var(--bezel-dark-1, #808080);
+            flex-shrink: 0;
+        }
+        .pf-melon-pager:empty { display: none; }
+        .pf-melon-pager .button {
+            min-height: 28px;
+            min-width: 44px;
+            font-size: 12px;
+        }
+        .pf-melon-pager-info {
+            font-size: 11px;
+            color: var(--text, #000);
+        }
+
+        /* Modal de detalles (reseñas individuales del item) */
+        .pf-melon-modal {
+            width: 100%; max-width: 360px;
+            max-height: 75vh;
+            display: flex; flex-direction: column;
+        }
+        .pf-melon-modal-body {
+            flex: 1; min-height: 0;
+            overflow-y: auto;
+            padding: 8px 10px;
+        }
+        .pf-melon-review-row {
+            display: flex;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px dotted var(--text-faint, #aaa);
+        }
+        .pf-melon-review-row:last-child { border-bottom: none; }
+        .pf-melon-review-av {
+            width: 32px; height: 32px;
+            flex-shrink: 0;
+            background: var(--inset-bg, #fff);
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff);
+        }
+        .pf-melon-review-av img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .pf-melon-review-info { flex: 1; min-width: 0; }
+        .pf-melon-review-hdr {
+            font-size: 12px;
+            color: var(--text, #000);
+            display: flex; align-items: center; gap: 4px;
+            flex-wrap: wrap;
+        }
+        .pf-melon-review-hdr strong { font-size: 13px; }
+        .pf-melon-review-comment {
+            font-size: 12px;
+            color: var(--text, #000);
+            margin-top: 3px;
+            font-style: italic;
+            word-break: break-word;
+        }
+        .pf-melon-review-time {
+            font-size: 10px;
+            color: var(--text-faint, #888);
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -1132,11 +1337,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
     <div class="window-body">
 
-        <!-- Banner cuando estoy viendo el perfil de otro usuario. -->
-        <div class="pf-viewing-banner" id="pf-viewing-banner">
-            <span id="pf-viewing-text">Viendo perfil de …</span>
-            <button class="button pf-viewing-back" id="pf-viewing-back" type="button">← Mi perfil</button>
-        </div>
+        <!-- (Banner "Viendo perfil de … ← Mi perfil" eliminado: la
+             navegación de vuelta vive en la statusbar inferior cuando
+             ?as= está en la URL.) -->
 
         <!-- Header: izquierda avatar + cuadro de conexiones, derecha texto -->
         <div class="mh-userbar pf-userbar">
@@ -1146,7 +1349,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <?php if ($userImg): ?>
                         <img src="<?= htmlspecialchars($userImg) ?>" alt="">
                     <?php else: ?>
-                        <span>👤</span>
+                        <span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>
                     <?php endif; ?>
                 </div>
                 <!-- Cuadrado de conexiones: rejilla 2×2 de iconos sociales,
@@ -1166,9 +1369,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <!-- VISTA: Perfil (edit + posts) -->
         <div class="pf-view" id="pf-view-profile">
             <div class="pf-profile-actions" id="pf-profile-actions">
-                <button class="button" id="pf-edit-profile-btn" type="button">✏ Editar perfil</button>
+                <button class="button" id="pf-edit-profile-btn" type="button"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Editar perfil</button>
                 <button class="button" id="pf-follow-btn" type="button" hidden>+ Seguir</button>
-                <button class="button" id="pf-chat-btn" type="button" hidden>💬 Chat</button>
+                <button class="button" id="pf-chat-btn" type="button" hidden><img src="../../assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Chat</button>
             </div>
             <div class="pf-new-post" id="pf-new-post">
                 <textarea id="pf-post-text" maxlength="1000" placeholder="Escribe algo..."></textarea>
@@ -1186,7 +1389,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <nav class="pf-tabs" id="pf-tabs">
                 <button class="pf-tab active" data-cat="movies"><img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Películas <span class="pf-tab-count" id="cnt-movies">·</span></button>
                 <button class="pf-tab" data-cat="series"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Series <span class="pf-tab-count" id="cnt-series">·</span></button>
-                <button class="pf-tab" data-cat="books">📖 Libros <span class="pf-tab-count" id="cnt-books">·</span></button>
+                <button class="pf-tab" data-cat="books"><img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Libros <span class="pf-tab-count" id="cnt-books">·</span></button>
                 <button class="pf-tab" data-cat="games"><img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Juegos <span class="pf-tab-count" id="cnt-games">·</span></button>
                 <button class="pf-tab" data-cat="music"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Música <span class="pf-tab-count" id="cnt-music">·</span></button>
             </nav>
@@ -1220,8 +1423,52 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- VISTA: Social (amigos + explorar) -->
         <div class="pf-view" id="pf-view-social" hidden>
-            <div class="pf-social-section-title">👥 Amigos</div>
+            <div class="pf-social-section-title"><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Amigos</div>
             <div class="pf-friends-grid" id="pf-friends-grid"></div>
+        </div>
+
+        <!-- VISTA: Melon reviews (ranking comunidad) -->
+        <div class="pf-view" id="pf-view-melon" hidden>
+            <!-- Filtro de período (Mejor del año / Reciente / Todo el tiempo) -->
+            <nav class="pf-subtabs" id="pf-melon-periods">
+                <button class="pf-subtab active" data-mperiod="year"    type="button"><img src="../../assets/img/appIcons/bestOfTheYearIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">Mejor del año</button>
+                <button class="pf-subtab"        data-mperiod="recent"  type="button"><img src="../../assets/img/appIcons/newsIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Reciente</button>
+                <button class="pf-subtab"        data-mperiod="alltime" type="button"><img src="../../assets/img/appIcons/calendarioIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Todo el tiempo</button>
+            </nav>
+
+            <!-- Filtro de categoría (Películas / Series / Libros / Juegos / Álbumes / Canciones) -->
+            <nav class="pf-tabs" id="pf-melon-cats">
+                <button class="pf-tab active" data-mcat="movies"><img src="../../assets/img/appIcons/pelisIcon.png"        alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Pelis</button>
+                <button class="pf-tab"        data-mcat="series"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Series</button>
+                <button class="pf-tab"        data-mcat="books"><img  src="../../assets/img/appIcons/booksIcon.png"        alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Libros</button>
+                <button class="pf-tab"        data-mcat="games"><img  src="../../assets/img/appIcons/juegosIcon.png"       alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Juegos</button>
+                <button class="pf-tab"        data-mcat="music" data-mtype="album"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Álbumes</button>
+                <button class="pf-tab"        data-mcat="music" data-mtype="song"><img  src="../../assets/img/appIcons/songIcon.png"   alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 3px 0 0;">Canciones</button>
+            </nav>
+
+            <!-- Status (cargando / vacío / error) -->
+            <div class="pf-melon-status" id="pf-melon-status">Selecciona una categoría</div>
+
+            <!-- Lista de items con cover + rating -->
+            <div class="mh-panel pf-melon-list" id="pf-melon-list"></div>
+
+            <!-- Paginación -->
+            <div class="pf-melon-pager" id="pf-melon-pager"></div>
+        </div>
+
+        <!-- Modal detalles de un item Melon (sus reseñas) -->
+        <div class="pf-modal-backdrop" id="pf-melon-modal-backdrop" hidden>
+            <div class="window pf-modal pf-melon-modal" id="pf-melon-modal">
+                <div class="title-bar">
+                    <div class="title-bar-text" id="pf-melon-modal-title">⭐ Reseñas</div>
+                    <div class="title-bar-controls">
+                        <button aria-label="Close" id="pf-melon-modal-close" type="button"></button>
+                    </div>
+                </div>
+                <div class="window-body pf-melon-modal-body">
+                    <div id="pf-melon-modal-list"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Sidebar drawer -->
@@ -1238,7 +1485,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Status bar Win98 al pie -->
         <div class="mh-statusbar">
-            <a href="../../mobile.php">‹ Menú</a>
+            <?php if ($_mobileViewingKey !== ''): ?>
+                <?php /* onclick + location.replace para NO añadir entrada
+                          al history del browser. Sin esto, el "‹ Menú"
+                          posterior (que hace history.back) vuelve al
+                          perfil ajeno previo en vez del menú real. */ ?>
+                <a href="perfil-mobile.php"
+                   onclick="event.preventDefault(); window.location.replace('perfil-mobile.php');">‹ Mi perfil</a>
+            <?php else: ?>
+                <a href="../../mobile.php">‹ Menú</a>
+            <?php endif; ?>
         </div>
 
     </div>
@@ -1263,6 +1519,10 @@ var STATE = {
 var USER_LABEL = <?= json_encode($userLabel) ?>;
 var PAREJA_ID  = <?= (int)$parejaId ?>;
 var USER_KEY   = <?= json_encode($userKey) ?>;
+/* Si llegamos vía ?as=USERKEY, el server ya emitió HTML con la
+   interfaz/tema/iconos del visitado. Este global le dice al bootstrap
+   que NO cargue el perfil propio sino el del visitado. */
+window.__MOBILE_VIEWING_KEY = <?= json_encode($_mobileViewingKey) ?>;
 /* Mapa { userKey: { label, image } } igual que el desktop, para el
    diálogo de colaboradores (avatares + listado de invitables). El
    `../../` viene de que perfil-mobile.php vive en /apps/ y getUserImage()
@@ -1341,13 +1601,18 @@ function renderAbout(d) {
     /* Conexiones — replica el array `socials` del escritorio
        (perfil.php:1551). Si el valor no es URL completa, construye una.
        Discord no tiene URL pública → tap copia el nombre al portapapeles. */
+    /* Steam, Discord e Instagram usan PNG dedicado; Twitter mantiene emoji. */
+    var STEAM_PNG_M     = '<img src="../../assets/img/appIcons/steamIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+    var DISCORD_PNG_M   = '<img src="../../assets/img/appIcons/discordIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+    var INSTAGRAM_PNG_M = '<img src="../../assets/img/appIcons/instagramIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+    var TWITTER_PNG_M   = '<img src="../../assets/img/appIcons/twitterIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
     var socials = [
-        { key: 'steam',     icon: '🎮', label: 'Steam',
+        { key: 'steam',     icon: STEAM_PNG_M,     label: 'Steam',
           url: function(v){ return /^https?:\/\//.test(v) ? v : 'https://steamcommunity.com/id/' + encodeURIComponent(v); } },
-        { key: 'discord',   icon: '💬', label: 'Discord',   url: null },
-        { key: 'twitter',   icon: '🐦', label: 'Twitter',
+        { key: 'discord',   icon: DISCORD_PNG_M,   label: 'Discord',   url: null },
+        { key: 'twitter',   icon: TWITTER_PNG_M,   label: 'Twitter',
           url: function(v){ return /^https?:\/\//.test(v) ? v : 'https://x.com/' + encodeURIComponent(v.replace(/^@/, '')); } },
-        { key: 'instagram', icon: '📷', label: 'Instagram',
+        { key: 'instagram', icon: INSTAGRAM_PNG_M, label: 'Instagram',
           url: function(v){ return /^https?:\/\//.test(v) ? v : 'https://instagram.com/' + encodeURIComponent(v.replace(/^@/, '')); } }
     ];
     socialsEl.innerHTML = '';
@@ -1356,7 +1621,7 @@ function renderAbout(d) {
         if (!v) return;
         var a = document.createElement('a');
         a.className = 'pf-about-social';
-        a.textContent = s.icon;
+        a.innerHTML = s.icon;
         if (s.url) {
             a.href   = s.url(v);
             a.target = '_blank';
@@ -1467,10 +1732,10 @@ function renderActiveList() {
     var html = '';
     if (!entries.length) {
         var emoji = STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
-                  : STATE.current === 'series' ? '📺'
-                  : STATE.current === 'books'  ? '📖'
-                  : STATE.current === 'games'  ? '🎮'
-                  : (STATE.musicView === 'songs' ? '🎵' : '💿');
+                  : STATE.current === 'series' ? '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">'
+                  : STATE.current === 'books'  ? '<img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">'
+                  : STATE.current === 'games'  ? '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">'
+                  : (STATE.musicView === 'songs' ? '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">' : '💿');
         var emptyMsg;
         if (viewingOther) {
             emptyMsg = 'Sin reseñas';
@@ -1495,9 +1760,9 @@ function renderActiveList() {
         var posterHtml = it.image
             ? '<img class="pf-item-poster" src="' + esc(it.image) + '" alt="" loading="lazy">'
             : '<div class="pf-item-poster placeholder">' +
-              (isMusic ? '🎵' : STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
-                : STATE.current === 'series' ? '📺'
-                : STATE.current === 'books'  ? '📖' : '🎮') +
+              (isMusic ? '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">' : STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
+                : STATE.current === 'series' ? '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">'
+                : STATE.current === 'books'  ? '<img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">' : '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">') +
               '</div>';
         var subParts = [];
         if (isMusic && it.artist) subParts.push('<span>' + esc(it.artist) + '</span>');
@@ -1579,7 +1844,7 @@ function renderDestacados() {
         var it = entry.it;
         var imgHtml = it.image
             ? '<img class="pf-dest-cover" src="' + esc(it.image) + '" alt="" loading="lazy">'
-            : '<div class="pf-dest-cover pf-dest-cover-ph">' + (it.type === 'album' ? '💿' : '🎵') + '</div>';
+            : '<div class="pf-dest-cover pf-dest-cover-ph">' + (it.type === 'album' ? '💿' : '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">') + '</div>';
         var hasReview = !!(it.review && it.review.stars);
         var starsHtml = hasReview
             ? '<div class="pf-dest-stars">' +
@@ -1767,15 +2032,15 @@ function showActionMenu(item, origIdx) {
 
     if (status === 'pending') {
         items.push({ act: 'inprogress', icon: '▶', label: 'Poner en curso' });
-        items.push({ act: 'collab',     icon: '👥', label: 'Colaboradores' });
+        items.push({ act: 'collab',     icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
         items.push({ act: lastAct,      icon: lastIcon, label: lastLabel });
     } else if (status === 'in-progress') {
         items.push({ act: 'complete', icon: '✓', label: 'Completar' });
         items.push({ act: 'unstart',  icon: '✕', label: 'Quitar de en curso' });
-        items.push({ act: 'collab',   icon: '👥', label: 'Colaboradores' });
+        items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
     } else { /* completed */
         var hasReview = !!(item.review && item.review.stars);
-        items.push({ act: 'review',  icon: '✏', label: hasReview ? 'Editar reseña' : 'Añadir reseña' });
+        items.push({ act: 'review',  icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: hasReview ? 'Editar reseña' : 'Añadir reseña' });
         items.push({ act: lastAct,   icon: lastIcon, label: lastLabel });
     }
 
@@ -1815,8 +2080,8 @@ function showMusicActionMenu(item, origIdx, title, isCollab) {
     openCtxMenu(title, [
         { act: 'play',     icon: '▶', label: 'Reproducir' },
         { act: 'featured', icon: '★', label: featLabel, disabled: !canFeature },
-        { act: 'review',   icon: '✏', label: revLabel },
-        { act: 'collab',   icon: '👥', label: 'Colaboradores' },
+        { act: 'review',   icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: revLabel },
+        { act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' },
         { act: lastAct,    icon: lastIcon, label: lastLabel }
     ], function(act){
         if (act === 'play')          playMusicItem(item);
@@ -1913,7 +2178,7 @@ function pfReviewPrompt(message, onYes) {
    Replica `crearMomentoDesdeItem` del escritorio: emoji por categoría,
    título "Verb: Item", descripción con colabs si las hay, y foto opcional. */
 function crearMomentoFromItem(cat, item) {
-    var emojis = { movies: '🎬', series: '📺', books: '📚', games: '🎮' };
+    var emojis = { movies: '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', series: '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', books: '<img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', games: '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">' };
     var verbs  = { movies: 'Vista', series: 'Vista', books: 'Leído', games: 'Jugado' };
     var titulo = (verbs[cat] || 'Completado') + ': ' + (item.title || '');
     var d = new Date();
@@ -2111,7 +2376,7 @@ function openCollabDialog(item, origIdx, cat) {
     bd.innerHTML =
         '<div class="window pf-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">👥 ' + esc(item.title || '—') + '</div>' +
+                '<div class="title-bar-text"><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> ' + esc(item.title || '—') + '</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
@@ -2151,7 +2416,7 @@ function openCollabDialog(item, origIdx, cat) {
         } else {
             var ph = document.createElement('div');
             ph.className = 'pf-collab-av-ph';
-            ph.textContent = '👤';
+            ph.innerHTML = '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">';
             av.appendChild(ph);
         }
         row.appendChild(av);
@@ -2427,7 +2692,7 @@ function openEditProfileDialog() {
     bd.innerHTML =
         '<div class="window pf-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">✏ Editar perfil</div>' +
+                '<div class="title-bar-text"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Editar perfil</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
@@ -2451,19 +2716,19 @@ function openEditProfileDialog() {
                     '<input type="text" id="ep-country" maxlength="50" value="' + esc(v('country')) + '" placeholder="📍 España">' +
                 '</div>' +
                 '<div class="pf-form-row">' +
-                    '<label for="ep-steam">🎮 Steam</label>' +
+                    '<label for="ep-steam"><img src="../../assets/img/appIcons/steamIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Steam</label>' +
                     '<input type="text" id="ep-steam" maxlength="200" value="' + esc(v('steam')) + '" placeholder="usuario o URL">' +
                 '</div>' +
                 '<div class="pf-form-row">' +
-                    '<label for="ep-discord">💬 Discord</label>' +
+                    '<label for="ep-discord"><img src="../../assets/img/appIcons/discordIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Discord</label>' +
                     '<input type="text" id="ep-discord" maxlength="100" value="' + esc(v('discord')) + '" placeholder="usuario#1234">' +
                 '</div>' +
                 '<div class="pf-form-row">' +
-                    '<label for="ep-twitter">🐦 Twitter</label>' +
+                    '<label for="ep-twitter"><img src="../../assets/img/appIcons/twitterIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Twitter</label>' +
                     '<input type="text" id="ep-twitter" maxlength="100" value="' + esc(v('twitter')) + '" placeholder="@usuario">' +
                 '</div>' +
                 '<div class="pf-form-row">' +
-                    '<label for="ep-instagram">📷 Instagram</label>' +
+                    '<label for="ep-instagram"><img src="../../assets/img/appIcons/instagramIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Instagram</label>' +
                     '<input type="text" id="ep-instagram" maxlength="100" value="' + esc(v('instagram')) + '" placeholder="@usuario">' +
                 '</div>' +
                 '<div class="pf-form-error" id="ep-error"></div>' +
@@ -2513,8 +2778,8 @@ function openAddItemDialog(cat) {
     var labels = {
         movies: { title: '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir película', titleField: 'Título' },
         series: { title: '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Añadir serie',    titleField: 'Título' },
-        books:  { title: '📖 Añadir libro',    titleField: 'Título' },
-        games:  { title: '🎮 Añadir juego',    titleField: 'Título' }
+        books:  { title: '<img src="../../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Añadir libro',    titleField: 'Título' },
+        games:  { title: '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Añadir juego',    titleField: 'Título' }
     };
     var cfg = labels[cat]; if (!cfg) return;
     var bd = document.createElement('div');
@@ -2693,7 +2958,7 @@ function openMusicAddDialog() {
                         }
                         state.meta = d;
                         previewEl.style.color = 'var(--text, #000)';
-                        previewEl.textContent = (state.type === 'album' ? '💿 ' : '♪ ') + (d.title || '');
+                        previewEl.innerHTML = (state.type === 'album' ? '💿 ' : '<img src="../../assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> ') + (d.title || '');
                         if (d.artist && !artistEl.value.trim()) artistEl.value = d.artist;
                     })
                     .catch(function(){
@@ -2890,16 +3155,17 @@ function renderDrawerBody() {
         sections.push({
             title: null,
             items: [
-                { view: 'profile', icon: '👤', label: 'Perfil' },
-                { view: 'lists',   icon: '📋', label: 'Mis listas' },
-                { view: 'social',  icon: '👥', label: 'Social' }
+                { view: 'profile', icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Perfil' },
+                { view: 'lists',   icon: '<img src="../../assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Mis listas' },
+                { view: 'melon',   icon: '⭐', label: 'Melon reviews' },
+                { view: 'social',  icon: '+', label: 'Social' }
             ]
         });
     } else {
         sections.push({
             title: null,
             items: [
-                { view: 'profile', icon: '👤', label: 'Perfil' },
+                { view: 'profile', icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Perfil' },
                 { view: 'lists',   icon: '📋', label: 'Listas de ' + (STATE.viewingLabel || '?') }
             ]
         });
@@ -2930,7 +3196,7 @@ function renderDrawerBody() {
 /* ─── View switching ────────────────────────────────────────────── */
 function showView(name) {
     STATE.view = name;
-    var V = { profile: 'pf-view-profile', lists: 'pf-view-lists', social: 'pf-view-social' };
+    var V = { profile: 'pf-view-profile', lists: 'pf-view-lists', social: 'pf-view-social', melon: 'pf-view-melon' };
     Object.keys(V).forEach(function(k){
         var el = document.getElementById(V[k]);
         if (el) el.hidden = (k !== name);
@@ -2943,8 +3209,251 @@ function showView(name) {
         toggleProfileActions();
     } else if (name === 'social') {
         renderSocial();
+    } else if (name === 'melon') {
+        /* Carga lo seleccionado actualmente (defaults a year + movies). */
+        if (!MELON_STATE.loaded) {
+            MELON_STATE.loaded = true;
+            loadMelonItems();
+        }
     }
 }
+
+/* ════════════════════════════════════════════════════════════════
+   MELON REVIEWS — ranking comunidad
+   ════════════════════════════════════════════════════════════════
+   Igual que perfil.php (desktop) pero con UI mobile:
+     · Filtro de período en .pf-subtabs (year / recent / alltime)
+     · Filtro de categoría en .pf-tabs
+     · Grid 2 columnas de "slots" con cover + rating
+     · Modal con detalle de reseñas individuales
+   El endpoint es el mismo (assets/profile/api.php?action=melon-reviews). */
+var MELON_STATE = {
+    loaded: false,
+    period: 'year',
+    cat:    'movies',
+    type:   null,
+    items:  [],
+    page:   1,
+    pageSize: 10
+};
+var MELON_LABELS = { year: 'Mejor del año', recent: 'Reciente', alltime: 'Todo el tiempo' };
+var MELON_ICONS  = { movies: '🎬', series: '📺', books: '📚', games: '🎮', music: '🎵' };
+var MELON_MUST_VERBS = { movies: 'see', series: 'watch', books: 'read', games: 'play', music: 'hear' };
+
+function loadMelonItems() {
+    if (!MELON_STATE.period || !MELON_STATE.cat) return;
+    var statusEl = document.getElementById('pf-melon-status');
+    var listEl   = document.getElementById('pf-melon-list');
+    var pagerEl  = document.getElementById('pf-melon-pager');
+    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Cargando…'; }
+    if (listEl) listEl.innerHTML = '';
+    if (pagerEl) pagerEl.innerHTML = '';
+
+    var url = API + '?action=melon-reviews&period=' + encodeURIComponent(MELON_STATE.period)
+            + '&cat=' + encodeURIComponent(MELON_STATE.cat);
+    if (MELON_STATE.type) url += '&type=' + encodeURIComponent(MELON_STATE.type);
+
+    fetch(url, { credentials: 'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if (!d || !d.ok) {
+                if (statusEl) { statusEl.style.display = ''; statusEl.textContent = (d && d.error) ? d.error : 'Error'; }
+                return;
+            }
+            MELON_STATE.items = d.items || [];
+            MELON_STATE.page  = 1;
+            renderMelonItems();
+        })
+        .catch(function(){
+            if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Error de red'; }
+        });
+}
+
+function renderMelonItems() {
+    var statusEl = document.getElementById('pf-melon-status');
+    var listEl   = document.getElementById('pf-melon-list');
+    var pagerEl  = document.getElementById('pf-melon-pager');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (pagerEl) pagerEl.innerHTML = '';
+
+    if (!MELON_STATE.items.length) {
+        if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'No hay reseñas en este período.'; }
+        return;
+    }
+    if (statusEl) statusEl.style.display = 'none';
+
+    var totalPages = Math.max(1, Math.ceil(MELON_STATE.items.length / MELON_STATE.pageSize));
+    if (MELON_STATE.page > totalPages) MELON_STATE.page = totalPages;
+    if (MELON_STATE.page < 1) MELON_STATE.page = 1;
+    var start = (MELON_STATE.page - 1) * MELON_STATE.pageSize;
+    var pageItems = MELON_STATE.items.slice(start, start + MELON_STATE.pageSize);
+
+    var isMusic = (MELON_STATE.cat === 'music');
+    var ICON_FALLBACK = {
+        movies: '🎬', series: '📺', books: '📚', games: '🎮',
+        music:  (MELON_STATE.type === 'song' ? '🎵' : '💿')
+    };
+    pageItems.forEach(function(item, idx){
+        var isMust = item.avg > 4.4;
+
+        /* Poster — reusa la estructura .pf-item-poster de "Mis listas":
+           img si hay cover, div.placeholder con emoji si no. */
+        var posterHtml;
+        if (item.image) {
+            posterHtml = '<img class="pf-item-poster" src="' + esc(item.image) + '" alt="" loading="lazy">';
+        } else {
+            posterHtml = '<div class="pf-item-poster placeholder">' + (ICON_FALLBACK[MELON_STATE.cat] || '🖼') + '</div>';
+        }
+
+        /* Sub: artista (música) + rating estrellas + count + badge "must" inline */
+        var subParts = [];
+        if (isMusic && item.artist) subParts.push('<span>' + esc(item.artist) + '</span>');
+        subParts.push(
+            '<span class="pf-stars-wrap">' +
+                '<span class="pf-stars">' + makeStarsHtml(item.avg, 5) + '</span>' +
+                '<span class="pf-stars-num">' + item.avg.toFixed(1) + '</span>' +
+                '<span class="pf-melon-count">(' + item.count + ')</span>' +
+            '</span>'
+        );
+        if (isMust) {
+            subParts.push('<span class="pf-melon-must-tag">★ Must ' + (MELON_MUST_VERBS[MELON_STATE.cat] || 'see') + '</span>');
+        }
+
+        var classes = 'pf-item has-review pf-melon-item' + (isMusic ? ' music' : '') + (isMust ? ' is-must' : '');
+        var row = document.createElement('div');
+        row.className = classes;
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
+        row.innerHTML = posterHtml +
+            '<div class="pf-item-info">' +
+                '<div class="pf-item-title">' + esc(item.title) + '</div>' +
+                '<div class="pf-item-sub">' + subParts.join('') + '</div>' +
+            '</div>';
+        (function(it){ row.addEventListener('click', function(){ showMelonDetails(it); }); })(item);
+        listEl.appendChild(row);
+    });
+
+    /* Paginación */
+    if (pagerEl && totalPages > 1) {
+        var prev = document.createElement('button');
+        prev.className = 'button';
+        prev.textContent = '◄';
+        prev.disabled = MELON_STATE.page <= 1;
+        prev.addEventListener('click', function(){ if (MELON_STATE.page > 1) { MELON_STATE.page--; renderMelonItems(); } });
+        pagerEl.appendChild(prev);
+
+        var info = document.createElement('span');
+        info.className = 'pf-melon-pager-info';
+        info.textContent = MELON_STATE.page + ' / ' + totalPages + '  ·  ' + MELON_STATE.items.length + ' items';
+        pagerEl.appendChild(info);
+
+        var next = document.createElement('button');
+        next.className = 'button';
+        next.textContent = '►';
+        next.disabled = MELON_STATE.page >= totalPages;
+        next.addEventListener('click', function(){ if (MELON_STATE.page < totalPages) { MELON_STATE.page++; renderMelonItems(); } });
+        pagerEl.appendChild(next);
+    }
+}
+
+/* makeStarsHtml ya está definida arriba (línea ~1583) con clip-path
+   safe-cross-device para la media estrella. NO redefinirla aquí. */
+
+function showMelonDetails(item) {
+    var backdrop = document.getElementById('pf-melon-modal-backdrop');
+    var titleEl  = document.getElementById('pf-melon-modal-title');
+    var listEl   = document.getElementById('pf-melon-modal-list');
+    if (!backdrop || !listEl) return;
+    titleEl.textContent = '⭐ ' + item.title;
+    listEl.innerHTML = '';
+    (item.reviews || []).forEach(function(rev){
+        var row = document.createElement('div');
+        row.className = 'pf-melon-review-row';
+
+        var av = document.createElement('div');
+        av.className = 'pf-melon-review-av';
+        if (rev.userImg) {
+            /* getUserImage devuelve la ruta relativa al root del proyecto
+               ("assets/img/Sami.jpg"); perfil-mobile vive en /apps/mobile/
+               así que prefijamos "../../" salvo que ya sea absoluta. */
+            var src = rev.userImg;
+            if (src.indexOf('/') !== 0 && src.indexOf('http') !== 0 && src.indexOf('../') !== 0) {
+                src = '../../' + src;
+            }
+            var img = document.createElement('img');
+            img.src = src; img.alt = rev.userLabel || '';
+            av.appendChild(img);
+        } else {
+            av.textContent = '👤';
+        }
+        row.appendChild(av);
+
+        var info = document.createElement('div');
+        info.className = 'pf-melon-review-info';
+        var hdr = document.createElement('div');
+        hdr.className = 'pf-melon-review-hdr';
+        hdr.innerHTML = '<strong>' + esc(rev.userLabel || '?') + '</strong> '
+            + makeStarsHtml(rev.stars, 5)
+            + '<span class="pf-melon-review-num">' + rev.stars + '</span>';
+        info.appendChild(hdr);
+        if (rev.comment) {
+            var cmt = document.createElement('div');
+            cmt.className = 'pf-melon-review-comment';
+            cmt.textContent = '" ' + rev.comment + ' "';
+            info.appendChild(cmt);
+        }
+        var t = document.createElement('div');
+        t.className = 'pf-melon-review-time';
+        t.textContent = rev.reviewedAt ? relTimeStr(rev.reviewedAt) : '';
+        info.appendChild(t);
+
+        row.appendChild(info);
+        listEl.appendChild(row);
+    });
+    backdrop.hidden = false;
+}
+
+/* Tiempo relativo. Si ya existe relTime en el scope del perfil-mobile
+   (declarado más arriba), úsalo; si no, fallback simple. */
+function relTimeStr(ts) {
+    if (typeof relTime === 'function') {
+        try { return relTime(ts); } catch (_) {}
+    }
+    if (!ts) return '';
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString();
+}
+
+/* Setup de los filtros (period + cat) y close del modal.
+   Los elementos están en el DOM cuando este script corre (script al
+   final del body), así que no esperamos a DOMContentLoaded. */
+(function setupMelon() {
+    var periodBtns = document.querySelectorAll('#pf-melon-periods .pf-subtab');
+    periodBtns.forEach(function(btn){
+        btn.addEventListener('click', function(){
+            MELON_STATE.period = btn.dataset.mperiod;
+            periodBtns.forEach(function(b){ b.classList.toggle('active', b === btn); });
+            loadMelonItems();
+        });
+    });
+    var catBtns = document.querySelectorAll('#pf-melon-cats .pf-tab');
+    catBtns.forEach(function(btn){
+        btn.addEventListener('click', function(){
+            MELON_STATE.cat  = btn.dataset.mcat;
+            MELON_STATE.type = btn.dataset.mtype || null;
+            catBtns.forEach(function(b){ b.classList.toggle('active', b === btn); });
+            loadMelonItems();
+        });
+    });
+    var closeBtn = document.getElementById('pf-melon-modal-close');
+    var backdrop = document.getElementById('pf-melon-modal-backdrop');
+    if (closeBtn) closeBtn.addEventListener('click', function(){ backdrop.hidden = true; });
+    if (backdrop) backdrop.addEventListener('click', function(e){
+        if (e.target === backdrop) backdrop.hidden = true;
+    });
+})();
 
 /* Edit profile / nuevo post solo en mi perfil. Botón Seguir solo cuando
    estoy viendo a otro. Chat solo si hay seguimiento mutuo. */
@@ -3016,7 +3525,7 @@ function renderPosts(posts) {
     var listEl = document.getElementById('pf-posts-list');
     if (!listEl) return;
     if (!posts || !posts.length) {
-        listEl.innerHTML = '<div class="mh-empty"><span class="mh-empty-icon">📝</span>Sin posts todavía</div>';
+        listEl.innerHTML = '<div class="mh-empty"><span class="mh-empty-icon"><img src="../../assets/img/appIcons/newsIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>Sin posts todavía</div>';
         return;
     }
     var iAmOwner = !STATE.viewingUser;
@@ -3044,7 +3553,7 @@ function renderPosts(posts) {
                     '<button class="button pf-post-btn' + (liked ? ' is-liked' : '') + '" data-act="like" type="button"' + likeBtnAttr + '>' +
                         (liked ? '❤' : '♡') + ' ' + likeCount +
                     '</button>' +
-                    '<button class="button pf-post-btn" data-act="comments" type="button">💬 ' + commentCount + '</button>' +
+                    '<button class="button pf-post-btn" data-act="comments" type="button"><img src="../../assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">' + commentCount + '</button>' +
                     (canDel ? '<button class="button pf-post-btn danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;"></button>' : '') +
                 '</div>' +
                 '<div class="pf-post-comments" data-comments-for="' + p.id + '" hidden></div>' +
@@ -3158,7 +3667,7 @@ function addComment(post, text, box) {
             /* Actualiza el contador del botón. */
             var postEl = box.closest('.pf-post');
             var btn = postEl && postEl.querySelector('[data-act="comments"]');
-            if (btn) btn.textContent = '💬 ' + post.comments.length;
+            if (btn) btn.innerHTML = '<img src="../../assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">' + post.comments.length;
         }
     })
     .catch(function(){});
@@ -3177,7 +3686,7 @@ function deleteComment(post, cid, box) {
             renderComments(post, box);
             var postEl = box.closest('.pf-post');
             var btn = postEl && postEl.querySelector('[data-act="comments"]');
-            if (btn) btn.textContent = '💬 ' + post.comments.length;
+            if (btn) btn.innerHTML = '<img src="../../assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">' + post.comments.length;
         }
     })
     .catch(function(){});
@@ -3267,15 +3776,12 @@ function renderSocial() {
         if (!uInfo) return;
         var avHtml = uInfo.image
             ? '<img src="' + esc(uInfo.image) + '" alt="">'
-            : '<span>👤</span>';
-        /* Badge de chat solo para mutuos (el server enforza la mutualidad
-           con 403; ocultarlo aquí evita un tap que falla). */
-        var chatBadge = isMutual(uKey)
-            ? '<button class="pf-friend-chat" data-act="chat" type="button" aria-label="Chat">💬</button>'
-            : '';
+            : '<span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
+        /* Chat ya no se abre desde aquí — la app dedicada chat-mobile
+           lo gestiona. Solo dejamos el avatar + nombre + presencia. */
         html +=
             '<div class="pf-friend-card" data-user="' + esc(uKey) + '">' +
-                '<div class="pf-friend-av has-presence-dot">' + avHtml + chatBadge + '<span class="pf-presence-dot" data-userkey="' + esc(uKey) + '"></span></div>' +
+                '<div class="pf-friend-av has-presence-dot">' + avHtml + '<span class="pf-presence-dot" data-userkey="' + esc(uKey) + '"></span></div>' +
                 '<div class="pf-friend-label">' + esc(uInfo.label) + '</div>' +
             '</div>';
     });
@@ -3291,14 +3797,8 @@ function renderSocial() {
     });
     /* Re-aplica el estado de presencia conocido sin esperar al fetch. */
     if (window.__pfApplyPresence) window.__pfApplyPresence();
-    /* Badge 💬: stopPropagation para que no dispare también viewOtherUser. */
-    gridEl.querySelectorAll('[data-act="chat"]').forEach(function(btn){
-        btn.addEventListener('click', function(e){
-            e.stopPropagation();
-            var card = btn.closest('[data-user]');
-            if (card) openChat(card.dataset.user);
-        });
-    });
+    /* (Antes había aquí un handler de chat — el chat se ha movido a la
+       app dedicada chat-mobile.php.) */
     var exploreBtn = gridEl.querySelector('[data-act="explore"]');
     if (exploreBtn) exploreBtn.addEventListener('click', openExploreDialog);
     /* Re-aplica los badges al render — el grid se acaba de regenerar y
@@ -3321,7 +3821,7 @@ function openExploreDialog() {
             if (!uInfo) return;
             var avHtml = uInfo.image
                 ? '<img src="' + esc(uInfo.image) + '" alt="">'
-                : '<span>👤</span>';
+                : '<span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
             listHtml +=
                 '<div class="pf-friend-card" data-user="' + esc(uKey) + '">' +
                     '<div class="pf-friend-av has-presence-dot">' + avHtml + '<span class="pf-presence-dot" data-userkey="' + esc(uKey) + '"></span></div>' +
@@ -3358,6 +3858,27 @@ function openExploreDialog() {
 /* ─── View other user ──────────────────────────────────────────── */
 function viewOtherUser(userKey) {
     if (!userKey || userKey === USER_KEY) return;
+    /* Si estamos YA viendo este user (por ?as= en URL), no recargues —
+       la página ya se renderizó con SU look server-side, solo nos toca
+       cargar sus datos del perfil. */
+    if (window.__MOBILE_VIEWING_KEY === userKey) {
+        viewOtherUserInPlace(userKey);
+        return;
+    }
+    /* Sino, NAVEGAMOS a perfil-mobile.php?as=USERKEY para que el PHP
+       resuelva server-side la INTERFAZ, TEMA e ICONOS del visitado.
+       Usamos location.replace (NO .href) para no añadir entrada al
+       history del browser — así "‹ Menú" (que hace history.back) vuelve
+       al menú del shell, no a la cadena de perfiles ajenos visitados. */
+    try {
+        window.location.replace('perfil-mobile.php?as=' + encodeURIComponent(userKey));
+        return;
+    } catch (_) {}
+}
+
+/* Carga in-place sin recarga — usado SOLO en el bootstrap cuando ya
+   estamos en perfil-mobile.php?as=USERKEY. */
+function viewOtherUserInPlace(userKey) {
     fetch(API + '?action=view-user&user=' + encodeURIComponent(userKey), { credentials: 'same-origin' })
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -3393,10 +3914,14 @@ function exitViewingUser() {
 
 function updateHeaderForViewing() {
     var viewing = !!STATE.viewingUser;
+    /* El banner "Viendo perfil de …" se eliminó del HTML; los IDs ya
+       no existen → guard con `if (el)` para no romper el flow del JS
+       que sigue cambiando otros elementos del header. */
     var banner  = document.getElementById('pf-viewing-banner');
-    banner.classList.toggle('is-active', viewing);
+    if (banner) banner.classList.toggle('is-active', viewing);
     if (viewing) {
-        document.getElementById('pf-viewing-text').textContent =
+        var vt = document.getElementById('pf-viewing-text');
+        if (vt) vt.textContent =
             'Viendo perfil de ' + (STATE.viewingLabel || '?');
     }
     /* Cambia el nombre y avatar del userbar al perfil que estoy viendo. */
@@ -3410,7 +3935,7 @@ function updateHeaderForViewing() {
         if (info && info.image) {
             avatarEl.innerHTML = '<img src="' + esc(info.image) + '" alt="">';
         } else {
-            avatarEl.innerHTML = '<span>👤</span>';
+            avatarEl.innerHTML = '<span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
         }
         attachPresenceDot(avatarEl, STATE.viewingUser);
     } else {
@@ -3420,14 +3945,17 @@ function updateHeaderForViewing() {
         if (meInfo && meInfo.image) {
             avatarEl.innerHTML = '<img src="' + esc(meInfo.image) + '" alt="">';
         } else {
-            avatarEl.innerHTML = '<span>👤</span>';
+            avatarEl.innerHTML = '<span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
         }
         attachPresenceDot(avatarEl, USER_KEY);
     }
     toggleProfileActions();
 }
 
-document.getElementById('pf-viewing-back').addEventListener('click', exitViewingUser);
+/* Guard: el botón #pf-viewing-back se eliminó del HTML — la navegación
+   de vuelta vive en la statusbar inferior. */
+var _pfBackBtn = document.getElementById('pf-viewing-back');
+if (_pfBackBtn) _pfBackBtn.addEventListener('click', exitViewingUser);
 
 /* ─── Chat ──────────────────────────────────────────────────────
    Modal de pantalla casi completa con polling cada 1.5s mientras está
@@ -3435,6 +3963,24 @@ document.getElementById('pf-viewing-back').addEventListener('click', exitViewing
    server reenforza el 403 si no lo es. */
 
 var CHAT = { withUser: null, pollTimer: null, lastId: null };
+
+/* ── Supresión de notificaciones cuando el chat está activo ──
+   El service worker pregunta vía MessageChannel cada vez que llega un
+   push si estamos focused en el chat con ese usuario. Si lo estamos Y
+   la página es visible, devolvemos true → el SW se salta showNotification.
+   Sin esto el usuario recibe ping en el SO mientras lee los mensajes
+   en vivo (poll de chat). */
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function(e) {
+        var d = e.data || {};
+        if (d.type !== 'sw:is-chat-focused') return;
+        var port = e.ports && e.ports[0];
+        if (!port) return;
+        var focused = (CHAT.withUser === d.fromKey)
+                   && (document.visibilityState === 'visible');
+        try { port.postMessage({ focused: focused }); } catch (_) {}
+    });
+}
 
 function openChat(uKey) {
     if (!uKey || !isMutual(uKey)) return;
@@ -3448,6 +3994,13 @@ function openChat(uKey) {
         delete STATE.unreadChats[uKey];
         renderUnreadBadges();
     }
+    /* Limpia la notificación push del SO de esta conversación cuando el
+       usuario "responde" abriendo el chat. El helper vive en mobile.php
+       (parent del iframe) y enruta al SW por postMessage. */
+    try {
+        var fn = (window.parent && window.parent !== window) ? window.parent.mhClearNotifications : window.mhClearNotifications;
+        if (typeof fn === 'function') fn({ tag: 'chat:' + uKey });
+    } catch (_) {}
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
@@ -3502,7 +4055,7 @@ function openChat(uKey) {
                   '🥳','😏','😉','🙃','😬','😱','🤣','😋','😇','🤧',
                   '👍','👎','🙌','👏','💪','🙏','🤝','✌️','🤞','👌',
                   '❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💖',
-                  '🔥','✨','💯','⭐','🎉','🎊','🎵','🎶','🎁','☕',
+                  '🔥','✨','💯','⭐','🎉','🎊','<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">','<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">','🎁','☕',
                   '🍕','🍔','🍿','🍻','🍰','🌹','🌸','🌈','☀️','🌙'];
     var panel  = bd.querySelector('#pf-chat-emoji-panel');
     var emBtn  = bd.querySelector('#pf-chat-emoji-btn');
@@ -3717,8 +4270,20 @@ function addItemToOwnProfile(cat, item) {
 
 /* ─── Bootstrap ─────────────────────────────────────────────────── */
 /* Carga inicial: fetchProfile rellena perfil + posts + following; fetchLists
-   las 5 categorías. La vista por defecto es "Mis listas". */
-fetchProfile();
+   las 5 categorías. La vista por defecto es "Mis listas".
+
+   Si llegamos con ?as=USERKEY (visitando otro perfil), saltamos el fetch
+   del perfil propio y cargamos directamente los datos del visitado. La
+   página YA se renderizó con SU look (interfaz/tema/iconos) server-side. */
+if (window.__MOBILE_VIEWING_KEY) {
+    /* Necesitamos fetchProfile para que PROFILE_USERS y caches base
+       estén listos; luego viewOtherUserInPlace muestra al visitado. */
+    fetchProfile().then(function() {
+        viewOtherUserInPlace(window.__MOBILE_VIEWING_KEY);
+    });
+} else {
+    fetchProfile();
+}
 fetchFollowers();
 fetchLists();
 showView('profile');
@@ -3782,7 +4347,7 @@ loadUnreadChats = function() {
 function showForegroundNotification(fromKey, deltaCount) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     var uInfo = PROFILE_USERS[fromKey];
-    var title = '💬 ' + ((uInfo && uInfo.label) || fromKey);
+    var title = '<img src="../../assets/img/appIcons/chatIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> ' + ((uInfo && uInfo.label) || fromKey);
     var body  = deltaCount === 1 ? 'Nuevo mensaje' : deltaCount + ' nuevos mensajes';
     try {
         new Notification(title, {

@@ -28,7 +28,6 @@ body.Angie-Unroudmell {
     --titlebar-icon-bezel-light: #F9DDD8;
     --titlebar-icon-bezel-dark: #35522B;
     --border: #F3BABA;
-    --border-strong: #5B744B;
     --bezel-light-1: #F9DDD8;
     --bezel-light-2: #F8D0C8;
     --bezel-dark-1: #35522B;
@@ -38,11 +37,15 @@ body.Angie-Unroudmell {
     --error-text: #c8456e;
     --warning-bg: #F3BABA;
     --warning-text: #35522B;
-    --selection-bg: #799567;
-    --selection-text: #F9DDD8;
     --badge-bg: #c8456e;
     --badge-text: #F9DDD8;
     --star-color: #c8a000;
+    --hover-bg: #CCE7F7;
+    --active-rose: #FCE7F5;
+    --inactive-bg: #E8DEEB;
+    --link-hover: #6B3A6B;
+    --pale-rose: #FFF4F9;
+    --shadow-color: #2D2052;
 
     /* Alias retro-compat */
     --t-bg:           #F8D0C8;

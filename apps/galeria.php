@@ -50,6 +50,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <link rel="stylesheet" href="../assets/css/tokens.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/tokens.css'); ?>">
     <link rel="stylesheet" href="../assets/css/base.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/base.css'); ?>">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../assets/css/themes.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/themes.css'); ?>">
     <link rel="stylesheet" href="../assets/css/galeria.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/galeria.css'); ?>">
     <?php if ($activeThemeCss): ?>
@@ -85,7 +88,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <aside id="gal-sidebar">
         <!-- ── Filtros de Galería ── -->
         <div class="gal-sidebar-section" data-for-tab="galeria">
-            <div class="gal-side-head">🔍 Buscar</div>
+            <div class="gal-side-head">Buscar</div>
             <div class="gal-side-pad">
                 <input type="text" id="gal-search" placeholder="Nombre de archivo...">
             </div>
@@ -97,13 +100,13 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
             <div id="gal-sidebar-footer">
                 <button class="button" id="gal-clear-filters">Limpiar filtros</button>
-                <button class="button" id="gal-discord-settings" title="Webhook de Discord">⚙ Discord</button>
+                <button class="button" id="gal-discord-settings" title="Webhook de Discord"><img src="../assets/img/appIcons/discordIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Discord</button>
                 <button class="button" id="gal-disconnect" title="Cerrar sesión de Drive">🔌 Desconectar</button>
             </div>
         </div>
         <!-- ── Filtros de OCs (ocultos hasta cambiar de tab) ── -->
         <div class="gal-sidebar-section" data-for-tab="ocs" style="display:none;">
-            <div class="gal-side-head">🔍 Buscar</div>
+            <div class="gal-side-head">Buscar</div>
             <div class="gal-side-pad">
                 <input type="text" id="ocs-search" placeholder="Nombre del OC...">
             </div>
@@ -265,7 +268,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 <!-- Diálogo: AJUSTES de Discord (webhook URL) -->
 <div class="window gal-dialog" id="gal-discord-settings-dialog" style="display:none;">
     <div class="title-bar">
-        <div class="title-bar-text">⚙ Webhook de Discord</div>
+        <div class="title-bar-text"><img src="../assets/img/appIcons/discordIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Webhook de Discord</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="gal-ds-close"></button>
         </div>

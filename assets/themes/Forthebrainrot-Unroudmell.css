@@ -28,7 +28,6 @@ body.Forthebrainrot-Unroudmell {
     --titlebar-icon-bezel-light: #ffffff;
     --titlebar-icon-bezel-dark: #0a0a0a;
     --border: #808080;
-    --border-strong: #404040;
     --bezel-light-1: #000000;
     --bezel-light-2: #613583;
     --bezel-dark-1: #9141ac;
@@ -38,11 +37,15 @@ body.Forthebrainrot-Unroudmell {
     --error-text: #c00000;
     --warning-bg: #fffbe6;
     --warning-text: #444444;
-    --selection-bg: #000080;
-    --selection-text: #f9f06b;
     --badge-bg: #d72638;
     --badge-text: #f9f06b;
     --star-color: #ffd700;
+    --hover-bg: #CCE7F7;
+    --active-rose: #FCE7F5;
+    --inactive-bg: #E8DEEB;
+    --link-hover: #6B3A6B;
+    --pale-rose: #FFF4F9;
+    --shadow-color: #2D2052;
 
     /* Alias retro-compat */
     --t-bg:           #f9f06b;

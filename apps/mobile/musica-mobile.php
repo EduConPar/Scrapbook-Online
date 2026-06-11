@@ -106,6 +106,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -1471,7 +1474,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <?php if ($userImg): ?>
                     <img src="<?= htmlspecialchars($userImg) ?>" alt="">
                 <?php else: ?>
-                    <span>👤</span>
+                    <span><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>
                 <?php endif; ?>
             </div>
             <div class="mh-userbar-text">
@@ -1505,7 +1508,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <!-- Mini reproductor sticky -->
 <div class="mu-player" id="mu-player">
-    <div class="mu-player-thumb" id="mu-thumb">🎵</div>
+    <div class="mu-player-thumb" id="mu-thumb"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
     <div class="mu-player-info">
         <div class="mu-player-title" id="mu-now-title">—</div>
         <div class="mu-player-artist" id="mu-now-artist">—</div>
@@ -1538,7 +1541,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <div class="mu-full-display">
                 <div class="mu-vinyl-wrap">
                     <div class="mu-vinyl" id="mu-vinyl">
-                        <div class="mu-vinyl-label empty" id="mu-vinyl-label">🎵</div>
+                        <div class="mu-vinyl-label empty" id="mu-vinyl-label"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
                         <div class="mu-vinyl-hole"></div>
                     </div>
                 </div>
@@ -1551,7 +1554,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                  y la animación scrollea el track una distancia
                  (texto + gap), creando un loop visual sin "vuelta atrás". -->
             <div class="mu-full-info">
-                <div class="mu-full-info-marker">♪</div>
+                <div class="mu-full-info-marker"><img src="../../assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
                 <div class="mu-full-info-text">
                     <div class="mu-full-title-wrap" id="mu-full-title-wrap">
                         <span class="mu-full-title-track" id="mu-full-title-track">
@@ -1638,7 +1641,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="mu-lock-display">
             <div class="mu-lock-vinyl-wrap">
                 <div class="mu-vinyl mu-lock-vinyl" id="mu-lock-vinyl">
-                    <div class="mu-vinyl-label empty" id="mu-lock-vinyl-label">🎵</div>
+                    <div class="mu-vinyl-label empty" id="mu-lock-vinyl-label"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
                     <div class="mu-vinyl-hole"></div>
                 </div>
             </div>
@@ -1646,7 +1649,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         <!-- Info LCD: marker + title/artist con marquee. -->
         <div class="mu-lock-info">
-            <div class="mu-lock-info-marker">♪</div>
+            <div class="mu-lock-info-marker"><img src="../../assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
             <div class="mu-lock-info-text">
                 <div class="mu-lock-title-wrap" id="mu-lock-title-wrap">
                     <span class="mu-lock-title-track" id="mu-lock-title-track">
@@ -1860,7 +1863,7 @@ function restoreHighlightFromShell() {
 function renderPlaylists() {
     var listEl = document.getElementById('mu-list');
     if (!PLAYLISTS.length) {
-        listEl.innerHTML = '<div class="mh-empty"><span class="mh-empty-icon">🎵</span>No tienes playlists todavía</div>';
+        listEl.innerHTML = '<div class="mh-empty"><span class="mh-empty-icon"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>No tienes playlists todavía</div>';
         return;
     }
     var html = '';
@@ -1947,7 +1950,7 @@ function renderPlaylists() {
                       '<div class="mu-track-num">' + (ti + 1) + '</div>' +
                       (thumbUrl
                         ? '<img class="mu-track-thumb" src="' + thumbUrl + '" alt="" loading="lazy">'
-                        : '<div class="mu-track-thumb mu-track-thumb-ph">🎵</div>') +
+                        : '<div class="mu-track-thumb mu-track-thumb-ph"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>') +
                       '<div class="mu-track-info">' +
                         '<div class="mu-track-title">' + esc(tr.title || tr.videoId) + '</div>' +
                         (tr.artist ? '<div class="mu-track-artist">' + esc(tr.artist) + '</div>' : '') +
@@ -2206,7 +2209,7 @@ function muFullRefresh() {
         label.style.backgroundImage  = '';
         splash.style.backgroundImage = '';
         label.classList.add('empty');
-        label.textContent = '🎵';
+        label.innerHTML = '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">';
     }
     /* Title-bar: nombre de la playlist activa. */
     var tbPl = document.getElementById('mu-full-tb-pl');
@@ -2320,7 +2323,7 @@ function muLockSync() {
         } else {
             label.style.backgroundImage = '';
             label.classList.add('empty');
-            label.textContent = '🎵';
+            label.innerHTML = '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">';
         }
     }
     if (titleEl)  titleEl.textContent  = tr.title  || tr.videoId || '—';
@@ -2874,10 +2877,10 @@ function muOpenPlaylistMenu(idx) {
     var isOwn = !pl.sharedFrom;
     var items = [
         { act: 'add',       label: '➕ Añadir canción' },
-        { act: 'edit',      label: '✏️ Renombrar' }
+        { act: 'edit',      label: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">️ Renombrar' }
     ];
     if (isOwn) {
-        items.push({ act: 'collab', label: '👥 Colaboradores' });
+        items.push({ act: 'collab', label: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Colaboradores' });
         items.push({ act: 'delete', label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar playlist', danger: true });
     } else {
         items.push({ act: 'leave',  label: '🚪 Abandonar (dejar de colaborar)', danger: true });

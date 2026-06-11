@@ -304,23 +304,47 @@ function actionStats(): void {
     }
     unset($s);
 
-    /* Top artistas (5) — saltamos artist vacío. */
+    /* Top artistas (5) — saltamos artist vacío.
+       Si artist contiene ';' son N artistas distintos (e.g. "Bad Bunny;J Balvin"
+       para una colaboración). Cada play cuenta 1 vez para CADA artista
+       de la lista, no como un super-artista combinado.
+       Estrategia: fetch raw groups, expandir por ';' en PHP, re-agregar. */
     $stmt = $pdo->prepare("
         SELECT artist, COUNT(*) AS plays
         FROM music_plays WHERE $where AND artist <> ''
         GROUP BY artist
-        ORDER BY plays DESC
-        LIMIT 5
     ");
     $stmt->execute($params);
-    $artists = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    /* Pool de hasta 5 canciones por artista. Cada entrada lleva su
-       PROPIO artist (mismo string del row, garantizado por el filtro
-       WHERE artist = ?) — el cliente usa eso para el Now Playing. */
+    $rawArtists = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $artistCounts = [];   /* artistName(trim) → plays acumulados */
+    foreach ($rawArtists as $r) {
+        $artistStr = (string)$r['artist'];
+        $plays     = (int)$r['plays'];
+        $parts = strpos($artistStr, ';') !== false
+            ? array_filter(array_map('trim', explode(';', $artistStr)), 'strlen')
+            : [trim($artistStr)];
+        foreach ($parts as $a) {
+            if ($a === '') continue;
+            $artistCounts[$a] = ($artistCounts[$a] ?? 0) + $plays;
+        }
+    }
+    arsort($artistCounts);
+    $artists = [];
+    foreach (array_slice($artistCounts, 0, 5, true) as $name => $plays) {
+        $artists[] = ['artist' => $name, 'plays' => (int)$plays];
+    }
+    /* Pool de hasta 5 canciones por artista — match FLEXIBLE: cuando
+       buscamos "Bad Bunny" debemos incluir filas donde artist sea solo
+       "Bad Bunny" Y filas donde forme parte de una lista colaborativa
+       ("Bad Bunny;X", "Y;Bad Bunny", "Y;Bad Bunny;Z").
+       CONCAT envuelve el campo en ';...;' y el patrón busca ';artist;'
+       como subcadena. REPLACE elimina espacios alrededor de ';' para
+       normalizar artistas con espacio tras la separación. */
+    $matchClause = "CONCAT(';', REPLACE(REPLACE(artist, '; ', ';'), ' ;', ';'), ';') LIKE CONCAT('%;', ?, ';%')";
     $stmtTopSongsByArtist = $pdo->prepare("
         SELECT video_id, MAX(title) AS title, MAX(artist) AS artist, COUNT(*) AS plays
         FROM music_plays
-        WHERE user_id = ? AND artist = ?" . ($all ? "" : " AND YEAR(played_at) = ?") . "
+        WHERE user_id = ? AND $matchClause" . ($all ? "" : " AND YEAR(played_at) = ?") . "
         GROUP BY video_id
         ORDER BY plays DESC
         LIMIT 5

@@ -86,6 +86,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -703,7 +706,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- Diálogo: EDITAR (renombrar + etiquetas) -->
 <div class="window gal-dialog" id="gal-edit-dialog" style="display:none;">
     <div class="title-bar">
-        <div class="title-bar-text">✏ Editar</div>
+        <div class="title-bar-text"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Editar</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="gal-ed-close"></button>
         </div>
@@ -777,9 +780,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <!-- Menú contextual -->
 <div id="gal-ctx-menu" data-no-auto-z="" style="display:none;">
     <div class="gal-ctx-opt" data-act="preview"><img src="../../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Ver</div>
-    <div class="gal-ctx-opt" data-act="download">📥 Descargar</div>
+    <div class="gal-ctx-opt" data-act="download"><img src="../../assets/img/appIcons/downloadIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Descargar</div>
     <div class="gal-ctx-opt" data-act="publish">📤 Publicar</div>
-    <div class="gal-ctx-opt" data-act="edit">✏ Renombrar / etiquetas</div>
+    <div class="gal-ctx-opt" data-act="edit"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Renombrar / etiquetas</div>
     <div class="gal-ctx-opt gal-ctx-danger" data-act="delete"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</div>
 </div>
 
@@ -3181,7 +3184,7 @@ async function openFicha(id) {
         '</div>':'')+
       /* Acciones */
       '<div class="ocs-ficha-actions">'+
-        (isOwn?'<button class="button" id="ocs-ficha-edit-btn">✏ Editar</button>':'')+
+        (isOwn?'<button class="button" id="ocs-ficha-edit-btn"><img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Editar</button>':'')+
       '</div>';
 
     if (isOwn) {

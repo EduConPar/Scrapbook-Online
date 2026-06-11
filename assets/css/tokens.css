@@ -52,7 +52,6 @@
 
     /* ──────── Bordes / divisores ──────── */
     --border:              #808080;
-    --border-strong:       #404040;
 
     /* ──────── Bezels Win98 (4 capas) ──────── */
     --bezel-light-1:       #ffffff;   /* inset  1px  1px */
@@ -70,8 +69,6 @@
     --warning-text:        #444444;   /* texto de aviso */
 
     /* ──────── Selección / badges ──────── */
-    --selection-bg:        #000080;   /* fondo de items seleccionados */
-    --selection-text:      #ffffff;   /* texto sobre selección */
     --badge-bg:            #d72638;   /* fondo de badges (notificaciones, chat) */
     --badge-text:          #ffffff;   /* texto sobre badge */
 

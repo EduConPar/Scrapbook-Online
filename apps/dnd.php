@@ -27,6 +27,9 @@ if ($userKey && file_exists($themeHelpers)) {
 <head>
 <meta charset="UTF-8">
 <script src="../assets/js/pwa-guard.js"></script>
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>D&D Fichas</title>
 <link rel="stylesheet" href="../assets/css/tokens.css">
@@ -502,8 +505,8 @@ body{
 
 <!-- TOOLBAR -->
 <div id="dnd-toolbar">
-    <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (PDF editable, 5 páginas)">📜 Oficial</button>
-    <button class="tb-btn has-tip"        id="tab-melon" onclick="switchSheet('melon')" data-tip="Ficha melon alternativa">🎨 Melon</button>
+    <button class="tb-btn active has-tip" id="tab-oficial"   onclick="switchSheet('oficial')"   data-tip="Ficha oficial D&D 5e (PDF editable, 5 páginas)"><img src="../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Oficial</button>
+    <button class="tb-btn has-tip"        id="tab-melon" onclick="switchSheet('melon')" data-tip="Ficha melon alternativa"><img src="../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Melon</button>
     <button class="tb-btn has-tip"        id="tab-misfichas" onclick="switchToMisFichas()"      data-tip="Ver todas tus fichas guardadas"><img src="../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Mis Fichas</button>
     <div class="tb-sep"></div>
     <button class="tb-btn has-tip" id="btn-dados" onclick="toggleDicePanel()" data-tip="Tirar dados (d4–d100)"><img src="../assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Dados</button>
@@ -609,8 +612,8 @@ body{
                 ¿A qué hoja pertenece <strong id="import-file-name"></strong>?
             </p>
             <div class="modal-btns">
-                <button class="tb-btn" onclick="doImport('oficial')">📜 Oficial</button>
-                <button class="tb-btn" onclick="doImport('melon')">🎨 Melon</button>
+                <button class="tb-btn" onclick="doImport('oficial')"><img src="../assets/img/appIcons/booksIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Oficial</button>
+                <button class="tb-btn" onclick="doImport('melon')"><img src="../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Melon</button>
                 <button class="tb-btn" onclick="closeImportModal()">Cancelar</button>
             </div>
         </div>
@@ -1360,13 +1363,17 @@ function renderFichasList(){
                  : 'desconocida';
         var nombreLimpio = f.name.replace(/_(oficial|melon)\.pdf$/i,'').replace(/\.pdf$/i,'').replace(/_/g,' ');
         var fecha = new Date(f.modifiedTime).toLocaleDateString('es-ES', {day:'2-digit',month:'2-digit',year:'numeric'});
-        var tipoLbl = tipo==='oficial'?'📜 Oficial':tipo==='melon'?'🎨 Melon':'❓ Otro';
+        var oficialIcon = '<img src="../assets/img/appIcons/booksIcon.png"  alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:3px;">';
+        var melonIcon   = '<img src="../assets/img/appIcons/galeriaIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:3px;">';
+        var tipoLbl = tipo==='oficial' ? (oficialIcon+'Oficial')
+                    : tipo==='melon'   ? (melonIcon+'Melon')
+                    : ('❓ Otro');
         var card = document.createElement('div'); card.className = 'ficha-card';
         card.innerHTML =
             '<button class="fc-del" title="Eliminar de Drive">✕</button>'+
             '<div class="fc-tipo">'+tipoLbl+'</div>'+
             '<div class="fc-nombre">'+esc(nombreLimpio)+'</div>'+
-            '<div class="fc-fecha">📅 '+esc(fecha)+'</div>'+
+            '<div class="fc-fecha"><img src="../assets/img/appIcons/calendarioIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:3px;">'+esc(fecha)+'</div>'+
             '<div class="fc-btns"><button data-a="cargar"><img src="../assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:3px;">Cargar</button></div>';
         card.querySelector('.fc-del').onclick = function(e){
             e.stopPropagation();

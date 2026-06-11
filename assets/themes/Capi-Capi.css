@@ -28,7 +28,6 @@ body.Capi-Capi {
     --titlebar-icon-bezel-light: #ffffff;
     --titlebar-icon-bezel-dark: #0a0a0a;
     --border: #3a3a3a;
-    --border-strong: #555555;
     --bezel-light-1: #555555;
     --bezel-light-2: #444444;
     --bezel-dark-1: #111111;
@@ -38,11 +37,15 @@ body.Capi-Capi {
     --error-text: #ff4f6e;
     --warning-bg: #2a2200;
     --warning-text: #e8cc80;
-    --selection-bg: #EDC001;
-    --selection-text: #000000;
     --badge-bg: #ff4f6e;
     --badge-text: #ffffff;
     --star-color: #EDC001;
+    --hover-bg: #CCE7F7;
+    --active-rose: #FCE7F5;
+    --inactive-bg: #E8DEEB;
+    --link-hover: #6B3A6B;
+    --pale-rose: #FFF4F9;
+    --shadow-color: #2D2052;
 
     /* Alias retro-compat */
     --t-bg:           #2d2d2d;

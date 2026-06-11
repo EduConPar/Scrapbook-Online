@@ -559,7 +559,7 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
 </div>
 
 
-<div class="window" id="lt-modal" style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9100;">
+<div class="window" id="lt-modal" data-no-auto-z style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9995;">
     <div class="title-bar">
         <div class="title-bar-text">🎧 Escuchar juntos</div>
         <div class="title-bar-controls">
@@ -803,7 +803,7 @@ async function ltHostBroadcast() {
                     window.notifSystem.show({
                         id:    'lt-joiner-' + p.user_key,
                         type:  'info',
-                        title: '🎧 ' + joinerName + ' se unió',
+                        title: joinerName + ' se unió',
                         message: joinerName + ' está escuchando contigo en tiempo real.',
                         autoDismissAfter: 4500,
                     });
@@ -903,7 +903,7 @@ async function ltJoinAsGuest(inviteId) {
         window.notifSystem.show({
             id:    'lt-joined-' + r.session_id,
             type:  'info',
-            title: '🎧 Te has unido a la sesión de ' + hostName,
+            title: 'Te has unido a la sesión de ' + hostName,
             message: 'Ahora escuchas en tiempo real con ' + hostName + '.',
             autoDismissAfter: 4500,
         });
@@ -993,7 +993,7 @@ async function ltPollInvites() {
         window.notifSystem.show({
             id:      'lt-invite-' + inv.id,
             type:    'action',
-            title:   '🎧 ' + (inv.from_label || '?') + ' te invita',
+            title:   (inv.from_label || '?') + ' te invita',
             message: 'Escuchar juntos: ' + (inv.track_title || 'una canción'),
             onAccept: function(){ ltJoinAsGuest(inv.id); },
             onReject: function(){
@@ -1718,7 +1718,7 @@ var addTrackCallback = null;
         if (taskbarManager.isRegistered('playlist-editor')) {
             taskbarManager.restore('playlist-editor');
         } else {
-            taskbarManager.register('playlist-editor', 'Playlists', '♪', 'flex');
+            taskbarManager.register('playlist-editor', 'Playlists', '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
         showHome();
         loadPlaylists();
@@ -2029,6 +2029,41 @@ var addTrackCallback = null;
 
     function showAddToPicker(anchorX, anchorY, track) {
         var pickerList = document.getElementById('add-to-picker-list');
+        /* Lazy-load de playlists: el editor (loadPlaylists) solo se
+           llama cuando el usuario abre el panel de playlists. Si nunca
+           lo abrió, allPlaylists está vacío y "Añadir a otra playlist"
+           mostraba "no hay otras". Hacemos un fetch en frío aquí y
+           rellenamos allPlaylists; las próximas veces ya está caliente. */
+        if (!allPlaylists || allPlaylists.length === 0) {
+            pickerList.innerHTML = '<div style="font-size:11px;padding:4px;color:#808080;">Cargando…</div>';
+            addToPicker.style.display = 'block';
+            addToPicker.style.left = Math.min(anchorX, window.innerWidth  - 200) + 'px';
+            addToPicker.style.top  = Math.min(anchorY, window.innerHeight - 100) + 'px';
+            fetch('assets/music/api.php?action=get-playlists')
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    if (!data || data.error) {
+                        pickerList.innerHTML = '<div style="font-size:11px;padding:4px;color:#808080;">Error cargando playlists.</div>';
+                        return;
+                    }
+                    allPlaylists = data;
+                    /* Re-pinta con datos frescos. */
+                    renderAddToPicker(track, pickerList);
+                })
+                .catch(function(){
+                    pickerList.innerHTML = '<div style="font-size:11px;padding:4px;color:#808080;">Error de red.</div>';
+                });
+            return;
+        }
+        renderAddToPicker(track, pickerList);
+        addToPicker.style.display = 'block';
+        var pw = addToPicker.offsetWidth, ph = addToPicker.offsetHeight;
+        addToPicker.style.left = Math.min(anchorX, window.innerWidth  - pw - 8) + 'px';
+        addToPicker.style.top  = Math.min(anchorY, window.innerHeight - ph - 8) + 'px';
+    }
+    /* Helper extraído — pinta las playlists destino en el picker. Reusable
+       tras un lazy-fetch o si ya estaban cargadas. */
+    function renderAddToPicker(track, pickerList) {
         pickerList.innerHTML = '';
         var currentId = editingPlIdx >= 0 && allPlaylists[editingPlIdx] ? allPlaylists[editingPlIdx].id : null;
         var targets = allPlaylists.filter(function(pl) { return pl.id !== currentId; });
@@ -2055,11 +2090,8 @@ var addTrackCallback = null;
                 pickerList.appendChild(item);
             });
         }
-
-        addToPicker.style.display = 'block';
-        var pw = addToPicker.offsetWidth, ph = addToPicker.offsetHeight;
-        addToPicker.style.left = Math.min(anchorX, window.innerWidth  - pw - 8) + 'px';
-        addToPicker.style.top  = Math.min(anchorY, window.innerHeight - ph - 8) + 'px';
+        /* No reposicionamos aquí — el caller (showAddToPicker o el
+           callback del fetch) ya dejó el picker visible y anclado. */
     }
 
     function showTrackCtxMenu(e, track) {
@@ -2081,6 +2113,15 @@ var addTrackCallback = null;
         addProfile.textContent = '🎵 Añadir a mi perfil';
         addProfile.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
+            /* Cierra el fullscreen llamando a la función real (expuesta
+               como window.__closeFullscreenPlayer) en vez de simular
+               click() en el botón restore. El click() simulado a veces
+               no se propagaba bien, dejando el flag isOpen en true →
+               el siguiente click en maximize hacía return temprano y
+               necesitabas dos clicks. */
+            if (typeof window.__closeFullscreenPlayer === 'function') {
+                window.__closeFullscreenPlayer();
+            }
             if (typeof window.profileAddTrackAndReview === 'function') {
                 window.profileAddTrackAndReview(track);
             }
@@ -3172,13 +3213,19 @@ function relTime(sentAt) {
         isOpen = false;
         if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
     }
+    /* Exposed globally para que el ctxMenu pueda cerrarlo desde otro
+       IIFE (showTrackCtxMenu vive en otro scope). Usar la función real
+       en vez de simular click() en el botón restore evita un timing
+       weird donde el listener no se dispara y el siguiente openFullscreen
+       cree que sigue abierto (necesitando 2 clicks en max). */
+    window.__closeFullscreenPlayer = closeFullscreen;
 
     /* Minimize: usa taskbarManager para llevar el reproductor a la
        taskbar — igual que cualquier otra ventana del desktop. */
     if (btnMin) btnMin.addEventListener('click', function() {
         if (window.taskbarManager) {
             if (!window.taskbarManager.isRegistered('music-player')) {
-                window.taskbarManager.register('music-player', 'Reproductor', '♪', 'block');
+                window.taskbarManager.register('music-player', 'Reproductor', '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'block');
             }
             window.taskbarManager.minimize('music-player');
         } else {
@@ -4522,10 +4569,13 @@ function relTime(sentAt) {
     attachCtxMenu(document.getElementById('player-titlebar'));
     attachCtxMenu(document.getElementById('player-content'));
     attachCtxMenu(document.getElementById('player-cover-wrap'));
-    /* Fullscreen: title-bar + display + info. */
+    /* Fullscreen: title-bar + body (que cubre el contenido entero del
+       overlay). Los selectors antiguos .pf-display y .pf-info ya no
+       existían en el HTML actualizado, por eso el menú no aparecía. */
     attachCtxMenu(document.querySelector('#player-full .pf-titlebar'));
-    attachCtxMenu(document.querySelector('#player-full .pf-display'));
-    attachCtxMenu(document.querySelector('#player-full .pf-info'));
+    attachCtxMenu(document.querySelector('#player-full .pf-body'));
+    attachCtxMenu(document.querySelector('#player-full .pf-lcd'));
+    attachCtxMenu(document.querySelector('#player-full .pf-vinyl-floating'));
 })();
 <?php endif; ?>
 </script>

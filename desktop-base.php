@@ -48,16 +48,77 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']))
 $hasPlayer = true;
 
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
-refreshActiveThemeCss($desktopUserKey, $desktopLabel);
+require_once __DIR__ . '/assets/php/active-interface.php';
+
+/* INTERFAZ POR USUARIO:
+   La interfaz activa se guarda en BD como SLUG directa
+   (user_settings.active_interface_slug = '"kawaii"' como JSON string).
+   SIEMPRE sincronizamos cookie ← BD; si no hay preferencia guardada,
+   caemos al default 'win98'. Sin este reseteo, un user heredaría la
+   cookie del user anterior. */
+(function() use (&$pdo, $desktopUserKey) {
+    $slug = 'win98';
+    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$desktopUserKey]);
+    $uid = (int)($stmt->fetchColumn() ?: 0);
+    if ($uid) {
+        $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = 'active_interface_slug'");
+        $stmt->execute([$uid]);
+        $raw = (string)$stmt->fetchColumn();
+        if ($raw !== '') {
+            /* `value` es JSON (CHECK json_valid). Decodificamos. */
+            $candidate = json_decode($raw, true);
+            if (is_string($candidate) && $candidate !== ''
+                && is_dir(__DIR__ . '/assets/interfaces/' . $candidate . '/')) {
+                $slug = $candidate;
+            }
+        }
+    }
+    $currentCookie = $_COOKIE['activeInterface'] ?? '';
+    if ($currentCookie !== $slug) {
+        setcookie('activeInterface', $slug, [
+            'expires'  => time() + 60 * 60 * 24 * 365,
+            'path'     => '/',
+            'secure'   => !empty($_SERVER['HTTPS']),
+            'samesite' => 'Lax',
+        ]);
+        $_COOKIE['activeInterface'] = $slug;
+    }
+})();
+
+/* ICON PACK POR USUARIO/INTERFAZ:
+   Igual que con la interfaz, sincronizamos el icon pack del user para
+   la interfaz activa. El valor vive en BD (user_settings.icon_pack:<iface>)
+   pero icon-pack.js client lee de localStorage. Sin este sync, shell y
+   BD divergen — y cuando alguien visita TU perfil ve un pack distinto
+   al que tú estás viendo. */
+$_shellIconPack = 'Melon';
+(function() use (&$pdo, $desktopUserKey, &$_shellIconPack) {
+    $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+    $stmt->execute([$desktopUserKey]);
+    $uid = (int)($stmt->fetchColumn() ?: 0);
+    if (!$uid) return;
+    $iface = $_COOKIE['activeInterface'] ?? 'win98';
+    $stmt = $pdo->prepare("SELECT value FROM user_settings WHERE user_id = ? AND key_name = ?");
+    $stmt->execute([$uid, 'icon_pack:' . $iface]);
+    $raw = (string)$stmt->fetchColumn();
+    if ($raw === '') return;
+    $pack = json_decode($raw, true);
+    if (is_string($pack) && $pack !== '') $_shellIconPack = $pack;
+})();
+
+/* Resuelve qué tema usar para la interfaz activa del usuario. Lee la
+   cookie themeFor_<interface> que setea apps/temas.php al activar un
+   tema. Si no hay cookie, cae al tema global (retrocompat). */
+$_activeInterface = getActiveInterface();
+$_themeMeta       = getActiveThemeForInterface($desktopUserKey, $desktopLabel, $_activeInterface);
+$activeTheme      = $_themeMeta['name'];
+$activeThemeClass = $_themeMeta['className'];
+$activeThemeCss   = $_themeMeta['cssRel'];
+if ($activeThemeCss !== '' && !file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+/* Mantenemos loadUserThemes para retrocompat con código que pueda
+   leer $_userThemes más abajo. */
 $_userThemes = loadUserThemes($desktopUserKey);
-$activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
-$activeThemeClass = '';
-$activeThemeCss   = '';
-if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme])) {
-    $activeThemeClass = themeCssClassName($activeTheme, $desktopLabel);
-    $activeThemeCss   = themeCssRelPath($activeTheme, $desktopLabel);
-    if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
-}
 
 $wallpaper = getUserWallpaper($desktopLabel);
 $startIcon = getUserStartIcon($desktopLabel);
@@ -104,16 +165,24 @@ function desktopIcon(string $name, string $emoji) {
     return $emoji;
 }
 
-/* Helper para el title-bar de las ventanas: usa el PNG de
-   assets/img/appIcons/{pngName}.png si existe (16×16) o cae al emoji.
-   Pensado para que cada ventana de app muestre el MISMO icono que aparece
-   en el escritorio, no un emoji distinto. */
+/* Helper para el title-bar de las ventanas. */
 function appTitleIcon(string $pngName, string $emoji): string {
-    $rel = "assets/img/appIcons/{$pngName}.png";
-    if (file_exists(__DIR__ . '/' . $rel)) {
+    $rel    = "assets/img/appIcons/{$pngName}.png";
+    $melon  = "assets/img/appIcons/Melon/{$pngName}.png";
+    if (file_exists(__DIR__ . '/' . $melon) || file_exists(__DIR__ . '/' . $rel)) {
         return '<img src="' . $rel . '" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;" alt="">';
     }
     return $emoji . ' ';
+}
+
+/* Helper: dado un path tipo `assets/img/appIcons/X.png`, verifica si
+   existe (en raíz o en la carpeta `Melon`, donde ahora viven todos
+   los iconos por defecto). Lo usan los echos de desktop-icons para
+   decidir entre img o emoji fallback. */
+function _appIconExists(string $rel): bool {
+    if (file_exists(__DIR__ . '/' . $rel)) return true;
+    $melon = preg_replace('#/appIcons/#', '/appIcons/Melon/', $rel, 1);
+    return file_exists(__DIR__ . '/' . $melon);
 }
 ?>
 <!DOCTYPE html>
@@ -131,12 +200,38 @@ function appTitleIcon(string $pngName, string $emoji): string {
     <link rel="stylesheet" href="assets/css/tokens.css">
     <link rel="stylesheet" href="assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <!-- Sincroniza el icon pack del user desde BD → localStorage ANTES
+         de que icon-pack.js lo lea. Sin esto, si el usuario cambió su
+         pack en otra sesión/dispositivo, el shell local lo ignoraba.
+         Tambien previene divergencia con perfil ajeno (que lee de BD). -->
+    <script>
+        (function() {
+            try {
+                var pack  = <?php echo json_encode($_shellIconPack); ?>;
+                var iface = <?php echo json_encode($_activeInterface ?? 'win98'); ?>;
+                if (pack && iface) {
+                    localStorage.setItem('iconPack:' + iface, pack);
+                    localStorage.setItem('iconPack', pack);
+                }
+            } catch (_) {}
+        })();
+    </script>
+    <!-- Swap de packs de iconos (lee localStorage.iconPack). DEBE cargar
+         antes de cualquier render que dependa de iconos. -->
+    <script src="assets/js/icon-pack.js"></script>
     <link rel="stylesheet" href="assets/css/reproductor.css">
     <link rel="stylesheet" href="assets/css/perfil.css">
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
+    <!-- INTERFACE CSS: cargada al final para que pueda sobreescribir
+         98.css + themes.css. Lee cookie `activeInterface` (default win98). -->
+    <?php
+        require_once __DIR__ . '/assets/php/active-interface.php';
+        emitInterfaceCss('');
+    ?>
+    <script src="assets/js/interface-loader.js"></script>
     <script>
     (function(){
         if (window.__win98DialogsLoaded) return;
@@ -322,7 +417,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="archive-icon">
         <div class="desktop-icon-img"><?php
             $_archiveIcon = 'assets/img/appIcons/melonArchiveIcon.png';
-            echo file_exists(__DIR__ . '/' . $_archiveIcon)
+            echo _appIconExists($_archiveIcon)
                 ? '<img src="' . $_archiveIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('archive', '📼');
         ?></div>
@@ -331,7 +426,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="calendar-icon">
         <div class="desktop-icon-img"><?php
             $_calendarIcon = 'assets/img/appIcons/calendarioIcon.png';
-            echo file_exists(__DIR__ . '/' . $_calendarIcon)
+            echo _appIconExists($_calendarIcon)
                 ? '<img src="' . $_calendarIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
                 : desktopIcon('calendar', '📅');
         ?></div>
@@ -340,7 +435,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="profile-icon">
         <div class="desktop-icon-img"><?php
             $_profileIcon = 'assets/img/appIcons/profileIcon.png';
-            echo file_exists(__DIR__ . '/' . $_profileIcon)
+            echo _appIconExists($_profileIcon)
                 ? '<img src="' . $_profileIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('profile', '👤');
         ?></div>
@@ -349,7 +444,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="temas-icon">
         <div class="desktop-icon-img"><?php
             $_temasIcon = 'assets/img/appIcons/temasIcon.png';
-            echo file_exists(__DIR__ . '/' . $_temasIcon)
+            echo _appIconExists($_temasIcon)
                 ? '<img src="' . $_temasIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('temas', '🎨');
         ?></div>
@@ -358,7 +453,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="companion-icon">
         <div class="desktop-icon-img"><?php
             $_companionIcon = 'assets/img/appIcons/companionIcon.png';
-            echo file_exists(__DIR__ . '/' . $_companionIcon)
+            echo _appIconExists($_companionIcon)
                 ? '<img src="' . $_companionIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('companion', '💀');
         ?></div>
@@ -367,7 +462,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="dnd-icon">
         <div class="desktop-icon-img"><?php
             $_dndIcon = 'assets/img/appIcons/dndIcon.png';
-            echo file_exists(__DIR__ . '/' . $_dndIcon)
+            echo _appIconExists($_dndIcon)
                 ? '<img src="' . $_dndIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
                 : desktopIcon('dnd', '⚔');
         ?></div>
@@ -376,7 +471,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="galeria-icon">
         <div class="desktop-icon-img"><?php
             $_galeriaIcon = 'assets/img/appIcons/galeriaIcon.png';
-            echo file_exists(__DIR__ . '/' . $_galeriaIcon)
+            echo _appIconExists($_galeriaIcon)
                 ? '<img src="' . $_galeriaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('galeria', '🖼');
         ?></div>
@@ -386,7 +481,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="dibujo-icon">
         <div class="desktop-icon-img"><?php
             $_drawingIcon = 'assets/img/appIcons/drawingIcon.png';
-            echo file_exists(__DIR__ . '/' . $_drawingIcon)
+            echo _appIconExists($_drawingIcon)
                 ? '<img src="' . $_drawingIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">'
                 : desktopIcon('dibujo', '✏️');
         ?></div>
@@ -395,7 +490,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="tienda-icon">
         <div class="desktop-icon-img"><?php
             $_tiendaIcon = 'assets/img/appIcons/tiendaIcon.png';
-            echo file_exists(__DIR__ . '/' . $_tiendaIcon)
+            echo _appIconExists($_tiendaIcon)
                 ? '<img src="' . $_tiendaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : desktopIcon('tienda', '🛒');
         ?></div>
@@ -406,7 +501,7 @@ window.DesktopState.whenReady = function(cb){
     <div class="desktop-icon" id="mascota-icon">
         <div class="desktop-icon-img"><?php
             $_mascotaIcon = 'assets/img/appIcons/mascotaIcon.png';
-            echo file_exists(__DIR__ . '/' . $_mascotaIcon)
+            echo _appIconExists($_mascotaIcon)
                 ? '<img src="' . $_mascotaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
                 : '<div style="font-size:48px;line-height:1;">🐾</div>';
         ?></div>
@@ -709,6 +804,25 @@ window.addEventListener('message', function(e) {
             var childHref = basePath ? '../' + basePath : '';
             applyThemeToDocument(fr.contentDocument, className, childHref);
         });
+    } else if (e.data.type === 'theme-color-preview') {
+        /* Live preview de un color del editor de Temas — aplica el
+           CSS var al body del shell Y a todos los iframes hijos (apps
+           abiertas) para que vean el cambio en tiempo real, sin
+           necesidad de guardar. La variable inline gana al theme CSS
+           (specificity inline > class) y al CSS de la interfaz. */
+        var cssVar = e.data.cssVar || '';
+        var value  = e.data.value  || '';
+        if (cssVar.charAt(0) === '-' && /^#[0-9a-f]{6}$/i.test(value)) {
+            /* !important para vencer a interfaces como kawaii que
+               declaran las vars con !important en sus :root. */
+            try { document.body.style.setProperty(cssVar, value, 'important'); } catch (_) {}
+            /* Propaga a iframes de apps abiertas. */
+            ['calendar-iframe', 'archive-frame', 'temas-frame', 'companion-frame', 'dnd-iframe', 'galeria-iframe'].forEach(function(id) {
+                var fr = document.getElementById(id);
+                if (!fr || !fr.contentDocument || !fr.contentDocument.body) return;
+                try { fr.contentDocument.body.style.setProperty(cssVar, value, 'important'); } catch (_) {}
+            });
+        }
     } else if (e.data.type === 'wallpaper-changed') {
         var wp = e.data.wallpaper || '';
         if (wp) {
@@ -1368,7 +1482,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('archive-window')) {
             taskbarManager.restore('archive-window');
         } else {
-            taskbarManager.register('archive-window', 'MelonArchive', '📼', 'flex');
+            taskbarManager.register('archive-window', 'MelonArchive', '<img src="assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -1390,7 +1504,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('calendar-window')) {
             taskbarManager.restore('calendar-window');
         } else {
-            taskbarManager.register('calendar-window', 'Calendario', '📅', 'flex');
+            taskbarManager.register('calendar-window', 'Calendario', '<img src="assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -1405,17 +1519,25 @@ window.notifSystem = (function() {
 (function() {
     var temasFrame  = document.getElementById('temas-frame');
     var temasLoaded = false;
-    document.getElementById('temas-icon').addEventListener('dblclick', function() {
+    function openTemas() {
         if (!temasLoaded) { temasFrame.src = 'apps/temas.php'; temasLoaded = true; }
         if (taskbarManager.isRegistered('temas-window')) {
             taskbarManager.restore('temas-window');
         } else {
-            taskbarManager.register('temas-window', 'Temas', '🎨', 'flex');
+            taskbarManager.register('temas-window', 'Temas', '<img src="assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
-    });
+    }
+    document.getElementById('temas-icon').addEventListener('dblclick', openTemas);
     document.getElementById('temas-close').addEventListener('click', function() {
         taskbarManager.unregister('temas-window');
     });
+    /* Auto-open al cargar: si la flag 'temas-restore-tab' está presente
+       (la pone temas.php antes de un reload por cambio de iconos),
+       reabrimos la app de Temas. temas.php leerá la flag a su vez y
+       activará el tab correspondiente. */
+    try {
+        if (sessionStorage.getItem('temas-restore-tab')) openTemas();
+    } catch (_) {}
 })();
 
 /* =========================
@@ -1429,7 +1551,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('companion-window')) {
             taskbarManager.restore('companion-window');
         } else {
-            taskbarManager.register('companion-window', 'Companion', '💀', 'flex');
+            taskbarManager.register('companion-window', 'Companion', '<img src="assets/img/appIcons/companionIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
     document.getElementById('companion-close').addEventListener('click', function() {
@@ -1449,7 +1571,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('dnd-window')) {
             taskbarManager.restore('dnd-window');
         } else {
-            taskbarManager.register('dnd-window', 'Fichas D&D', '⚔', 'flex');
+            taskbarManager.register('dnd-window', 'Fichas D&D', '<img src="assets/img/appIcons/dndIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -1496,7 +1618,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('dibujo-window')) {
             taskbarManager.restore('dibujo-window');
         } else {
-            taskbarManager.register('dibujo-window', 'Dibujo', '✏️', 'flex');
+            taskbarManager.register('dibujo-window', 'Dibujo', '<img src="assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -1527,7 +1649,7 @@ window.notifSystem = (function() {
         if (taskbarManager.isRegistered('tienda-window')) {
             taskbarManager.restore('tienda-window');
         } else {
-            taskbarManager.register('tienda-window', 'Tienda', '🛒', 'flex');
+            taskbarManager.register('tienda-window', 'Tienda', '<img src="assets/img/appIcons/tiendaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
     });
 
@@ -2312,7 +2434,7 @@ window.notifSystem = (function() {
                     window.notifSystem.show({
                         id:    'reminder-' + rm.id + '-' + rm.threshold,
                         type:  'info',
-                        title: '🔔 Recordatorio',
+                        title: '<img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Recordatorio',
                         message: rm.titulo + ' ' + whenLabel(rm.threshold),
                         autoDismissAfter: 8000,
                     });
@@ -2759,7 +2881,7 @@ window.notifSystem = (function() {
             });
         }
         if(window.WindowManager) window.WindowManager.setup(wid, false);
-        if(window.taskbarManager) taskbarManager.register(wid, f.name, '📁', 'flex');
+        if(window.taskbarManager) taskbarManager.register(wid, f.name, '<img src="assets/img/appIcons/folderIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         if(window.windowZ) windowZ.bringToFront(w);
         renderFolderContent(id);
     }
@@ -3071,7 +3193,7 @@ window.notifSystem = (function() {
             window.notifSystem.show({
                 id:      'wrapped-' + year,
                 type:    'info',
-                title:   '🎁 Tu Wrapped ' + year + ' está aquí',
+                title:   'Tu Wrapped ' + year + ' está aquí',
                 message: 'Repasa tu año en música. Tap para abrir.',
                 autoDismissAfter: 0,
                 onClick: function () {
@@ -3098,7 +3220,7 @@ window.notifSystem = (function() {
                             window.notifSystem.show({
                                 id: 'feed-err-' + Date.now(),
                                 type: 'error',
-                                title: '🍴 Error',
+                                title: 'Error',
                                 message: (d && d.error) || 'No se pudo alimentar.',
                                 autoDismissAfter: 3500,
                             });
@@ -3277,7 +3399,7 @@ window.notifSystem = (function() {
                         window.notifSystem.show({
                             id:    'mascota-status-' + Date.now(),
                             type:  'info',
-                            title: '🐾 Tu mascota',
+                            title: '<img src="assets/img/appIcons/mascotaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Tu mascota',
                             message: msg,
                             autoDismissAfter: 4000,
                         });

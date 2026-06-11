@@ -44,6 +44,34 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         $themeBgColor = $candidate;
     }
 }
+
+/* Detecta packs de iconos: subcarpetas de assets/img/appIcons/.
+   Cada carpeta = un pack. Idéntico al PHP de temas.php desktop. */
+$iconPacks = [];
+$appIconsDir = dirname(__DIR__, 2) . '/assets/img/appIcons';
+if (is_dir($appIconsDir)) {
+    foreach (scandir($appIconsDir) as $entry) {
+        if ($entry === '.' || $entry === '..') continue;
+        if (!is_dir($appIconsDir . '/' . $entry)) continue;
+        $previewIcon = '';
+        foreach (scandir($appIconsDir . '/' . $entry) as $f) {
+            if (preg_match('/\.(png|jpg|gif|webp)$/i', $f)) {
+                $previewIcon = '../../assets/img/appIcons/' . $entry . '/' . $f;
+                break;
+            }
+        }
+        $iconPacks[] = [
+            'name'    => $entry,
+            'preview' => $previewIcon,
+        ];
+    }
+    usort($iconPacks, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+}
+
+/* Detecta interfaces instaladas en assets/interfaces/. Cada una con
+   style.css + meta.json + (opcional) preview.png. */
+require_once dirname(__DIR__, 2) . '/assets/php/active-interface.php';
+$interfacePacks = listInterfaces();
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -74,6 +102,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" href="../../assets/css/tokens.css">
     <link rel="stylesheet" href="../../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <!-- Icon pack swap — debe cargar antes del primer render. -->
+    <script src="../../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php"; emitInterfaceCss("../../"); ?>
+    <script src="../../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
@@ -164,7 +196,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
              titlebar, win-bg, accent, text). Da contexto visual claro
              de cómo se ve cada tema sin tener que activarlo.
            - Nombre del tema.
-           - Indicadores (📥 descargado / 🌐 publicado).
+           - Indicadores (<img src="../../assets/img/appIcons/downloadIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> descargado / 🌐 publicado).
            - Badge "ACTIVO" cuando es el tema actual. */
         #temas-list { display: flex; flex-direction: column; gap: 6px; }
         .temas-item {
@@ -232,9 +264,11 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         /* Indicadores (descargado / publicado en biblioteca). */
         .temas-item-dl, .temas-item-pub {
-            font-size: 14px;
+            width: 16px;
+            height: 16px;
+            object-fit: contain;
+            image-rendering: pixelated;
             flex-shrink: 0;
-            line-height: 1;
         }
         /* Badge "ACTIVO" — contrasta con el tema activo. */
         .temas-item-badge {
@@ -644,7 +678,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
 
     <div class="tm-section">
-        <h3 class="tm-section-title">📺 Efectos visuales</h3>
+        <h3 class="tm-section-title"><img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Efectos visuales</h3>
         <div class="tm-section-body">
             <div class="field-row">
                 <input type="checkbox" id="lcd-filter-toggle">
@@ -656,11 +690,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         </div>
     </div>
 
-    <!-- Vista de Interfaces / Haros / Mascotas con cosas que tienes. -->
+    <!-- Vista de Interfaces / Iconos / Haros / Mascotas con cosas que tienes. -->
     <div id="temas-personalize">
         <section class="tm-section">
             <h3 class="tm-section-title"><img src="../../assets/img/appIcons/interfaceIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Interfaces</h3>
             <div class="pers-grid" id="pers-themes-grid"></div>
+        </section>
+        <section class="tm-section">
+            <h3 class="tm-section-title"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Iconos</h3>
+            <div class="pers-grid" id="pers-icons-grid"></div>
         </section>
         <section class="tm-section">
             <h3 class="tm-section-title"><img src="../../assets/img/appIcons/haroIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Haros</h3>
@@ -759,6 +797,22 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             if (which === 'personalize') loadPersonalize();
         });
     });
+    /* Auto-restore tab tras un reload por cambio de pack de iconos.
+       DOMContentLoaded asegura que TODOS los <script> del archivo se han
+       parseado (en mobile, loadPersonalize vive en un <script> posterior
+       a este IIFE → sin esperar, el click trigger falla con
+       ReferenceError porque loadPersonalize aún no está definido). */
+    document.addEventListener('DOMContentLoaded', function() {
+        try {
+            var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+            var restore = topStorage.getItem('temas-restore-tab');
+            if (restore) {
+                topStorage.removeItem('temas-restore-tab');
+                var btn = document.querySelector('.tm-tab[data-tab="' + restore + '"]');
+                if (btn) btn.click();
+            }
+        } catch (_) {}
+    });
 })();
 </script>
 
@@ -766,6 +820,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
      JS PRINCIPAL — copiado de apps/temas.php con paths ajustados.
      Mantener en sync con el original si se modifica la lógica.
      =================================================================== -->
+<script>
+/* Packs de iconos detectados por PHP. Mismo formato que en temas.php
+   desktop — la función renderIconPacks() los usa. */
+window.__ICON_PACKS__      = <?= json_encode($iconPacks, JSON_UNESCAPED_UNICODE) ?>;
+window.__INTERFACE_PACKS__ = <?= json_encode($interfacePacks, JSON_UNESCAPED_UNICODE) ?>;
+</script>
 <script>
 const COLOR_DEFS = [
     /* — Superficies — */
@@ -800,7 +860,6 @@ const COLOR_DEFS = [
     { key: 'titlebarIconBezelDark',  label: 'Borde 3D oscuro (bot-right)', def: '#0a0a0a', group: 'Iconos de ventana' },
     /* — Bordes — */
     { key: 'border',        label: 'Borde general',             def: '#808080', group: 'Bordes' },
-    { key: 'borderStrong',  label: 'Borde fuerte',              def: '#404040', group: 'Bordes' },
     /* — Bezels Win98 (4 capas) — */
     { key: 'bezelLight1',   label: 'Bezel claro (1px)',         def: '#ffffff', group: 'Bezels' },
     { key: 'bezelLight2',   label: 'Bezel claro (2px)',         def: '#dfdfdf', group: 'Bezels' },
@@ -814,13 +873,37 @@ const COLOR_DEFS = [
     { key: 'warningBg',     label: 'Fondo de aviso',            def: '#fffbe6', group: 'Estados' },
     { key: 'warningText',   label: 'Texto de aviso',            def: '#444444', group: 'Estados' },
     /* — Selección / badges — */
-    { key: 'selectionBg',   label: 'Fondo de selección',        def: '#000080', group: 'Selección' },
-    { key: 'selectionText', label: 'Texto en selección',        def: '#ffffff', group: 'Selección' },
     { key: 'badgeBg',       label: 'Fondo del badge',           def: '#d72638', group: 'Selección' },
     { key: 'badgeText',     label: 'Texto del badge',           def: '#ffffff', group: 'Selección' },
     /* — Decorativos — */
     { key: 'starColor',     label: 'Estrellas (rating)',        def: '#ffd700', group: 'Decorativos' }
 ];
+
+/* Defaults dinámicos por interfaz: lee :root de la interfaz activa
+   con getComputedStyle y reemplaza los `def` Win98 hardcoded. */
+(function() {
+    var rootStyle = getComputedStyle(document.documentElement);
+    function keyToVar(key) {
+        return '--' + key
+            .replace(/([A-Z])/g, '-$1')
+            .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+            .toLowerCase();
+    }
+    function normalizeColor(v) {
+        v = (v || '').trim();
+        if (!v) return '';
+        if (/^#[0-9a-f]{3}$/i.test(v)) {
+            return '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+        }
+        if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
+        if (/^#[0-9a-f]{8}$/i.test(v)) return v.substring(0, 7).toLowerCase();
+        return '';
+    }
+    COLOR_DEFS.forEach(function(d) {
+        var live = normalizeColor(rootStyle.getPropertyValue(keyToVar(d.key)));
+        if (live) d.def = live;
+    });
+})();
 
 /* Mapeo de claves legacy → nuevas (para temas guardados antes del refactor) */
 const LEGACY_KEY_MAP = {
@@ -859,6 +942,18 @@ var editingOriginalName = null;
    - Icono  → '' (sin imagen → logo Win98 por defecto). */
 var THEME_DEFAULT_WP = <?php echo json_encode(defaultWallpaper()); ?>;
 var THEME_DEFAULT_SI = '';
+
+/* Cookie helper: persiste qué tema usar para la interfaz activa.
+   PHP lo lee en getActiveThemeForInterface() en el siguiente reload. */
+function persistThemeForInterface(themeName) {
+    try {
+        var iface = (typeof window.getActiveInterface === 'function')
+            ? window.getActiveInterface() : 'win98';
+        var oneYear = 60 * 60 * 24 * 365;
+        document.cookie = 'themeFor_' + iface + '=' + encodeURIComponent(themeName || '') +
+                          '; path=/; max-age=' + oneYear + '; SameSite=Lax';
+    } catch (_) {}
+}
 /* Fondo / icono GLOBAL del usuario (su baseline cuando NO hay tema activo). */
 var USER_GLOBAL_WP = <?php echo json_encode(getUserWallpaper($userLabel)); ?>;
 var USER_GLOBAL_SI = <?php echo json_encode(getUserStartIcon($userLabel)); ?>;
@@ -995,16 +1090,18 @@ function renderList() {
         item.appendChild(n);
 
         if (t.downloaded) {
-            var dl = document.createElement('span');
+            var dl = document.createElement('img');
             dl.className = 'temas-item-dl';
-            dl.textContent = '📥';
+            dl.src = '../../assets/img/appIcons/downloadIcon.png';
+            dl.alt = '';
             dl.title = 'Descargado de la biblioteca';
             item.appendChild(dl);
         }
         if (t.public) {
-            var pub = document.createElement('span');
+            var pub = document.createElement('img');
             pub.className = 'temas-item-pub';
-            pub.textContent = '🌐';
+            pub.src = '../../assets/img/appIcons/booksIcon.png';
+            pub.alt = '';
             pub.title = 'Publicado en la biblioteca';
             item.appendChild(pub);
         }
@@ -1159,6 +1256,7 @@ function loadThemes(cb) {
 
 document.getElementById('temas-new').addEventListener('click', resetEditor);
 document.getElementById('temas-deactivate').addEventListener('click', function() {
+    persistThemeForInterface('');
     fetch('../../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1212,6 +1310,7 @@ document.getElementById('theme-activate').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Selecciona un tema primero.'; return; }
     if (!savedThemes[name]) { statusEl.textContent = 'Guarda el tema antes de activarlo.'; return; }
+    persistThemeForInterface(name);
     fetch('../../assets/themes/api.php?action=set-active', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1373,6 +1472,7 @@ document.getElementById('theme-import-file').addEventListener('change', function
         }).then(function(r) { return r.json(); })
           .then(function(d) {
               if (!d || d.error) throw new Error((d && d.error) || 'Error al guardar');
+              persistThemeForInterface(name);
               return fetch('../../assets/themes/api.php?action=set-active', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -1455,15 +1555,111 @@ function loadPersonalize() {
         .then(function(r){ return r.json(); })
         .then(function(d){
             if (!d || !d.ok) throw new Error(d && d.error || 'error');
-            renderPersInventory('pers-themes-grid',  d.interfaces, d.activeInterface, 'interface');
             renderPersInventory('pers-haros-grid',   d.haros,      d.activeHaro,      'haro');
             renderPersInventory('pers-mascots-grid', d.mascots,    d.activeMascot,    'mascot');
+            renderInterfacePacks();
+            renderIconPacks();
         })
         .catch(function(){
-            document.getElementById('pers-themes-grid').innerHTML  = '';
             document.getElementById('pers-haros-grid').innerHTML   = '';
             document.getElementById('pers-mascots-grid').innerHTML = '';
+            renderInterfacePacks();
         });
+}
+
+/* Render del grid de interfaces. Click → setActiveInterface (cookie +
+   reload del top). Es la misma función conceptualmente que en desktop
+   pero adaptada a mobile (paths con ../../). */
+function renderInterfacePacks() {
+    var grid = document.getElementById('pers-themes-grid');
+    if (!grid) return;
+    var packs = (window.__INTERFACE_PACKS__ || []);
+    var active = (typeof window.getActiveInterface === 'function')
+        ? window.getActiveInterface() : 'win98';
+    if (!packs.length) {
+        grid.innerHTML = '<p style="font-size:11px;color:var(--text-faint);">No hay interfaces instaladas.</p>';
+        return;
+    }
+    grid.innerHTML = packs.map(function(p) {
+        var isActive = (p.name === active);
+        var iconHtml;
+        if (p.preview) {
+            iconHtml = '<img src="../../' + p.preview + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;image-rendering:pixelated;">';
+        } else {
+            iconHtml = '<img src="../../assets/img/appIcons/interfaceIcon.png" alt="" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;">';
+        }
+        return '<div class="pers-item' + (isActive ? ' active' : '') + '" data-iface="' + p.name + '" title="' + (p.description || '') + '">' +
+            '<div class="pers-item-icon">' + iconHtml + '</div>' +
+            '<div class="pers-item-name">' + (p.label || p.name) + '</div>' +
+            (isActive ? '<div class="pers-item-badge">ACTIVA</div>' : '') +
+        '</div>';
+    }).join('');
+    grid.querySelectorAll('[data-iface]').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var name = card.dataset.iface;
+            /* applyInterfacePack viene de interface-loader.js. NO usamos
+               setActiveInterface porque ese nombre lo ocupa una función
+               local que POSTea al endpoint viejo y devuelve 400. */
+            if (typeof window.applyInterfacePack === 'function') {
+                try {
+                    var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+                    topStorage.setItem('temas-restore-tab', 'personalize');
+                } catch (_) {}
+                window.applyInterfacePack(name);
+            }
+        });
+    });
+}
+
+/* Iconos: packs detectados desde el filesystem por PHP. Click selecciona
+   y guarda en localStorage; recarga para que icon-pack.js aplique. */
+function renderIconPacks() {
+    var grid = document.getElementById('pers-icons-grid');
+    if (!grid) return;
+    var packs = (window.__ICON_PACKS__ || []);
+    var active = '';
+    /* Lee del namespace por interfaz para mostrar el pack activo correcto. */
+    var iface = (typeof window.getActiveInterface === 'function') ? window.getActiveInterface() : 'win98';
+    try {
+        active = localStorage.getItem('iconPack:' + iface)
+              || localStorage.getItem('iconPack')
+              || 'Melon';
+    } catch (_) { active = 'Melon'; }
+    if (!packs.length) {
+        grid.innerHTML = '<p style="font-size:11px;color:var(--text-faint);">No hay packs de iconos disponibles.</p>';
+        return;
+    }
+    grid.innerHTML = packs.map(function(p) {
+        var isActive = (p.name === active);
+        return '<div class="pers-item' + (isActive ? ' active' : '') + '" data-pack="' + p.name + '">' +
+            '<div class="pers-item-icon">' +
+                (p.preview
+                    ? '<img src="' + p.preview + '" alt="" style="image-rendering:pixelated;">'
+                    : '<span>📦</span>') +
+            '</div>' +
+            '<div class="pers-item-name">' + p.name + '</div>' +
+            (isActive ? '<div class="pers-item-badge">ACTIVO</div>' : '') +
+        '</div>';
+    }).join('');
+    grid.querySelectorAll('[data-pack]').forEach(function(card) {
+        card.addEventListener('click', function() {
+            var name = card.dataset.pack;
+            try {
+                /* Guarda en namespace por interfaz para que cada interfaz
+                   recuerde su propio icon pack. */
+                var iface = (typeof window.getActiveInterface === 'function')
+                    ? window.getActiveInterface() : 'win98';
+                localStorage.setItem('iconPack:' + iface, name);
+                localStorage.setItem('iconPack', name);  /* retrocompat */
+                /* Flag para que mobile.php reabra Temas y temas-mobile
+                   active el tab Personalización tras el reload. */
+                var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+                topStorage.setItem('temas-restore-tab', 'personalize');
+            } catch (_) {}
+            try { window.top.location.reload(); }
+            catch (_) { location.reload(); }
+        });
+    });
 }
 
 function renderPersInventory(gridId, items, activeId, kind) {
@@ -1660,7 +1856,7 @@ function loadLibrary(){
                 author.title = 'Ver el perfil de ' + it.label;
                 var imgHtml = it.image
                     ? '<img class="lib-author-img" src="../../' + it.image + '" alt="">'
-                    : '<span class="lib-author-ph">👤</span>';
+                    : '<span class="lib-author-ph"><img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span>';
                 author.innerHTML = imgHtml + '<span class="lib-author-name">' + escapeHtml(it.label) + '</span>';
                 author.addEventListener('click', function(e){
                     e.stopPropagation();
@@ -1753,6 +1949,7 @@ function downloadLibraryTheme(it){
           editingOriginalName = name;
           /* Activar el tema descargado para aplicar de golpe colores + fondo + icono.
              set-active devuelve los assets ya copiados al espacio del usuario. */
+          persistThemeForInterface(name);
           return fetch('../../assets/themes/api.php?action=set-active', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

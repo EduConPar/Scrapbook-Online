@@ -54,6 +54,9 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">
     <script>try{if(localStorage.getItem('lcd-filter')!=='0'){var c=document.documentElement.classList;c.add('lcd-filter-on');if(window.top===window)c.add('lcd-filter-top');}}catch(e){}</script>
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
     <link rel="stylesheet" href="../assets/css/themes.css">
     <link rel="stylesheet" href="../assets/css/calendario.css">
     <?php if ($activeThemeCss): ?>
@@ -70,20 +73,20 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 <div style="padding: 8px 16px; display: flex; align-items: center; gap: 8px;">
     <span style="font-size: 13px; color: var(--text);">Hola, <?php echo htmlspecialchars($userLabel); ?></span>
     <?php if (!$pareja): ?>
-    <button class="button" id="btn-invitar">💌 Invitar</button>
+    <button class="button" id="btn-invitar">Invitar</button>
     <?php endif; ?>
 </div>
 
 <!-- VENTANA DE INVITACIÓN -->
 <div class="window" id="invite-window" style="display:none; width: 280px; position: fixed; top: 80px; left: 50%; transform: translateX(-50%); z-index: 1000;">
     <div class="title-bar">
-        <div class="title-bar-text">💌 Invitar pareja</div>
+        <div class="title-bar-text">Invitar a compartir calendario</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="invite-close"></button>
         </div>
     </div>
     <div class="window-body" style="padding: 12px;">
-        <p style="font-size: 11px; margin-bottom: 8px;">Selecciona a tu pareja:</p>
+        <p style="font-size: 11px; margin-bottom: 8px;">Selecciona a quién invitar:</p>
         <div id="user-list" style="margin-bottom: 10px;"></div>
         <p id="invite-status" style="font-size: 11px; color: green;"></p>
     </div>
@@ -93,7 +96,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 <div id="partner-notif" style="display:none; position: fixed; bottom: 60px; right: 16px; z-index: 5000;">
     <div class="window" style="width: 260px;">
         <div class="title-bar">
-            <div class="title-bar-text">💑 Invitación de pareja</div>
+            <div class="title-bar-text">Invitación al calendario</div>
         </div>
         <div class="window-body" style="padding: 10px;">
             <p id="partner-notif-msg" style="font-size: 11px; margin-bottom: 8px;"></p>
@@ -368,13 +371,208 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
         0%, 100% { opacity: 1; }
         50%      { opacity: 0.15; }
     }
+
+    /* ════════════════════════════════════════════════════════════════
+       WIDGETS WIN98 — date picker + custom select
+       Reemplazan inputs nativos para tener look retro coherente con
+       el resto del desktop. El input/select original se convierte en
+       hidden y sirve de "modelo": el JS sincroniza un display visible.
+       ════════════════════════════════════════════════════════════════ */
+    .w98-date-wrap, .w98-select-wrap {
+        position: relative;
+        display: inline-flex;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .w98-date-display, .w98-select-btn {
+        flex: 1;
+        height: 22px;
+        padding: 2px 6px;
+        font-size: 11px;
+        font-family: inherit;
+        background: var(--input-bg, #fff);
+        color: var(--text);
+        border: 1px solid var(--bezel-dark-1, #0a0a0a);
+        box-shadow:
+            inset -1px -1px 0 var(--bezel-light-2, #dfdfdf),
+            inset  1px  1px 0 var(--bezel-dark-2, grey);
+        cursor: pointer;
+        text-align: left;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        line-height: 1;
+    }
+    .w98-date-display { cursor: pointer; }
+    .w98-select-arrow {
+        margin-left: 6px;
+        font-size: 8px;
+        opacity: 0.8;
+        flex-shrink: 0;
+    }
+    .w98-date-label { flex: 1; }
+
+    /* Popup del calendario */
+    .w98-cal-popup {
+        position: absolute;
+        top: 24px;
+        left: 0;
+        z-index: 10000;
+        background: var(--win-bg, #c3c3c3);
+        border: 1px solid;
+        border-color:
+            var(--bezel-light-1, #fff)
+            var(--bezel-dark-1, #0a0a0a)
+            var(--bezel-dark-1, #0a0a0a)
+            var(--bezel-light-1, #fff);
+        box-shadow:
+            inset -1px -1px 0 var(--bezel-dark-2, grey),
+            inset  1px  1px 0 var(--bezel-light-2, #dfdfdf),
+            2px 2px 6px rgba(0, 0, 0, 0.35);
+        padding: 4px;
+        font-size: 11px;
+        width: 220px;
+        box-sizing: border-box;
+        font-family: inherit;
+    }
+    .w98-cal-popup[hidden] { display: none; }
+    .w98-cal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 3px 4px;
+        background: linear-gradient(to right,
+            var(--titlebar-start, #000080),
+            var(--titlebar-end, #1084d0));
+        color: var(--titlebar-text, #fff);
+        margin-bottom: 4px;
+        font-weight: bold;
+        font-size: 11px;
+        height: 22px;       /* altura fija evita que el title wrappeado descoloque buttons */
+        box-sizing: border-box;
+        overflow: hidden;
+        gap: 4px;
+    }
+    .w98-cal-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1;
+    }
+    .w98-cal-nav-btn {
+        /* Botón propio sin heredar de .button para evitar min-width
+           que hacía que sobresalieran del header. */
+        width: 22px;
+        height: 18px;
+        padding: 0;
+        margin: 0;
+        font-size: 12px;
+        font-family: inherit;
+        line-height: 1;
+        cursor: pointer;
+        flex: 0 0 22px;            /* no crece, no se encoge — siempre 22px */
+        box-sizing: border-box;
+        background: var(--win-bg, #c3c3c3);
+        color: var(--text);
+        border: 1px solid var(--bezel-dark-1, #0a0a0a);
+        box-shadow:
+            inset -1px -1px 0 var(--bezel-dark-2, grey),
+            inset  1px  1px 0 var(--bezel-light-2, #dfdfdf);
+        appearance: none;          /* sin estilo nativo del browser */
+        -webkit-appearance: none;
+    }
+    .w98-cal-nav-btn:active {
+        box-shadow:
+            inset  1px  1px 0 var(--bezel-dark-2, grey),
+            inset -1px -1px 0 var(--bezel-light-2, #dfdfdf);
+    }
+    .w98-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+        background: var(--bezel-dark-2, grey);
+        padding: 1px;
+    }
+    .w98-cal-dow {
+        text-align: center;
+        font-weight: bold;
+        font-size: 9px;
+        padding: 2px 0;
+        background: var(--win-bg, #c3c3c3);
+        color: var(--text-faint, #555);
+    }
+    .w98-cal-day {
+        text-align: center;
+        padding: 3px 0;
+        cursor: pointer;
+        background: var(--input-bg, #fff);
+        color: var(--text);
+        border: 1px solid transparent;
+        font-size: 10px;
+        user-select: none;
+        line-height: 1.2;
+    }
+    .w98-cal-day:hover {
+        background: var(--accent, #1084d0);
+        color: var(--accent-text, #fff);
+    }
+    .w98-cal-day.other-month {
+        color: var(--text-faint, #999);
+        opacity: 0.45;
+    }
+    .w98-cal-day.today {
+        outline: 1px dashed var(--accent, #1084d0);
+        outline-offset: -2px;
+        font-weight: bold;
+    }
+    .w98-cal-day.selected {
+        background: var(--accent, #1084d0);
+        color: var(--accent-text, #fff);
+        font-weight: bold;
+    }
+
+    /* Popup del select custom */
+    .w98-select-popup {
+        position: absolute;
+        top: 22px;
+        left: 0;
+        right: 0;
+        z-index: 10000;
+        background: var(--input-bg, #fff);
+        border: 1px solid var(--bezel-dark-1, #0a0a0a);
+        box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        max-height: 180px;
+        overflow-y: auto;
+        font-family: inherit;
+    }
+    .w98-select-popup[hidden] { display: none; }
+    .w98-select-opt {
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 11px;
+        color: var(--text);
+        user-select: none;
+        line-height: 1.2;
+    }
+    .w98-select-opt:hover,
+    .w98-select-opt.active {
+        background: var(--accent, #1084d0);
+        color: var(--accent-text, #fff);
+    }
 </style>
 
 <!-- POPUP DÍA -->
 <div class="popup-overlay" id="popup-dia">
     <div class="window" style="width: 380px; max-height: 85vh; display: flex; flex-direction: column;">
         <div class="title-bar">
-            <div class="title-bar-text" id="popup-titulo">📅 Día</div>
+            <div class="title-bar-text" id="popup-titulo"><img src="../assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Día</div>
             <div class="title-bar-controls">
                 <button aria-label="Close" id="popup-close"></button>
             </div>
@@ -393,7 +591,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
         <?php if ($pareja): ?>
         <div class="window">
-            <div class="title-bar"><div class="title-bar-text">💕 Tiempo juntos</div></div>
+            <div class="title-bar"><div class="title-bar-text">Tiempo juntos</div></div>
             <div class="window-body" style="padding: 12px; text-align: center;">
                 <div id="dias-contador" style="font-size: 28px; font-weight: bold;"></div>
                 <div style="font-size: 11px; margin-top: 4px;">días juntos</div>
@@ -404,7 +602,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
 
         <!-- AÑADIR MOMENTO -->
         <div class="window" style="overflow: auto;">
-            <div class="title-bar"><div class="title-bar-text">📸 Añadir momento</div></div>
+            <div class="title-bar"><div class="title-bar-text"><img src="../assets/img/appIcons/instagramIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Añadir momento</div></div>
             <div class="window-body" style="padding: 10px;">
                 <div class="field-row-stacked" style="margin-bottom: 6px;">
                     <label style="font-size: 11px;">Título</label>
@@ -450,9 +648,9 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
                     <label style="font-size: 11px;">Periodicidad</label>
                     <select id="rec-periodicidad" style="width: 100%;">
                         <option value="ninguna">— Sin repetición —</option>
-                        <option value="anual">📅 Anual (cada año)</option>
-                        <option value="mensual">🗓️ Mensual (cada mes)</option>
-                        <option value="semanal">📆 Semanal (cada semana)</option>
+                        <option value="anual">Anual (cada año)</option>
+                        <option value="mensual">Mensual (cada mes)</option>
+                        <option value="semanal">Semanal (cada semana)</option>
                     </select>
                 </div>
                 <button class="button" id="btn-guardar-rec" style="width: 100%;">Guardar</button>
@@ -580,26 +778,31 @@ function expandirRecordatorios(lista) {
             expandidos.push(r);
             return;
         }
-        /* Calcular DIRECTAMENTE la primera ocurrencia >= desde sin loop
-           lento (antes iteraba desde la base original años hacia atrás). */
+        /* Calcular DIRECTAMENTE la primera ocurrencia >= effDesde sin
+           loop lento. effDesde = max(desde, base) → la periodicidad solo
+           aplica del día base en adelante. Si navegas a meses anteriores
+           al día del recordatorio, no se muestran ocurrencias ficticias.
+           (Antes: si base=Julio 2026 y navegabas a 2024, expandía hacia
+           atrás como si el evento existiera siempre.) */
+        const effDesde = desde > base ? desde : base;
         let cursor;
         if (p === 'anual') {
-            /* Mismo mes/día, año = desde.year. Si pasó → siguiente año. */
-            cursor = new Date(desde.getFullYear(), base.getMonth(), base.getDate());
-            if (cursor < desde) cursor.setFullYear(cursor.getFullYear() + 1);
+            /* Mismo mes/día, año = effDesde.year. Si pasó → siguiente año. */
+            cursor = new Date(effDesde.getFullYear(), base.getMonth(), base.getDate());
+            if (cursor < effDesde) cursor.setFullYear(cursor.getFullYear() + 1);
         } else if (p === 'mensual') {
             /* Mismo día del mes. Con clamp para meses cortos
                (día 31 en febrero → último día de febrero). */
             const dayBase = base.getDate();
-            cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
-            while (cursor < desde) cursor.setMonth(cursor.getMonth() + 1);
+            cursor = new Date(effDesde.getFullYear(), effDesde.getMonth(), 1);
+            while (cursor < effDesde) cursor.setMonth(cursor.getMonth() + 1);
             /* Asegurar que el día efectivo refleja el ORIGINAL clampeado. */
             const lastDayOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
             cursor.setDate(Math.min(dayBase, lastDayOfMonth));
-            if (cursor < desde) cursor.setMonth(cursor.getMonth() + 1);
+            if (cursor < effDesde) cursor.setMonth(cursor.getMonth() + 1);
         } else if (p === 'semanal') {
-            /* Mismo día de la semana que base, primer >= desde. */
-            cursor = new Date(desde);
+            /* Mismo día de la semana que base, primer >= effDesde. */
+            cursor = new Date(effDesde);
             const dowBase = base.getDay();
             const dowDesde = cursor.getDay();
             let diff = (dowBase - dowDesde + 7) % 7;
@@ -989,7 +1192,7 @@ function abrirPopupDia(fecha) {
     const momentos = momentosPorFecha[fecha] || [];
     const recordatorios = recordatoriosPorFecha[fecha] || [];
 
-    document.getElementById('popup-titulo').textContent = '📅 ' + fecha;
+    document.getElementById('popup-titulo').innerHTML = '<img src="../assets/img/appIcons/calendarioIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">' + fecha;
     const contenido = document.getElementById('popup-contenido');
     contenido.innerHTML = '';
 
@@ -1001,12 +1204,18 @@ function abrirPopupDia(fecha) {
     }
 
     if (momentos.length) {
-        contenido.appendChild(_buildSectionHeader('💗 Momentos', 'popup-section-momentos'));
+        contenido.appendChild(_buildSectionHeader(
+            '<img src="../assets/img/appIcons/galeriaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Momentos',
+            'popup-section-momentos'
+        ));
         momentos.forEach(m => contenido.appendChild(_buildMomentoCard(m)));
     }
 
     if (recordatorios.length) {
-        contenido.appendChild(_buildSectionHeader('🔔 Recordatorios', 'popup-section-recs'));
+        contenido.appendChild(_buildSectionHeader(
+            '<img src="../assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Recordatorios',
+            'popup-section-recs'
+        ));
         recordatorios.forEach(r => contenido.appendChild(_buildRecordatorioRow(r)));
     }
 
@@ -1022,7 +1231,10 @@ function abrirPopupDia(fecha) {
 function _buildSectionHeader(title, className) {
     const h = document.createElement('p');
     h.className = 'popup-section-title ' + className;
-    h.textContent = title;
+    /* innerHTML para permitir <img> inline (e.g. bellIcon.png en la
+       sección de recordatorios). Los callers pasan strings de confianza,
+       no input del usuario, así que no hay riesgo XSS. */
+    h.innerHTML = title;
     return h;
 }
 
@@ -1079,13 +1291,36 @@ function _buildRecordatorioRow(r) {
     texto.innerHTML = '<strong>' + escHTML(r.titulo) + '</strong>' + periodicoLabel +
         (r.descripcion ? '<br>' + escHTML(r.descripcion) : '');
 
+    /* Botón "ver contador" — abre la ventana fullscreen de cuenta atrás
+       épica. Mismo icono (👁) que en el sidebar para consistencia visual.
+       Cierra el popup-día antes de abrir para que la overlay nueva no
+       quede tapada por el popup-día. */
+    const btnVer = document.createElement('button');
+    btnVer.className = 'button btn-del-row';
+    btnVer.textContent = '👁';
+    btnVer.title = 'Ver cuenta atrás';
+    btnVer.addEventListener('click', () => {
+        document.getElementById('popup-dia').classList.remove('active');
+        abrirCountdown(r);
+    });
+
     const btnDel = document.createElement('button');
     btnDel.className = 'button btn-del-row';
     btnDel.textContent = '✕';
+    btnDel.title = 'Eliminar recordatorio';
     btnDel.addEventListener('click', () => eliminarRecordatorio(r.id));
 
+    /* Wrap de los dos botones — la .rec-row usa justify-content:
+       space-between que separaría los 3 hijos en columnas. Con el
+       wrap, son 2 hijos: texto a la izquierda, grupo de botones a la
+       derecha, los dos botones uno al lado del otro. */
+    const btnsWrap = document.createElement('div');
+    btnsWrap.className = 'rec-row-btns';
+    btnsWrap.appendChild(btnVer);
+    btnsWrap.appendChild(btnDel);
+
     div.appendChild(texto);
-    div.appendChild(btnDel);
+    div.appendChild(btnsWrap);
     return div;
 }
 
@@ -1274,7 +1509,7 @@ async function checkPartnerInvites() {
     __invitePollEmpty = 0;
     __invitePollDelay = CFG.invitePollMinMs;
     currentPartnerInvite = inv;
-    document.getElementById('partner-notif-msg').textContent = inv.fromLabel + ' quiere ser tu pareja 💕';
+    document.getElementById('partner-notif-msg').textContent = inv.fromLabel + ' te ha invitado a compartir calendario';
     document.getElementById('partner-notif').style.display = 'block';
 }
 
@@ -1487,6 +1722,344 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         document.addEventListener('keydown', keyHandler);
     }
     window._calConfirm = open;
+})();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     WIN98 WIDGETS — date picker + custom select
+     Reemplaza nativamente todos los <input type="date"> y <select> del
+     calendario por widgets que respetan el theme Win98. Mantiene los
+     mismos IDs en hidden inputs → el código existente sigue accediendo
+     a .value como antes. Un monkey-patch al setter de value sincroniza
+     el display al hacer `input.value = X` desde otros sitios.
+     ════════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+    var MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    /* Días de semana empezando en LUNES (estilo europeo). */
+    var DOWS = ['L','M','X','J','V','S','D'];
+
+    function pad(n) { return n < 10 ? '0' + n : String(n); }
+    function ymd(date) {
+        return date.getFullYear() + '-' + pad(date.getMonth()+1) + '-' + pad(date.getDate());
+    }
+    function parseYmd(s) {
+        if (!s) return null;
+        var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+        if (!m) return null;
+        var d = new Date(+m[1], +m[2]-1, +m[3]);
+        return isNaN(d.getTime()) ? null : d;
+    }
+    function fmtDisplay(s) {
+        var d = parseYmd(s);
+        if (!d) return '';
+        /* dd/mm/yyyy es más legible que ISO en interfaces ES. */
+        return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear();
+    }
+
+    /* Intercepta `input.value = X` para mantener sincronizado el display
+       sin que el código existente cambie. Solo para los inputs que
+       gestionamos — no afecta a otros inputs del documento. */
+    function interceptValueSetter(input, onSet) {
+        var proto = Object.getPrototypeOf(input);
+        var nativeDesc = Object.getOwnPropertyDescriptor(proto, 'value')
+                      || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (!nativeDesc || !nativeDesc.set) return;
+        Object.defineProperty(input, 'value', {
+            configurable: true,
+            get: function() { return nativeDesc.get.call(this); },
+            set: function(v) {
+                nativeDesc.set.call(this, v);
+                try { onSet(v); } catch(_) {}
+            }
+        });
+    }
+
+    /* ── Date picker ─────────────────────────────────────────────── */
+    function buildDatePicker(origInput) {
+        /* Capturamos el value antes de cambiar el type — input[type=date]
+           tiene su propio formato YYYY-MM-DD, lo conservamos. */
+        var initialValue = origInput.value || '';
+        var origStyle    = origInput.getAttribute('style') || '';
+        var origId       = origInput.id;
+        var origName     = origInput.name || '';
+
+        /* Convertimos a hidden y le añadimos width:100% que tenía. */
+        origInput.type = 'hidden';
+        origInput.removeAttribute('style');
+
+        var wrap = document.createElement('div');
+        wrap.className = 'w98-date-wrap';
+        if (origStyle) wrap.setAttribute('style', origStyle);
+
+        var display = document.createElement('div');
+        display.className = 'w98-date-display';
+        display.tabIndex = 0;
+        display.innerHTML = '<span class="w98-date-label"></span><span class="w98-select-arrow">▼</span>';
+
+        var popup = document.createElement('div');
+        popup.className = 'w98-cal-popup';
+        popup.hidden = true;
+
+        /* Insertamos wrap antes del original y movemos el hidden DENTRO
+           del wrap para mantenerlos juntos. */
+        origInput.parentNode.insertBefore(wrap, origInput);
+        wrap.appendChild(display);
+        wrap.appendChild(popup);
+        wrap.appendChild(origInput);
+
+        var labelEl = display.querySelector('.w98-date-label');
+        var currentView = new Date();   /* mes/año mostrados en el grid */
+
+        function updateDisplay(v) {
+            labelEl.textContent = fmtDisplay(v) || 'dd/mm/aaaa';
+        }
+        updateDisplay(initialValue);
+        /* Restauramos el value tras setear type=hidden (algunos browsers
+           lo limpian al cambiar de tipo). */
+        if (initialValue) {
+            var nativeDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+            nativeDesc.set.call(origInput, initialValue);
+        }
+
+        interceptValueSetter(origInput, updateDisplay);
+
+        function renderGrid() {
+            var sel = parseYmd(origInput.value);
+            var today = new Date();
+            var year = currentView.getFullYear();
+            var month = currentView.getMonth();
+            var firstDay = new Date(year, month, 1);
+            var lastDay  = new Date(year, month + 1, 0);
+            /* Lunes = 0; nativo de JS getDay() es Domingo = 0. */
+            var startDow = (firstDay.getDay() + 6) % 7;
+            var monthDays = lastDay.getDate();
+            /* 5 semanas × 7 = 35 celdas. Si el mes natural necesita 6
+               semanas (cellsNeeded > 35), desplazamos el grid +7 para
+               que los últimos días caigan dentro: las primeras 1-3
+               filas del mes se pintan como "other-month" overflow al
+               principio o se omiten — preferimos perder los primeros
+               días en favor de mostrar el mes ENTERO al final (que es
+               donde casi siempre cae el "hoy"). */
+            var totalCells = 35;
+            var cellsNeeded = startDow + monthDays;
+            if (cellsNeeded > totalCells) startDow -= 7;
+
+            var html = '<div class="w98-cal-header">' +
+                '<button type="button" class="w98-cal-nav-btn" data-nav="prev" title="Mes anterior">‹</button>' +
+                '<div class="w98-cal-title">' + MONTHS[month] + ' ' + year + '</div>' +
+                '<button type="button" class="w98-cal-nav-btn" data-nav="next" title="Mes siguiente">›</button>' +
+            '</div><div class="w98-cal-grid">';
+            DOWS.forEach(function(d){ html += '<div class="w98-cal-dow">' + d + '</div>'; });
+            for (var i = 0; i < totalCells; i++) {
+                var dayNum = i - startDow + 1;
+                var date = new Date(year, month, dayNum);
+                var isOther = dayNum < 1 || dayNum > monthDays;
+                var isToday = date.toDateString() === today.toDateString();
+                var isSel = sel && date.toDateString() === sel.toDateString();
+                var cls = 'w98-cal-day';
+                if (isOther) cls += ' other-month';
+                if (isToday) cls += ' today';
+                if (isSel)   cls += ' selected';
+                html += '<div class="' + cls + '" data-date="' + ymd(date) + '">' + date.getDate() + '</div>';
+            }
+            html += '</div>';
+            popup.innerHTML = html;
+
+            popup.querySelectorAll('[data-nav]').forEach(function(btn){
+                btn.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    var dir = btn.dataset.nav === 'next' ? 1 : -1;
+                    currentView = new Date(year, month + dir, 1);
+                    renderGrid();
+                });
+            });
+            popup.querySelectorAll('.w98-cal-day').forEach(function(cell){
+                cell.addEventListener('click', function(e){
+                    e.stopPropagation();
+                    origInput.value = cell.dataset.date;   /* dispara monkey-patch → updateDisplay */
+                    closePop();
+                });
+            });
+        }
+
+        /* Movemos el popup al body para escapar overflow:hidden / clip
+           del modal padre. Con position:fixed lo anclamos al viewport
+           y lo posicionamos según el bounding del display. Si no cabe
+           debajo, lo volteamos arriba; mismo para derecha. */
+        document.body.appendChild(popup);
+        popup.style.position = 'fixed';
+
+        function positionPop() {
+            var r = display.getBoundingClientRect();
+            popup.style.left = r.left + 'px';
+            popup.style.top  = (r.bottom + 2) + 'px';
+            /* Forzar reflow antes de medir popup. */
+            var pr = popup.getBoundingClientRect();
+            if (pr.bottom > window.innerHeight - 8) {
+                /* Voltea arriba si no cabe abajo. */
+                popup.style.top = Math.max(8, r.top - pr.height - 2) + 'px';
+            }
+            if (pr.right > window.innerWidth - 8) {
+                popup.style.left = Math.max(8, window.innerWidth - pr.width - 8) + 'px';
+            }
+        }
+
+        function openPop() {
+            var v = parseYmd(origInput.value);
+            currentView = v ? new Date(v.getFullYear(), v.getMonth(), 1) : new Date();
+            renderGrid();
+            popup.hidden = false;
+            positionPop();
+        }
+        function closePop() { popup.hidden = true; }
+
+        display.addEventListener('click', function(e){
+            e.stopPropagation();
+            if (popup.hidden) openPop();
+            else closePop();
+        });
+        display.addEventListener('keydown', function(e){
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (popup.hidden) openPop();
+                else closePop();
+            } else if (e.key === 'Escape') {
+                closePop();
+            }
+        });
+        /* Guard incluye popup (vive en body, fuera de wrap) — sin esto
+           cualquier click DENTRO del popup cerraría el calendario. */
+        document.addEventListener('click', function(e){
+            if (!wrap.contains(e.target) && !popup.contains(e.target)) closePop();
+        });
+        /* Re-posicionar si el viewport cambia mientras está abierto. */
+        window.addEventListener('resize', function(){ if (!popup.hidden) positionPop(); });
+        window.addEventListener('scroll', function(){ if (!popup.hidden) positionPop(); }, true);
+    }
+
+    /* ── Custom select ───────────────────────────────────────────── */
+    function buildSelect(origSelect) {
+        var options = Array.from(origSelect.options).map(function(opt){
+            return { value: opt.value, label: opt.textContent.trim() };
+        });
+        if (!options.length) return;
+        var origId    = origSelect.id;
+        var origName  = origSelect.name || '';
+        var origValue = origSelect.value;
+        var origStyle = origSelect.getAttribute('style') || '';
+
+        var wrap = document.createElement('div');
+        wrap.className = 'w98-select-wrap';
+        if (origStyle) wrap.setAttribute('style', origStyle);
+
+        var btn = document.createElement('div');
+        btn.className = 'w98-select-btn';
+        btn.tabIndex = 0;
+        btn.innerHTML = '<span class="w98-date-label"></span><span class="w98-select-arrow">▼</span>';
+
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        if (origId)   hidden.id   = origId;
+        if (origName) hidden.name = origName;
+        hidden.value = origValue;
+
+        var popup = document.createElement('div');
+        popup.className = 'w98-select-popup';
+        popup.hidden = true;
+
+        var labelEl = btn.querySelector('.w98-date-label');
+
+        function findOpt(v) {
+            return options.find(function(o){ return o.value === v; });
+        }
+        function updateLabel(v) {
+            var o = findOpt(v);
+            labelEl.textContent = o ? o.label : '';
+        }
+        updateLabel(origValue);
+
+        options.forEach(function(o) {
+            var el = document.createElement('div');
+            el.className = 'w98-select-opt';
+            el.textContent = o.label;
+            el.dataset.value = o.value;
+            if (o.value === origValue) el.classList.add('active');
+            el.addEventListener('click', function(e){
+                e.stopPropagation();
+                hidden.value = o.value;   /* dispara monkey-patch → updateLabel */
+                popup.querySelectorAll('.w98-select-opt').forEach(function(x){ x.classList.remove('active'); });
+                el.classList.add('active');
+                popup.hidden = true;
+                btn.focus();
+            });
+            popup.appendChild(el);
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(hidden);
+        origSelect.parentNode.replaceChild(wrap, origSelect);
+        /* Popup al body para escapar overflow:hidden del modal padre. */
+        document.body.appendChild(popup);
+        popup.style.position = 'fixed';
+
+        interceptValueSetter(hidden, updateLabel);
+
+        function positionSelectPop() {
+            var r = btn.getBoundingClientRect();
+            /* Mantenemos el mismo ancho que el botón para que el dropdown
+               se alinee visualmente. */
+            popup.style.left  = r.left + 'px';
+            popup.style.width = r.width + 'px';
+            popup.style.top   = (r.bottom + 1) + 'px';
+            var pr = popup.getBoundingClientRect();
+            if (pr.bottom > window.innerHeight - 8) {
+                popup.style.top = Math.max(8, r.top - pr.height - 1) + 'px';
+            }
+            if (pr.right > window.innerWidth - 8) {
+                popup.style.left = Math.max(8, window.innerWidth - pr.width - 8) + 'px';
+            }
+        }
+        function openSelectPop() {
+            popup.hidden = false;
+            positionSelectPop();
+        }
+        function closeSelectPop() { popup.hidden = true; }
+
+        btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            if (popup.hidden) openSelectPop();
+            else closeSelectPop();
+        });
+        btn.addEventListener('keydown', function(e){
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (popup.hidden) openSelectPop();
+                else closeSelectPop();
+            } else if (e.key === 'Escape') {
+                closeSelectPop();
+            }
+        });
+        document.addEventListener('click', function(e){
+            /* Guard incluye popup (vive en body, fuera de wrap). */
+            if (!wrap.contains(e.target) && !popup.contains(e.target)) popup.hidden = true;
+        });
+        /* Re-posicionar al cambiar viewport mientras abierto. */
+        window.addEventListener('resize', function(){ if (!popup.hidden) positionSelectPop(); });
+        window.addEventListener('scroll', function(){ if (!popup.hidden) positionSelectPop(); }, true);
+    }
+
+    /* ── Init: aplica a TODOS los date/select del calendario ────── */
+    function init() {
+        document.querySelectorAll('input[type="date"]').forEach(buildDatePicker);
+        document.querySelectorAll('select').forEach(buildSelect);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 })();
 </script>
 

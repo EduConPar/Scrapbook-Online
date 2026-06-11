@@ -39,6 +39,9 @@ $year  = (int)($_GET['year'] ?? date('Y'));
 ?><!DOCTYPE html>
 <html lang="es">
 <head>
+    <script src="../assets/js/icon-pack.js"></script>
+    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
+    <script src="../assets/js/interface-loader.js"></script>
 <meta charset="UTF-8">
 <title>Wrapped <?= $year ?></title>
 <link rel="stylesheet" href="../assets/css/98.css">

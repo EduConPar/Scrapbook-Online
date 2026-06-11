@@ -108,6 +108,32 @@ case 'delete-momento': {
     jsonResponse(['ok' => true]);
 }
 
+/* Borra TODOS los momentos del usuario que tengan exactamente este
+   título. Pensado para auto-cleanup cuando se elimina un item completado
+   del perfil → el momento que se creó via crearMomentoDesdeItem desaparece
+   también. Si el momento ya fue borrado manualmente, no hace nada (idempotente).
+   Tiene en cuenta que un mismo título pudo crearse varias veces por
+   ciclos completar→pendiente→completar; borra todos. */
+case 'delete-momento-by-title': {
+    $userId = getCurrentUserId($pdo, $userKey);
+    if (!$userId) jsonError('Usuario no encontrado');
+    $title = trim((string)(jsonBody()['title'] ?? ''));
+    if ($title === '') jsonError('Título vacío');
+    /* Limpia fotos en disco antes del DELETE. */
+    $stmt = $pdo->prepare("SELECT id, foto FROM momentos WHERE usuario_id = ? AND titulo = ?");
+    $stmt->execute([$userId, $title]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        if (!empty($r['foto'])) {
+            $ruta = __DIR__ . '/../../uploads/momentos/' . $r['foto'];
+            if (file_exists($ruta)) @unlink($ruta);
+        }
+    }
+    $pdo->prepare("DELETE FROM momentos WHERE usuario_id = ? AND titulo = ?")
+        ->execute([$userId, $title]);
+    jsonResponse(['ok' => true, 'deleted' => count($rows)]);
+}
+
 case 'upload-foto': {
     $momentoId = (int)($_POST['momento_id'] ?? 0);
     if (!$momentoId) jsonError('ID de momento inválido');
@@ -405,7 +431,7 @@ case 'invite-partner': {
     $fromLabel = $GLOBALS['loginUsers'][$userKey]['label'] ?? $userKey;
     sendPushToUser($pdo, (int)$toId, buildInvitePushPayload(
         'partner',
-        '💌 ' . $fromLabel . ' quiere ser tu pareja',
+        $fromLabel . ' te ha invitado a compartir calendario',
         'Acepta para vincular vuestros calendarios',
     ));
     jsonResponse(['ok' => true]);
@@ -438,8 +464,8 @@ case 'respond-partner-invite': {
         /* B12: notifica al inviter que su invitación fue rechazada. */
         require_once dirname(__DIR__) . '/push/send-push.php';
         sendPushToUser($pdo, (int)$fromId, [
-            'title' => '💔 Invitación rechazada',
-            'body'  => ucfirst($respLabel) . ' ha rechazado tu invitación de pareja.',
+            'title' => 'Invitación rechazada',
+            'body'  => ucfirst($respLabel) . ' ha rechazado tu invitación al calendario.',
             'url'   => '/apps/calendario.php',
         ]);
         jsonResponse(['ok' => true]);
