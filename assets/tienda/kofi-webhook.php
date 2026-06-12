@@ -15,65 +15,24 @@
    ────────────────────────────────────────────────────────────────────── */
 header('Content-Type: text/plain; charset=utf-8');
 
-/* ── DEBUG TEMPORAL ────────────────────────────────────────────────────
-   Loguea CADA petición que reciba este endpoint en `kofi-debug.log`
-   (misma carpeta). Útil cuando Hostinger no expone logs PHP por panel.
-   Cuando confirmes que funciona, borra todo este bloque hasta la línea
-   `── FIN DEBUG`. */
-$DEBUG_LOG = __DIR__ . '/kofi-debug.log';
-ini_set('display_errors', '0');
-ini_set('log_errors',     '1');
-ini_set('error_log',      $DEBUG_LOG);
-error_reporting(E_ALL);
-
-function kofiDbg($msg) {
-    global $DEBUG_LOG;
-    @file_put_contents($DEBUG_LOG, '[' . date('c') . '] ' . $msg . "\n", FILE_APPEND);
-}
-
-kofiDbg('REQUEST ' . ($_SERVER['REQUEST_METHOD'] ?? '?')
-    . ' from ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
-$rawBody = file_get_contents('php://input');
-kofiDbg('raw_body_len=' . strlen($rawBody) . ' content_type=' . ($_SERVER['CONTENT_TYPE'] ?? '?'));
-kofiDbg('raw_body=' . substr($rawBody, 0, 2000));
-kofiDbg('POST keys=' . implode(',', array_keys($_POST)));
-if (isset($_POST['data'])) {
-    kofiDbg('POST.data=' . substr((string)$_POST['data'], 0, 2000));
-}
-/* ── FIN DEBUG ────────────────────────────────────────────────────── */
-
 require_once dirname(__DIR__, 2) . '/assets/config.php';
 require_once dirname(__DIR__, 2) . '/db.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    kofiDbg('rejected: method not POST');
-    http_response_code(405); echo 'POST only'; exit;
-}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo 'POST only'; exit; }
 
 $raw = $_POST['data'] ?? null;
-if (!$raw) {
-    kofiDbg('rejected: missing data field');
-    http_response_code(400); echo 'missing data'; exit;
-}
+if (!$raw) { http_response_code(400); echo 'missing data'; exit; }
 
 $payload = json_decode((string)$raw, true);
-if (!is_array($payload)) {
-    kofiDbg('rejected: json_decode failed, last_error=' . json_last_error_msg());
-    http_response_code(400); echo 'bad json'; exit;
-}
+if (!is_array($payload)) { http_response_code(400); echo 'bad json'; exit; }
 
-$token   = env('KOFI_WEBHOOK_TOKEN', '');
-$sent    = (string)($payload['verification_token'] ?? '');
-kofiDbg('token_check env_len=' . strlen($token) . ' payload_len=' . strlen($sent)
-    . ' env_head=' . substr($token, 0, 4) . ' payload_head=' . substr($sent, 0, 4));
-if ($token === '' || !hash_equals($token, $sent)) {
-    kofiDbg('rejected: verification_token mismatch');
+$token = env('KOFI_WEBHOOK_TOKEN', '');
+if ($token === '' || !hash_equals($token, (string)($payload['verification_token'] ?? ''))) {
     http_response_code(401);
     echo 'unauthorized';
     error_log('[kofi-webhook] verification_token mismatch');
     exit;
 }
-kofiDbg('token OK, type=' . ($payload['type'] ?? 'NONE'));
 
 /* Tipos aceptados: donaciones libres, suscripciones mensuales y compras
    de comisiones (Commission). Todos contribuyen a sostener el proyecto,
@@ -87,7 +46,6 @@ $typeMap = [
     'Commission'   => 'encargo',
 ];
 if (!isset($typeMap[$type])) {
-    kofiDbg('skip: type "' . $type . '" not in map (Donation/Subscription/Commission)');
     http_response_code(204);
     exit;
 }
@@ -146,7 +104,6 @@ if ($importe <= 0) $importe = null;
 $avatar = null;
 
 try {
-    kofiDbg('insert tipo=' . $tipo . ' tx=' . $txId . ' nombre=' . $nombre . ' importe=' . ($importe ?? 'null'));
     $stmt = $pdo->prepare('
         INSERT INTO donaciones (nombre, avatar_url, mensaje, importe, tipo, kofi_transaction_id)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -157,11 +114,9 @@ try {
             tipo    = VALUES(tipo)
     ');
     $stmt->execute([$nombre, $avatar, $mensaje, $importe, $tipo, $txId]);
-    kofiDbg('insert OK, rows_affected=' . $stmt->rowCount());
     http_response_code(200);
     echo 'ok';
 } catch (Throwable $e) {
-    kofiDbg('insert FAIL: ' . $e->getMessage());
     http_response_code(500);
     error_log('[kofi-webhook] ' . $e->getMessage());
     echo 'error';

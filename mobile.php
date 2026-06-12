@@ -1182,6 +1182,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <small id="mh-set-notif-sub">Recibe avisos de chats e invitaciones</small>
                 </span>
             </button>
+            <button class="mh-set-btn" type="button" id="mh-set-change-photo">
+                <span class="mh-set-emoji"><img src="assets/img/appIcons/profileIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;"></span>
+                <span class="mh-set-text">Cambiar foto de perfil
+                    <small id="mh-set-photo-sub">Sustituye tu avatar (jpg/png/gif/webp, máx 5MB)</small>
+                </span>
+            </button>
+            <!-- Input oculto: el OS abre su propio file picker como "modal". -->
+            <input type="file" id="mh-set-photo-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
             <button class="mh-set-btn" type="button" id="mh-set-change-password">
                 <span class="mh-set-emoji">🔑</span>
                 <span class="mh-set-text">Cambiar contraseña
@@ -3422,6 +3430,82 @@ window.MuShell = (function(){
             });
         });
         refreshNotifLabel();
+    }
+
+    /* ── cambiar foto de perfil ──
+       El input file está oculto en el panel. El botón solo dispara su
+       click → el OS abre su propio selector. Al cambiar la selección,
+       validamos, subimos al endpoint existente del desktop (reutiliza
+       sesión + valida ext/tamaño server-side) y refrescamos el avatar
+       de la cabecera para feedback inmediato. */
+    var photoBtn   = document.getElementById('mh-set-change-photo');
+    var photoInput = document.getElementById('mh-set-photo-input');
+    var photoSub   = document.getElementById('mh-set-photo-sub');
+    var photoSubDefault = photoSub ? photoSub.textContent : '';
+
+    function setPhotoStatus(msg, color) {
+        if (!photoSub) return;
+        photoSub.textContent = msg;
+        photoSub.style.color = color || '';
+    }
+    function resetPhotoStatus() {
+        setPhotoStatus(photoSubDefault, '');
+    }
+
+    if (photoBtn && photoInput) {
+        photoBtn.addEventListener('click', function() {
+            resetPhotoStatus();
+            photoInput.value = ''; // permite re-elegir el mismo archivo
+            photoInput.click();
+        });
+        photoInput.addEventListener('change', function() {
+            var file = photoInput.files && photoInput.files[0];
+            if (!file) return;
+            /* Pre-validación cliente para mensajes inmediatos antes de
+               subir 5 MB en balde — el server vuelve a validar igualmente. */
+            var ok = ['image/jpeg','image/png','image/gif','image/webp'].indexOf(file.type) !== -1;
+            if (!ok) {
+                setPhotoStatus('✗ Formato no permitido (jpg/png/gif/webp)', 'var(--error-text,#c00)');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                setPhotoStatus('✗ La imagen supera los 5MB', 'var(--error-text,#c00)');
+                return;
+            }
+            setPhotoStatus('Subiendo…', 'var(--text-muted,#666)');
+            photoBtn.disabled = true;
+            var fd = new FormData();
+            fd.append('photo', file);
+            fetch('assets/img/save-profile-photo.php', { method: 'POST', body: fd })
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    photoBtn.disabled = false;
+                    if (!data || data.error) {
+                        setPhotoStatus('✗ ' + (data && data.error || 'Error al subir'), 'var(--error-text,#c00)');
+                        return;
+                    }
+                    setPhotoStatus('✔ Foto actualizada', 'var(--accent-deep,#080)');
+                    /* Refresca el avatar de la cabecera con cache-bust. Si
+                       la cabecera no tenía img (usuario sin foto previa),
+                       reemplazamos el placeholder por una img nueva. */
+                    var avatarBox = document.querySelector('.mh-userbar-avatar');
+                    if (avatarBox) {
+                        var existing = avatarBox.querySelector('img');
+                        var src = data.photo + '?t=' + Date.now();
+                        if (existing) {
+                            existing.src = src;
+                        } else {
+                            avatarBox.innerHTML = '<img src="' + src + '" alt="">';
+                        }
+                    }
+                    /* Vuelve al texto original a los 2.5s. */
+                    setTimeout(resetPhotoStatus, 2500);
+                })
+                .catch(function(e){
+                    photoBtn.disabled = false;
+                    setPhotoStatus('✗ Error de red: ' + e.message, 'var(--error-text,#c00)');
+                });
+        });
     }
 
     /* ── modal cambiar contraseña ── */
