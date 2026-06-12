@@ -1,0 +1,63 @@
+/* Generado por la app de Temas. NO editar a mano.
+   Establece los tokens CSS para que cualquier app que use
+   var(--token) reciba la paleta del tema activo. */
+
+body.adawd-Capi {
+    --win-bg: #f0f0f0;
+    --win-body-bg: #ffffff;
+    --surface-deep: #c061cb;
+    --inset-bg: #ffffff;
+    --input-bg: #ffffff;
+    --input-text: #000000;
+    --btn-bg: #f2f2f2;
+    --btn-text: #000000;
+    --start-btn-bg: #155a82;
+    --start-btn-text: #ffffff;
+    --text: #000000;
+    --text-muted: #555555;
+    --text-faint: #838383;
+    --text-inset: #555555;
+    --titlebar-start: #e5a50a;
+    --titlebar-end: #000000;
+    --titlebar-text: #000000;
+    --accent: #3c7fb1;
+    --accent-text: #ffffff;
+    --accent-deep: #1b5a8a;
+    --titlebar-icon-color: #1a3e6b;
+    --titlebar-icon-bg: #c0c0c0;
+    --titlebar-icon-bezel-light: #ffffff;
+    --titlebar-icon-bezel-dark: #0a0a0a;
+    --border: #8e8f8f;
+    --bezel-light-1: #ffffff;
+    --bezel-light-2: #f6f6f6;
+    --bezel-dark-1: #adb2b5;
+    --bezel-dark-2: #8e8f8f;
+    --desktop-bg: #9a9996;
+    --link-text: #1b5a8a;
+    --link-hover: #000080;
+    --error-text: #ef0000;
+    --warning-bg: #fff4ce;
+    --warning-text: #5a4900;
+    --badge-bg: #d83b01;
+    --badge-text: #ffffff;
+    --star-color: #f0b400;
+    --btn-hover-bg: #000080;
+    --btn-active-bg: #00004a;
+    --ctrl-hover-bg: #000080;
+    --ctrl-active-bg: #00004a;
+    --list-hover-bg: #000080;
+    --list-hover-border: #000080;
+    --win-border-glass: #808080;
+    --tab-bg: #c0c0c0;
+    --tooltip-border: #808080;
+
+    /* Alias retro-compat */
+    --t-bg:           #f0f0f0;
+    --t-bg-alt:       #ffffff;
+    --t-text:         #000000;
+    --t-text-muted:   #555555;
+    --t-accent:       #3c7fb1;
+    --t-accent-text:  #ffffff;
+    --t-border:       #8e8f8f;
+    --t-grad:         linear-gradient(90deg, #e5a50a, #000000);
+}

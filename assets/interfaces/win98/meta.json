@@ -1,0 +1,27 @@
+{
+  "name": "Win98",
+  "label": "MelonOS 98",
+  "description": "Estilo retro inspirado en Windows 98 — bordes con bisel 3D, fuente pixelada y paleta gris clásica. La interfaz por defecto de la app.",
+  "author": "Melon Hub",
+  "isDefault": true,
+  "tokens": {
+    "winBg":         { "label": "Fondo de ventana",       "default": "#c0c0c0" },
+    "winBodyBg":     { "label": "Fondo del cuerpo",       "default": "#c0c0c0" },
+    "surfaceDeep":   { "label": "Taskbar / paneles",      "default": "#c0c0c0" },
+    "insetBg":       { "label": "Inputs / hundidos",      "default": "#ffffff" },
+    "text":          { "label": "Texto principal",        "default": "#000000" },
+    "textMuted":     { "label": "Texto secundario",       "default": "#666666" },
+    "accent":        { "label": "Acento (selección)",     "default": "#000080" },
+    "accentText":    { "label": "Texto sobre acento",     "default": "#ffffff" },
+    "titlebarStart": { "label": "Titlebar inicio",        "default": "#0a246a" },
+    "titlebarEnd":   { "label": "Titlebar fin",           "default": "#a6caf0" },
+    "titlebarText":  { "label": "Texto del titlebar",     "default": "#ffffff" },
+    "bezelLight1":   { "label": "Bisel claro 1 (interno)","default": "#dfdfdf" },
+    "bezelLight2":   { "label": "Bisel claro 2 (externo)","default": "#ffffff" },
+    "bezelDark1":    { "label": "Bisel oscuro 1",         "default": "#0a0a0a" },
+    "bezelDark2":    { "label": "Bisel oscuro 2",         "default": "#808080" },
+    "border":        { "label": "Borde estándar",         "default": "#7f7f7f" },
+    "desktopBg":     { "label": "Fondo del escritorio",   "default": "#008080" },
+    "errorText":     { "label": "Texto de error",         "default": "#c00000" }
+  }
+}

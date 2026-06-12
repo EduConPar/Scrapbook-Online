@@ -1,0 +1,561 @@
+/* =========================================================
+   LOGIN (index.php)
+   ---------------------------------------------------------
+   Pantalla de selección de usuario + login + intro animada
+   + popups de error/anuncio. Solo estilos base — los
+   overrides por usuario (body.user1 / body.user2) viven en
+   themes.css.
+========================================================= */
+
+body {
+    position: relative;
+    margin: 0;
+    user-select: none;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    font-family: "ms_sans_serif";
+    background: #000;
+}
+
+/* ── Fondos blureados (wallpapers) ── */
+body::before,
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    filter: blur(8px) saturate(1.1) brightness(.8);
+    transform: scale(1.05);
+    transition: opacity .7s ease;
+}
+
+body::before { opacity: 0; }
+body.user-selected::before { opacity: 1; }
+
+/* ── Contenedor principal ── */
+.login-window {
+    position: relative;
+    width: 320px;
+    height: 180px;
+}
+
+.window { will-change: transform, opacity; }
+
+/* ── Skin "consola" compartido por select y register ── */
+#selectWindow,
+#registerWindow {
+    min-width: 200px;
+    background: #120808;
+    border-color: #3a0000 #0a0000 #0a0000 #3a0000;
+    box-shadow:
+        1px 1px 0 #000,
+        -1px -1px 0 #5a1010,
+        0 8px 32px rgba(0,0,0,0.8),
+        0 0 12px rgba(180,0,0,0.15);
+}
+
+/* ── Select window (lista de usuarios) ── */
+#selectWindow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 320px;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    transition: opacity .35s ease, transform .35s ease;
+}
+
+#selectWindow.hidden {
+    opacity: 0;
+    transform: translateY(-25px);
+    pointer-events: none;
+}
+
+#selectWindow .title-bar,
+#registerWindow .title-bar {
+    background: linear-gradient(to right, #6a0000, #b02020);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    border-bottom: 1px solid #3a0000;
+}
+
+#selectWindow .window-body,
+#registerWindow .window-body {
+    background: #120808;
+    padding: 8px;
+}
+
+/* Inputs y labels del formulario de registro */
+#registerWindow label {
+    color: #d4a0a0;
+    font-size: 11px;
+}
+#registerWindow .register-file-row {
+    gap: 4px;
+    display: flex;
+}
+#registerWindow .register-file-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    cursor: default;
+}
+#registerWindow #registerPhotoBrowse {
+    flex-shrink: 0;
+    min-width: 80px;
+    font-size: 11px;
+    padding: 3px 10px;
+    background: #1e0c0c !important;
+    color: #d4a0a0 !important;
+    border: 1px solid #3a1515 !important;
+    text-shadow: none !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255,100,100,0.08),
+        0 1px 3px rgba(0,0,0,0.5) !important;
+}
+#registerWindow #registerPhotoBrowse:hover {
+    background: #5a0000 !important;
+    color: #fff !important;
+    border-color: #a03030 !important;
+}
+#registerWindow #registerPhotoBrowse:active {
+    background: #3a0000 !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+}
+
+#registerWindow input[type="text"],
+#registerWindow input[type="password"],
+#registerWindow input[type="file"] {
+    background: #1e0c0c;
+    color: #d4a0a0;
+    border: 1px solid #0a0000;
+    border-top-color: #0a0000;
+    border-left-color: #0a0000;
+    border-right-color: #4a1010;
+    border-bottom-color: #4a1010;
+    padding: 4px 6px;
+    margin-top: 7px;
+    font-size: 11px;
+    box-shadow:
+        inset 1px 1px 0 #000,
+        inset -1px -1px 0 #3a0000,
+        inset 2px 2px 4px rgba(0,0,0,0.6);
+    border-radius: 0;
+}
+#registerWindow input[type="file"] {
+    padding: 3px 4px;
+    cursor: pointer;
+}
+#registerWindow input[type="text"]:focus,
+#registerWindow input[type="password"]:focus {
+    outline: none;
+    background: #2a0c0c;
+    color: #fff;
+    box-shadow:
+        inset 1px 1px 0 #000,
+        inset -1px -1px 0 #5a1010,
+        inset 2px 2px 4px rgba(0,0,0,0.7),
+        0 0 4px rgba(180,0,0,0.4);
+}
+#registerWindow .login-actions .button {
+    background: #1e0c0c !important;
+    color: #d4a0a0 !important;
+    border: 1px solid #3a1515 !important;
+    text-shadow: none !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255,100,100,0.08),
+        0 1px 3px rgba(0,0,0,0.5) !important;
+}
+#registerWindow .login-actions .button:hover {
+    background: #5a0000 !important;
+    color: #fff !important;
+    border-color: #a03030 !important;
+}
+#registerWindow .error-text { color: #ff8080; }
+
+/* ── Login window (formulario contraseña) ── */
+#loginWindow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 320px;
+    opacity: 0;
+    transform: translateY(25px);
+    pointer-events: none;
+    transition: opacity .35s ease, transform .35s ease;
+}
+
+#loginWindow.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* ── Register window (formulario crear usuario) ── */
+#registerWindow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 320px;
+    opacity: 0;
+    transform: translateY(25px);
+    pointer-events: none;
+    transition: opacity .35s ease, transform .35s ease;
+}
+#registerWindow.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* ── Foto de usuario (preview lateral) ── */
+.user-preview {
+    position: absolute;
+    top: 0;
+    left: 320px;
+    width: 140px;
+    z-index: 50;
+    opacity: 0;
+    transform: translateY(20px) scale(.92);
+    pointer-events: none;
+    transition: opacity .35s ease, transform .35s ease;
+}
+
+.user-preview.visible {
+    opacity: 1;
+    transform: translateY(-20px) scale(1);
+    pointer-events: auto;
+}
+
+.user-preview .window { overflow: hidden; }
+
+.user-preview .window-body {
+    min-height: 120px;
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.user-preview img,
+.login-avatar-placeholder {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    display: block;
+    box-shadow:
+        -1px -1px 0 #0a0a0a,
+         1px  1px 0 #ffffff,
+        -2px -2px 0 #808080,
+         2px  2px 0 #dfdfdf;
+}
+
+.login-avatar-placeholder {
+    background: #808080;
+    color: #dfdfdf;
+    font-size: 56px;
+    line-height: 1;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 1px 1px 0 #404040;
+}
+
+#previewImage { image-rendering: pixelated; }
+
+/* ── Lista de botones de usuario ── */
+.user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.user-button {
+    width: 100%;
+    text-align: left;
+    padding: 4px 12px;
+    font-size: 12px;
+    background: #1e0c0c !important;
+    color: #d4a0a0 !important;
+    border: 1px solid #3a1515 !important;
+    border-radius: 1px;
+    box-shadow:
+        inset 0 1px 0 rgba(255,100,100,0.08),
+        0 1px 3px rgba(0,0,0,0.5) !important;
+    transition: background 0.1s, color 0.1s;
+}
+
+.user-button:hover {
+    background: #5a0000 !important;
+    color: #fff !important;
+    border-color: #a03030 !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255,120,120,0.15),
+        0 2px 6px rgba(120,0,0,0.4) !important;
+}
+
+.user-button:active {
+    background: #3a0000 !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+}
+
+/* ── Form de password ── */
+.login-text { margin-bottom: 14px; }
+.field-row-stacked { margin-top: 12px; }
+
+.login-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+/* Transición suave entre temas */
+.window,
+.window-body,
+.button,
+input[type="password"],
+input[type="text"],
+label, p, strong {
+    transition: background 0.5s ease, color 0.5s ease, box-shadow 0.5s ease;
+}
+
+.error-text {
+    color: #c00;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* ── Icono de error en title-bar ── */
+#error-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    color: #cc0000;
+    font-size: 10px;
+    font-weight: bold;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-right: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+/* =========================
+   INTRO ANIMADA
+========================= */
+
+#intro-start {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 14px 18px 14px 60px;
+    background: #0d1117;
+    z-index: 1;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+#intro-start::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 3px,
+        rgba(0,0,0,0.22) 3px,
+        rgba(0,0,0,0.22) 4px
+    );
+    pointer-events: none;
+}
+
+#intro-start > span {
+    font-family: 'VT323', monospace;
+    font-size: 2rem;
+    color: #c8ffe0;
+    text-shadow: none;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    user-select: none;
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes termBlink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+}
+
+#intro-cursor {
+    animation: termBlink 1s step-end infinite;
+}
+
+#intro-overlay {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 9999;
+}
+
+#intro-overlay video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#intro-overlay.oculto {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+}
+
+/* =========================
+   POPUPS DE ERROR / ANUNCIO
+========================= */
+
+@keyframes adFromTL {
+    from { opacity:0; transform:translate(-20px,-20px); }
+    to   { opacity:1; transform:translate(0,0); }
+}
+@keyframes adFromTR {
+    from { opacity:0; transform:translate(20px,-20px); }
+    to   { opacity:1; transform:translate(0,0); }
+}
+@keyframes adFromBL {
+    from { opacity:0; transform:translate(-20px,20px); }
+    to   { opacity:1; transform:translate(0,0); }
+}
+@keyframes adFromBR {
+    from { opacity:0; transform:translate(20px,20px); }
+    to   { opacity:1; transform:translate(0,0); }
+}
+
+#ad-popup {
+    position: fixed;
+    z-index: 5000;
+    display: none;
+    cursor: pointer;
+}
+
+#ad-titlebar { cursor: move; }
+
+#ad-image {
+    display: block;
+    width: 10vw;
+    height: auto;
+    image-rendering: pixelated;
+}
+
+#ad-btn {
+    width: 100%;
+    margin-top: 8px;
+    font-weight: bold;
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+.window.error-popup {
+    position: fixed;
+    z-index: 4500;
+    width: 270px;
+    opacity: 0;
+    transform: scale(0.88);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    background: #120808;
+    border-color: #3a0000 #0a0000 #0a0000 #3a0000;
+    box-shadow: 1px 1px 0 #000, -1px -1px 0 #5a1010,
+                0 10px 36px rgba(0,0,0,0.85), 0 0 14px rgba(180,0,0,0.2);
+}
+
+.window.error-popup.ep-visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.error-popup .title-bar {
+    background: linear-gradient(to right, #6a0000, #b02020);
+    border-bottom: 1px solid #3a0000;
+}
+
+.ep-title-icon {
+    display: inline-flex;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    color: #cc0000;
+    font-size: 9px;
+    font-weight: bold;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-right: 3px;
+    line-height: 1;
+}
+
+.error-popup .window-body {
+    background: #120808;
+    padding: 12px 14px;
+}
+
+.ep-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.ep-big-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #cc0000;
+    color: #fff;
+    font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid #800000;
+    box-shadow: inset 0 1px 0 rgba(255,100,100,0.3);
+    line-height: 1;
+}
+
+.ep-msg {
+    color: #d4a0a0;
+    font-size: 11px;
+    margin: 2px 0 0;
+    line-height: 1.5;
+}
+
+.ep-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.ep-ok-btn {
+    min-width: 72px;
+    background: #1e0c0c !important;
+    color: #d4a0a0 !important;
+    border: 1px solid #3a1515 !important;
+    box-shadow: inset 0 1px 0 rgba(255,80,80,0.07), 0 1px 3px rgba(0,0,0,0.5) !important;
+}
+
+.ep-ok-btn:hover {
+    background: #5a0000 !important;
+    color: #fff !important;
+    border-color: #a03030 !important;
+}

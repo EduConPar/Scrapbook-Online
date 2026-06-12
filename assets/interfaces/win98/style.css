@@ -1,0 +1,68 @@
+/* ──────────────────────────────────────────────────────────────────────
+   INTERFACE: MelonOS 98 (default y única)
+   ──────────────────────────────────────────────────────────────────────
+   El look retro Win98 viene aplicado por `assets/css/98.css` +
+   `themes.css`. Aquí solo definimos las CSS vars POR DEFECTO
+   (paleta gris clásica). Cuando el usuario tiene un tema activo,
+   ese tema carga después y sobreescribe estas variables.
+
+   Los tokens están alineados con los que expone el editor de Temas
+   (assets/themes/theme-helpers.php → $THEME_COLOR_KEYS).
+   ────────────────────────────────────────────────────────────────────── */
+
+:root {
+    /* Superficies */
+    --win-bg:                  #c0c0c0;
+    --win-body-bg:             #c0c0c0;
+    --surface-deep:            #c0c0c0;
+    --inset-bg:                #ffffff;
+    /* Inputs */
+    --input-bg:                #ffffff;
+    --input-text:              #000000;
+    /* Botones */
+    --btn-bg:                  #c0c0c0;
+    --btn-text:                #000000;
+    /* Botón inicio */
+    --start-btn-bg:            #c0c0c0;
+    --start-btn-text:          #000000;
+    /* Texto */
+    --text:                    #000000;
+    --text-muted:              #666666;
+    --text-faint:              #808080;
+    --text-inset:              #555555;
+    /* Title-bar */
+    --titlebar-start:          #0a246a;
+    --titlebar-end:            #a6caf0;
+    --titlebar-text:           #ffffff;
+    --titlebar-icon-color:     #000000;
+    --titlebar-icon-bg:        #c0c0c0;
+    --titlebar-icon-bezel-light:#ffffff;
+    --titlebar-icon-bezel-dark: #0a0a0a;
+    /* Acento */
+    --accent:                  #000080;
+    --accent-text:             #ffffff;
+    --accent-deep:             #000060;
+    /* Bordes */
+    --border:                  #7f7f7f;
+    /* Bezels 3D Win98 (críticos para los bordes hundidos/elevados) */
+    --bezel-light-1:           #dfdfdf;
+    --bezel-light-2:           #ffffff;
+    --bezel-dark-1:            #0a0a0a;
+    --bezel-dark-2:            #808080;
+    /* Escritorio */
+    --desktop-bg:              #008080;
+    /* Estados */
+    --link-text:               #0000ff;
+    --error-text:              #c00000;
+    --warning-bg:              #fffbe6;
+    --warning-text:            #444444;
+    /* Badges */
+    --badge-bg:                #d72638;
+    --badge-text:              #ffffff;
+    /* Decorativo */
+    --star-color:              #ffd700;
+    /* Overlays (no editable — interno) */
+    --overlay-text:            #ffffff;
+    --overlay-text-shadow:     rgba(0,0,0,0.8);
+
+}

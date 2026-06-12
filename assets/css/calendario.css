@@ -1,0 +1,187 @@
+/* =========================================================
+   CALENDARIO
+   ---------------------------------------------------------
+   Calendario de pareja: rejilla mensual, popup de día,
+   formularios de añadir momento / recordatorio y diálogo
+   de invitación a pareja. Solo estilos base — los overrides
+   de tema generales viven en themes.css.
+
+   Nota: los fondos (wallpaper) por tema se quedan en este
+   archivo porque solo aplican dentro del iframe del
+   calendario; ponerlos en themes.css colisionaría con el
+   wallpaper que setea desktop-base.php por inline style.
+========================================================= */
+
+html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--desktop-bg); }
+
+.popup-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    z-index: 9000;
+    justify-content: center;
+    align-items: center;
+}
+.popup-overlay.active { display: flex; }
+
+.cal-cell {
+    padding: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    border: 1px dashed color-mix(in srgb, var(--text) 25%, transparent);
+    position: relative;
+    overflow: hidden;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+.cal-cell:hover {
+    border-color: color-mix(in srgb, var(--text) 55%, transparent);
+    background: color-mix(in srgb, var(--win-bg) 35%, transparent);
+}
+.cal-cell-num {
+    padding: 6px 4px;
+}
+.cal-cell-today {
+    width: 100%;
+    background: var(--accent);
+    color: var(--accent-text);
+    padding: 6px 4px;
+    box-sizing: border-box;
+    text-align: center;
+}
+.cal-cell-foto {
+    background-size: cover;
+    background-position: center;
+    color: var(--overlay-text) !important;
+    text-shadow: 0 0 3px var(--overlay-text-shadow), 0 0 6px var(--overlay-text-shadow);
+    border: 2px solid var(--overlay-text) !important;
+}
+
+/* Inputs del calendario: en vez del bezel hundido por defecto de los
+   inputs, usamos el mismo bezel "saliente" que los botones — más coherente
+   con el resto del UI dentro del calendario.
+   Selector reforzado con body para ganar especificidad sobre themes.css y
+   98.css aunque cambie el orden de carga. */
+body input[type="text"],
+body input[type="date"],
+body input[type="number"],
+body input[type="email"],
+body input[type="password"],
+body input[type="search"],
+body input[type="tel"],
+body input[type="url"],
+body textarea,
+body select {
+    box-shadow: inset -1px -1px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2),
+                inset  2px  2px var(--bezel-light-2) !important;
+}
+
+/* ── Wallpapers por tema (scope: calendario) ── */
+body.capi {
+    background-image: url('../img/wallpapers/capi-wallpaper.jpg') !important;
+    background-size: cover;
+    background-position: center;
+}
+body.angie {
+    background-image: url('../img/wallpapers/angie-wallpaper.png') !important;
+    background-size: cover;
+    background-position: center;
+}
+
+/* ── Popup-dia: cards de momentos + filas de recordatorios ──
+   Antes eran estilos inline duplicados en `abrirPopupDia` con
+   `style.cssText = '...'`. Movidos aquí para tener una sola fuente
+   de verdad y poder iterar diseño sin tocar JS. */
+.popup-empty {
+    font-size: 11px;
+    color: #808080;
+}
+.popup-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+.popup-section-title.popup-section-recs { margin-top: 8px; }
+.popup-section-momentos { color: #ff69b4; }
+.popup-section-recs     { color: #4a90d9; }
+
+.momento-card {
+    border: 1px solid #ff69b4;
+    padding: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    border-radius: 2px;
+}
+.momento-card-img {
+    width: 100%;
+    max-height: 180px;
+    object-fit: cover;
+    border-radius: 2px;
+    margin-bottom: 6px;
+    display: block;
+}
+.momento-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.rec-row {
+    border: 1px solid #4a90d9;
+    padding: 6px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    border-radius: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.btn-del-row {
+    font-size: 10px;
+    padding: 1px 4px;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+/* Wrap de los botones de acción de cada recordatorio en el popup-día.
+   La .rec-row usa space-between → con este wrap los botones son UN
+   bloque a la derecha (en lugar de 2 elementos repartidos), pegados
+   uno al otro con un pequeño gap. */
+.rec-row-btns {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+.rec-row-btns .btn-del-row {
+    margin-left: 0;          /* el gap del wrap maneja el espacio */
+}
+.muted { color: #808080; }
+
+/* Sidebar derecha — items de recordatorios próximos. */
+.sidebar-rec {
+    border: 1px solid #4a90d9;
+    padding: 6px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    border-radius: 2px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 4px;
+}
+.sidebar-rec-texto { flex: 1; }
+.sidebar-rec-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.btn-icon-sm {
+    font-size: 10px;
+    padding: 1px 4px;
+}

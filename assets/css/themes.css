@@ -1,0 +1,347 @@
+/* =========================================================
+   THEMES — TOKENS POR USUARIO
+   ---------------------------------------------------------
+   tokens.css define la paleta Win98 por defecto. Este archivo:
+     1. Redefine los tokens para body.capi/angie/user1/user2.
+     2. Reescribe las superficies clave de 98.css usando
+        var(--token), de modo que CUALQUIER tema (incluyendo
+        los generados por la app de Temas) se propague a las
+        ventanas, botones, inputs y barras de título sin
+        necesidad de reglas selector-específicas.
+     3. Mantiene unas pocas reglas puntuales para casos que no
+        encajan en el sistema de tokens (bezels tintados del
+        taskbar de capi, gradientes de slots vacíos, etc.).
+========================================================= */
+
+
+/* =========================================================
+   1) PALETAS — definen las variables que el resto del CSS usa
+========================================================= */
+
+body.capi,
+body.user1 {
+    --win-bg:              #2d2d2d;
+    --win-body-bg:         #222222;
+    --surface-deep:        #1e1e1e;
+    --inset-bg:            #111111;
+    --input-bg:            #1a1a1a;
+    --input-text:          #d0d0d0;
+    --btn-bg:              #3a3a3a;
+    --btn-text:            #d0d0d0;
+    --start-btn-bg:        #3a3a3a;
+    --start-btn-text:      #d0d0d0;
+    --text:                #d0d0d0;
+    --text-muted:          #888888;
+    --text-faint:          #666666;
+    --text-inset:          #444444;
+    --titlebar-start:      #6b5500;
+    --titlebar-end:        #EDC001;
+    --titlebar-text:       #000000;
+    --titlebar-icon-color:       #000000;
+    --titlebar-icon-bg:          #3a3a3a;
+    --titlebar-icon-bezel-light: #555555;
+    --titlebar-icon-bezel-dark:  #111111;
+    --accent:              #EDC001;
+    --accent-text:         #000000;
+    --accent-deep:         #c8a000;
+    --border:              #3a3a3a;
+    --bezel-light-1:       #555555;
+    --bezel-light-2:       #444444;
+    --bezel-dark-1:        #111111;
+    --bezel-dark-2:        #1a1a1a;
+    --desktop-bg:          #1a1a1a;
+    --link-text:           #EDC001;
+    --error-text:          #ff4f6e;
+    --warning-bg:          #2a2200;
+    --warning-text:        #e8cc80;
+    --badge-bg:            #ff4f6e;
+    --badge-text:          #ffffff;
+    --star-color:          #EDC001;
+
+    /* Alias retro-compat */
+    --t-bg:                #2d2d2d;
+    --t-bg-alt:            #1a1a1a;
+    --t-text:              #d0d0d0;
+    --t-text-muted:        #888888;
+    --t-accent:            #EDC001;
+    --t-accent-text:       #000000;
+    --t-border:            #3a3a3a;
+    --t-grad:              linear-gradient(90deg, #6b5500, #EDC001);
+}
+
+body.angie,
+body.user2 {
+    --win-bg:              #F8D0C8;
+    --win-body-bg:         #F8D0C8;
+    --surface-deep:        #F8D0C8;
+    --inset-bg:            #F3BABA;
+    --input-bg:            #F3BABA;
+    --input-text:          #1a1a1a;
+    --btn-bg:              #5B744B;
+    --btn-text:            #F9DDD8;
+    --start-btn-bg:        #5B744B;
+    --start-btn-text:      #F9DDD8;
+    --text:                #35522B;
+    --text-muted:          #5B744B;
+    --text-faint:          #799567;
+    --text-inset:          #799567;
+    --titlebar-start:      #5B744B;
+    --titlebar-end:        #799567;
+    --titlebar-text:       #F9DDD8;
+    --titlebar-icon-color:       #35522B;
+    --titlebar-icon-bg:          #F8D0C8;
+    --titlebar-icon-bezel-light: #F9DDD8;
+    --titlebar-icon-bezel-dark:  #35522B;
+    --accent:              #799567;
+    --accent-text:         #F9DDD8;
+    --accent-deep:         #5B744B;
+    --border:              #F3BABA;
+    --bezel-light-1:       #F9DDD8;
+    --bezel-light-2:       #F8D0C8;
+    --bezel-dark-1:        #35522B;
+    --bezel-dark-2:        #5B744B;
+    --desktop-bg:          #F9DDD8;
+    --link-text:           #5B744B;
+    --error-text:          #c8456e;
+    --warning-bg:          #F3BABA;
+    --warning-text:        #35522B;
+    --badge-bg:            #c8456e;
+    --badge-text:          #F9DDD8;
+    --star-color:          #c8a000;
+
+    /* Alias retro-compat */
+    --t-bg:                #F8D0C8;
+    --t-bg-alt:            #F9DDD8;
+    --t-text:              #35522B;
+    --t-text-muted:        #5B744B;
+    --t-accent:            #799567;
+    --t-accent-text:       #F9DDD8;
+    --t-border:            #F3BABA;
+    --t-grad:              linear-gradient(90deg, #5B744B, #799567);
+}
+
+
+/* =========================================================
+   2) CHROME WIN98 token-driven (vale para CUALQUIER tema)
+   ---------------------------------------------------------
+   Estas reglas sobreescriben los valores hardcoded de 98.css
+   usando variables. Para el "tema neutro" (sin clase
+   capi/angie/etc.), los tokens en :root reproducen los
+   defaults Win98 → aspecto idéntico al original.
+========================================================= */
+
+.window {
+    background: var(--win-bg);
+    box-shadow: inset -1px -1px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2),
+                inset  2px  2px var(--bezel-light-2);
+}
+
+.window-body {
+    background: var(--win-body-bg);
+    color: var(--text);
+}
+
+.title-bar {
+    background: linear-gradient(90deg, var(--titlebar-start), var(--titlebar-end));
+    color: var(--titlebar-text);
+}
+
+.title-bar-text {
+    color: var(--titlebar-text);
+}
+
+/* ── Iconos de la barra de título (close / minimize / maximize / restore / help)
+   98.css los pinta como background-image (SVG con fill negro). Aquí los
+   recoloreamos con mask-image para que el dibujo use --titlebar-icon-color
+   y el fondo del botón --titlebar-icon-bg. ──── */
+.title-bar-controls button[aria-label] {
+    background-color: var(--titlebar-icon-bg);
+    background-image: none;
+    box-shadow: inset -1px -1px var(--titlebar-icon-bezel-dark),
+                inset  1px  1px var(--titlebar-icon-bezel-light),
+                inset -2px -2px var(--titlebar-icon-bezel-dark),
+                inset  2px  2px var(--titlebar-icon-bezel-light);
+    position: relative;
+}
+.title-bar-controls button[aria-label]:not(:disabled):active {
+    box-shadow: inset -1px -1px var(--titlebar-icon-bezel-light),
+                inset  1px  1px var(--titlebar-icon-bezel-dark),
+                inset -2px -2px var(--titlebar-icon-bezel-light),
+                inset  2px  2px var(--titlebar-icon-bezel-dark) !important;
+}
+.title-bar-controls button[aria-label]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--titlebar-icon-color);
+    -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+    pointer-events: none;
+}
+.title-bar-controls button[aria-label=Minimize]::before,
+.title-bar-controls button[aria-label].minimize::before {
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='2' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M0 0h6v2H0z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='2' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M0 0h6v2H0z'/%3E%3C/svg%3E");
+    -webkit-mask-position: bottom 3px left 4px;
+            mask-position: bottom 3px left 4px;
+}
+.title-bar-controls button[aria-label=Maximize]::before,
+.title-bar-controls button[aria-label].maximize::before {
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='9' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 0H0v9h9V0zM8 2H1v6h7V2z' fill='%23000'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='9' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M9 0H0v9h9V0zM8 2H1v6h7V2z' fill='%23000'/%3E%3C/svg%3E");
+    -webkit-mask-position: top 2px left 3px;
+            mask-position: top 2px left 3px;
+}
+.title-bar-controls button[aria-label=Restore]::before,
+.title-bar-controls button[aria-label].restore::before {
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M2 0h6v2H2zM7 2h1v4H7zM2 2h1v1H2zM6 5h1v1H6zM0 3h6v2H0zM5 5h1v4H5zM0 5h1v4H0zM1 8h4v1H1z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M2 0h6v2H2zM7 2h1v4H7zM2 2h1v1H2zM6 5h1v1H6zM0 3h6v2H0zM5 5h1v4H5zM0 5h1v4H0zM1 8h4v1H1z'/%3E%3C/svg%3E");
+    -webkit-mask-position: top 2px left 3px;
+            mask-position: top 2px left 3px;
+}
+.title-bar-controls button[aria-label=Help]::before,
+.title-bar-controls button[aria-label].help::before {
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M0 1h2v2H0zM1 0h4v1H1zM4 1h2v2H4zM3 3h2v1H3zM2 4h2v2H2zM2 7h2v2H2z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='6' height='9' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%23000' d='M0 1h2v2H0zM1 0h4v1H1zM4 1h2v2H4zM3 3h2v1H3zM2 4h2v2H2zM2 7h2v2H2z'/%3E%3C/svg%3E");
+    -webkit-mask-position: top 2px left 5px;
+            mask-position: top 2px left 5px;
+}
+.title-bar-controls button[aria-label=Close]::before,
+.title-bar-controls button[aria-label].close::before {
+    -webkit-mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0h2v1h1v1h2V1h1V0h2v1H7v1H6v1H5v1h1v1h1v1h1v1H6V6H5V5H3v1H2v1H0V6h1V5h1V4h1V3H2V2H1V1H0V0z' fill='%23000'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml;charset=utf-8,%3Csvg width='8' height='7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 0h2v1h1v1h2V1h1V0h2v1H7v1H6v1H5v1h1v1h1v1h1v1H6V6H5V5H3v1H2v1H0V6h1V5h1V4h1V3H2V2H1V1H0V0z' fill='%23000'/%3E%3C/svg%3E");
+    -webkit-mask-position: top 3px left 4px;
+            mask-position: top 3px left 4px;
+}
+
+button,
+.button,
+input[type="reset"],
+input[type="submit"] {
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    box-shadow: inset -1px -1px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-light-1),
+                inset -2px -2px var(--bezel-dark-2),
+                inset  2px  2px var(--bezel-light-2);
+}
+
+/* Botón .default (típicamente el submit): bezel más grueso con tokens */
+button.default,
+.button.default,
+input[type="reset"].default,
+input[type="submit"].default {
+    box-shadow: inset -2px -2px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-dark-1),
+                inset  2px  2px var(--bezel-light-1),
+                inset -3px -3px var(--bezel-dark-2),
+                inset  3px  3px var(--bezel-light-2);
+}
+
+button.default:not(:disabled):active,
+.button.default:not(:disabled):active,
+input[type="reset"].default:not(:disabled):active,
+input[type="submit"].default:not(:disabled):active {
+    box-shadow: inset  2px  2px var(--bezel-dark-1),
+                inset -1px -1px var(--bezel-dark-1),
+                inset -2px -2px var(--bezel-light-1),
+                inset  3px  3px var(--bezel-dark-2),
+                inset -3px -3px var(--bezel-light-2) !important;
+}
+
+button:not(:disabled):active,
+.button:not(:disabled):active,
+input[type="reset"]:not(:disabled):active,
+input[type="submit"]:not(:disabled):active {
+    box-shadow: inset -1px -1px var(--bezel-light-1),
+                inset  1px  1px var(--bezel-dark-1),
+                inset -2px -2px var(--bezel-light-2),
+                inset  2px  2px var(--bezel-dark-2) !important;
+}
+
+button:disabled,
+.button:disabled {
+    box-shadow: inset -1px -1px var(--bezel-dark-1),
+                inset  1px  1px var(--bezel-light-2),
+                inset -2px -2px var(--bezel-dark-2),
+                inset  2px  2px var(--bezel-light-2);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+input[type="date"],
+textarea,
+select {
+    background: var(--input-bg);
+    color: var(--input-text);
+    box-shadow: inset -1px -1px var(--bezel-light-1),
+                inset  1px  1px var(--bezel-dark-1),
+                inset -2px -2px var(--bezel-light-2),
+                inset  2px  2px var(--bezel-dark-2);
+}
+
+/* 98.css fuerza background:silver en inputs readonly/disabled (look "no
+   editable"). Lo reescribimos para que use la superficie del tema y no
+   se vea un cuadrado gris fuera de paleta. */
+input[type="text"]:read-only,
+input[type="password"]:read-only,
+input[type="email"]:read-only,
+input[type="number"]:read-only,
+input[type="search"]:read-only,
+input[type="tel"]:read-only,
+input[type="url"]:read-only,
+textarea:read-only,
+input[type="text"]:disabled,
+textarea:disabled {
+    background: var(--win-bg);
+    color: var(--text-muted);
+}
+
+
+/* =========================================================
+   3) OVERRIDES ESPECÍFICOS por tema con paletas únicas
+   ---------------------------------------------------------
+   Casos donde el bezel/gradient depende del acento del tema
+   y no se reproduce sólo con tokens base.
+========================================================= */
+
+/* ── Slot vacío de "en curso": gradient verde claro (angie) ── */
+body.angie .profile-encurso-slot:not(.filled) .profile-encurso-slot-tb,
+body.user2 .profile-encurso-slot:not(.filled) .profile-encurso-slot-tb {
+    background: linear-gradient(to right, #8a9e7a, #b0c4a0);
+    color: #F9DDD8;
+}
+
+/* ── btn-active del reproductor (angie) ── */
+body.angie .btn-active,
+body.user2 .btn-active {
+    background: #007020 !important;
+    color: #ffffff !important;
+}
+
+/* ── archive item:hover (angie) ── */
+body.angie .archive-item:hover,
+body.user2 .archive-item:hover {
+    background: #e8f0e0;
+}
+
+/* ── Profile gallery placeholder (angie) ── */
+body.angie .profile-gallery-placeholder,
+body.user2 .profile-gallery-placeholder {
+    background: #d4a0a0;
+    color: #F9DDD8;
+}
+
+/* ── Start menu sidebar (angie) ── */
+body.angie #start-sidebar,
+body.user2 #start-sidebar {
+    background: linear-gradient(to top, #5B744B, #799567);
+    color: #F9DDD8;
+}

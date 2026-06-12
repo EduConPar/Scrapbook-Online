@@ -1,0 +1,73 @@
+# Base de datos - nunca subir
+.env
+
+# Dumps SQL (backups / migraciones de Hostinger): contienen datos de
+# usuarios y se hacen rápidamente obsoletos. Se generan a mano cuando
+# hace falta y no tienen sitio en el repo.
+*.sql
+
+# Script de SSL local (XAMPP only) — no aplica fuera del entorno de dev.
+setup-https.sh
+
+# XAMPP / logs
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# ─── Contenido generado por usuarios en producción ─────────────────
+# El auto-deploy de Hostinger hace `git reset --hard` y revierte todo
+# lo tracked → si dejamos estas rutas en el repo, cada push borra las
+# fotos/wallpapers/temas que los usuarios suben en producción.
+# Solo viven en el servidor; no deben volver a entrar al repo.
+
+# Fotos de perfil (assets/img/<Label>.<ext>): cualquier imagen directa
+# en assets/img/ que NO sea de las subcarpetas de iconos/sistema.
+# Excepción: Capi y Angie sí se versionan como seed/defaults.
+/assets/img/*.png
+/assets/img/*.jpg
+/assets/img/*.jpeg
+/assets/img/*.gif
+/assets/img/*.webp
+!/assets/img/Capi.*
+!/assets/img/Angie.*
+
+# Wallpapers de usuario y de tema (pero NO base-wallpaper.jpg que es el
+# default que sí queremos versionado). Capi/Angie excepción.
+/assets/img/wallpapers/*
+!/assets/img/wallpapers/base-wallpaper.*
+!/assets/img/wallpapers/save-wallpaper.php
+!/assets/img/wallpapers/.gitkeep
+!/assets/img/wallpapers/capi-wallpaper.*
+!/assets/img/wallpapers/angie-wallpaper.*
+!/assets/img/wallpapers/theme-*-capi-wallpaper.*
+!/assets/img/wallpapers/theme-*-angie-wallpaper.*
+
+# Start icons de usuario / tema. Capi/Angie excepción.
+/assets/img/start-icons/*
+!/assets/img/start-icons/save-start-icon.php
+!/assets/img/start-icons/.gitkeep
+!/assets/img/start-icons/capi-start-icon.*
+!/assets/img/start-icons/angie-start-icon.*
+!/assets/img/start-icons/theme-*-capi-start-icon.*
+!/assets/img/start-icons/theme-*-angie-start-icon.*
+
+# CSS de temas (los regenera assets/themes/api.php a partir de la BD).
+# Capi/Angie sí se versionan (sus temas son los seed iniciales).
+/assets/themes/*.css
+!/assets/themes/*-Capi.css
+!/assets/themes/*-Angie.css
+
+# Stubs de escritorio (los crea register-user.php; index/login los
+# auto-regeneran si faltan). Capi/Angie sí se versionan.
+/desktops/*-desktop.php
+!/desktops/capi-desktop.php
+!/desktops/angie-desktop.php
+
+# Subidas de momentos (fotos privadas).
+/uploads/momentos/*
+!/uploads/momentos/.gitkeep

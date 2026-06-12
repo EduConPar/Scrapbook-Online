@@ -1,0 +1,331 @@
+/* ──────────────────────────────────────────────────────────────────────
+   MOBILE-THEME.CSS — Look Win98 + tema del usuario para todas las apps
+   ──────────────────────────────────────────────────────────────────────
+   Compartido entre mobile.php, perfil-mobile.php, musica-mobile.php
+   y mobile-placeholder.php. Todo lo visual se deriva de las variables
+   de tokens.css (que el tema activo del usuario sobreescribe).
+
+   Pre-requisitos: el HTML que cargue este archivo también debe cargar,
+   en este orden: 98.css → tokens.css → base.css → themes.css → tema
+   activo del usuario (si existe) → mobile-theme.css.
+
+   Convención de clases: prefijo `mh-` para "Melon Hub mobile". El body
+   del documento debe tener `class="mh-body"` para que las reglas no
+   contaminen otras páginas que reusen estos selectores.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset móvil ──
+   Estrategia "native app shell": body OCUPA EXACTAMENTE el viewport
+   visible con overflow:hidden. La ventana Win98 fill body al 100%.
+   El scroll solo vive dentro de .mh-panel.
+
+   Altura del viewport — orden de preferencia:
+   1) var(--mh-vh): valor en px que el JS de cada página seteamos
+      desde window.innerHeight. Esto es lo que SOBREVIVE al bfcache:
+      al volver de una app, escuchamos `pageshow` y refrescamos el
+      valor para que el footer no quede descuelgado fuera del viewport.
+   2) 100dvh: fallback nativo. Funciona en navegadores modernos pero
+      el bfcache lo deja stale → bug del footer.
+   3) 100vh: último recurso para navegadores antiguos sin dvh. */
+html, .mh-body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    height: 100dvh;
+    height: var(--mh-vh, 100dvh);
+    overflow: hidden;
+    font-family: 'ms_sans_serif', Tahoma, sans-serif;
+    background: var(--desktop-bg, #000000) !important;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+}
+/* base.css fija height:100vh; overflow:hidden para escritorio — lo
+   mantenemos pero forzamos el bg del tema. */
+.mh-body {
+    height: var(--mh-vh, 100dvh) !important;
+    overflow: hidden !important;
+}
+
+/* ── Ventana principal Win98 que envuelve el contenido ── */
+.mh-window {
+    width: 100%;
+    max-width: 480px;
+    height: 100%;             /* fill body's height (= viewport) */
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+.mh-window > .title-bar { flex-shrink: 0; }
+.mh-window > .window-body {
+    flex: 1;
+    min-height: 0;             /* permite que children con overflow scroleen */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;          /* el scroll vive en paneles internos */
+    /* Safe-area inferior (gesture bar) absorbida aquí para que el
+       footer no quede oculto detrás de la barra de gestos del SO. */
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+
+/* ── Barra superior con avatar + título + reloj/extra ── */
+.mh-userbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: var(--btn-bg, silver);
+    box-shadow:
+        inset -1px -1px var(--bezel-dark-1, #0a0a0a),
+        inset 1px 1px var(--bezel-light-2, #fff),
+        inset -2px -2px var(--bezel-dark-2, grey),
+        inset 2px 2px var(--bezel-light-1, #dfdfdf);
+    color: var(--text, #000);
+    flex-shrink: 0;
+}
+/* Avatar del usuario (foto de perfil) — alineado 1:1 con
+   .profile-avatar-frame de perfil.css del escritorio. El marco se
+   aplica al WRAPPER (div) en lugar del <img>; muchos navegadores
+   tratan el <img> como elemento reemplazado y no pintan el box-shadow
+   exterior con fiabilidad. */
+.mh-userbar-avatar {
+    /* `flex: 0 0 48px` fija el flex-basis a 48px y prohibe grow/shrink
+       — el div no se va a estirar para llenar el espacio del header. */
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    box-sizing: border-box;
+    overflow: hidden;
+    margin: 2px;             /* aire para el shadow exterior */
+    background: var(--inset-bg, #808080);
+    color: var(--accent-text, #fff);
+    display: inline-flex;     /* inline-flex respeta width/height al 100% */
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    position: relative;       /* ancla el .pf-presence-dot */
+    box-shadow:
+        -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+         1px  1px 0 var(--bezel-light-1, #fff),
+        -2px -2px 0 var(--bezel-dark-2, grey),
+         2px  2px 0 var(--bezel-light-2, #dfdfdf);
+}
+.mh-userbar-avatar.has-presence-dot { overflow: visible; }
+.mh-userbar-avatar > img {
+    /* Píxeles explícitos en vez de % para que el img no se expanda
+       más allá del wrapper (algunos navegadores con object-fit + flex
+       inflaban el img al tamaño natural intrínseco). */
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    image-rendering: pixelated;
+    display: block;
+    flex-shrink: 0;
+}
+.mh-userbar-text {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.2;
+    color: var(--text, #000);
+}
+.mh-userbar-greeting {
+    font-size: 11px;
+    color: var(--text-muted, var(--text-faint, #444));
+}
+.mh-userbar-name {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--text, #000);
+    letter-spacing: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mh-userbar-clock {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    color: var(--text, #000);
+    text-align: right;
+}
+.mh-userbar-date {
+    font-size: 10px;
+    color: var(--text-muted, var(--text-faint, #444));
+    text-align: right;
+}
+
+/* ── Panel hundido (sunken-panel Win98) para listas y contenido ── */
+.mh-panel {
+    flex: 1;
+    background: var(--input-bg, #fff);
+    color: var(--input-text, var(--text, #000));
+    box-shadow:
+        inset -1px -1px var(--bezel-light-1, #fff),
+        inset 1px 1px var(--bezel-dark-2, grey),
+        inset -2px -2px var(--bezel-light-2, #dfdfdf),
+        inset 2px 2px var(--bezel-dark-1, #0a0a0a);
+    padding: 4px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 0;             /* evita que el flex item desborde */
+}
+.mh-panel-title {
+    font-size: 11px;
+    color: var(--text-muted, var(--text-faint, #444));
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 6px 8px 2px;
+    border-bottom: 1px dotted var(--text-faint, #aaa);
+    margin-bottom: 4px;
+}
+
+/* ── Filas/items genéricos dentro de un mh-panel ── */
+.mh-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    color: var(--input-text, var(--text, #000));
+    text-decoration: none;
+    border: 1px solid transparent;
+    min-height: 44px;
+}
+.mh-row + .mh-row { border-top: 1px dotted var(--text-faint, #aaa); }
+.mh-row:active {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+    border: 1px dotted var(--accent-text, #fff);
+}
+.mh-row.active {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+}
+
+/* ── Iconos / emojis en filas ── */
+.mh-row-icon {
+    width: 32px; height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    line-height: 1;
+}
+.mh-row-icon img {
+    max-width: 32px;
+    max-height: 32px;
+    object-fit: contain;
+    image-rendering: pixelated;
+}
+.mh-row-name {
+    flex: 1;
+    font-size: 13px;
+    color: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mh-row-meta {
+    font-size: 11px;
+    color: var(--text-muted, var(--text-faint, #444));
+    flex-shrink: 0;
+}
+.mh-row:active .mh-row-meta { color: var(--accent-text, #fff); }
+.mh-row.active .mh-row-meta { color: var(--accent-text, #fff); }
+.mh-row-chev {
+    color: var(--text-faint, #444);
+    font-size: 16px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+.mh-row:active .mh-row-chev { color: var(--accent-text, #fff); }
+.mh-row.active .mh-row-chev { color: var(--accent-text, #fff); }
+
+/* Badge de notificaciones sin leer al lado del nombre de la app del
+   launcher. Pintado por JS de mobile.php a partir de get-unread-chats.
+   Hidden por defecto — pasa a display:inline-flex cuando hay > 0.
+
+   Colores: --accent / --accent-text del tema activo del usuario. Si el
+   tema no los define (poco probable), caemos al rojo clásico para que
+   el badge no se pierda. */
+.mh-row-badge {
+    display: none;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 6px;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent, #c00);
+    color: var(--accent-text, #fff);
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 1;
+    border-radius: 9px;
+    flex-shrink: 0;
+    /* Pequeño contorno con el bezel oscuro del tema para que destaque
+       sobre fondos del mismo tono que el accent. */
+    box-shadow: 0 0 0 1px var(--bezel-dark-2, rgba(0,0,0,0.3));
+}
+.mh-row-badge.is-on { display: inline-flex; }
+/* En el row pulsado el fondo pasa al accent → el badge queda mismo color
+   que el fondo. Invertimos: badge usa --win-bg / --text para destacar. */
+.mh-row:active .mh-row-badge,
+.mh-row.active .mh-row-badge {
+    background: var(--win-bg, #fff);
+    color: var(--text, #000);
+    box-shadow: 0 0 0 1px var(--bezel-dark-2, rgba(0,0,0,0.3));
+}
+
+/* ── Status bar Win98 al pie con accesos rápidos ── */
+.mh-statusbar {
+    display: flex;
+    gap: 1px;
+    margin: 0 1px;
+    flex-shrink: 0;
+}
+.mh-statusbar a, .mh-statusbar button {
+    flex: 1;
+    box-shadow:
+        inset -1px -1px var(--bezel-light-2, #dfdfdf),
+        inset 1px 1px var(--bezel-dark-2, grey);
+    padding: 4px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--text, #000);
+    background: var(--btn-bg, silver);
+    text-decoration: none;
+    text-align: center;
+    border: none;
+    cursor: pointer;
+}
+.mh-statusbar a:active,
+.mh-statusbar button:active {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+}
+.mh-statusbar a.danger,
+.mh-statusbar button.danger {
+    color: var(--error-text, #800000);
+}
+
+/* ── Estado vacío / loading ── */
+.mh-empty {
+    text-align: center;
+    color: var(--text-muted, var(--text-faint, #666));
+    font-size: 12px;
+    padding: 40px 20px;
+}
+.mh-empty .mh-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+/* ── Botón Win98 a ancho completo, útil dentro de paneles ── */
+.mh-btn-full {
+    width: 100%;
+    min-height: 32px;
+    font-size: 12px;
+    margin-top: 6px;
+}
