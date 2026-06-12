@@ -649,15 +649,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="donar-encargos-title"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Encargos</div>
         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/064181251c" target="_blank" rel="noopener"
            data-kofi-title="Haro personalizado">
-            <span class="ic"><img src="../../assets/img/appIcons/haroIcon.png" alt="" style="width:18px;height:18px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Haro personalizado</span><span class="price">2 €</span>
+            <span class="ic"><img src="../../assets/img/appIcons/haroIcon.png" alt="" style="width:18px;height:18px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Haro personalizado</span><span class="price">5 €</span>
         </a>
         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/4de28dd45e" target="_blank" rel="noopener"
            data-kofi-title="Tema personalizado">
-            <span class="ic"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span><span class="label">Tema personalizado</span><span class="price">5 €</span>
+            <span class="ic"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></span><span class="label">Tema personalizado</span><span class="price">10 €</span>
         </a>
         <a class="button donar-encargo-btn" href="https://ko-fi.com/c/16c92f9fdf" target="_blank" rel="noopener"
            data-kofi-title="Mascota personalizada">
-            <span class="ic"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Mascota personalizada</span><span class="price">10 €</span>
+            <span class="ic"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span><span class="label">Mascota personalizada</span><span class="price">15 €</span>
         </a>
         <p class="donar-encargos-info">
             Si no te apetece donar también puedes hacer un encargo para tener
