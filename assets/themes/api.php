@@ -118,6 +118,49 @@ case 'save': {
         themeCssFile($name, $label),
         generateThemeCss(themeCssClassName($name, $label), $colors)
     );
+
+    /* ── PREMIO POR DESCARGA ───────────────────────────────────────────
+       Si esta llamada es una DESCARGA de un tema de la biblioteca
+       (downloaded=1 + sourceUserKey del autor), premiamos al AUTOR
+       con +50 puntos de autismo. Reglas:
+         · El autor no puede ser el descargador (no auto-premio).
+         · Solo 1 vez por par (autor_tema_iface, descargador): el UNIQUE
+           de `theme_download_rewards` dedupea. INSERT IGNORE → si la
+           fila ya existía rowCount=0 → no se da puntos.
+       Errores se silencian (try/catch) — no queremos que un fallo en el
+       premio rompa la propia descarga.
+       ────────────────────────────────────────────────────────────────── */
+    $awarded = false;
+    if ($downloaded) {
+        $srcKey  = isset($body['sourceUserKey'])   ? (string)$body['sourceUserKey']   : '';
+        $srcName = isset($body['sourceThemeName']) ? sanitizeThemeName($body['sourceThemeName']) : '';
+        if ($srcKey !== '' && $srcName !== '') {
+            try {
+                $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
+                $stmt->execute([$srcKey]);
+                $ownerId = (int)($stmt->fetchColumn() ?: 0);
+                if ($ownerId > 0 && $ownerId !== $uid) {
+                    $pdo->beginTransaction();
+                    $ins = $pdo->prepare(
+                        "INSERT IGNORE INTO theme_download_rewards
+                            (theme_owner_id, theme_name, interface_name, downloader_id)
+                         VALUES (?, ?, ?, ?)"
+                    );
+                    $ins->execute([$ownerId, $srcName, $iface, $uid]);
+                    if ($ins->rowCount() > 0) {
+                        $pdo->prepare("UPDATE usuarios SET autismo = autismo + 50 WHERE id = ?")
+                            ->execute([$ownerId]);
+                        $awarded = true;
+                    }
+                    $pdo->commit();
+                }
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+                error_log('[themes/save] reward error: ' . $e->getMessage());
+            }
+        }
+    }
+
     jsonResponse([
         'ok'        => true,
         'name'      => $name,
@@ -125,6 +168,7 @@ case 'save': {
         'className' => themeCssClassName($name, $label),
         'wallpaper' => $newWp,
         'startIcon' => $newSi,
+        'awarded'   => $awarded,
     ]);
 }
 

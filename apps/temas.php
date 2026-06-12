@@ -1840,8 +1840,14 @@ function downloadLibraryTheme(it){
     fetch('../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, colors: colors, downloaded: true,
-                               wallpaper: it.wallpaper || '', startIcon: it.startIcon || '' })
+        body: JSON.stringify({
+            name: name, colors: colors, downloaded: true,
+            wallpaper: it.wallpaper || '', startIcon: it.startIcon || '',
+            /* Identifica al autor para que el server le premie 50 puntos
+               (la primera vez que ESTE usuario descarga este tema). */
+            sourceUserKey:   it.userKey || '',
+            sourceThemeName: it.name    || ''
+        })
     }).then(function(r){ return r.json(); })
       .then(function(d){
           if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error al guardar'; return; }

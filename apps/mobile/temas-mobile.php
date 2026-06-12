@@ -1965,8 +1965,13 @@ function downloadLibraryTheme(it){
     fetch('../../assets/themes/api.php?action=save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, colors: colors, downloaded: true,
-                               wallpaper: it.wallpaper || '', startIcon: it.startIcon || '' })
+        body: JSON.stringify({
+            name: name, colors: colors, downloaded: true,
+            wallpaper: it.wallpaper || '', startIcon: it.startIcon || '',
+            /* Premio +50 al autor (dedupe server-side por descargador). */
+            sourceUserKey:   it.userKey || '',
+            sourceThemeName: it.name    || ''
+        })
     }).then(function(r){ return r.json(); })
       .then(function(d){
           if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error al guardar'; return; }

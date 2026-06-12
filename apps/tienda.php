@@ -1048,6 +1048,14 @@ if (document.readyState === 'loading') {
                         <div class="th-help-sub">Solo cuentan reacciones ❤ en posts que publiques desde la app (Galería → Publicar a Discord). Una persona = un corazón por post.</div>
                     </div>
                 </li>
+                <li class="th-help-item">
+                    <span class="th-help-icon"><img src="../assets/img/appIcons/temasIcon.png" alt="" style="width:20px;height:20px;object-fit:contain;image-rendering:pixelated;"></span>
+                    <div>
+                        <strong>Descargas de tus temas en la biblioteca</strong>
+                        <span class="th-help-amt">+50 <img src="../assets/img/appIcons/puntosAutismo.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:-1px;"></span>
+                        <div class="th-help-sub">Publica tu tema en la biblioteca compartida (Temas → ✓ Publicar). Cada usuario distinto que lo descargue te da +50 una vez. No cuentan tus propias descargas ni descargar el mismo tema varias veces.</div>
+                    </div>
+                </li>
             </ul>
             <p class="th-help-foot">
                 ¿Tu balance no sube? Asegúrate de que has vinculado tu Discord desde la sección

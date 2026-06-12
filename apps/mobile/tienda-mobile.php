@@ -1158,6 +1158,14 @@ if (document.readyState === 'loading') {
                         <div class="th-help-sub">Solo posts publicados desde la app a Discord. Un usuario = un corazón por post.</div>
                     </div>
                 </li>
+                <li class="th-help-item">
+                    <span class="th-help-icon"><img src="../../assets/img/appIcons/temasIcon.png" alt="" style="width:20px;height:20px;object-fit:contain;image-rendering:pixelated;"></span>
+                    <div>
+                        <strong>Descargas de tus temas</strong>
+                        <span class="th-help-amt">+50 / descarga única</span>
+                        <div class="th-help-sub">Publica tu tema en la biblioteca (Temas → ✓ Publicar). Cada usuario distinto que lo descargue te da +50 una vez. No cuentan auto-descargas ni descargas repetidas.</div>
+                    </div>
+                </li>
             </ul>
             <p class="th-help-foot">¿Tu balance no sube? <strong>Vincula tu Discord</strong> arriba.</p>
         </div>
