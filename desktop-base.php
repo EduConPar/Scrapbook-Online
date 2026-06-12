@@ -614,6 +614,7 @@ window.DesktopState.whenReady = function(cb){
         </div>
     </div>
     <iframe id="wrapped-frame" src="" frameborder="0"
+            allow="web-share; clipboard-write"
             style="flex:1; width:100%; border:none; display:block; background:#000;"></iframe>
 </div>
 

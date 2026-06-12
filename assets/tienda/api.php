@@ -129,6 +129,16 @@ case 'buy': {
             jsonError('Ya tienes este item', 409);
         }
 
+        /* Los items que conceden un rol de Discord requieren vinculación
+           obligatoria. Sin Discord vinculado el bot no podría darle el rol
+           al comprador → la compra no tendría efecto. Rechazamos antes de
+           cobrar para que el usuario no pierda puntos en una compra inútil. */
+        $itemRoleId = (string)($item['discord_role_id'] ?? '');
+        if ($itemRoleId !== '' && (string)($user['discord_user_id'] ?? '') === '') {
+            $pdo->rollBack();
+            jsonError('Vincula tu cuenta de Discord antes de comprar este item.', 403);
+        }
+
         $uStmt = $pdo->prepare('SELECT autismo FROM usuarios WHERE id = ? FOR UPDATE');
         $uStmt->execute([$userId]);
         $row = $uStmt->fetch(PDO::FETCH_ASSOC);

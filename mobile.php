@@ -159,6 +159,7 @@ require_once __DIR__ . '/db.php';
    user_settings.active_interface_slug (string JSON por CHECK constraint).
    Si no hay preferencia, fallback 'win98'. */
 (function() use (&$pdo, $userKey) {
+    /** @var PDO $pdo */
     $slug = 'win98';
     $stmt = $pdo->prepare("SELECT id FROM usuarios WHERE user_key = ?");
     $stmt->execute([$userKey]);
@@ -1236,7 +1237,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
 <!-- VISTA APP: iframe que carga la sub-app cuando el usuario tap una. -->
 <div id="shell-app" hidden>
-    <iframe id="app-frame" allow="autoplay; encrypted-media; clipboard-write"></iframe>
+    <iframe id="app-frame" allow="autoplay; encrypted-media; clipboard-write; web-share"></iframe>
 </div>
 
 <!-- WIDGET FLOTANTE: disco de vinilo arrastrable. Reemplaza el mini-player.

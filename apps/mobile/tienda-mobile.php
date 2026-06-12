@@ -804,7 +804,15 @@ function renderItems(){
             ? 'Adquiere el rol ' + it.discord_role_name + ' en :melonduagua: 3.0'
             : (it.descripcion || '');
         var owned = !!_owned[it.id|0];
-        var btnLabel = owned ? '✓ Ya lo tienes' : 'Comprar';
+        /* Items con rol de Discord requieren vinculación obligatoria.
+           El server también lo enforza (403) por si el frontend se parchea. */
+        var needsDiscord  = !!it.discord_role_name;
+        var discordLinked = window.__DISCORD_LINKED__ === true;
+        var locked        = needsDiscord && !discordLinked && !owned;
+        var btnLabel = owned  ? '✓ Ya lo tienes'
+                     : locked ? 'Vincula Discord'
+                              : 'Comprar';
+        var btnAttrs = locked ? ' disabled' : '';
         /* Para los haros el icono usa la convención
            assets/img/haro/{slug}Haro-preview.png (PNG curado).
            Si no existe, cae al último frame del gif vía onerror. */
@@ -824,7 +832,7 @@ function renderItems(){
             '</div>' +
             '<div class="tienda-card-name"' + nameStyle + '>' + esc(displayName) + '</div>' +
             '<div class="tienda-card-desc">' + esc(desc) + '</div>' +
-            '<button type="button" class="button" data-buy-id="' + it.id + '" data-price="' + it.precio + '">' + btnLabel + '</button>' +
+            '<button type="button" class="button" data-buy-id="' + it.id + '" data-price="' + it.precio + '"' + btnAttrs + '>' + btnLabel + '</button>' +
         '</div>';
     }).join('');
     view.querySelectorAll('[data-buy-id]').forEach(function(btn){
@@ -989,6 +997,7 @@ document.querySelectorAll('[data-view]').forEach(function(el){
     var nameEl = document.getElementById('tienda-discord-name');
     var btn    = document.getElementById('tienda-discord-btn');
     var linked = false;
+    window.__DISCORD_LINKED__ = false;
     var DISCORD_BASE = '../../assets/discord-oauth';
 
     function render(){
@@ -1005,8 +1014,11 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             var r = await fetch(DISCORD_BASE + '/status.php', { credentials: 'same-origin' }).then(function(x){ return x.json(); });
             if (r.error) throw new Error(r.error);
             linked = !!r.linked;
+            window.__DISCORD_LINKED__ = linked;
             nameEl.textContent = linked && r.username ? '@' + r.username : '';
             render();
+            /* Re-render de items para refrescar el bloqueo de los Discord. */
+            if (typeof renderItems === 'function') renderItems();
         } catch (e) {
             nameEl.textContent = '';
             btn.textContent    = 'Conectar Discord';
@@ -1034,6 +1046,7 @@ document.querySelectorAll('[data-view]').forEach(function(el){
             }).then(function(x){ return x.json(); });
             if (r.error) throw new Error(r.error);
             linked = false;
+            window.__DISCORD_LINKED__ = false;
             refresh();
         } catch (e) {
             alert('Error: ' + e.message);

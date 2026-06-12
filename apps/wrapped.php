@@ -2204,7 +2204,6 @@ function buildSlides(data) {
             <div class="wc-share-row">
                 <button type="button" class="wc-share-btn" id="wc-btn-share">📱 Compartir</button>
                 <button type="button" class="wc-share-btn" id="wc-btn-download">💾 Descargar</button>
-                <button type="button" class="wc-share-btn" id="wc-btn-copy">📋 Copiar</button>
             </div>
         </div>
     `, groupSong('topSong'), { bare: true }));
@@ -3047,6 +3046,100 @@ function wrappedFilename() {
     return 'melonhub-wrapped-' + year + '.png';
 }
 
+/* Descarga un blob como PNG con el nombre estándar. Lo abstraemos
+   porque tanto Descargar como el fallback de Compartir lo usan. */
+function downloadBlobAsImage(blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = wrappedFilename();
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Menú custom de compartir — fallback cuando navigator.share no soporta
+   archivos (escritorio Chrome/Firefox). Descarga la imagen y abre la
+   red social elegida en una pestaña nueva con un mensaje pre-rellenado.
+   El usuario adjunta manualmente el PNG descargado. */
+function showShareFallbackMenu(blob) {
+    /* Descargamos primero para que el usuario tenga la imagen lista. */
+    downloadBlobAsImage(blob);
+
+    /* Mensaje + URL del sitio. Cambia siteUrl si quieres que apunten
+       al wrapped concreto en vez de a la home. */
+    const text = '¡Mira mi Melon Hub Wrapped!';
+    const siteUrl = location.origin + (location.pathname.split('/').slice(0, -2).join('/') || '/');
+    const enc = encodeURIComponent;
+    const targets = [
+        { label: '📷 Instagram',
+          url:   'https://www.instagram.com/',
+          hint:  'Abre Instagram y sube la imagen descargada' },
+        { label: '💬 WhatsApp',
+          url:   'https://wa.me/?text=' + enc(text + ' ' + siteUrl),
+          hint:  'Adjunta la imagen descargada al chat' },
+        { label: '✈ Telegram',
+          url:   'https://t.me/share/url?url=' + enc(siteUrl) + '&text=' + enc(text),
+          hint:  'Adjunta la imagen descargada al chat' },
+        { label: '🐦 X / Twitter',
+          url:   'https://twitter.com/intent/tweet?text=' + enc(text + ' ' + siteUrl),
+          hint:  'Adjunta la imagen descargada al tweet' },
+        { label: '📘 Facebook',
+          url:   'https://www.facebook.com/sharer/sharer.php?u=' + enc(siteUrl),
+          hint:  'Sube la imagen al publicar' },
+    ];
+
+    /* Construimos un overlay simple, estilo Win98. Lo destruimos en cuanto
+       el usuario clickea un target o el botón Cerrar. */
+    const overlay = document.createElement('div');
+    overlay.className = 'wc-share-menu-overlay';
+    overlay.style.cssText =
+        'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;' +
+        'display:flex;align-items:center;justify-content:center;padding:14px;';
+
+    const panel = document.createElement('div');
+    panel.className = 'window';
+    panel.style.cssText =
+        'width:min(380px,92vw);max-height:88vh;display:flex;flex-direction:column;';
+    panel.innerHTML =
+        '<div class="title-bar">' +
+            '<div class="title-bar-text">Compartir Wrapped</div>' +
+            '<div class="title-bar-controls"><button aria-label="Close" data-share-close></button></div>' +
+        '</div>' +
+        '<div class="window-body" style="padding:12px;font-size:12px;line-height:1.5;">' +
+            '<p style="margin-bottom:10px;">Ya te descargué la imagen. Elige dónde compartirla:</p>' +
+            '<div class="wc-share-targets" style="display:flex;flex-direction:column;gap:8px;"></div>' +
+        '</div>';
+    overlay.appendChild(panel);
+
+    const list = panel.querySelector('.wc-share-targets');
+    targets.forEach(t => {
+        const a = document.createElement('a');
+        a.href = t.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'button';
+        a.style.cssText =
+            'display:flex;flex-direction:column;align-items:flex-start;gap:2px;' +
+            'padding:8px 10px;text-decoration:none;color:inherit;';
+        a.innerHTML =
+            '<span style="font-weight:bold;">' + t.label + '</span>' +
+            '<small style="opacity:0.75;font-weight:normal;">' + t.hint + '</small>';
+        a.addEventListener('click', () => setTimeout(() => overlay.remove(), 100));
+        list.appendChild(a);
+    });
+
+    function close() { overlay.remove(); }
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    panel.querySelector('[data-share-close]').addEventListener('click', close);
+    document.addEventListener('keydown', function esc(ev) {
+        if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
+    });
+    document.body.appendChild(overlay);
+}
+
 document.addEventListener('click', async (e) => {
     const t = e.target;
     if (!t || !t.classList) return;
@@ -3054,41 +3147,28 @@ document.addEventListener('click', async (e) => {
     if (t.id === 'wc-btn-share') {
         const blob = await captureWrappedCard();
         if (!blob) return;
+        /* En móvil (iOS/Android): el share sheet del sistema ya incluye
+           Instagram, WhatsApp, Telegram, etc. nativamente. */
         const file = new File([blob], wrappedFilename(), { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
             try {
                 await navigator.share({ files: [file], title: 'Mi Melon Hub Wrapped' });
-            } catch (_) {/* user canceled */}
-        } else {
-            /* Fallback a download si Web Share no disponible. */
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = wrappedFilename();
-            a.click();
-            URL.revokeObjectURL(url);
+                return;
+            } catch (err) {
+                /* AbortError = el usuario canceló a propósito; en ese caso NO
+                   abrimos el fallback. Cualquier otro error (NotAllowed por
+                   no estar en gesture context, NotSupported, etc.) cae al
+                   menú custom para que la acción siga funcionando. */
+                if (err && err.name === 'AbortError') return;
+            }
         }
+        /* Escritorio sin Web Share API o sin soporte de files. */
+        showShareFallbackMenu(blob);
     }
     else if (t.id === 'wc-btn-download') {
         const blob = await captureWrappedCard();
         if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = wrappedFilename();
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-    else if (t.id === 'wc-btn-copy') {
-        const blob = await captureWrappedCard();
-        if (!blob) return;
-        try {
-            if (navigator.clipboard && window.ClipboardItem) {
-                await navigator.clipboard.write([
-                    new ClipboardItem({ 'image/png': blob }),
-                ]);
-                t.textContent = '✓ Copiado';
-                setTimeout(() => { t.textContent = '📋 Copiar'; }, 1800);
-            }
-        } catch (_) { /* permiso denegado */ }
+        downloadBlobAsImage(blob);
     }
 });
 </script>
