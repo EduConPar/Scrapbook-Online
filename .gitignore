@@ -1,6 +1,14 @@
 # Base de datos - nunca subir
 .env
 
+# Dumps SQL (backups / migraciones de Hostinger): contienen datos de
+# usuarios y se hacen rápidamente obsoletos. Se generan a mano cuando
+# hace falta y no tienen sitio en el repo.
+*.sql
+
+# Script de SSL local (XAMPP only) — no aplica fuera del entorno de dev.
+setup-https.sh
+
 # XAMPP / logs
 *.log
 
@@ -10,3 +18,40 @@ Thumbs.db
 
 # VS Code
 .vscode/
+
+# ─── Contenido generado por usuarios en producción ─────────────────
+# El auto-deploy de Hostinger hace `git reset --hard` y revierte todo
+# lo tracked → si dejamos estas rutas en el repo, cada push borra las
+# fotos/wallpapers/temas que los usuarios suben en producción.
+# Solo viven en el servidor; no deben volver a entrar al repo.
+
+# Fotos de perfil (assets/img/<Label>.<ext>): cualquier imagen directa
+# en assets/img/ que NO sea de las subcarpetas de iconos/sistema.
+/assets/img/*.png
+/assets/img/*.jpg
+/assets/img/*.jpeg
+/assets/img/*.gif
+/assets/img/*.webp
+
+# Wallpapers de usuario y de tema (pero NO base-wallpaper.jpg que es el
+# default que sí queremos versionado).
+/assets/img/wallpapers/*
+!/assets/img/wallpapers/base-wallpaper.*
+!/assets/img/wallpapers/save-wallpaper.php
+!/assets/img/wallpapers/.gitkeep
+
+# Start icons de usuario / tema.
+/assets/img/start-icons/*
+!/assets/img/start-icons/save-start-icon.php
+!/assets/img/start-icons/.gitkeep
+
+# CSS de temas (los regenera assets/themes/api.php a partir de la BD).
+/assets/themes/*.css
+
+# Stubs de escritorio (los crea register-user.php; index/login los
+# auto-regeneran si faltan, así que no hace falta versionarlos).
+/desktops/*-desktop.php
+
+# Subidas de momentos (fotos privadas).
+/uploads/momentos/*
+!/uploads/momentos/.gitkeep
