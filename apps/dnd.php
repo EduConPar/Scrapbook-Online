@@ -28,15 +28,20 @@ if ($userKey && file_exists($themeHelpers)) {
 <meta charset="UTF-8">
 <script src="../assets/js/pwa-guard.js"></script>
     <script src="../assets/js/icon-pack.js"></script>
-    <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
-    <script src="../assets/js/interface-loader.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>D&D Fichas</title>
+<!-- Orden importante: tokens primero (defaults), interfaz después
+     (kawaii redefine tokens), themes.css después (per-user), y al
+     final el tema activo del usuario. Sin este orden las defaults
+     de tokens.css pisaban los overrides de kawaii y la página se
+     veía Win98 aunque el SO fuera MelonOS Overdose. -->
 <link rel="stylesheet" href="../assets/css/tokens.css">
+<?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
 <link rel="stylesheet" href="../assets/css/themes.css">
 <?php if ($activeThemeCss): ?>
 <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
 <?php endif; ?>
+<script src="../assets/js/interface-loader.js"></script>
 <style>
 @font-face { font-family:'Allison'; src:url('../assets/fonts/Allison-Regular.ttf') format('truetype'); }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}

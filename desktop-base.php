@@ -1681,9 +1681,9 @@ window.notifSystem = (function() {
     var dibujoIframe = document.getElementById('dibujo-iframe');
     var dibujoLoaded = false;
 
-    document.getElementById('dibujo-icon').addEventListener('dblclick', function() {
+    function openDibujoWindow() {
         if (!dibujoLoaded) {
-            dibujoIframe.src = 'https://excalidraw.com/#room=scrapbook-melon,clave-secreta-fija';
+            dibujoIframe.src = 'apps/dibujo.php';
             dibujoLoaded = true;
         }
         if (taskbarManager.isRegistered('dibujo-window')) {
@@ -1691,10 +1691,71 @@ window.notifSystem = (function() {
         } else {
             taskbarManager.register('dibujo-window', 'Dibujo', '<img src="assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
+    }
+
+    document.getElementById('dibujo-icon').addEventListener('dblclick', openDibujoWindow);
+
+    /* El X del título de la ventana NO cierra directo: pregunta primero
+       al iframe si tiene cambios sin guardar. Dibujo responde con
+       'close-allowed' o 'close-cancelled'. Si el iframe no responde en
+       2 s asumimos que está OK cerrarlo (timeout de seguridad). */
+    document.getElementById('dibujo-close').addEventListener('click', function() {
+        if (!dibujoLoaded || !dibujoIframe.contentWindow) {
+            taskbarManager.unregister('dibujo-window');
+            return;
+        }
+        var done = false;
+        var onReply = function(ev) {
+            if (!ev.data || (ev.data.type !== 'close-allowed' && ev.data.type !== 'close-cancelled')) return;
+            if (done) return;
+            done = true;
+            window.removeEventListener('message', onReply);
+            if (ev.data.type === 'close-allowed') {
+                taskbarManager.unregister('dibujo-window');
+            }
+        };
+        window.addEventListener('message', onReply);
+        try {
+            dibujoIframe.contentWindow.postMessage({ type: 'request-close' }, location.origin);
+        } catch (e) {
+            done = true;
+            window.removeEventListener('message', onReply);
+            taskbarManager.unregister('dibujo-window');
+        }
+        setTimeout(function() {
+            if (done) return;
+            done = true;
+            window.removeEventListener('message', onReply);
+            taskbarManager.unregister('dibujo-window');
+        }, 2000);
     });
 
-    document.getElementById('dibujo-close').addEventListener('click', function() {
-        taskbarManager.unregister('dibujo-window');
+    /* Puente Galería → Dibujo: la galería postMessage'a aquí cuando el
+       usuario clica un WIP. Abrimos Dibujo si hace falta y reenviamos
+       el blob al iframe en cuanto haya cargado. */
+    window.addEventListener('message', function(ev) {
+        var msg = ev.data;
+        if (!msg || msg.type !== 'open-in-dibujo' || !msg.blob) return;
+        var alreadyLoaded = dibujoLoaded;
+        openDibujoWindow();
+        var send = function() {
+            try {
+                dibujoIframe.contentWindow.postMessage({
+                    type: 'load-file',
+                    blob: msg.blob,
+                    fileName: msg.fileName,
+                    driveFileId: msg.driveFileId
+                }, location.origin);
+            } catch (e) {}
+        };
+        if (alreadyLoaded) {
+            send();
+        } else {
+            /* Esperamos a que el iframe acabe de cargar antes de
+               enviar (si no, el postMessage llega a un window sin
+               listener todavía). */
+            dibujoIframe.addEventListener('load', send, { once: true });
+        }
     });
 })();
 

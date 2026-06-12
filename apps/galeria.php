@@ -481,7 +481,7 @@ async function ensureDriveFolder() {
 }
 
 /* Extensiones admitidas (no-imagen → tratadas como WIP). */
-var WIP_EXTS    = ['csp', 'psd', 'kra'];
+var WIP_EXTS    = ['csp', 'psd', 'kra', 'ora'];
 var IMAGE_EXTS  = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif', 'tif', 'tiff'];
 /* MIME por extensión (para subida; Drive lo necesita en la metadata). */
 var EXT_TO_MIME = {
@@ -490,7 +490,8 @@ var EXT_TO_MIME = {
     avif: 'image/avif', tif:  'image/tiff', tiff: 'image/tiff',
     psd:  'image/vnd.adobe.photoshop',
     csp:  'application/octet-stream',
-    kra:  'application/x-krita'
+    kra:  'application/x-krita',
+    ora:  'image/openraster'
 };
 
 function extOf(name) {
@@ -662,13 +663,19 @@ async function extractFromDriveZip(file, filename) {
     throw new Error('Compresión no soportada: ' + entry.method);
 }
 
-/* Intenta extraer preview.png o mergedimage.png de un .kra. Devuelve un
-   blob: URL listo para <img src>, o null si no hay preview embebida. */
+/* Intenta extraer un PNG de preview de cualquier ZIP de tipo "ilustración
+   con capas". Prueba en orden las rutas estándar de:
+     - .kra (Krita)            → preview.png, mergedimage.png
+     - .ora (OpenRaster)       → Thumbnails/thumbnail.png, mergedimage.png
+   Devuelve blob URL para <img src>, o null si no encuentra ninguno. */
 async function extractKraPreviewBlob(file) {
     var bytes = null;
-    try { bytes = await extractFromDriveZip(file, 'preview.png'); } catch (e) { /* sigue */ }
-    if (!bytes) {
-        try { bytes = await extractFromDriveZip(file, 'mergedimage.png'); } catch (e) {}
+    var candidates = ['preview.png', 'Thumbnails/thumbnail.png', 'mergedimage.png'];
+    for (var i = 0; i < candidates.length; i++) {
+        try {
+            bytes = await extractFromDriveZip(file, candidates[i]);
+            if (bytes) break;
+        } catch (e) { /* sigue probando */ }
     }
     if (!bytes) return null;
     return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
@@ -1123,17 +1130,41 @@ function renderGrid() {
             (ts.length ? '<div class="gal-card-tags">' +
                 ts.map(function(t) { return '<span class="gal-chip">#' + escapeHtml(t) + '</span>'; }).join('') +
             '</div>' : '');
-        /* Click izquierdo: extensión no-renderizable → descarga; resto → preview.
-           El flag `_suppressClick` se enciende cuando un long-press táctil
-           ya ha abierto el menú contextual — así el touchend → click
-           sintético no abre además la preview. */
-        card.addEventListener('click', function() {
+        /* Click izquierdo:
+           - extensión no-renderizable (WIP: csp/psd/kra/ora) → abrir en
+             la app de Dibujo (descarga el blob de Drive, lo manda al
+             parent vía postMessage; el parent abre la ventana de
+             Dibujo y forwardea el blob).
+           - resto → preview.
+           El flag `_suppressClick` se enciende cuando un long-press
+           táctil ya ha abierto el menú contextual — así el touchend →
+           click sintético no abre además la preview. */
+        card.addEventListener('click', async function() {
             if (card.dataset.suppressClick === '1') {
                 delete card.dataset.suppressClick;
                 return;
             }
-            if (wipExt) downloadToUser(f);
-            else openPreview(f);
+            if (wipExt) {
+                try {
+                    setStatus('Cargando ' + f.name + '...');
+                    const blob = await downloadDriveBlob(f.id, f.mimeType);
+                    /* Manda al parent (desktop) para que abra Dibujo. */
+                    try {
+                        window.parent.postMessage({
+                            type: 'open-in-dibujo',
+                            blob, fileName: f.name, driveFileId: f.id,
+                        }, location.origin);
+                    } catch (err) {
+                        /* Si no hay parent (modo standalone), descarga normal. */
+                        downloadToUser(f);
+                    }
+                    setStatus('');
+                } catch (e) {
+                    setStatus('No se pudo abrir: ' + e.message, true);
+                }
+            } else {
+                openPreview(f);
+            }
         });
         card.addEventListener('contextmenu', function(e) {
             e.preventDefault();
@@ -1259,9 +1290,9 @@ async function _loadThumbInner(card) {
             }
         }
 
-        /* Vía B — .kra / .psd: extraer el preview embebido del propio archivo
-           usando Range requests sobre la API. */
-        if (ext === 'kra' || ext === 'psd') {
+        /* Vía B — .kra / .psd / .ora: extraer el preview embebido del propio
+           archivo usando Range requests sobre la API. */
+        if (ext === 'kra' || ext === 'psd' || ext === 'ora') {
             if (_thumbCache.has(fileId)) {
                 thumb.innerHTML =
                     '<img src="' + _thumbCache.get(fileId) + '" alt="' + escapeAttr(f.name) + '">' +
@@ -1271,9 +1302,13 @@ async function _loadThumbInner(card) {
             }
             _setWipExtLabel(thumb, '.' + ext + ' · extrayendo…');
             try {
-                var url = ext === 'kra'
-                    ? await extractKraPreviewBlob(f)
-                    : await extractPsdThumbnailBlob(f);
+                /* PSD usa su extractor propio. KRA y ORA son ambos ZIPs con
+                   PNG embebido, y extractKraPreviewBlob ya prueba todas las
+                   rutas estándar (preview.png, Thumbnails/thumbnail.png,
+                   mergedimage.png), así que sirve para los dos. */
+                var url = ext === 'psd'
+                    ? await extractPsdThumbnailBlob(f)
+                    : await extractKraPreviewBlob(f);
                 if (!url) { _setWipExtLabel(thumb, '.' + ext); return; }
                 _thumbCache.set(fileId, url);
                 thumb.innerHTML =
@@ -1329,13 +1364,13 @@ function openPreview(f) {
         }
         if (_thumbCache.has(f.id)) { img.src = _thumbCache.get(f.id); return; }
         var _ext = extOf(f.name);
-        if (_ext === 'kra' || _ext === 'psd') {
+        if (_ext === 'kra' || _ext === 'psd' || _ext === 'ora') {
             img.src = '';
             var note = document.createElement('small');
             note.style.color = 'var(--text-muted)';
             note.innerHTML = '<br>Extrayendo preview del .' + _ext + '…';
             tagsEl.appendChild(note);
-            var extractor = (_ext === 'kra') ? extractKraPreviewBlob : extractPsdThumbnailBlob;
+            var extractor = (_ext === 'psd') ? extractPsdThumbnailBlob : extractKraPreviewBlob;
             extractor(f).then(function(url) {
                 if (note.parentNode) note.parentNode.removeChild(note);
                 if (!url) {
