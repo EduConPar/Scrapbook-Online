@@ -653,6 +653,11 @@ function renderBalance(){
 }
 function renderItems(){
     var view = document.getElementById('tienda-view-principal');
+    /* Categoría Mascotas: placeholder hasta que esté implementada. */
+    if (_activeCat === 'mascotas') {
+        view.innerHTML = '<div class="tienda-empty" style="font-size:18px;padding:40px 20px;">Coming soon...</div>';
+        return;
+    }
     var items = _items.filter(function(it){ return (it.categoria || 'discord') === _activeCat; });
     if (!items.length) {
         view.innerHTML = '<div class="tienda-empty">No hay items en esta categoría todavía.</div>';

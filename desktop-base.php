@@ -558,17 +558,6 @@ window.DesktopState.whenReady = function(cb){
         ?></div>
         <span>Tienda</span>
     </div>
-    <!-- App MASCOTA: doble-click → spawnea la mascota (o el huevo si no
-         está eclosionada) en pantalla via MascotaEngine.spawn(). -->
-    <div class="desktop-icon" id="mascota-icon">
-        <div class="desktop-icon-img"><?php
-            $_mascotaIcon = 'assets/img/appIcons/mascotaIcon.png';
-            echo _appIconExists($_mascotaIcon)
-                ? '<img src="' . $_mascotaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
-                : '<div style="font-size:48px;line-height:1;">🐾</div>';
-        ?></div>
-        <span>Mascota</span>
-    </div>
 </div>
 
 <!-- CALENDAR WINDOW -->
@@ -617,15 +606,6 @@ window.DesktopState.whenReady = function(cb){
             allow="web-share; clipboard-write"
             style="flex:1; width:100%; border:none; display:block; background:#000;"></iframe>
 </div>
-
-<!-- BOTÓN DEV — abre el wrapped con el flag ?dev=1 (todas las plays
-     sin filtro de año). Posición fija arriba-derecha del escritorio
-     para acceso fácil mientras se desarrolla. -->
-<button id="wrapped-dev-btn" type="button"
-        style="position:fixed;top:46px;right:8px;z-index:9001;background:linear-gradient(135deg,#1db954,#191414);color:#fff;border:1px solid #0d0d0d;padding:4px 10px;font-size:11px;font-weight:bold;cursor:pointer;border-radius:0;box-shadow:2px 2px 0 #0a0a0a;font-family:inherit;"
-        title="Spotify Wrapped (modo DEV — todas las plays)">
-    🎁 Wrapped (DEV)
-</button>
 
 <!-- VENTANA "Alimentar" — picker de comidas. Se monta con el catálogo
      de assets/mascota/foods.php (no se duplica). Al click → POST feed
@@ -3279,7 +3259,6 @@ window.notifSystem = (function() {
     if (window.WindowManager) window.WindowManager.setup('wrapped-window', false);
 
     var wrappedFrame   = document.getElementById('wrapped-frame');
-    var wrappedDevBtn  = document.getElementById('wrapped-dev-btn');
     var wrappedCloseEl = document.getElementById('wrapped-close-window');
 
     /** Abre la ventana del Wrapped cargando el iframe.
@@ -3298,11 +3277,6 @@ window.notifSystem = (function() {
     }
 
     wrappedCloseEl.addEventListener('click', closeWrappedWindow);
-    if (wrappedDevBtn) {
-        wrappedDevBtn.addEventListener('click', function () {
-            openWrappedWindow(true);
-        });
-    }
     /* El iframe del wrapped puede pedir cerrarse vía postMessage. */
     window.addEventListener('message', function (ev) {
         if (ev && ev.data && ev.data.type === 'wrapped-close') {
@@ -3608,27 +3582,9 @@ window.notifSystem = (function() {
    un widget global. El botón flotante ☰ aparece junto con el spawn.
 ========================= */
 (function () {
-    /* Wire del icono ANTES de que el script async termine — el HTML del
-       icono ya está en el DOM (lo hemos puesto en la sección de iconos
-       más arriba en este mismo archivo PHP). Si el engine aún no se ha
-       cargado en el momento del doble-click, mostramos un fallback. */
-    var icon = document.getElementById('mascota-icon');
-    if (icon) {
-        icon.addEventListener('dblclick', function () {
-            if (window.MascotaEngine && window.MascotaEngine.spawn) {
-                window.MascotaEngine.spawn();
-            } else {
-                console.warn('[Mascota] engine aún no cargado, reintentando…');
-                /* Reintento tardío: si el script estaba aún cargando,
-                   esperamos 500ms y volvemos a intentar. */
-                setTimeout(function () {
-                    if (window.MascotaEngine && window.MascotaEngine.spawn) {
-                        window.MascotaEngine.spawn();
-                    }
-                }, 500);
-            }
-        });
-    }
+    /* Icono Mascota retirado del escritorio. El engine sigue cargándose
+       para que las interacciones existentes (alimentar, click-on-spawn,
+       etc.) sigan funcionando si algo más invoca MascotaEngine.spawn(). */
 
     var script  = document.createElement('script');
     script.src  = 'assets/mascota/engine.js';

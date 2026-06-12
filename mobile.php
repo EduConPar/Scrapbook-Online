@@ -1587,10 +1587,42 @@ if ('serviceWorker' in navigator) {
         catch (_) { showMenu(); }
     }
 
-    /* Tap en un icono de app interna → cargar en iframe. */
+    /* Modal "Coming soon..." Win98 — usado para apps móviles aún no
+       implementadas (Dibujo, por ejemplo). Reusa los estilos
+       .shell-modal-* que ya están definidos arriba. */
+    function showComingSoonModal(appName) {
+        var bd = document.createElement('div');
+        bd.className = 'shell-modal-backdrop';
+        bd.innerHTML =
+            '<div class="shell-modal window">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text">' + (appName || 'App') + '</div>' +
+                    '<div class="title-bar-controls"><button aria-label="Close"></button></div>' +
+                '</div>' +
+                '<div class="window-body">' +
+                    '<p style="text-align:center;font-size:17px;margin:24px 8px;">Coming soon...</p>' +
+                    '<div style="text-align:right;">' +
+                        '<button data-close style="min-width:75px;">Aceptar</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(bd);
+        var close = function(){ bd.remove(); };
+        bd.querySelector('button[aria-label="Close"]').addEventListener('click', close);
+        bd.querySelector('[data-close]').addEventListener('click', close);
+        bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    }
+
+    /* Tap en un icono de app interna → cargar en iframe.
+       Caso especial: Dibujo aún no tiene versión móvil terminada → modal
+       "Coming soon..." en lugar de cargar la app. */
     document.querySelectorAll('.shell-launch').forEach(function(a){
         a.addEventListener('click', function(e){
             e.preventDefault();
+            if (a.dataset.appName === 'Dibujo') {
+                showComingSoonModal('Dibujo');
+                return;
+            }
             openApp(a.dataset.appUrl, a.dataset.appName);
         });
     });
