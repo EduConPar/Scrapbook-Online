@@ -9,6 +9,7 @@
    (0 rows) y simplemente se ignora.
    ────────────────────────────────────────────────────────────────────── */
 import 'dotenv/config';                /* lee `.env` y mete las vars en process.env */
+import http from 'node:http';
 import { Client, GatewayIntentBits, Events, Partials } from 'discord.js';
 import mysql from 'mysql2/promise';
 
@@ -214,5 +215,33 @@ async function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
+
+/* ──────────────────────────────────────────────────────────────────────
+   HTTP KEEPALIVE
+   ──────────────────────────────────────────────────────────────────────
+   Hostinger Node.js (Passenger) duerme procesos que no reciben HTTP. Un
+   bot de Discord solo mantiene WebSocket SALIENTE → Passenger lo daría
+   por inactivo y lo mataría. Exponemos un /health mínimo y configuramos
+   un monitor externo (UptimeRobot) que lo pingue cada 5 min para que
+   Passenger crea que el servicio está activo.
+
+   PORT lo asigna Passenger por env; si no existe (ej. en local o
+   Discloud), cae a 3000. NO hardcodear ni cambiar el nombre de la var.
+   ────────────────────────────────────────────────────────────────────── */
+const PORT = Number(process.env.PORT || 3000);
+http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            ok: true,
+            bot: client.user ? client.user.tag : 'connecting',
+            uptime: Math.round(process.uptime()),
+            guilds: client.guilds?.cache?.size ?? 0,
+        }));
+        return;
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('not found');
+}).listen(PORT, () => console.log(`▶ HTTP keepalive escuchando en :${PORT}`));
 
 client.login(cfg.token);
