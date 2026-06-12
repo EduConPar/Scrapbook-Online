@@ -1,0 +1,56 @@
+/* Generado por la app de Temas. NO editar a mano.
+   Establece los tokens CSS para que cualquier app que use
+   var(--token) reciba la paleta del tema activo. */
+
+body.Angie-Angie {
+    --win-bg: #F8D0C8;
+    --win-body-bg: #F8D0C8;
+    --surface-deep: #F8D0C8;
+    --inset-bg: #F3BABA;
+    --input-bg: #F3BABA;
+    --input-text: #1a1a1a;
+    --btn-bg: #5B744B;
+    --btn-text: #F9DDD8;
+    --start-btn-bg: #5B744B;
+    --start-btn-text: #F9DDD8;
+    --text: #35522B;
+    --text-muted: #5B744B;
+    --text-faint: #799567;
+    --text-inset: #799567;
+    --titlebar-start: #5B744B;
+    --titlebar-end: #799567;
+    --titlebar-text: #F9DDD8;
+    --accent: #799567;
+    --accent-text: #F9DDD8;
+    --accent-deep: #5B744B;
+    --titlebar-icon-color: #35522B;
+    --titlebar-icon-bg: #F8D0C8;
+    --titlebar-icon-bezel-light: #F9DDD8;
+    --titlebar-icon-bezel-dark: #35522B;
+    --border: #F3BABA;
+    --border-strong: #5B744B;
+    --bezel-light-1: #F9DDD8;
+    --bezel-light-2: #F8D0C8;
+    --bezel-dark-1: #35522B;
+    --bezel-dark-2: #5B744B;
+    --desktop-bg: #F9DDD8;
+    --link-text: #5B744B;
+    --error-text: #c8456e;
+    --warning-bg: #F3BABA;
+    --warning-text: #35522B;
+    --selection-bg: #799567;
+    --selection-text: #F9DDD8;
+    --badge-bg: #c8456e;
+    --badge-text: #F9DDD8;
+    --star-color: #c8a000;
+
+    /* Alias retro-compat */
+    --t-bg:           #F8D0C8;
+    --t-bg-alt:       #F8D0C8;
+    --t-text:         #35522B;
+    --t-text-muted:   #5B744B;
+    --t-accent:       #799567;
+    --t-accent-text:  #F9DDD8;
+    --t-border:       #F3BABA;
+    --t-grad:         linear-gradient(90deg, #5B744B, #799567);
+}
