@@ -168,3 +168,19 @@ function getUserStartIcon($label)
     }
     return '';
 }
+
+/* Self-heal del stub `desktops/<label>-desktop.php`. Si por cualquier
+   motivo (rollback erróneo de register-user.php en versiones antiguas,
+   File Manager borrado, etc.) el archivo no existe pero el usuario sí
+   está en BD, lo regeneramos al vuelo justo antes del redirect. Sin
+   esto el login redirige a un 404 y el usuario queda sin escritorio
+   utilizable hasta que un admin lo cree a mano. Idempotente. */
+function ensureDesktopStub(string $label): void {
+    $safe = strtolower(preg_replace('/[^A-Za-z0-9_-]/', '', $label));
+    if ($safe === '') return;
+    $path = dirname(__DIR__) . '/desktops/' . $safe . '-desktop.php';
+    if (file_exists($path)) return;
+    $stub = "<?php \$desktopLabel = " . var_export($label, true)
+          . "; require __DIR__ . '/../desktop-base.php';\n";
+    @file_put_contents($path, $stub);
+}

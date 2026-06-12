@@ -157,7 +157,10 @@ if ($selectedUser && isset($users[$selectedUser])) {
     if (isset($_POST['password'])) {
         if (password_verify($_POST['password'], $users[$selectedUser]['password'])) {
             $_SESSION['user'] = $selectedUser;
-            /* Móviles → menú feature-phone. PC/tablet → escritorio Win98. */
+            /* Móviles → menú feature-phone. PC/tablet → escritorio Win98.
+               ensureDesktopStub() regenera el stub si fue borrado en algún
+               momento — el usuario aterriza en su escritorio en vez de 404. */
+            ensureDesktopStub($selectedLabel);
             $target = isMobileDevice()
                 ? 'mobile.php'
                 : 'desktops/' . strtolower($selectedLabel) . '-desktop.php';

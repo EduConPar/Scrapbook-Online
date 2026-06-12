@@ -97,13 +97,19 @@ foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $key) {
 $newKey = 'user' . ($maxNum + 1);
 
 /* Stub de escritorio (desktops/<label-lowercase>-desktop.php) — se crea ANTES
-   del INSERT para no dejar un usuario sin escritorio si falla la escritura. */
+   del INSERT para no dejar un usuario sin escritorio si falla la escritura.
+   `$createdStub` marca si fuimos nosotros quien lo creamos: solo en ese caso
+   el rollback debe borrarlo. Sin esta marca, registrar dos veces con el
+   mismo username (INSERT falla por UNIQUE) borraba el stub del usuario
+   legítimo que ya existía. */
 $desktopStub = __DIR__ . '/desktops/' . strtolower($username) . '-desktop.php';
+$createdStub = false;
 if (!file_exists($desktopStub)) {
     $stubContent = "<?php \$desktopLabel = " . var_export($username, true) . "; require __DIR__ . '/../desktop-base.php';\n";
     if (@file_put_contents($desktopStub, $stubContent) === false) {
         echo json_encode(['error' => 'No se pudo crear el escritorio del usuario']); exit;
     }
+    $createdStub = true;
 }
 
 /* INSERT en usuarios con bcrypt */
@@ -113,7 +119,8 @@ try {
                            VALUES (?, ?, ?, ?)");
     $stmt->execute([$newKey, $lowerNew, $username, $hash]);
 } catch (Throwable $e) {
-    @unlink($desktopStub);
+    /* Solo rollback del stub si lo creamos en ESTA invocación. */
+    if ($createdStub) @unlink($desktopStub);
     echo json_encode(['error' => 'No se pudo guardar el usuario en BD']); exit;
 }
 
