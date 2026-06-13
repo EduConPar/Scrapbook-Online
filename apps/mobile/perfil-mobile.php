@@ -1098,6 +1098,13 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                alternate el ciclo es continuo en valor y en velocidad. */
             animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
         }
+        /* DND: el usuario tiene mute_messages activo. Rojo gana al
+           verde aunque esté online (estado "no molestar"). */
+        .pf-presence-dot.dnd,
+        .pf-presence-dot.online.dnd {
+            background: #e74c3c !important;
+            animation: none !important;
+        }
         @keyframes pfPresencePulse {
             from {
                 box-shadow: 0 0 0 2px var(--win-bg, silver),
@@ -3266,7 +3273,16 @@ function loadMelonItems() {
                 if (statusEl) { statusEl.style.display = ''; statusEl.textContent = (d && d.error) ? d.error : 'Error'; }
                 return;
             }
-            MELON_STATE.items = d.items || [];
+            /* Reordena: "Melon must" siempre delante (avg ≥ 4.6 con
+               ≥ 2 reseñas). Estable: dentro de cada grupo respetamos
+               el orden del backend. Aplica a todos los filtros. */
+            var raw = d.items || [];
+            var musts = [], rest = [];
+            raw.forEach(function(it) {
+                if (it && it.avg >= 4.6 && it.count >= 2) musts.push(it);
+                else rest.push(it);
+            });
+            MELON_STATE.items = musts.concat(rest);
             MELON_STATE.page  = 1;
             renderMelonItems();
         })
@@ -3491,14 +3507,17 @@ function isMutual(uKey) {
    Social. Llamado al cargar y cada 20s. Cachea el último set para que
    los re-renders apliquen el estado sin esperar al fetch. */
 var __pfLastOnline = {};
+var __pfLastDnd    = {};
 function applyPresence() {
     document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
         var k = dot.getAttribute('data-userkey');
         dot.classList.toggle('online', !!__pfLastOnline[k]);
+        dot.classList.toggle('dnd',    !!__pfLastDnd[k]);
     });
 }
 /* Helper: attach/replace dot en cualquier wrapper de avatar. userKey
-   '' o falsy → elimina el dot. */
+   '' o falsy → elimina el dot. Si el usuario está en DND el dot se
+   pinta rojo aunque esté online. */
 function attachPresenceDot(wrap, userKey, small) {
     if (!wrap) return;
     var existing = wrap.querySelector('.pf-presence-dot');
@@ -3512,6 +3531,7 @@ function attachPresenceDot(wrap, userKey, small) {
     dot.className = 'pf-presence-dot' + (small ? ' pf-presence-dot-small' : '');
     dot.setAttribute('data-userkey', userKey);
     if (__pfLastOnline[userKey]) dot.classList.add('online');
+    if (__pfLastDnd[userKey])    dot.classList.add('dnd');
     wrap.appendChild(dot);
 }
 window.__pfAttachPresenceDot = attachPresenceDot;
@@ -3522,6 +3542,10 @@ function refreshPresenceDots() {
             if (!d || !d.ok || !Array.isArray(d.online)) return;
             __pfLastOnline = {};
             d.online.forEach(function(k) { __pfLastOnline[k] = true; });
+            __pfLastDnd = {};
+            if (Array.isArray(d.dnd)) {
+                d.dnd.forEach(function(k) { __pfLastDnd[k] = true; });
+            }
             applyPresence();
         })
         .catch(function() {});
@@ -4209,8 +4233,13 @@ function loadUnreadChats() {
             for (var k in counts) {
                 if (Object.prototype.hasOwnProperty.call(counts, k)) total += counts[k] | 0;
             }
+            var muteMsgs = false;
+            try {
+                var prefs = JSON.parse(localStorage.getItem('melonNotifPrefs') || 'null');
+                if (prefs && prefs.mute_messages) muteMsgs = true;
+            } catch (_) {}
             if (_prevChatUnreadTotal >= 0 && total > _prevChatUnreadTotal
-                && typeof window.playNotifSound === 'function') {
+                && !muteMsgs && typeof window.playNotifSound === 'function') {
                 window.playNotifSound();
             }
             _prevChatUnreadTotal = total;
@@ -4377,7 +4406,12 @@ loadUnreadChats = function() {
             });
             /* Sonido aunque la pestaña sí esté visible — el throttle del
                helper colapsa con el del polling original si ambos disparan. */
-            if (anyNew && Object.keys(LAST_UNREAD).length
+            var muteMsgs2 = false;
+            try {
+                var prefs2 = JSON.parse(localStorage.getItem('melonNotifPrefs') || 'null');
+                if (prefs2 && prefs2.mute_messages) muteMsgs2 = true;
+            } catch (_) {}
+            if (anyNew && Object.keys(LAST_UNREAD).length && !muteMsgs2
                 && typeof window.playNotifSound === 'function') {
                 window.playNotifSound();
             }

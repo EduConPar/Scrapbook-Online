@@ -149,8 +149,16 @@ async function loadRecents() {
             if (STATE.view === 'chat' && c.userKey === STATE.chatWith) continue;
             total += (c.unread | 0);
         }
+        /* Respeta la preferencia mute_messages del usuario. La guarda
+           el dialog de prefs del perfil en localStorage; el chat
+           móvil la lee sin hacer fetch extra (mismo origen). */
+        var muteMsgs = false;
+        try {
+            var prefs = JSON.parse(localStorage.getItem('melonNotifPrefs') || 'null');
+            if (prefs && prefs.mute_messages) muteMsgs = true;
+        } catch (_) {}
         if (_prevRecentsTotalUnread >= 0 && total > _prevRecentsTotalUnread
-            && typeof window.playNotifSound === 'function') {
+            && !muteMsgs && typeof window.playNotifSound === 'function') {
             window.playNotifSound();
         }
         _prevRecentsTotalUnread = total;

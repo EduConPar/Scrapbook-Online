@@ -516,12 +516,43 @@ if ($_perfilStandalone) {
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
+            <button aria-label="Help" id="profile-notifs-settings-btn" title="Preferencias de notificaciones" style="margin-right:2px;">?</button>
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>
     <div class="window-body" id="profile-notifs-body" style="padding:6px;flex:1;min-height:0;overflow-y:auto;">
         <div id="profile-notifs-list"></div>
         <div id="profile-notifs-empty" style="display:none;padding:14px;text-align:center;font-size:11px;color:#808080;">No tienes notificaciones</div>
+    </div>
+</div>
+
+<!-- Preferencias de sonido de notificaciones -->
+<div class="window" id="profile-notif-prefs-window" style="display:none;flex-direction:column;position:fixed;z-index:10003;width:300px;">
+    <div class="title-bar" style="flex-shrink:0;">
+        <div class="title-bar-text">Preferencias de notificaciones</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="profile-notif-prefs-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:12px;display:flex;flex-direction:column;gap:8px;font-size:11px;">
+        <p style="margin:0 0 4px;">Silenciar el sonido de:</p>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="np-mute-profile">
+            <span>Perfil de otros usuarios (reseñas, posts, follows)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="np-mute-social">
+            <span>Likes y comentarios</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;">
+            <input type="checkbox" id="np-mute-messages">
+            <span>Mensajes (activa el modo "no molestar")</span>
+        </label>
+        <p id="np-status" style="margin:6px 0 0;min-height:14px;color:var(--text-muted,#808080);"></p>
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
+            <button class="button" id="np-cancel">Cerrar</button>
+            <button class="button" id="np-save">Guardar</button>
+        </div>
     </div>
 </div>
 
@@ -2215,7 +2246,36 @@ var PROFILE_USERS = <?php
     var _notifAudio = null;
     var _lastNotifSoundAt = 0;
     var _prevProfileUnread = -1;
-    function playProfileNotifSound() {
+    /* Preferencias de mute. Cargadas del backend al boot; default todo
+       a false. Categoría por tipo:
+         - 'profile' : review, follow, post (notifs sobre TUS contenidos
+                       que un OTRO usuario interactuó — "perfil de otros
+                       usuarios" desde tu perspectiva).
+         - 'social'  : like, comment.
+         - 'messages': mensajes de chat.
+       Si la única notif nueva entre dos polls está toda muteada, no
+       suena. Si hay al menos una no-muteada, suena (cubre el caso
+       mixto). El indicador online del usuario pasa a rojo (DND) si
+       mute_messages está activo. */
+    var NOTIF_PREFS = { mute_profile: false, mute_social: false, mute_messages: false };
+    var NOTIF_CATEGORY = {
+        follow: 'profile', review: 'profile', post: 'profile',
+        like: 'social', comment: 'social',
+        chat: 'messages', message: 'messages'
+    };
+    function notifIsMuted(type) {
+        var cat = NOTIF_CATEGORY[type];
+        if (cat === 'profile')  return !!NOTIF_PREFS.mute_profile;
+        if (cat === 'social')   return !!NOTIF_PREFS.mute_social;
+        if (cat === 'messages') return !!NOTIF_PREFS.mute_messages;
+        return false;   /* desconocido → suena */
+    }
+    /* Expuesto para que el chat de la misma página llame antes de su
+       propio playNotifSound. */
+    window.profileNotifIsMuted = notifIsMuted;
+    window.profileNotifPrefs   = function(){ return NOTIF_PREFS; };
+    function playProfileNotifSound(typeHint) {
+        if (typeHint && notifIsMuted(typeHint)) return;
         var now = Date.now();
         if (now - _lastNotifSoundAt < 1500) return;
         _lastNotifSoundAt = now;
@@ -2229,6 +2289,33 @@ var PROFILE_USERS = <?php
             if (p && typeof p.catch === 'function') p.catch(function(){});
         } catch (_) {}
     }
+    /* Sincronización con localStorage: el iframe de chat lee la misma
+       clave para decidir si reproducir el ping al recibir un mensaje
+       (sin tener que hacer otro fetch al backend). */
+    function _persistPrefsLocal() {
+        try { localStorage.setItem('melonNotifPrefs', JSON.stringify(NOTIF_PREFS)); } catch (_) {}
+    }
+    /* Carga inicial: intentamos localStorage primero (instant) y luego
+       refrescamos desde BD para alinear con el otro dispositivo. */
+    try {
+        var cached = JSON.parse(localStorage.getItem('melonNotifPrefs') || 'null');
+        if (cached && typeof cached === 'object') {
+            NOTIF_PREFS.mute_profile  = !!cached.mute_profile;
+            NOTIF_PREFS.mute_social   = !!cached.mute_social;
+            NOTIF_PREFS.mute_messages = !!cached.mute_messages;
+        }
+    } catch (_) {}
+    fetch('assets/profile/api.php?action=notif-settings')
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if (d && d.ok) {
+                NOTIF_PREFS.mute_profile  = !!d.mute_profile;
+                NOTIF_PREFS.mute_social   = !!d.mute_social;
+                NOTIF_PREFS.mute_messages = !!d.mute_messages;
+                _persistPrefsLocal();
+            }
+        })
+        .catch(function(){});
 
     function loadProfileNotifs(cb) {
         fetch('assets/profile/api.php?action=get-profile-notifs')
@@ -2242,7 +2329,13 @@ var PROFILE_USERS = <?php
                        suena — no queremos disparar el sonido por notifs
                        ya existentes al abrir la sesión. */
                     if (_prevProfileUnread >= 0 && unread > _prevProfileUnread) {
-                        playProfileNotifSound();
+                        /* Solo suena si al menos una de las notifs sin
+                           leer NO está muteada. Si todas las nuevas son
+                           de categorías muteadas, silencio total. */
+                        var unmuted = (profileNotifs || []).filter(function(n){
+                            return !n.read && !notifIsMuted(n.type);
+                        });
+                        if (unmuted.length) playProfileNotifSound();
                     }
                     _prevProfileUnread = unread;
                     updateNotifBadge(unread);
@@ -2418,6 +2511,63 @@ var PROFILE_USERS = <?php
         var clo  = document.getElementById('profile-notifs-close');
         if (btn) btn.addEventListener('click', openNotifsWindow);
         if (clo) clo.addEventListener('click', closeNotifsWindow);
+    })();
+
+    /* Dialog de preferencias de notificaciones (silenciar perfil /
+       social / mensajes). El mute_messages también activa el modo
+       "no molestar" → el indicador online del usuario pasa a rojo
+       (renderizado en el backend `presence` → frontend mira el set
+       `dnd` y aplica la clase). */
+    (function setupNotifPrefs() {
+        var openBtn  = document.getElementById('profile-notifs-settings-btn');
+        var win      = document.getElementById('profile-notif-prefs-window');
+        var closeBtn = document.getElementById('profile-notif-prefs-close');
+        var cancel   = document.getElementById('np-cancel');
+        var save     = document.getElementById('np-save');
+        var cP = document.getElementById('np-mute-profile');
+        var cS = document.getElementById('np-mute-social');
+        var cM = document.getElementById('np-mute-messages');
+        var status = document.getElementById('np-status');
+        if (!openBtn || !win) return;
+        function open() {
+            cP.checked = !!NOTIF_PREFS.mute_profile;
+            cS.checked = !!NOTIF_PREFS.mute_social;
+            cM.checked = !!NOTIF_PREFS.mute_messages;
+            status.textContent = '';
+            win.style.display = 'flex';
+            win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
+            win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        }
+        function close() { win.style.display = 'none'; }
+        openBtn.addEventListener('click', open);
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        if (cancel)   cancel.addEventListener('click', close);
+        save.addEventListener('click', function(){
+            var payload = {
+                mute_profile:  cP.checked,
+                mute_social:   cS.checked,
+                mute_messages: cM.checked
+            };
+            status.textContent = 'Guardando…';
+            fetch('assets/profile/api.php?action=notif-settings', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d && d.ok) {
+                    NOTIF_PREFS.mute_profile  = payload.mute_profile;
+                    NOTIF_PREFS.mute_social   = payload.mute_social;
+                    NOTIF_PREFS.mute_messages = payload.mute_messages;
+                    _persistPrefsLocal();
+                    status.textContent = 'Guardado.';
+                    setTimeout(close, 600);
+                } else {
+                    status.textContent = 'Error al guardar.';
+                }
+            })
+            .catch(function(){ status.textContent = 'Error de red.'; });
+        });
     })();
 
     (function setupFollowBtn() {
@@ -3085,7 +3235,18 @@ var PROFILE_USERS = <?php
                     if (statusEl) { statusEl.style.display = ''; statusEl.textContent = (data && data.error) ? data.error : 'Error'; }
                     return;
                 }
-                melonItemsCache = data.items || [];
+                /* Reordena: "Melon must" siempre delante. Mismo criterio
+                   que el badge (avg ≥ 4.6 && count ≥ 2). Estable: dentro
+                   de cada grupo conservamos el orden del backend
+                   (ordenado por nota descendente). Aplica a todos los
+                   filtros (mejor del año, todo el tiempo, etc.). */
+                var raw = data.items || [];
+                var musts = [], rest = [];
+                raw.forEach(function(it) {
+                    if (it && it.avg >= 4.6 && it.count >= 2) musts.push(it);
+                    else rest.push(it);
+                });
+                melonItemsCache = musts.concat(rest);
                 melonPage = 1;
                 renderMelonItems();
             }).catch(function() {
@@ -3581,14 +3742,18 @@ var PROFILE_USERS = <?php
        Cacheamos el último set para que renderSocialList/renderFollowedNav
        puedan re-aplicar el estado sin esperar al siguiente fetch. */
     var lastOnlineSet = {};
+    var lastDndSet    = {};
     function applyPresence() {
         document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
             var k = dot.getAttribute('data-userkey');
             dot.classList.toggle('online', !!lastOnlineSet[k]);
+            dot.classList.toggle('dnd',    !!lastDndSet[k]);
         });
     }
     /* Helper: marca un .profile-avatar-frame con su dot de presencia.
-       Cualquier dot previo se elimina. userKey '' o falsy → sin dot. */
+       Cualquier dot previo se elimina. userKey '' o falsy → sin dot.
+       Si el usuario está en DND (mute_messages activo) el dot se
+       muestra rojo aunque esté online. */
     function attachPresenceDot(frame, userKey) {
         if (!frame) return;
         var existing = frame.querySelector('.pf-presence-dot');
@@ -3603,6 +3768,7 @@ var PROFILE_USERS = <?php
         dot.setAttribute('data-userkey', userKey);
         frame.appendChild(dot);
         if (lastOnlineSet[userKey]) dot.classList.add('online');
+        if (lastDndSet[userKey])    dot.classList.add('dnd');
     }
     window.__attachPresenceDot = attachPresenceDot;
     /* Mapa de last-seen para mostrar "Última vez X" en la cabecera del
@@ -3616,6 +3782,10 @@ var PROFILE_USERS = <?php
                 if (!d || !d.ok || !Array.isArray(d.online)) return;
                 lastOnlineSet = {};
                 d.online.forEach(function(k) { lastOnlineSet[k] = true; });
+                lastDndSet = {};
+                if (Array.isArray(d.dnd)) {
+                    d.dnd.forEach(function(k) { lastDndSet[k] = true; });
+                }
                 if (d.lastSeen && typeof d.lastSeen === 'object') {
                     lastSeenMap = d.lastSeen;
                 }

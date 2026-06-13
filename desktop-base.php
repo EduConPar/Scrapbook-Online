@@ -828,8 +828,24 @@ window.DesktopState.whenReady = function(cb){
     <div class="taskbar-sep"></div>
     <div id="taskbar-tasks"></div>
     <button class="button" id="tray-player-btn" title="Reproductor">♪▶</button>
+    <button class="button" id="tray-volume-btn" title="Volumen global">🔊</button>
     <div id="system-tray">
         <span id="tray-clock">00:00</span>
+    </div>
+</div>
+
+<!-- POPUP del volumen global. Se ancla al botón #tray-volume-btn al
+     abrirse. Click fuera = cerrar. Slider vertical estilo Win98. -->
+<div class="window" id="tray-volume-popup"
+     style="display:none;position:fixed;z-index:100000;width:60px;flex-direction:column;">
+    <div class="title-bar" style="font-size:10px;">
+        <div class="title-bar-text">Volumen</div>
+    </div>
+    <div class="window-body" style="padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span id="tray-volume-readout" style="font-size:10px;font-variant-numeric:tabular-nums;">100%</span>
+        <input type="range" id="tray-volume-range" min="0" max="100" step="1" value="100"
+               orient="vertical"
+               style="writing-mode:bt-lr;-webkit-appearance:slider-vertical;appearance:slider-vertical;width:24px;height:120px;">
     </div>
 </div>
 
@@ -854,6 +870,127 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 1000);
+
+/* =========================
+   VOLUMEN GLOBAL
+   -------------------------
+   Botón en taskbar (entre música y reloj) abre un slider vertical.
+   El valor (0-100) se aplica como factor a TODO lo que suene en la
+   página: <audio>, <video>, el YouTube player del reproductor, e
+   iframes hijos same-origin. Se persiste en localStorage. La música
+   del reproductor mantiene su propio volumen local — este factor
+   multiplica por encima, así "100%" deja la música tal cual.
+========================= */
+(function(){
+    var KEY = 'globalVolumeFactor';
+    var btn   = document.getElementById('tray-volume-btn');
+    var popup = document.getElementById('tray-volume-popup');
+    var range = document.getElementById('tray-volume-range');
+    var out   = document.getElementById('tray-volume-readout');
+    if (!btn || !popup || !range || !out) return;
+
+    function getStored() {
+        try { var v = parseFloat(localStorage.getItem(KEY));
+              return isFinite(v) ? Math.max(0, Math.min(1, v)) : 1; }
+        catch (_) { return 1; }
+    }
+    function store(f) {
+        try { localStorage.setItem(KEY, String(f)); } catch (_) {}
+    }
+
+    /* Aplica el factor a una única ventana (document + iframes
+       same-origin recursivamente). Idempotente: si la ventana ya tiene
+       un factor seteado, sólo lo reaplica. */
+    function applyTo(win) {
+        if (!win) return;
+        try {
+            win.__globalVolumeFactor = window.__globalVolumeFactor;
+            var doc = win.document;
+            if (doc) {
+                var media = doc.querySelectorAll('audio, video');
+                for (var i = 0; i < media.length; i++) {
+                    var el = media[i];
+                    /* Guardamos el volumen "natural" la primera vez
+                       que tocamos cada media; así "factor=1" lo
+                       restaura exacto y "factor=0.5" lo deja al 50%
+                       de su valor original. */
+                    if (el.dataset.origVol === undefined) {
+                        el.dataset.origVol = String(el.volume);
+                    }
+                    el.volume = (parseFloat(el.dataset.origVol) || 1) * win.__globalVolumeFactor;
+                }
+                /* YouTube player del reproductor (si existe en este
+                   contexto). setVolume acepta 0-100, así que
+                   multiplicamos por 100. NO tocamos su _userVolume
+                   interno — esto es un factor multiplicador encima. */
+                if (typeof win.ytPlayer !== 'undefined' && win.ytPlayer && typeof win.ytPlayer.setVolume === 'function') {
+                    var base = (typeof win._userYtVolume === 'number') ? win._userYtVolume : 100;
+                    win.ytPlayer.setVolume(Math.round(base * win.__globalVolumeFactor));
+                }
+            }
+            /* Recursa a iframes same-origin. */
+            var frames = doc ? doc.querySelectorAll('iframe') : [];
+            for (var j = 0; j < frames.length; j++) {
+                try { applyTo(frames[j].contentWindow); } catch (_) {}
+                try { frames[j].contentWindow.postMessage({ type: 'global-volume', factor: win.__globalVolumeFactor }, '*'); }
+                catch (_) {}
+            }
+        } catch (_) { /* cross-origin: silenciamos */ }
+    }
+
+    function setFactor(f) {
+        f = Math.max(0, Math.min(1, f));
+        window.__globalVolumeFactor = f;
+        store(f);
+        var pct = Math.round(f * 100);
+        if (range && parseInt(range.value, 10) !== pct) range.value = pct;
+        if (out) out.textContent = pct + '%';
+        btn.textContent = pct === 0 ? '🔇' : (pct < 40 ? '🔈' : (pct < 75 ? '🔉' : '🔊'));
+        applyTo(window);
+    }
+    /* API pública para que reproductor/cualquier app pueda consultar
+       el factor cuando crea un nuevo audio/video. */
+    window.getGlobalVolumeFactor = function() {
+        return (typeof window.__globalVolumeFactor === 'number') ? window.__globalVolumeFactor : 1;
+    };
+    window.setGlobalVolumeFactor = setFactor;
+
+    /* MutationObserver: media añadido dinámicamente (track nuevo del
+       reproductor, video que aparece en una app) recibe el factor
+       actual sin esperar al próximo slider tick. */
+    var mo = new MutationObserver(function(){ applyTo(window); });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+
+    /* Reaplica periódicamente — pillas casos donde algo cambió volume
+       sin pasar por nosotros (típico: reproductor cambia de track). */
+    setInterval(function(){ applyTo(window); }, 2000);
+
+    /* Toggle popup. Posicionado encima del botón. */
+    function openPopup() {
+        var r = btn.getBoundingClientRect();
+        popup.style.display = 'flex';
+        var pw = popup.offsetWidth, ph = popup.offsetHeight;
+        var left = Math.round(r.left + r.width/2 - pw/2);
+        var top  = Math.round(r.top - ph - 4);
+        if (left + pw > window.innerWidth - 4) left = window.innerWidth - pw - 4;
+        if (left < 4) left = 4;
+        if (top < 4) top = 4;
+        popup.style.left = left + 'px';
+        popup.style.top  = top  + 'px';
+    }
+    function closePopup() { popup.style.display = 'none'; }
+    btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (popup.style.display === 'none') openPopup(); else closePopup();
+    });
+    document.addEventListener('click', function(e){
+        if (popup.style.display !== 'none' && !popup.contains(e.target) && e.target !== btn) closePopup();
+    });
+    range.addEventListener('input', function(){ setFactor(range.value / 100); });
+
+    /* Init */
+    setFactor(getStored());
+})();
 
 /* =========================
    TEMA EN VIVO (hot-swap)

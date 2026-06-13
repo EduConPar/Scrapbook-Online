@@ -492,6 +492,44 @@
     background: #2ecc71;
     animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
 }
+/* "No molestar": el usuario tiene mute_messages activo. Gana en
+   especificidad sobre `.online` por orden + !important para que el
+   usuario en DND aunque esté online se vea siempre rojo. */
+.pf-presence-dot.dnd,
+.pf-presence-dot.online.dnd {
+    background: #e74c3c !important;
+    animation: pfPresenceDndPulse 1.4s ease-in-out infinite alternate !important;
+}
+@keyframes pfPresenceDndPulse {
+    from {
+        box-shadow: 0 0 0 2px var(--win-bg, silver),
+                    0 0 3px rgba(231,76,60,0.55),
+                    inset -1px -1px 0 rgba(0,0,0,0.2);
+        opacity: 0.85;
+    }
+    to {
+        box-shadow: 0 0 0 2px var(--win-bg, silver),
+                    0 0 10px rgba(231,76,60,1),
+                    inset -1px -1px 0 rgba(0,0,0,0.2);
+        opacity: 1;
+    }
+}
+.pf-presence-dot.pf-presence-dot-small.dnd,
+.pf-presence-dot.pf-presence-dot-small.online.dnd {
+    animation: pfPresenceDndPulseSmall 1.4s ease-in-out infinite alternate !important;
+}
+@keyframes pfPresenceDndPulseSmall {
+    from {
+        box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                    0 0 2px rgba(231,76,60,0.55);
+        opacity: 0.85;
+    }
+    to {
+        box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                    0 0 7px rgba(231,76,60,1);
+        opacity: 1;
+    }
+}
 @keyframes pfPresencePulse {
     from {
         box-shadow:

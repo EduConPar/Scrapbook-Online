@@ -2203,16 +2203,26 @@ function onYouTubeIframeAPIReady()
         playerVars: { controls: 0, rel: 0, modestbranding: 1 },
         events: {
             onReady: function() {
+                /* Exposición a window para el control de volumen global
+                   del taskbar (`let ytPlayer` no es accesible desde
+                   fuera del script). Reasignamos en cada onReady por si
+                   el player se recrea. */
+                window.ytPlayer = ytPlayer;
                 /* onReady puede dispararse antes de que fetchState haya
                    resuelto. whenReady aplica el volumen y la playlist
                    guardada en cuanto ambos extremos estén listos. */
                 window.DesktopState.whenReady(function(){
                     var saved = MelonPlayerState.get();
-                    if (saved && typeof saved.volume === 'number') {
-                        ytPlayer.setVolume(saved.volume);
-                    } else {
-                        ytPlayer.setVolume(parseInt(volSlider.value));
-                    }
+                    var baseVol = (saved && typeof saved.volume === 'number')
+                        ? saved.volume
+                        : parseInt(volSlider.value);
+                    /* `_userYtVolume` es el volumen "natural" del reproductor;
+                       el control de volumen global del taskbar lo multiplica
+                       por su propio factor para el setVolume real. */
+                    window._userYtVolume = baseVol;
+                    var globalF = (typeof window.getGlobalVolumeFactor === 'function')
+                        ? window.getGlobalVolumeFactor() : 1;
+                    ytPlayer.setVolume(Math.round(baseVol * globalF));
                     restorePlaylist(saved);
                 });
 
@@ -2323,14 +2333,23 @@ playerProg.addEventListener('input', function() {
 });
 
 volSlider.addEventListener('input', function() {
+    var vol = parseInt(this.value);
+    /* `_userYtVolume` es el "natural" del reproductor; el control
+       global del taskbar lo multiplica por su factor antes del
+       setVolume real. Así el usuario puede tener el reproductor a 80%
+       y el taskbar a 50% → suena al 40% sin que ninguno de los dos
+       sliders se mueva. */
+    window._userYtVolume = vol;
+    var globalF = (typeof window.getGlobalVolumeFactor === 'function')
+        ? window.getGlobalVolumeFactor() : 1;
     if (ytPlayer && ytPlayer.setVolume) {
-        ytPlayer.setVolume(parseInt(this.value));
+        ytPlayer.setVolume(Math.round(vol * globalF));
     }
     const icon = document.getElementById('volume-icon');
-    if (parseInt(this.value) === 0) icon.textContent = '◄✕';
-    else if (parseInt(this.value) < 50) icon.textContent = '◄)';
+    if (vol === 0) icon.textContent = '◄✕';
+    else if (vol < 50) icon.textContent = '◄)';
     else icon.textContent = '◄))';
-    MelonPlayerState.setVolume(parseInt(this.value));
+    MelonPlayerState.setVolume(vol);
 });
 
 /* Restore volume before player API loads.
@@ -2346,7 +2365,10 @@ window.DesktopState.whenReady(function(){
     if (s.volume === 0) icon.textContent = '◄✕';
     else if (s.volume < 50) icon.textContent = '◄)';
     else icon.textContent = '◄))';
-    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(s.volume);
+    window._userYtVolume = s.volume;
+    var globalF = (typeof window.getGlobalVolumeFactor === 'function')
+        ? window.getGlobalVolumeFactor() : 1;
+    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(Math.round(s.volume * globalF));
 });
 
 

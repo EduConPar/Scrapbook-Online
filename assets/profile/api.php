@@ -1410,12 +1410,12 @@ case 'heartbeat': {
 }
 
 case 'presence': {
-    /* Devuelve los user_keys ONLINE (heartbeat en los últimos 60s) y
-       además un mapa de "última vez visto" para TODOS los que tienen
-       row en user_presence — la app de chat (desktop y móvil) lo usa
-       para mostrar "Última vez HH:MM" cuando el otro está offline.
-       Retro-compat: el campo `online` (array de user_keys) sigue ahí
-       como antes — los clientes viejos no se rompen. */
+    /* Devuelve los user_keys ONLINE (heartbeat en los últimos 60s),
+       un mapa de "última vez visto" para TODOS los que tienen row en
+       user_presence, y la lista de user_keys en "no molestar" (DND).
+       DND = preferencia `mute_messages` activa → indicador rojo en el
+       UI en lugar del verde habitual. La app de chat también la usa
+       para silenciar el ping de mensajes entrantes en el receptor. */
     $st = $pdo->query("
         SELECT u.user_key,
                UNIX_TIMESTAMP(p.last_at) AS lastAt,
@@ -1429,7 +1429,53 @@ case 'presence': {
         if ((int)$r['isOnline']) $online[] = $r['user_key'];
         $lastSeen[$r['user_key']] = (int)$r['lastAt'];
     }
-    jsonResponse(['ok' => true, 'online' => $online, 'lastSeen' => $lastSeen]);
+    /* DND set: user_keys con `mute_messages = "true"` en user_settings.
+       try/catch para no romper si la tabla user_settings no existe
+       (instalaciones nuevas / migraciones pendientes). */
+    $dnd = [];
+    try {
+        $st2 = $pdo->query("
+            SELECT u.user_key
+              FROM user_settings s
+              JOIN usuarios u ON u.id = s.user_id
+             WHERE s.key_name = 'mute_messages' AND s.value = '\"true\"'
+        ");
+        foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $k) $dnd[] = $k;
+    } catch (Throwable $_) {}
+    jsonResponse(['ok' => true, 'online' => $online, 'lastSeen' => $lastSeen, 'dnd' => $dnd]);
+}
+
+case 'notif-settings': {
+    /* GET → devuelve los 3 flags del usuario actual.
+       POST → guarda los flags enviados.
+       Storage: tabla `user_settings` (key_name, value JSON string). */
+    $uid = pf_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $KEYS = ['mute_profile', 'mute_social', 'mute_messages'];
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $body = jsonBody();
+        foreach ($KEYS as $k) {
+            $v = !empty($body[$k]) ? 'true' : 'false';
+            try {
+                $pdo->prepare("INSERT INTO user_settings (user_id, key_name, value)
+                               VALUES (?, ?, ?)
+                               ON DUPLICATE KEY UPDATE value = VALUES(value)")
+                    ->execute([$uid, $k, json_encode($v === 'true', JSON_UNESCAPED_UNICODE)]);
+            } catch (Throwable $_) { /* tabla ausente → ignorar */ }
+        }
+        jsonResponse(['ok' => true]);
+    }
+    $out = ['mute_profile' => false, 'mute_social' => false, 'mute_messages' => false];
+    try {
+        $place = implode(',', array_fill(0, count($KEYS), '?'));
+        $stmt = $pdo->prepare("SELECT key_name, value FROM user_settings
+                               WHERE user_id = ? AND key_name IN ($place)");
+        $stmt->execute(array_merge([$uid], $KEYS));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[$r['key_name']] = (json_decode($r['value'], true) === true);
+        }
+    } catch (Throwable $_) {}
+    jsonResponse(array_merge(['ok' => true], $out));
 }
 
 case 'mark-notifs-read': {
