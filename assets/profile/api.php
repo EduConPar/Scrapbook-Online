@@ -391,6 +391,19 @@ function pf_chatId(PDO $pdo, int $a, int $b): int {
     return (int)$pdo->lastInsertId();
 }
 
+/* ¿El usuario tiene activa la preferencia `key_name` en user_settings?
+   Es la fuente de verdad de mute_profile / mute_social / mute_messages
+   (boolean JSON). Usado para filtrar push antes de enviarlos. */
+function pf_userHasMuteFlag(PDO $pdo, int $uid, string $key): bool {
+    try {
+        $st = $pdo->prepare("SELECT value FROM user_settings
+                             WHERE user_id = ? AND key_name = ? LIMIT 1");
+        $st->execute([$uid, $key]);
+        $v = $st->fetchColumn();
+        return $v === 'true';   /* JSON de boolean true → string literal 'true' */
+    } catch (Throwable $_) { return false; }
+}
+
 /* Envía Web Push best-effort a todas las subscripciones del destinatario.
    Errores 410 (Gone) / 404 limpian la sub muerta de la BD. Cualquier otro
    fallo se silencia — el mensaje ya está persistido. */
@@ -400,6 +413,11 @@ function pf_tryWebPush(PDO $pdo, int $toUid, string $fromKey, string $text): voi
     if (!file_exists($libPath)) return;     /* no instalado todavía */
     $keysPath = dirname(__DIR__) . '/push/vapid-keys.php';
     if (!file_exists($keysPath)) return;    /* corre generate-vapid.php primero */
+
+    /* Modo "no molestar": el destinatario desactivó la categoría
+       Mensajes en sus prefs → no enviamos push (la conversación
+       seguirá visible al abrir la app). */
+    if (pf_userHasMuteFlag($pdo, $toUid, 'mute_messages')) return;
 
     /* Respeta el mute: si el destinatario ha silenciado el chat con el
        remitente y mute_until aún es futuro, no enviamos push. El mensaje

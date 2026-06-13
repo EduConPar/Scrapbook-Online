@@ -828,11 +828,11 @@ window.DesktopState.whenReady = function(cb){
     <div class="taskbar-sep"></div>
     <div id="taskbar-tasks"></div>
     <button class="button" id="tray-player-btn" title="Reproductor">♪▶</button>
-    <button class="button" id="tray-volume-btn" title="Volumen global"
-            style="padding:0 6px;display:inline-flex;align-items:center;justify-content:center;">
+    <button class="button" id="tray-volume-btn" title="Volumen global">
         <!-- Icono altavoz: SVG outline, sin fondo. Las ondas las
-             actualiza el JS según el nivel (0/bajo/medio/alto). -->
-        <svg id="tray-volume-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             actualiza el JS según el nivel (0/bajo/medio/alto).
+             Tamaño/centrado vienen del CSS (#tray-volume-btn svg). -->
+        <svg id="tray-volume-icon" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              aria-hidden="true">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>

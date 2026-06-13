@@ -418,6 +418,23 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             margin-top: 6px;
         }
 
+        /* Modal notificaciones — reutiliza el patrón visual de #mh-cp. */
+        #mh-notif-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 90;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        #mh-notif-backdrop.is-open { display: flex; }
+        #mh-notif-window { width: 100%; max-width: 340px; display: flex; flex-direction: column; }
+        #mh-notif-window .window-body { padding: 14px; }
+        #mh-notif-window .field-row { margin: 6px 0; }
+        #mh-notif-window label { font-size: 11px; }
+
         /* ── WIDGET FLOTANTE (vinilo) ──
            Reemplaza el mini-player bar. Es un disco circular sin
            fondo, flotando sobre el viewport. Se mueve manteniendo
@@ -1193,8 +1210,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="window-body">
             <button class="mh-set-btn" type="button" id="mh-set-notifications">
                 <span class="mh-set-emoji"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;"></span>
-                <span class="mh-set-text" id="mh-set-notif-text">Activar notificaciones
-                    <small id="mh-set-notif-sub">Recibe avisos de chats e invitaciones</small>
+                <span class="mh-set-text" id="mh-set-notif-text">Notificaciones
+                    <small id="mh-set-notif-sub">Configura categorías y activación</small>
                 </span>
             </button>
             <button class="mh-set-btn" type="button" id="mh-set-change-photo">
@@ -1244,6 +1261,48 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <div id="mh-cp-actions">
                 <button id="mh-cp-cancel">Cancelar</button>
                 <button id="mh-cp-ok" class="default">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL NOTIFICACIONES — 3 categorías (mismo backend que la app de
+     perfil del desktop) + toggle de push del navegador. Si una
+     categoría se desactiva, su sonido se silencia EN ESTE móvil (las
+     prefs van a localStorage y los pollings las consultan antes de
+     llamar a playNotifSound). El toggle de push gestiona el permiso
+     del navegador llamando al flujo existente. -->
+<div id="mh-notif-backdrop">
+    <div class="window" id="mh-notif-window">
+        <div class="title-bar">
+            <div class="title-bar-text"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Notificaciones</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-notif-close"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <p style="margin:0 0 8px;font-size:11px;">Activar el sonido para:</p>
+            <div class="field-row">
+                <input type="checkbox" id="mh-notif-mute-profile" checked>
+                <label for="mh-notif-mute-profile">Perfil de otros (reseñas, posts, follows)</label>
+            </div>
+            <div class="field-row">
+                <input type="checkbox" id="mh-notif-mute-social" checked>
+                <label for="mh-notif-mute-social">Likes y comentarios</label>
+            </div>
+            <div class="field-row">
+                <input type="checkbox" id="mh-notif-mute-messages" checked>
+                <label for="mh-notif-mute-messages">Mensajes (no molestar al desactivar)</label>
+            </div>
+            <hr style="margin:10px 0;border:none;border-top:1px solid var(--bezel-dark-2,#808080);">
+            <div class="field-row">
+                <input type="checkbox" id="mh-notif-push">
+                <label for="mh-notif-push">Recibir notificaciones del sistema</label>
+            </div>
+            <p id="mh-notif-status" style="margin:8px 0 0;font-size:10px;min-height:14px;color:var(--text-muted,#808080);"></p>
+            <div id="mh-cp-actions" style="margin-top:8px;">
+                <button type="button" id="mh-notif-cancel">Cerrar</button>
+                <button type="button" id="mh-notif-save" class="default">Guardar</button>
             </div>
         </div>
     </div>
@@ -3459,38 +3518,126 @@ window.MuShell = (function(){
             return;
         }
         var p = Notification.permission;
-        if (p === 'granted') {
-            notifText.childNodes[0].nodeValue = '✓ Notificaciones activas';
-            notifSub.textContent = 'Tu dispositivo recibe avisos';
-            notifBtn.classList.remove('danger');
-        } else if (p === 'denied') {
-            notifText.childNodes[0].nodeValue = 'Notificaciones bloqueadas';
-            notifSub.textContent = 'Permítelas desde los ajustes del sistema';
-            notifBtn.classList.add('danger');
-        } else {
-            notifText.childNodes[0].nodeValue = 'Activar notificaciones';
-            notifSub.textContent = 'Recibe avisos de chats e invitaciones';
-            notifBtn.classList.remove('danger');
-        }
+        var hint;
+        if (p === 'granted')      hint = 'Sistema: activas — configura categorías';
+        else if (p === 'denied')  hint = 'Sistema: bloqueadas — configura sonido en la app';
+        else                       hint = 'Configura categorías y activación';
+        notifSub.textContent = hint;
+        notifBtn.classList.toggle('danger', p === 'denied');
     }
-    if (notifBtn) {
-        notifBtn.addEventListener('click', function() {
-            if (typeof window.mhRequestNotifications !== 'function') return;
-            notifSub.textContent = 'Procesando…';
-            window.mhRequestNotifications().then(function(res){
-                refreshNotifLabel();
-                if (res && res.ok) {
-                    notifSub.textContent = '✓ Activadas';
-                    setTimeout(refreshNotifLabel, 1500);
-                } else if (res && res.reason === 'denied') {
-                    notifSub.textContent = 'Bloqueadas — habilítalas en Ajustes del SO';
-                } else if (res && res.reason === 'unsupported') {
-                    notifSub.textContent = 'No soportado en este navegador';
+
+    /* Modal de notificaciones: 3 categorías + toggle del permiso de
+       sistema. Mismo storage que el desktop (BD vía notif-settings +
+       localStorage para que los pollings del móvil lo lean). */
+    var notifBd     = document.getElementById('mh-notif-backdrop');
+    var notifWin    = document.getElementById('mh-notif-window');
+    var notifClose  = document.getElementById('mh-notif-close');
+    var notifCancel = document.getElementById('mh-notif-cancel');
+    var notifSave   = document.getElementById('mh-notif-save');
+    var cbProfile   = document.getElementById('mh-notif-mute-profile');
+    var cbSocial    = document.getElementById('mh-notif-mute-social');
+    var cbMessages  = document.getElementById('mh-notif-mute-messages');
+    var cbPush      = document.getElementById('mh-notif-push');
+    var notifStatus = document.getElementById('mh-notif-status');
+
+    function syncPushToggleFromState() {
+        if (!cbPush) return;
+        if (!('Notification' in window)) {
+            cbPush.checked = false; cbPush.disabled = true;
+            return;
+        }
+        var p = Notification.permission;
+        cbPush.checked  = (p === 'granted');
+        cbPush.disabled = (p === 'denied'); /* el SO lo bloqueó; el usuario debe ir a ajustes */
+    }
+    function openNotifDialog() {
+        /* Carga prefs desde localStorage (lo refrescamos contra BD al
+           abrir, igual que el desktop). UI: checked = SUENA. */
+        try {
+            var cached = JSON.parse(localStorage.getItem('melonNotifPrefs') || 'null') || {};
+            cbProfile.checked  = !cached.mute_profile;
+            cbSocial.checked   = !cached.mute_social;
+            cbMessages.checked = !cached.mute_messages;
+        } catch (_) {
+            cbProfile.checked = cbSocial.checked = cbMessages.checked = true;
+        }
+        syncPushToggleFromState();
+        notifStatus.textContent = '';
+        notifBd.classList.add('is-open');
+        /* Refresh desde BD para alinear con el desktop. */
+        fetch('assets/profile/api.php?action=notif-settings')
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d && d.ok) {
+                    cbProfile.checked  = !d.mute_profile;
+                    cbSocial.checked   = !d.mute_social;
+                    cbMessages.checked = !d.mute_messages;
                 }
-            });
-        });
+            })
+            .catch(function(){});
+    }
+    function closeNotifDialog() { notifBd.classList.remove('is-open'); }
+
+    if (notifBtn) {
+        notifBtn.addEventListener('click', openNotifDialog);
         refreshNotifLabel();
     }
+    if (notifClose)  notifClose.addEventListener('click', closeNotifDialog);
+    if (notifCancel) notifCancel.addEventListener('click', closeNotifDialog);
+    /* Tap en backdrop (fuera del window) también cierra. */
+    if (notifBd) notifBd.addEventListener('click', function(e){
+        if (e.target === notifBd) closeNotifDialog();
+    });
+    /* Toggle de push: si el user lo marca y aún no hay permiso, lo
+       pedimos. Si ya está granted, no hay nada que pedir — el OS lo
+       gestiona. denied no se puede revertir desde la app. */
+    if (cbPush) cbPush.addEventListener('change', function(){
+        if (!('Notification' in window)) return;
+        if (cbPush.checked && Notification.permission !== 'granted') {
+            if (typeof window.mhRequestNotifications === 'function') {
+                notifStatus.textContent = 'Solicitando permiso…';
+                window.mhRequestNotifications().then(function(res){
+                    syncPushToggleFromState();
+                    refreshNotifLabel();
+                    if (res && res.ok)              notifStatus.textContent = '✓ Activadas en el sistema';
+                    else if (res && res.reason === 'denied')      notifStatus.textContent = 'Bloqueadas por el sistema';
+                    else if (res && res.reason === 'unsupported') notifStatus.textContent = 'No soportado';
+                    else notifStatus.textContent = '';
+                });
+            }
+        }
+        /* Si el user lo desmarca y ya estaba granted, no podemos
+           "revocar" el permiso desde JS — pero al desactivar las 3
+           categorías, no sonará nada en práctica. Mostramos hint. */
+        else if (!cbPush.checked && Notification.permission === 'granted') {
+            notifStatus.textContent = 'Para revocar el permiso del SO, hazlo desde sus ajustes.';
+        }
+    });
+    if (notifSave) notifSave.addEventListener('click', function(){
+        var payload = {
+            mute_profile:  !cbProfile.checked,
+            mute_social:   !cbSocial.checked,
+            mute_messages: !cbMessages.checked
+        };
+        notifStatus.textContent = 'Guardando…';
+        fetch('assets/profile/api.php?action=notif-settings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if (d && d.ok) {
+                /* Refleja en localStorage para que los pollings del chat
+                   y de notifs del móvil lo apliquen inmediatamente. */
+                try { localStorage.setItem('melonNotifPrefs', JSON.stringify(payload)); } catch (_) {}
+                notifStatus.textContent = 'Guardado.';
+                setTimeout(closeNotifDialog, 600);
+            } else {
+                notifStatus.textContent = 'Error al guardar.';
+            }
+        })
+        .catch(function(){ notifStatus.textContent = 'Error de red.'; });
+    });
 
     /* ── cambiar foto de perfil ──
        El input file está oculto en el panel. El botón solo dispara su

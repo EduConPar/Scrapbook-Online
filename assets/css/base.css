@@ -163,7 +163,8 @@ body.has-start-icon .win-logo span { display: none; }
     flex-shrink: 0;
 }
 
-#tray-player-btn {
+#tray-player-btn,
+#tray-volume-btn {
     height: 18px !important;
     min-height: 0 !important;
     padding: 0 5px !important;
@@ -171,6 +172,10 @@ body.has-start-icon .win-logo span { display: none; }
     min-width: 0;
     flex-shrink: 0;
 }
+/* SVG dentro del botón del volumen: centrado y a una altura que case
+   con el ♪▶ del botón del reproductor. */
+#tray-volume-btn { display: inline-flex; align-items: center; justify-content: center; }
+#tray-volume-btn svg { display: block; width: 12px; height: 12px; }
 
 /* =========================
    START MENU

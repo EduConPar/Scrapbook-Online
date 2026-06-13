@@ -24,6 +24,32 @@ if (!function_exists('sendPushToUser')) {
         $keysPath = __DIR__ . '/vapid-keys.php';
         if (!file_exists($keysPath)) return;
 
+        /* Filtro por preferencias del receptor (mismas que el dialog
+           de notificaciones del perfil/ajustes móvil): si la categoría
+           del payload está silenciada, no enviamos push. Mapeo de tipo
+           de notif → key_name de user_settings: */
+        $type = (string)($payload['type'] ?? '');
+        static $TYPE_TO_KEY = [
+            'chat'           => 'mute_messages',
+            'message'        => 'mute_messages',
+            'invite'         => 'mute_profile',
+            'item-accepted'  => 'mute_profile',
+            'item-rejected'  => 'mute_profile',
+            'follow'         => 'mute_profile',
+            'review'         => 'mute_profile',
+            'post'           => 'mute_profile',
+            'like'           => 'mute_social',
+            'comment'        => 'mute_social',
+        ];
+        if (isset($TYPE_TO_KEY[$type])) {
+            try {
+                $st = $pdo->prepare("SELECT value FROM user_settings
+                                     WHERE user_id = ? AND key_name = ? LIMIT 1");
+                $st->execute([$toUid, $TYPE_TO_KEY[$type]]);
+                if ($st->fetchColumn() === 'true') return;   /* silenciado */
+            } catch (Throwable $_) { /* tabla ausente → no bloquea */ }
+        }
+
         $stmt = $pdo->prepare("SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?");
         $stmt->execute([$toUid]);
         $subs = $stmt->fetchAll(PDO::FETCH_ASSOC);
