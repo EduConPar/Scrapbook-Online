@@ -121,22 +121,51 @@ function getUserImage($label)
 {
     $safe = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
     $root = dirname(__DIR__);
-    /* 1) Carpeta de subidas de usuario — sobrevive a los deploys de
-       Hostinger porque está gitignored. Aquí van TODAS las fotos
-       subidas vía save-profile-photo.php, incluidas las de Capi/Angie
-       si las cambian. Si existe aquí, tiene precedencia. */
+    /* 1) Carpeta de subidas de usuario — caché en filesystem. Si existe,
+       sirve directamente. */
     foreach (['webp', 'jpg', 'jpeg', 'png', 'gif'] as $ext) {
         if (file_exists($root . "/uploads/profile-photos/{$safe}.{$ext}")) {
             return "uploads/profile-photos/{$safe}.{$ext}";
         }
     }
-    /* 2) Fallback al seed versionado del repo (Capi.jpg / Angie.jpg). */
+    /* 2) Si el filesystem se borró (deploy de Hostinger limpiando uploads/),
+       restauramos desde la BD que SÍ persiste. usuarios.photo_data tiene
+       el binario y photo_ext la extensión original. */
+    $restored = _restorePhotoFromDb($label, $safe);
+    if ($restored !== '') return $restored;
+    /* 3) Fallback al seed del repo (Capi.jpg / Angie.jpg shipped). */
     foreach (['jpg', 'jpeg', 'png', 'gif'] as $ext) {
         if (file_exists(__DIR__ . "/img/{$safe}.{$ext}")) {
             return "assets/img/{$safe}.{$ext}";
         }
     }
     return '';
+}
+
+/* Lee el blob de la foto desde usuarios.photo_data y lo escribe al
+   filesystem como caché. Devuelve la ruta relativa o '' si no hay
+   blob / la columna no existe / falla la escritura. */
+function _restorePhotoFromDb(string $label, string $safe): string
+{
+    try {
+        require_once dirname(__DIR__) . '/db.php';
+        global $pdo;
+        if (!isset($pdo)) return '';
+        $stmt = $pdo->prepare("SELECT photo_data, photo_ext FROM usuarios WHERE label = ? AND photo_data IS NOT NULL LIMIT 1");
+        $stmt->execute([$label]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || empty($row['photo_data']) || empty($row['photo_ext'])) return '';
+        $ext = preg_replace('/[^a-z0-9]/', '', strtolower($row['photo_ext']));
+        if (!in_array($ext, ['jpg','jpeg','png','gif','webp'], true)) return '';
+        $dir = dirname(__DIR__) . '/uploads/profile-photos';
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true)) return '';
+        $path = $dir . '/' . $safe . '.' . $ext;
+        if (@file_put_contents($path, $row['photo_data']) === false) return '';
+        return "uploads/profile-photos/{$safe}.{$ext}";
+    } catch (Throwable $e) {
+        /* Migración pendiente (no existe la columna) o BD no disponible. */
+        return '';
+    }
 }
 
 function getUserWallpaper($label)

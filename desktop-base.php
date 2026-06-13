@@ -116,7 +116,15 @@ $_themeMeta       = getActiveThemeForInterface($desktopUserKey, $desktopLabel, $
 $activeTheme      = $_themeMeta['name'];
 $activeThemeClass = $_themeMeta['className'];
 $activeThemeCss   = $_themeMeta['cssRel'];
-if ($activeThemeCss !== '' && !file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+/* Self-heal: si el archivo CSS del tema activo no existe (típico tras
+   un deploy de Hostinger que borra uploads/themes/), lo regeneramos
+   junto con todos los demás temas del usuario desde la BD. Sin esto,
+   el escritorio cargaría con el tema default tras cada push hasta que
+   el usuario entrara a Temas y forzara la regeneración. */
+if ($activeThemeCss !== '' && !file_exists(__DIR__ . '/' . $activeThemeCss)) {
+    refreshAllUserThemesCss($desktopUserKey, $desktopLabel);
+    if (!file_exists(__DIR__ . '/' . $activeThemeCss)) $activeThemeCss = '';
+}
 /* Mantenemos loadUserThemes para retrocompat con código que pueda
    leer $_userThemes más abajo. */
 $_userThemes = loadUserThemes($desktopUserKey);

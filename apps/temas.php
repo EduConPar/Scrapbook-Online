@@ -44,7 +44,12 @@ require_once dirname(__DIR__) . '/db.php';
 /** @var PDO $pdo */
 $interfacePacks = listInterfacesForUser($pdo, userIdByKey($userKey));
 
-/* Tema activo del usuario */
+/* Tema activo del usuario. refreshAllUserThemesCss regenera el CSS de
+   TODOS los temas guardados — necesario porque uploads/themes/ se borra
+   en los deploys de Hostinger y los demás temas del picker quedarían
+   sin CSS hasta que el usuario los reactivara. La BD (themes.colors)
+   es la fuente de verdad. */
+refreshAllUserThemesCss($userKey, $userLabel);
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';

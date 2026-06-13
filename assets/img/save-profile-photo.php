@@ -68,6 +68,24 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
     echo json_encode(['error' => 'No se pudo guardar la foto (revisa permisos)']); exit;
 }
 
+/* Guarda también el binario en la BD (columnas photo_data + photo_ext
+   de usuarios). Es la fuente de verdad: si el filesystem se borra en un
+   deploy, getUserImage() restaura el archivo desde aquí. */
+try {
+    require_once dirname(__DIR__, 2) . '/db.php';
+    $blob = file_get_contents($dest);
+    if ($blob !== false) {
+        $stmt = $pdo->prepare("UPDATE usuarios SET photo_data = ?, photo_ext = ? WHERE user_key = ?");
+        $stmt->bindParam(1, $blob, PDO::PARAM_LOB);
+        $stmt->bindValue(2, $ext);
+        $stmt->bindValue(3, $userKey);
+        $stmt->execute();
+    }
+} catch (Throwable $e) {
+    /* Si la BD aún no tiene las columnas (migración pendiente), no
+       rompemos el upload — la foto sigue accesible vía filesystem. */
+}
+
 echo json_encode([
     'ok'    => true,
     'photo' => 'uploads/profile-photos/' . $baseName . '.' . $ext,

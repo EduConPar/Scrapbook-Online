@@ -632,6 +632,25 @@ function refreshActiveThemeCss($userKey, $label) {
     @file_put_contents($cssPath, $css);
 }
 
+/* Regenera el CSS de TODOS los temas guardados del usuario. Llamado
+   desde apps que muestran el picker (temas.php) o cuando se necesita
+   garantizar que los CSS existan en disco. La BD (themes.colors) es la
+   fuente de verdad — el filesystem es solo caché que el deploy puede
+   borrar. Esto reconstruye la caché completa. Idempotente: si el CSS
+   ya existe se sobrescribe con la misma versión. */
+function refreshAllUserThemesCss($userKey, $label) {
+    $data = loadUserThemes($userKey);
+    $themes = (array)($data['themes'] ?? []);
+    foreach ($themes as $name => $info) {
+        if (!isset($info['colors']) || !validateThemeColors($info['colors'])) continue;
+        $safeName = sanitizeThemeName((string)$name);
+        if ($safeName === '') continue;
+        $cssPath = themeCssFile($safeName, $label);
+        $css     = generateThemeCss(themeCssClassName($safeName, $label), $info['colors']);
+        @file_put_contents($cssPath, $css);
+    }
+}
+
 /* ──────────────────────────────────────────────────────────────────────
    getActiveThemeForInterface
    ──────────────────────────────────────────────────────────────────────

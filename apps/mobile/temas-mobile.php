@@ -23,8 +23,12 @@ if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
 $userKey   = $_SESSION['user'];
 $userLabel = $loginUsers[$userKey]['label'];
 
-/* Tema activo del usuario — mismo flow que el resto de apps móviles. */
+/* Tema activo del usuario — mismo flow que el resto de apps móviles.
+   refreshAllUserThemesCss regenera el CSS de TODOS los temas del usuario
+   por si uploads/themes/ se perdió en un deploy (la BD es la fuente
+   de verdad). */
 require_once dirname(__DIR__, 2) . '/assets/themes/theme-helpers.php';
+refreshAllUserThemesCss($userKey, $userLabel);
 refreshActiveThemeCss($userKey, $userLabel);
 $_userThemes = loadUserThemes($userKey);
 $activeTheme = !empty($_userThemes['active']) ? sanitizeThemeName($_userThemes['active']) : '';
