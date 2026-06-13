@@ -276,6 +276,11 @@ input[type=range].tb-slider{
 #display-canvas{
     display:block;background:transparent;
     touch-action:none;cursor:crosshair;
+    /* will-change empuja al navegador a darnos una capa GPU dedicada
+       para el canvas — los repaints del display no fuerzan repaint del
+       resto del UI. Patrón estándar en apps de dibujo web. */
+    will-change:transform;
+    transform:translateZ(0);
     /* Checker debajo del canvas — cuando la capa de fondo está oculta
        o el usuario pinta con alfa, el cuadriculado del tema aparece
        en lugar del color sólido del workspace. */
@@ -1711,6 +1716,10 @@ function _compositeNow() {
                 const iy = Math.floor(d.y * s);
                 const iw = Math.min(display.width  - ix, Math.ceil((d.x + d.w) * s) - ix);
                 const ih = Math.min(display.height - iy, Math.ceil((d.y + d.h) * s) - iy);
+                /* A zoom out extremo el dirty rect puede colapsar a 0
+                   píxeles del display — el dab existe en layer.canvas
+                   pero no es visible. Saltamos el blit (gratis). */
+                if (iw < 1 || ih < 1) { _dirty = null; return; }
                 dctx.setTransform(1, 0, 0, 1, 0, 0);
                 dctx.clearRect(ix, iy, iw, ih);
                 dctx.drawImage(cache.below, ix, iy, iw, ih, ix, iy, iw, ih);
@@ -2258,39 +2267,70 @@ function pressureToWidth(p) {
    selection rotation activa (necesitaría rotar también el template);
    en esos casos caemos al render directo. */
 const DAB_TEMPLATE_SIZE = 128;
-const _dabTemplates = new Map(); /* key → HTMLCanvasElement */
+const _dabTemplates = new Map(); /* key → ImageBitmap | HTMLCanvasElement */
 const _DAB_TEMPLATE_CAP = 16;
+/* OffscreenCanvas + transferToImageBitmap es lo que usan apps tipo
+   Procreate/Krita para los stamps: el bitmap vive en GPU memory y
+   drawImage(ImageBitmap) es notablemente más rápido que un canvas
+   (no necesita re-uploadear la textura). Si el navegador no soporta
+   OffscreenCanvas (Safari < 16.4), fallback a canvas tradicional. */
+const _HAS_OFFSCREEN = typeof OffscreenCanvas !== 'undefined'
+    && typeof OffscreenCanvas.prototype.transferToImageBitmap === 'function';
 function _getDabTemplate(brush, color) {
     const key = (brush.hardEdge ? 'h:' : 's:') + color;
     let tpl = _dabTemplates.get(key);
     if (tpl) return tpl;
     if (_dabTemplates.size >= _DAB_TEMPLATE_CAP) {
-        /* LRU naive: borra el primero (el más antiguo en orden de
-           inserción de Map). */
         const firstKey = _dabTemplates.keys().next().value;
+        const old = _dabTemplates.get(firstKey);
+        /* ImageBitmap.close() libera la memoria GPU explícitamente. */
+        if (old && typeof old.close === 'function') old.close();
         _dabTemplates.delete(firstKey);
     }
     const s = DAB_TEMPLATE_SIZE;
-    tpl = document.createElement('canvas');
-    tpl.width = s; tpl.height = s;
-    const tctx = tpl.getContext('2d');
     const c = s / 2;
     const r = c - 2;
-    if (brush.hardEdge) {
-        tctx.fillStyle = color;
-        tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+    if (_HAS_OFFSCREEN) {
+        const off = new OffscreenCanvas(s, s);
+        const octx = off.getContext('2d');
+        if (brush.hardEdge) {
+            octx.fillStyle = color;
+            octx.beginPath(); octx.arc(c, c, r, 0, Math.PI * 2); octx.fill();
+        } else {
+            const g = octx.createRadialGradient(c, c, 0, c, c, r);
+            g.addColorStop(0,    color);
+            g.addColorStop(0.55, color);
+            g.addColorStop(1,    color + '00');
+            octx.fillStyle = g;
+            octx.beginPath(); octx.arc(c, c, r, 0, Math.PI * 2); octx.fill();
+        }
+        tpl = off.transferToImageBitmap();
     } else {
-        const g = tctx.createRadialGradient(c, c, 0, c, c, r);
-        g.addColorStop(0,    color);
-        g.addColorStop(0.55, color);
-        g.addColorStop(1,    color + '00');
-        tctx.fillStyle = g;
-        tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+        const cv = document.createElement('canvas');
+        cv.width = s; cv.height = s;
+        const tctx = cv.getContext('2d');
+        if (brush.hardEdge) {
+            tctx.fillStyle = color;
+            tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+        } else {
+            const g = tctx.createRadialGradient(c, c, 0, c, c, r);
+            g.addColorStop(0,    color);
+            g.addColorStop(0.55, color);
+            g.addColorStop(1,    color + '00');
+            tctx.fillStyle = g;
+            tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+        }
+        tpl = cv;
     }
     _dabTemplates.set(key, tpl);
     return tpl;
 }
-function _clearDabTemplates() { _dabTemplates.clear(); }
+function _clearDabTemplates() {
+    for (const v of _dabTemplates.values()) {
+        if (v && typeof v.close === 'function') v.close();
+    }
+    _dabTemplates.clear();
+}
 
 /* ── Blender sample patch ──
    getImageData(srcCtx, 1, 1) por dab era prohibitivo en lienzos grandes:
@@ -2417,7 +2457,14 @@ function paintSegment(ctx, from, to, color, brush, isEraser, sampleCtx) {
     const dx = to.x - from.x, dy = to.y - from.y;
     const dist = Math.hypot(dx, dy);
     const wMid = pressureToWidth((from.p + to.p) / 2);
-    const step = Math.max(1, wMid * brush.spacing);
+    /* Step mínimo en CSS px del display, no en lienzo px. A zoom 25%
+       sobre un 5000×5000, 1 px de lienzo = 0.25 px en pantalla. Pintar
+       cientos de dabs sub-pixel solo añade trabajo sin diferencia
+       visible. Krita usa una distancia mínima similar ("distance"
+       brush property). Mantenemos el step natural del brush si es
+       mayor — solo elevamos el suelo. */
+    const minStepLienzo = Math.max(1, 1.5 / Math.max(0.001, _displayScale()));
+    const step = Math.max(minStepLienzo, wMid * brush.spacing);
     const n = Math.max(1, Math.floor(dist / step));
     for (let i = 1; i <= n; i++) {
         const t = i / n;
