@@ -2288,3 +2288,30 @@
    genérica `.title-bar-controls button[aria-label]` + la mask-image
    específica para `[aria-label=Settings]`. Así el botón se ve con
    los mismos valores del tema activo que Close/Min/Max. */
+
+/* Ventanas de reseñas — ancho FIJO en CSS (no inline) para que el
+   reset `win.style.width = ''` del JS al reabrir no las deje sin
+   tamaño base. Sin esto la ventana caía a shrink-to-fit y crecía
+   con el texto. El usuario puede redimensionar a mano: el JS guarda
+   el nuevo ancho como `style.width=Npx` (gana por especificidad) y
+   solo se borra al cerrar+reabrir, volviendo a estos defaults. */
+#profile-melon-details-window {
+    width: 280px;
+    min-width: 220px;
+    max-width: 95vw;
+    height: 65vh;
+    max-height: 65vh;
+    min-height: 160px;
+}
+#profile-review-view {
+    width: 240px;
+    min-width: 200px;
+    max-width: 95vw;
+    max-height: 90vh;
+}
+#profile-review-window {
+    width: 290px;
+    min-width: 220px;
+    min-height: 200px;
+    max-height: 90vh;
+}
