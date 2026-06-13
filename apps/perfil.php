@@ -516,12 +516,15 @@ if ($_perfilStandalone) {
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
-            <!-- Botón engranaje. Sin aria-label (evita el sprite "?" del
-                 Help button de 98.css). El background-image vive en un
-                 <style> dedicado más abajo, en vez de inline, para que
-                 el patrón sea idéntico al de Close/Min/Max y herede los
-                 bezels Win98 sin clashes con escape de comillas. -->
-            <button id="profile-notifs-settings-btn" title="Preferencias de notificaciones"></button>
+            <!-- Botón engranaje. `aria-label="Settings"` es un valor
+                 custom (no presente en 98.css), así que NO hereda el
+                 sprite "?" del Help button. Pero las reglas genéricas
+                 de themes.css para `.title-bar-controls button[aria-label]`
+                 sí matchean — y así el botón coge los mismos colores
+                 (bg, bezels, icon-color) del tema activo que los de
+                 Close/Min/Max. El SVG del engranaje se aplica como
+                 mask-image en themes.css (regla [aria-label=Settings]). -->
+            <button aria-label="Settings" id="profile-notifs-settings-btn" title="Preferencias de notificaciones"></button>
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>
@@ -2332,6 +2335,10 @@ var PROFILE_USERS = <?php
         })
         .catch(function(){});
 
+    /* Set de notif IDs ya vistos en pollings anteriores — sirve para
+       detectar los nuevos sin necesidad de comparar `unread` (que se
+       resetea cuando el usuario abre la ventana). */
+    var _seenProfileNotifIds = {};
     function loadProfileNotifs(cb) {
         fetch('assets/profile/api.php?action=get-profile-notifs')
             .then(function(r) { return r.json(); })
@@ -2351,6 +2358,25 @@ var PROFILE_USERS = <?php
                             return !n.read && !notifIsMuted(n.type);
                         });
                         if (unmuted.length) playProfileNotifSound();
+                    }
+                    /* Detecta notifs nuevas por ID (no se ven en pollings
+                       anteriores). Si entre ellas hay un `follow`,
+                       alguien nos empezó a seguir → refresca la sección
+                       Social para que el botón "Seguir de vuelta" / la
+                       lista de seguidores se vea sin recargar la app. */
+                    var firstLoad = !Object.keys(_seenProfileNotifIds).length;
+                    var newFollow = false;
+                    profileNotifs.forEach(function(n) {
+                        if (n && n.id != null && !_seenProfileNotifIds[n.id]) {
+                            _seenProfileNotifIds[n.id] = true;
+                            if (!firstLoad && n.type === 'follow') newFollow = true;
+                        }
+                    });
+                    if (newFollow) {
+                        loadMyFollowers(function() {
+                            if (typeof renderFollowedNav === 'function') renderFollowedNav();
+                            if (typeof renderSocialList   === 'function') renderSocialList();
+                        });
                     }
                     _prevProfileUnread = unread;
                     updateNotifBadge(unread);
@@ -2470,6 +2496,12 @@ var PROFILE_USERS = <?php
                               b.textContent = d.following ? '✓ Siguiendo' : '+ Seguir';
                               b.classList.toggle('following', !!d.following);
                               renderFollowedNav();
+                              /* La lista "Explorar" de la sección Social
+                                 filtra por `ownFollowing`. Tras seguir/
+                                 dejar de seguir, hay que repintarla para
+                                 que el usuario aparezca/desaparezca de
+                                 ahí en tiempo real. */
+                              if (typeof renderSocialList === 'function') renderSocialList();
                               /* Si el perfil que se está viendo es este usuario, sincroniza también el botón principal */
                               if (viewingUser === uk) updateFollowButton(!!d.following);
                           }).catch(function() { b.dataset.busy = ''; });
@@ -2604,7 +2636,14 @@ var PROFILE_USERS = <?php
                   if (!d || d.error) { if (d && d.error) alert(d.error); return; }
                   ownFollowing = Array.isArray(d.list) ? d.list : ownFollowing;
                   updateFollowButton(!!d.following);
-                  loadMyFollowers(function() { renderFollowedNav(); });
+                  loadMyFollowers(function() {
+                      renderFollowedNav();
+                      /* La sección "Social → Explorar" filtra por
+                         `ownFollowing`; el usuario que acabamos de
+                         seguir/dejar de seguir debe aparecer/
+                         desaparecer de la lista sin recargar la app. */
+                      if (typeof renderSocialList === 'function') renderSocialList();
+                  });
               }).catch(function() { btn.dataset.busy = ''; });
         });
     })();
