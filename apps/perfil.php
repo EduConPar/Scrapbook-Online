@@ -559,16 +559,19 @@ if ($_perfilStandalone) {
     </div>
 </div>
 
-<!-- REVIEW VIEW WINDOW -->
-<div class="window" id="profile-review-view" style="display:none;position:fixed;z-index:10002;width:300px;">
-    <div class="title-bar">
+<!-- REVIEW VIEW WINDOW (ver una reseña concreta) -->
+<div class="window" id="profile-review-view" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:300px;min-width:240px;max-width:95vw;max-height:90vh;">
+    <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text">★ Review</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-review-view-close"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:0;">
-        <div style="padding:16px 18px 14px;">
+    <div class="window-body" style="padding:0;flex:1;min-height:0;overflow:auto;">
+        <!-- min-width:0 + overflow-wrap:anywhere → un comentario sin
+             espacios o un username largo se rompe en vez de empujar
+             el contenedor más ancho que la ventana. -->
+        <div style="padding:16px 18px 14px;min-width:0;overflow-wrap:anywhere;word-break:break-word;">
             <div id="profile-review-view-comment"></div>
             <div id="profile-review-view-header"></div>
         </div>
@@ -1404,7 +1407,14 @@ var PROFILE_USERS = <?php
         var username = (document.getElementById('profile-username') || {}).textContent || 'Usuario';
         document.getElementById('profile-review-view-comment').textContent = review.comment ? '" ' + review.comment + ' "' : '';
         document.getElementById('profile-review-view-header').innerHTML = '— ' + escHtml(username) + '  —  ' + makeStarsHtml(review.stars, 5) + '<span style="font-size:11px;margin-left:4px;vertical-align:middle;">' + review.stars + '</span>';
-        win.style.display = 'block';
+        /* Reset al tamaño base definido en el HTML — si el usuario
+           había redimensionado la ventana antes, los style inline
+           width/height persistían entre aperturas. Borrarlos hace que
+           la ventana vuelva a sus dimensiones por defecto cada vez. */
+        win.style.width = ''; win.style.height = '';
+        /* display:flex (no block) para que el flex-direction:column
+           del HTML surta efecto con el body interno scrolleable. */
+        win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
         var closeBtn = document.getElementById('profile-review-view-close');
@@ -1463,6 +1473,9 @@ var PROFILE_USERS = <?php
             }
         }
         drawStars();
+        /* Reset al tamaño base definido en el HTML (sin width/height
+           inline que persistan de un resize anterior). */
+        win.style.width = ''; win.style.height = '';
         win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
@@ -3251,6 +3264,9 @@ var PROFILE_USERS = <?php
             row.appendChild(body);
             list.appendChild(row);
         });
+        /* Reset al tamaño base — el usuario pidió que las ventanas de
+           reseñas siempre se abran con el tamaño mínimo definido. */
+        win.style.width = ''; win.style.height = '';
         win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
@@ -4727,6 +4743,9 @@ var PROFILE_USERS = <?php
             })(i);
             starsEl.appendChild(s);
         }
+        /* Reset al tamaño base — las ventanas de reseñas siempre se
+           abren con el tamaño mínimo (no persiste el resize anterior). */
+        win.style.width = ''; win.style.height = '';
         win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';

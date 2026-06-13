@@ -1352,11 +1352,11 @@ function updateTrackUI(index)
    Race: si el usuario cambia de track antes de que la query termine,
    la respuesta podría llegar para un track "viejo". Capturamos el
    videoId al iniciar el lookup y comprobamos al volver. */
-/* :v4 — invalida los álbumes "sintéticos" (con spotifyAlbumId
-   "synthetic:…") cacheados por la versión anterior. Esos pintaban el
-   título de la canción como nombre del álbum, lo que confundía. Tras
-   este bump las canciones sin álbum real vuelven a no mostrar álbum. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache:v4';
+/* :v5 — invalida los notFound:true cacheados después de quitar la
+   rama sintética. Esos resultados quedaban locked en cliente y
+   bloqueaban que las nuevas búsquedas (con la cascada del backend)
+   intentaran resolver el álbum real. */
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v5';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;
@@ -2071,7 +2071,10 @@ function _resolveAlbumForRow(track, albumSpan) {
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (!data) return;
-            _albumCacheSet(vId, data);
+            /* Solo cachear si es un álbum real — los notFound NO se
+               cachean en cliente para reintentar la próxima vez. */
+            const norm = _normalizeAlbumPayload(data, track);
+            if (norm) _albumCacheSet(vId, norm);
             paint(data);
         })
         .catch(() => { /* offline / endpoint caído → no se muestra nada */ });
@@ -2123,11 +2126,13 @@ function resolveAndShowAlbum(track) {
     fetch('assets/music/api.php?action=find-album&' + params.toString())
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-            /* Normalizamos para que un notFound o red caída se
-               conviertan en sintético — la promesa "todas las canciones
-               tienen álbum" se mantiene del lado del cliente también. */
+            /* Solo cacheamos álbumes REALES — un null (notFound o red
+               caída) NO lo cacheamos, así la próxima vez se reintenta
+               y puede encontrar el álbum cuando Spotify se recupere o
+               el match mejore. Sin esto, una sola búsqueda fallida
+               dejaba el videoId locked durante toda la sesión. */
             const normalized = _normalizeAlbumPayload(data, track);
-            _albumCacheSet(requestedFor, normalized);
+            if (normalized) _albumCacheSet(requestedFor, normalized);
             const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
                 ? playlist[currentTrack] : null;
             if (curTrack && curTrack.videoId === requestedFor

@@ -680,11 +680,11 @@ case 'find-album': {
     $artist = trim((string)($_GET['artist'] ?? ''));
     if ($title === '') jsonError('title requerido');
 
-    /* v3 — bumpeamos para invalidar cache que devolvía álbumes
-       sintéticos (con spotifyAlbumId "synthetic:…"). Esos sintéticos
-       quedaban pegados durante 7 días pintando el título de la canción
-       como nombre del álbum. */
-    $cacheKey = 'album_lookup_v3_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    /* v4 — bumpeamos otra vez para invalidar los notFound:true que
+       quedaron cacheados durante 7 días al quitar la rama sintética en
+       el turn anterior. Esos cache hits hacían que el cliente recibiera
+       siempre notFound y "ninguna canción tuviera álbum". */
+    $cacheKey = 'album_lookup_v4_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
@@ -870,14 +870,18 @@ case 'find-album': {
 
     /* Si nada superó ninguno de los niveles de la cascada (Spotify no
        devolvió candidatos o todos eran muy malos), devolvemos
-       notFound — el cliente NO muestra álbum para esa canción. Antes
-       sintetizábamos un álbum fake con el nombre de la canción, pero
-       confundía más de lo que ayudaba ("el álbum se llama igual que la
-       canción"). */
+       notFound — el cliente NO muestra álbum para esa canción. */
     if ($result === null) {
         $result = ['notFound' => true];
+        /* TTL corto (5 min) para notFound: si Spotify estaba caído o
+           el rate-limit nos cortó, queremos reintentar pronto. Sin esta
+           protección un fallo transitorio dejaba la canción sin álbum
+           durante 7 días. Resultados positivos (album real) sí los
+           cacheamos los 7 días — esos no caducan. */
+        cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 5 * 60);
+    } else {
+        cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
     }
-    cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
     jsonResponse($result);
 }
 
