@@ -287,6 +287,34 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
 </div>
 
+<!-- ALBUM VIEWER — ventana de previsualización de un álbum.
+     El click en el título del track / widget de "Álbum del track actual"
+     abre esta ventana con la lista de canciones del álbum. NO se
+     reproduce hasta que el usuario lo pide explícitamente con el botón
+     "Reproducir álbum" o haciendo click en una canción concreta. -->
+<div class="window" id="album-viewer">
+    <div class="title-bar">
+        <div class="title-bar-text">💿 Álbum</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="album-viewer-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="album-viewer-body">
+        <div id="album-viewer-header">
+            <img id="album-viewer-cover" src="" alt="">
+            <div id="album-viewer-head-info">
+                <div id="album-viewer-name">Cargando…</div>
+                <div id="album-viewer-artist"></div>
+                <div id="album-viewer-meta"></div>
+            </div>
+        </div>
+        <div id="album-viewer-tracks"></div>
+        <div id="album-viewer-footer">
+            <button class="button" id="album-viewer-play" disabled>▶ Reproducir álbum</button>
+        </div>
+    </div>
+</div>
+
 <!-- ADD TRACK DIALOG -->
 <div class="window" id="add-track-dialog">
     <div class="title-bar">
@@ -1414,30 +1442,123 @@ function _renderCurrentAlbumWidget() {
      - Si el track actual está en el tracklist resuelto, arrancamos
        desde esa posición — el cambio se siente como "seguir escuchando
        pero ahora con next/prev navegando el álbum". Si no, desde la 0. */
-let _albumLoading = false;
-async function openAlbumAsPlaylist(albumId, albumName) {
-    if (_albumLoading || !albumId) return;
-    _albumLoading = true;
-    /* Feedback en el sitio que esté visible. La pestaña Playlists tiene
-       el widget; el reproductor pequeño solo muestra el cursor wait
-       en el título (no cambiamos el textContent: el usuario sigue
-       viendo qué está sonando hasta que el álbum cargue). */
-    const widget = document.getElementById('pl-current-album');
-    const widgetPrev = widget ? widget.innerHTML : null;
-    if (widget && widget.style.display !== 'none') {
-        widget.innerHTML = '<div class="pl-current-album-info"><div class="pl-current-album-name">Cargando álbum…</div></div>';
+/* ── Album viewer ──
+   El click en el título de la canción / widget abre una ventana de
+   previsualización con la tracklist del álbum. NO reproduce nada hasta
+   que el usuario lo pide explícitamente (botón "Reproducir álbum" o
+   click en una canción). El loading sigue una secuencia:
+     1) album-tracks → pintar metadata + lista al instante.
+     2) yt-search-batch en background → habilita reproducción.
+   Mientras (2) está en flight, el botón "Reproducir" y los clicks en
+   tracks quedan disabled — el usuario ve la lista pero no puede tocar
+   nada todavía. */
+let _albumViewerCurrent = null; /* { albumId, meta, resolved } */
+let _albumViewerLoading = false;
+
+function _albumViewerEl(id) { return document.getElementById(id); }
+
+function closeAlbumViewer() {
+    const win = _albumViewerEl('album-viewer');
+    if (!win) return;
+    if (window.taskbarManager) {
+        try { taskbarManager.unregister('album-viewer'); } catch (_) {}
     }
-    if (playerTitle) playerTitle.style.cursor = 'wait';
+    win.style.display = 'none';
+    _albumViewerCurrent = null;
+}
+
+async function openAlbumViewer(albumId, albumName) {
+    if (_albumViewerLoading || !albumId) return;
+    const win = _albumViewerEl('album-viewer');
+    if (!win) return;
+    _albumViewerLoading = true;
+
+    const nameEl   = _albumViewerEl('album-viewer-name');
+    const artistEl = _albumViewerEl('album-viewer-artist');
+    const metaEl   = _albumViewerEl('album-viewer-meta');
+    const coverEl  = _albumViewerEl('album-viewer-cover');
+    const tracksEl = _albumViewerEl('album-viewer-tracks');
+    const playBtn  = _albumViewerEl('album-viewer-play');
+
+    /* Reset visual al estado de "cargando". Usamos lo que ya
+       conocemos de _currentAlbum (cover, nombre) para no esperar al
+       endpoint para enseñar algo. */
+    nameEl.textContent   = albumName || (_currentAlbum && _currentAlbum.albumName) || 'Cargando…';
+    artistEl.textContent = '';
+    metaEl.textContent   = '';
+    coverEl.src          = (_currentAlbum && _currentAlbum.image) || '';
+    tracksEl.innerHTML   = '<div class="album-viewer-msg">Cargando…</div>';
+    playBtn.disabled     = true;
+    playBtn.textContent  = '▶ Reproducir álbum';
+
+    /* Abrir ventana usando taskbarManager (mismo patrón que
+       playlist-editor) para que se registre en la taskbar. */
+    if (window.taskbarManager) {
+        if (taskbarManager.isRegistered('album-viewer')) {
+            taskbarManager.restore('album-viewer');
+        } else {
+            taskbarManager.register('album-viewer', 'Álbum',
+                '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">',
+                'flex');
+        }
+    } else {
+        win.style.display = 'flex';
+    }
+
     try {
-        /* 1) Tracklist de Spotify (title/artist/duration). */
+        /* 1) Metadata del álbum + tracklist. */
         const metaRes = await fetch('../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
         if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
         const meta = await metaRes.json();
         if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
 
-        /* 2) Resuelve cada track a un videoId de YouTube (en paralelo,
-           backend). yt-search-batch ya hace concurrencia limitada y
-           devuelve los items en el mismo orden que se mandaron. */
+        nameEl.textContent   = meta.name || albumName || 'Álbum';
+        artistEl.textContent = meta.artist || '';
+        if (meta.image) coverEl.src = meta.image;
+
+        /* Duración total bonita: "12 canciones · 48m" o similar. */
+        let totalSec = 0, hasDur = false;
+        meta.tracks.forEach(t => { if (t.duration) { totalSec += t.duration; hasDur = true; } });
+        let metaText = meta.tracks.length + ' canciones';
+        if (hasDur) {
+            const h = Math.floor(totalSec / 3600);
+            const m = Math.floor((totalSec % 3600) / 60);
+            metaText += ' · ' + (h > 0 ? h + 'h ' : '') + m + 'm';
+        }
+        metaEl.textContent = metaText;
+
+        /* Render de la lista. Los clicks llaman a _playAlbumFrom
+           pasando el índice ORIGINAL; ahí decidimos si esa canción
+           se resolvió en YouTube (y si no, alertamos). */
+        tracksEl.innerHTML = '';
+        meta.tracks.forEach((t, i) => {
+            const row = document.createElement('div');
+            row.className = 'album-viewer-row';
+            row.dataset.idx = i;
+            const num = document.createElement('span');
+            num.className = 'album-viewer-num';
+            num.textContent = i + 1;
+            const info = document.createElement('div');
+            info.className = 'album-viewer-info';
+            const ttl = document.createElement('div');
+            ttl.className = 'album-viewer-title';
+            ttl.textContent = t.title;
+            const ar = document.createElement('div');
+            ar.className = 'album-viewer-artist';
+            ar.textContent = t.artist;
+            info.appendChild(ttl); info.appendChild(ar);
+            const dur = document.createElement('span');
+            dur.className = 'album-viewer-dur';
+            dur.textContent = t.duration ? formatTime(t.duration) : '';
+            row.appendChild(num); row.appendChild(info); row.appendChild(dur);
+            row.addEventListener('click', () => _playAlbumFrom(i));
+            tracksEl.appendChild(row);
+        });
+
+        _albumViewerCurrent = { albumId, meta, resolved: null };
+
+        /* 2) En background: resolver videoIds. Mientras tanto, los
+           clicks de tracks devolverán un mensaje pidiendo esperar. */
         const ytRes = await fetch('../assets/music/api.php?action=yt-search-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1445,57 +1566,99 @@ async function openAlbumAsPlaylist(albumId, albumName) {
         });
         if (!ytRes.ok) throw new Error('No se pudo resolver el álbum en YouTube');
         const ytData = await ytRes.json();
-        const resolved = (ytData.tracks || [])
-            .filter(t => t && t.videoId)
-            .map(t => ({ videoId: t.videoId, title: t.title, artist: t.artist }));
-        if (!resolved.length) throw new Error('Ninguna canción del álbum se encontró en YouTube');
+        /* yt-search-batch puede devolver menos items que los enviados
+           (descarta los que no tienen título). Para mapear de vuelta
+           index original → videoId, normalizamos por título. */
+        const ytTracks = ytData.tracks || [];
+        const byTitle = {};
+        ytTracks.forEach(t => { if (t && t.title) byTitle[t.title] = t.videoId || null; });
+        const resolved = meta.tracks.map(t => ({
+            title:   t.title,
+            artist:  t.artist,
+            duration: t.duration || 0,
+            videoId: byTitle[t.title] || null,
+        }));
 
-        /* 3) Si el track sonando ahora está en el álbum, arrancamos
-           desde ahí. Comparamos por title normalizado para tolerar
-           pequeñas diferencias (mayúsculas, acentos, etc.). */
-        const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-        const currentTitle = (typeof playlist !== 'undefined' && playlist[currentTrack])
-            ? norm(playlist[currentTrack].title) : '';
-        let startAt = 0;
-        if (currentTitle) {
-            const found = resolved.findIndex(t => norm(t.title) === currentTitle);
-            if (found >= 0) startAt = found;
-        }
+        _albumViewerCurrent.resolved = resolved;
 
-        /* 4) Cárgalo como playlist activa. ID virtual con prefijo
-           'spotify-album:' — no choca con IDs reales de allPlaylists. */
-        const virtualId = 'spotify-album:' + albumId;
-        currentPlaylistId = virtualId;
-        currentPlaylistHasCollabs = false;
-        playlist.length = 0;
-        resolved.forEach(t => playlist.push(t));
-        currentTrack = startAt;
-        updatePlayerTitle('💿 ' + (meta.name || albumName || 'Álbum'));
-        updateTrackUI(startAt);
-        if (typeof MelonPlayerState !== 'undefined') {
-            try { MelonPlayerState.setPlaylist(virtualId, startAt); } catch (_) {}
-        }
-        if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-            ytPlayer.loadVideoById(playlist[startAt].videoId);
+        /* Marca los rows sin videoId como deshabilitados visualmente. */
+        Array.from(tracksEl.querySelectorAll('.album-viewer-row')).forEach((row, i) => {
+            if (!resolved[i].videoId) {
+                row.classList.add('is-disabled');
+                row.title = 'Esta canción no se encontró en YouTube';
+            }
+        });
+
+        const anyPlayable = resolved.some(t => t.videoId);
+        if (anyPlayable) {
+            playBtn.disabled = false;
+            playBtn.onclick = () => _playAlbumFrom(0);
+        } else {
+            playBtn.textContent = 'No disponible';
         }
     } catch (e) {
-        alert('No se pudo cargar el álbum: ' + (e.message || e));
-        /* Restaura el widget si lo estábamos enseñando como "Cargando…". */
-        if (widget && widgetPrev != null) widget.innerHTML = widgetPrev;
+        tracksEl.innerHTML = '<div class="album-viewer-msg">Error: ' + (e.message || e) + '</div>';
+        playBtn.textContent = 'No disponible';
     } finally {
-        _albumLoading = false;
-        if (playerTitle) playerTitle.style.cursor = '';
+        _albumViewerLoading = false;
     }
 }
 
-/* Click en el TÍTULO de la canción → abre su álbum como playlist. Solo
-   actúa cuando el título tiene la clase has-album (la setea
-   _applyAlbumState al resolver un álbum válido). */
+/* Carga el álbum como playlist activa y empieza a reproducir desde el
+   índice original. Si la canción de inicio no se pudo resolver,
+   buscamos la siguiente que sí. */
+function _playAlbumFrom(origIdx) {
+    if (!_albumViewerCurrent || !_albumViewerCurrent.resolved) {
+        /* Aún cargando videoIds. */
+        return;
+    }
+    const { albumId, meta, resolved } = _albumViewerCurrent;
+    /* Filtrar a las canciones que SÍ tienen videoId — son las que se
+       reproducirán. Mantenemos el orden del álbum original. */
+    const playable = resolved.filter(t => t.videoId);
+    if (!playable.length) {
+        alert('Ninguna canción de este álbum se encontró en YouTube.');
+        return;
+    }
+    /* Mapeo del índice original al índice en la lista filtrada. Si la
+       canción concreta no se resolvió, arrancamos desde la SIGUIENTE
+       que sí. */
+    let actualStart = -1;
+    for (let i = origIdx; i < resolved.length; i++) {
+        if (resolved[i].videoId) {
+            actualStart = playable.indexOf(resolved[i]);
+            break;
+        }
+    }
+    if (actualStart < 0) actualStart = 0;
+
+    const virtualId = 'spotify-album:' + albumId;
+    currentPlaylistId = virtualId;
+    currentPlaylistHasCollabs = false;
+    playlist.length = 0;
+    playable.forEach(t => playlist.push({ videoId: t.videoId, title: t.title, artist: t.artist }));
+    currentTrack = actualStart;
+    updatePlayerTitle('💿 ' + (meta.name || 'Álbum'));
+    updateTrackUI(actualStart);
+    if (typeof MelonPlayerState !== 'undefined') {
+        try { MelonPlayerState.setPlaylist(virtualId, actualStart); } catch (_) {}
+    }
+    if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+        ytPlayer.loadVideoById(playlist[actualStart].videoId);
+    }
+    /* Cerrar el viewer al pulsar play — el usuario ya tiene el track
+       sonando en el reproductor pequeño. */
+    closeAlbumViewer();
+}
+
+/* Click en el TÍTULO de la canción → abre la ventana del álbum
+   (no reproduce). Solo actúa cuando el título tiene la clase
+   has-album. */
 if (playerTitle) {
     playerTitle.addEventListener('click', () => {
         if (!playerTitle.classList.contains('has-album')) return;
         if (!_currentAlbum) return;
-        openAlbumAsPlaylist(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+        openAlbumViewer(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
     });
 }
 
@@ -1505,8 +1668,14 @@ if (playerTitle) {
     if (!widget) return;
     widget.addEventListener('click', () => {
         if (!_currentAlbum) return;
-        openAlbumAsPlaylist(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+        openAlbumViewer(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
     });
+})();
+
+/* Cerrar el viewer con el botón X de su title bar. */
+(function() {
+    const closeBtn = document.getElementById('album-viewer-close');
+    if (closeBtn) closeBtn.addEventListener('click', closeAlbumViewer);
 })();
 
 function resolveAndShowAlbum(track) {

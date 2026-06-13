@@ -2881,23 +2881,25 @@ display.addEventListener('pointerleave', () => hideEraserCursor());
 display.addEventListener('pointerenter', e => updateEraserCursor(eventToCanvas(e)));
 
 /* ── Eraser cursor ──
-   Indicador circular del área de borrado. Vive en zoom-container así
-   que escala junto al lienzo y el border-radius se mantiene perfecto a
-   cualquier zoom. left/top en coords del lienzo (pre-transform), w/h
-   en píxeles del lienzo — el padre los escala con su transform. */
+   Indicador circular del área de borrado. Vive dentro de zoom-container
+   pero ese contenedor SOLO usa translate() (no scale), así que su
+   layout interno está en píxeles CSS reales, no en coords del lienzo.
+   Los inputs (pt.x, pt.y, state.size) están en coords del lienzo, así
+   que multiplicamos por state.zoom para convertirlos al sistema CSS
+   del contenedor — sin esto, el cursor cae en el sitio equivocado a
+   cualquier zoom distinto de 100%. */
 const _eraserCursor = $('eraser-cursor');
 function updateEraserCursor(pt) {
     if (state.tool !== 'eraser') {
         if (_eraserCursor.style.display !== 'none') _eraserCursor.style.display = 'none';
         return;
     }
-    /* Tamaño = state.size (en coords del lienzo). El zoom lo gestiona
-       el transform del zoom-container — no necesitamos multiplicar. */
-    const d = Math.max(2, state.size);
+    const z = state.zoom || 1;
+    const d = Math.max(2, state.size * z);
     _eraserCursor.style.width  = d + 'px';
     _eraserCursor.style.height = d + 'px';
-    _eraserCursor.style.left = pt.x + 'px';
-    _eraserCursor.style.top  = pt.y + 'px';
+    _eraserCursor.style.left = (pt.x * z) + 'px';
+    _eraserCursor.style.top  = (pt.y * z) + 'px';
     if (_eraserCursor.style.display !== 'block') _eraserCursor.style.display = 'block';
 }
 function hideEraserCursor() {
@@ -3612,9 +3614,11 @@ document.querySelectorAll('[data-tool]').forEach(btn => btn.addEventListener('cl
 $('size').addEventListener('input', e => {
     state.size = +e.target.value;
     $('size-val').textContent = state.size;
-    /* Refrescar diámetro del cursor de la goma si está visible. */
+    /* Refrescar diámetro del cursor de la goma si está visible.
+       Mismo factor de escala que en updateEraserCursor — sin él el
+       círculo no coincidiría con el dab real a zoom ≠ 100%. */
     if (state.tool === 'eraser' && _eraserCursor.style.display === 'block') {
-        const d = Math.max(2, state.size);
+        const d = Math.max(2, state.size * (state.zoom || 1));
         _eraserCursor.style.width  = d + 'px';
         _eraserCursor.style.height = d + 'px';
     }
