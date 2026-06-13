@@ -752,27 +752,31 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
 </div>
 
-<!-- Diálogo: AJUSTES de Discord (webhook URL) -->
+<!-- Diálogo: VÍNCULO de Discord (no webhook).
+     El webhook es global (en .env). Aquí solo se gestiona si la cuenta
+     de Discord del usuario está vinculada — necesario para que el bot
+     pueda darle los puntos de autismo por las reacciones. -->
 <div class="window gal-dialog" id="gal-discord-settings-dialog" style="display:none;">
     <div class="title-bar">
-        <div class="title-bar-text">⚙ Webhook de Discord</div>
+        <div class="title-bar-text">⚙ Vincular Discord</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="gal-ds-close"></button>
         </div>
     </div>
     <div class="window-body">
-        <p style="font-size:11px;margin:0 0 8px;line-height:1.4;color:var(--text-muted);">
-            En tu servidor de Discord: <strong>Configuración del canal → Integraciones → Webhooks → Crear</strong>.<br>
-            Copia la URL completa y pégala aquí. Déjalo vacío para desconectar.
+        <p style="font-size:11px;margin:0 0 10px;line-height:1.4;color:var(--text-muted);">
+            Para que el bot te dé los puntos de autismo cuando reaccionen
+            a tus publicaciones, necesitas tener tu cuenta de Discord
+            vinculada.
         </p>
-        <div class="field-row-stacked">
-            <label for="gal-ds-url">URL del webhook</label>
-            <input type="text" id="gal-ds-url" maxlength="500" placeholder="https://discord.com/api/webhooks/...">
+        <div id="gal-ds-state" style="font-size:11px;margin:6px 0;padding:6px 8px;background:var(--input-bg);border:1px solid var(--border);box-shadow:inset 1px 1px var(--bezel-dark-1);">
+            Cargando…
         </div>
         <p id="gal-ds-status" style="font-size:11px;margin:6px 0 0;min-height:14px;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
-            <button class="button" id="gal-ds-cancel">Cancelar</button>
-            <button class="button default" id="gal-ds-submit">Guardar</button>
+            <button class="button" id="gal-ds-cancel">Cerrar</button>
+            <button class="button" id="gal-ds-unlink" style="display:none;">Desvincular</button>
+            <button class="button default" id="gal-ds-link" style="display:none;">Vincular Discord</button>
         </div>
     </div>
 </div>
@@ -2167,44 +2171,76 @@ async function submitPublish() {
     }
 }
 
-/* ─── Ajustes de webhook de Discord ─────────────────────────── */
+/* ─── Vínculo de Discord ─────────────────────────────────────
+   El webhook es global (.env); este modal solo gestiona el OAuth del
+   usuario para que el bot pueda darle puntos por las reacciones. */
 function openDiscordSettings() {
     var dlg = document.getElementById('gal-discord-settings-dialog');
-    var input = document.getElementById('gal-ds-url');
-    var st = document.getElementById('gal-ds-status');
-    st.textContent = 'Cargando…'; st.style.color = '';
-    input.value = '';
+    document.getElementById('gal-ds-status').textContent = '';
+    document.getElementById('gal-ds-status').style.color = '';
     dlg.style.display = 'block';
     centerDialog(dlg);
-    fetch('../../assets/profile/api.php?action=get-discord-webhook')
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-          if (d && d.webhook) input.value = d.webhook;
-          st.textContent = '';
-      })
-      .catch(function() { st.textContent = 'No se pudo cargar.'; st.style.color = 'var(--error-text)'; });
+    refreshDiscordLinkState();
 }
 function closeDiscordSettings() {
     document.getElementById('gal-discord-settings-dialog').style.display = 'none';
 }
-async function submitDiscordSettings() {
-    var btn = document.getElementById('gal-ds-submit');
+function refreshDiscordLinkState() {
+    var stateEl  = document.getElementById('gal-ds-state');
+    var linkBtn  = document.getElementById('gal-ds-link');
+    var unlinkBtn= document.getElementById('gal-ds-unlink');
+    stateEl.textContent = 'Cargando…';
+    linkBtn.style.display = 'none';
+    unlinkBtn.style.display = 'none';
+    fetch('../../assets/discord-oauth/status.php')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+          if (d && d.linked) {
+              var who = d.username ? (' como @' + d.username) : '';
+              stateEl.textContent = '✔ Tu Discord está vinculado' + who + '.';
+              unlinkBtn.style.display = '';
+          } else {
+              stateEl.textContent = 'Sin Discord vinculado. Vincúlalo para recibir los puntos por las reacciones a tus posts.';
+              linkBtn.style.display = '';
+          }
+      })
+      .catch(function() {
+          stateEl.textContent = 'No se pudo comprobar el estado del vínculo.';
+          linkBtn.style.display = '';
+      });
+}
+function startDiscordLink() {
+    var popup = window.open('../../assets/discord-oauth/start.php', '_blank');
+    var poll = setInterval(function() {
+        if (popup && popup.closed) {
+            clearInterval(poll);
+            refreshDiscordLinkState();
+            return;
+        }
+        refreshDiscordLinkState();
+    }, 2000);
+    var dlg = document.getElementById('gal-discord-settings-dialog');
+    var observer = new MutationObserver(function() {
+        if (dlg.style.display === 'none') {
+            clearInterval(poll);
+            observer.disconnect();
+        }
+    });
+    observer.observe(dlg, { attributes: true, attributeFilter: ['style'] });
+}
+async function unlinkDiscord() {
     var st = document.getElementById('gal-ds-status');
-    var url = document.getElementById('gal-ds-url').value.trim();
+    var btn = document.getElementById('gal-ds-unlink');
+    st.style.color = ''; st.textContent = 'Desvinculando…';
     btn.classList.add('btn-busy'); btn.disabled = true;
-    st.style.color = ''; st.textContent = 'Guardando…';
     try {
-        var r = await fetch('../../assets/profile/api.php?action=save-discord-webhook', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ webhook: url })
-        });
-        var d = await r.json();
-        if (d.error) throw new Error(d.error);
-        st.textContent = '✔ Guardado.';
-        setTimeout(closeDiscordSettings, 700);
+        var r = await fetch('../../assets/discord-oauth/disconnect.php', { method: 'POST' });
+        var d = await r.json().catch(function(){ return {}; });
+        if (d && d.error) throw new Error(d.error);
+        st.textContent = '✔ Desvinculado.';
+        refreshDiscordLinkState();
     } catch (e) {
-        st.textContent = 'Error: ' + e.message;
+        st.textContent = 'Error: ' + (e.message || e);
         st.style.color = 'var(--error-text)';
     } finally {
         btn.classList.remove('btn-busy'); btn.disabled = false;
@@ -2319,11 +2355,12 @@ document.getElementById('gal-pub-submit').addEventListener('click', submitPublis
 
 /* Diálogo de Discord */
 
-/* Ajustes de Discord (webhook) */
+/* Vínculo de Discord */
 document.getElementById('gal-discord-settings').addEventListener('click', openDiscordSettings);
 document.getElementById('gal-ds-close').addEventListener('click', closeDiscordSettings);
 document.getElementById('gal-ds-cancel').addEventListener('click', closeDiscordSettings);
-document.getElementById('gal-ds-submit').addEventListener('click', submitDiscordSettings);
+document.getElementById('gal-ds-link').addEventListener('click', startDiscordLink);
+document.getElementById('gal-ds-unlink').addEventListener('click', unlinkDiscord);
 document.getElementById('gal-ed-tags').addEventListener('input', updateEditTagChips);
 
 /* Menú contextual: acciones por opción */

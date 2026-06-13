@@ -496,7 +496,7 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- MELON REVIEWS DETAILS WINDOW -->
-<div class="window" id="profile-melon-details-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:360px;min-width:240px;height:65vh;max-height:65vh;min-height:160px;">
+<div class="window" id="profile-melon-details-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:360px;min-width:240px;max-width:95vw;height:65vh;max-height:65vh;min-height:160px;">
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" id="profile-melon-details-title">Reseñas</div>
         <div class="title-bar-controls">
@@ -525,16 +525,20 @@ if ($_perfilStandalone) {
     </div>
 </div>
 
-<!-- PROFILE ADD DIALOG -->
-<div class="window" id="profile-add-dialog">
-    <div class="title-bar">
+<!-- PROFILE ADD DIALOG
+     flex-direction:column + max-width:95vw + max-height:90vh + body
+     con flex:1 min-height:0 → la ventana se ajusta a viewports
+     pequeños y los campos hacen scroll interno en lugar de salirse
+     por abajo o por los lados. -->
+<div class="window" id="profile-add-dialog" style="flex-direction:column;min-width:240px;max-width:95vw;max-height:90vh;">
+    <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" id="profile-add-dialog-title">+ Añadir</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-add-dialog-close"></button>
         </div>
     </div>
-    <div class="window-body">
-        <div class="field-row-stacked profile-add-name-wrap">
+    <div class="window-body" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;">
+        <div class="field-row-stacked profile-add-name-wrap" style="flex-shrink:0;">
             <label for="profile-add-name">Nombre</label>
             <input type="text" id="profile-add-name" placeholder="Nombre..." autocomplete="off">
             <!-- Dropdown de autocomplete: aparece debajo del input
@@ -543,12 +547,12 @@ if ($_perfilStandalone) {
                  el input + image. -->
             <div id="profile-add-suggest" class="profile-add-suggest" hidden></div>
         </div>
-        <div class="field-row-stacked" style="margin-top:8px;">
+        <div class="field-row-stacked" style="margin-top:8px;flex-shrink:0;">
             <label for="profile-add-image">Imagen (URL)</label>
             <input type="text" id="profile-add-image" placeholder="https://...">
         </div>
-        <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;"></p>
-        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;">
+        <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;flex-shrink:0;"></p>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-add-dialog-cancel">Cancelar</button>
             <button class="button" id="profile-add-dialog-submit">Añadir</button>
         </div>
@@ -600,7 +604,12 @@ if ($_perfilStandalone) {
         </div>
         <div class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
             <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Comentario (opcional)</label>
-            <textarea id="profile-review-comment" rows="4" style="resize:vertical;width:100%;box-sizing:border-box;flex:1;min-height:60px;" placeholder="Escribe tu opinión..."></textarea>
+            <!-- resize:none — el resize:vertical permitía al usuario
+                 arrastrar el handle y agrandar el textarea fuera de su
+                 slot flex, empujando los botones hasta solaparse con
+                 el área del texto. Sin resize manual el textarea solo
+                 crece/encoge con la ventana (vía flex:1). -->
+            <textarea id="profile-review-comment" rows="4" style="resize:none;width:100%;box-sizing:border-box;flex:1;min-height:60px;" placeholder="Escribe tu opinión..."></textarea>
         </div>
         <div class="field-row" style="justify-content:flex-end;gap:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-review-window-delete" style="margin-right:auto;display:none;"><img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</button>
@@ -1918,7 +1927,7 @@ var PROFILE_USERS = <?php
         addNameInput.value = '';
         addImgInput.value  = '';
         document.getElementById('profile-add-error').textContent = '';
-        addDlg.style.display = 'block';
+        addDlg.style.display = 'flex';
         setTimeout(function() { addNameInput.focus(); }, 0);
     }
 

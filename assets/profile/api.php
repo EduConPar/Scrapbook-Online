@@ -563,14 +563,24 @@ case 'discord-publish': {
     if (!preg_match('#^https?://[^\s<>"\']+$#i', $img) || mb_strlen($img) > 2000) {
         jsonError('URL de imagen no válida');
     }
-    /* Cargar webhook + label del usuario */
-    $stmt = $pdo->prepare("SELECT discord_webhook, label FROM usuarios WHERE user_key = ?");
+    /* El webhook es UNO solo para toda la Melon Hub — vive en el .env
+       como DISCORD_WEBHOOK_URL. No se le pide a cada usuario, sino que
+       se exige que tengan Discord VINCULADO (discord_user_id) para que
+       el bot pueda darles los puntos de autismo por las reacciones. */
+    $webhook = env('DISCORD_WEBHOOK_URL', '');
+    if ($webhook === '') {
+        jsonError('El canal de Discord no está configurado en el servidor', 503);
+    }
+    $stmt = $pdo->prepare("SELECT discord_user_id, label FROM usuarios WHERE user_key = ?");
     $stmt->execute([$userKey]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$row || empty($row['discord_webhook'])) {
-        jsonError('No tienes un webhook de Discord configurado', 400);
+    if (!$row) jsonError('Usuario no encontrado', 500);
+    if (empty($row['discord_user_id'])) {
+        /* code:'needsDiscordLink' permite al cliente reconocer el caso
+           y guiar al usuario al flow de OAuth en vez de mostrar error
+           genérico. */
+        jsonResponse(['error' => 'Vincula tu cuenta de Discord para recibir los puntos por reacciones', 'code' => 'needsDiscordLink'], 400);
     }
-    $webhook = $row['discord_webhook'];
     $label   = $row['label'] ?: $userKey;
 
     /* Avatar del usuario: lo enviamos ADJUNTO en el propio request multipart

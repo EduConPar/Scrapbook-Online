@@ -1352,11 +1352,11 @@ function updateTrackUI(index)
    Race: si el usuario cambia de track antes de que la query termine,
    la respuesta podría llegar para un track "viejo". Capturamos el
    videoId al iniciar el lookup y comprobamos al volver. */
-/* :v3 al final — bumpeamos para invalidar los notFound:true cacheados
-   antes de añadir la cascada de fallbacks + álbum sintético. Sin esto,
-   tracks que dieron notFound con el algoritmo viejo se quedarían así
-   en cliente aunque el backend ya devuelva algo. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache:v3';
+/* :v4 — invalida los álbumes "sintéticos" (con spotifyAlbumId
+   "synthetic:…") cacheados por la versión anterior. Esos pintaban el
+   título de la canción como nombre del álbum, lo que confundía. Tras
+   este bump las canciones sin álbum real vuelven a no mostrar álbum. */
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v4';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;
@@ -2035,10 +2035,10 @@ function _resolveAlbumForRow(track, albumSpan) {
     const vId = track.videoId;
 
     function paint(data) {
-        /* Normaliza para que un notFound o data nula se conviertan en
-           sintético — la fila siempre muestra algún álbum clickable. */
+        /* Filtra a álbumes REALES (devuelve null si no hay). Sin álbum
+           confirmado dejamos el span vacío — el CSS :empty lo oculta. */
         const norm = _normalizeAlbumPayload(data, track);
-        if (!norm.albumName) {
+        if (!norm || !norm.albumName) {
             albumSpan.textContent = '';
             albumSpan.style.display = 'none';
             return;
@@ -2077,30 +2077,19 @@ function _resolveAlbumForRow(track, albumSpan) {
         .catch(() => { /* offline / endpoint caído → no se muestra nada */ });
 }
 
-/* Garantiza que cualquier respuesta del backend produzca un álbum
-   utilizable. Si el backend devuelve notFound:true (cache legacy, error
-   raro, server viejo) lo convertimos en sintético en el cliente
-   también — así nunca dejamos de tener has-album en el título. */
-function _normalizeAlbumPayload(data, track) {
-    if (data && !data.notFound && data.spotifyAlbumId) return data;
-    /* Sintetizamos a partir del track actual. */
-    const title  = (track && track.title)  || '';
-    const artist = (track && track.artist) || '';
-    let hash = '';
-    for (let i = 0; i < title.length; i++) hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
-    for (let i = 0; i < artist.length; i++) hash = ((hash << 5) - hash + artist.charCodeAt(i)) | 0;
-    return {
-        notFound:       false,
-        albumName:      title || 'Single',
-        albumImage:     '',
-        spotifyAlbumId: 'synthetic:' + (hash >>> 0).toString(16),
-        albumUrl:       '',
-        isSingle:       true,
-        matchTitle:     title,
-        matchArtist:    artist,
-        matchTrackId:   '',
-        isSynthetic:    true,
-    };
+/* Filtra el payload del backend: solo aceptamos respuestas con un
+   spotifyAlbumId REAL. Si el backend devolvió notFound o algo raro,
+   retornamos null y el caller trata la canción como "sin álbum"
+   (título no clickable, span del row oculto). Antes sintetizábamos
+   un álbum-fake con el nombre de la canción, pero confundía al
+   usuario más de lo que ayudaba. */
+function _normalizeAlbumPayload(data /*, track */) {
+    if (!data || data.notFound) return null;
+    if (!data.spotifyAlbumId) return null;
+    /* IDs sintéticos legacy (de un cache anterior) los descartamos
+       para no pintar el álbum fake. */
+    if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
+    return data;
 }
 
 function resolveAndShowAlbum(track) {
@@ -2147,15 +2136,9 @@ function resolveAndShowAlbum(track) {
             }
         })
         .catch(() => {
-            /* Offline / endpoint caído → sintético igual; el título sigue
-               siendo clickable y abre el viewer con la canción actual. */
-            const normalized = _normalizeAlbumPayload(null, track);
-            const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
-                ? playlist[currentTrack] : null;
-            if (curTrack && curTrack.videoId === requestedFor
-                         && curTrack.videoId !== _forcedAlbumForVideo) {
-                _applyAlbumState(normalized);
-            }
+            /* Offline / endpoint caído → la canción queda sin álbum
+               asignado en el reproductor. El estado ya fue reseteado
+               al inicio de resolveAndShowAlbum (no clickable). */
         });
 }
 

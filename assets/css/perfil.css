@@ -232,6 +232,11 @@
     gap: 8px;
     padding: 6px 8px;
     border-bottom: 1px solid var(--border);
+    /* Sin esto, un username sin espacios o un comentario muy largo
+       expande la row y empuja el contenido fuera del scroll vertical
+       de la ventana, "saliéndose" por la derecha. */
+    min-width: 0;
+    overflow: hidden;
 }
 .profile-avatar-frame.melon-detail-av {
     width: 32px;
@@ -255,6 +260,11 @@
     align-items: center;
     gap: 4px;
     flex-wrap: wrap;
+    /* Username muy largo sin espacios → break para que no fuerce
+       horizontal scroll en ventanas estrechas. */
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 .melon-detail-hdr .melon-item-avg { font-size: 10px; color: var(--star-color); }
 .melon-detail-comment {

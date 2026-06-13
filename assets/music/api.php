@@ -680,16 +680,21 @@ case 'find-album': {
     $artist = trim((string)($_GET['artist'] ?? ''));
     if ($title === '') jsonError('title requerido');
 
-    /* v2 en la key invalida cache previo (entradas con notFound:true
-       de antes de la cascada + sintético). Sin esto, los tracks ya
-       buscados antes seguirían devolviendo notFound durante 7 días. */
-    $cacheKey = 'album_lookup_v2_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    /* v3 — bumpeamos para invalidar cache que devolvía álbumes
+       sintéticos (con spotifyAlbumId "synthetic:…"). Esos sintéticos
+       quedaban pegados durante 7 días pintando el título de la canción
+       como nombre del álbum. */
+    $cacheKey = 'album_lookup_v3_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
-        if (is_array($decoded) && empty($decoded['notFound'])) {
-            /* Solo aceptamos cache hit si tiene álbum — un notFound
-               legacy se reprocesa con la cascada para devolver algo. */
+        if (is_array($decoded)
+            && empty($decoded['notFound'])
+            && empty($decoded['isSynthetic'])
+            && !empty($decoded['spotifyAlbumId'])
+            && strpos((string)$decoded['spotifyAlbumId'], 'synthetic:') !== 0) {
+            /* Solo aceptamos cache hit si tiene álbum REAL — un
+               notFound o sintético legacy se reprocesa con la cascada. */
             jsonResponse($decoded);
         }
     }
@@ -863,30 +868,14 @@ case 'find-album': {
         ];
     }
 
-    /* ÁLBUM SINTÉTICO: si Spotify no devolvió absolutamente nada (red
-       caída, canción rarísima, query rota), el cliente igual recibe un
-       "álbum" usable. El spotifyAlbumId lleva prefijo "synthetic:"
-       para que el viewer lo reconozca y muestre la tracklist localmente
-       (con solo la canción consultada) sin llamar a album-tracks de
-       Spotify. Resultado: TODAS las canciones tienen álbum clickable,
-       como pidió el usuario. */
+    /* Si nada superó ninguno de los niveles de la cascada (Spotify no
+       devolvió candidatos o todos eran muy malos), devolvemos
+       notFound — el cliente NO muestra álbum para esa canción. Antes
+       sintetizábamos un álbum fake con el nombre de la canción, pero
+       confundía más de lo que ayudaba ("el álbum se llama igual que la
+       canción"). */
     if ($result === null) {
-        $hash = substr(md5(mb_strtolower($title) . '|' . mb_strtolower($artist)), 0, 16);
-        $result = [
-            'notFound'       => false,
-            'albumName'      => $title,
-            'albumImage'     => '',
-            'spotifyAlbumId' => 'synthetic:' . $hash,
-            'albumUrl'       => '',
-            'isSingle'       => true,
-            'releaseDate'    => '',
-            'matchTitle'     => $title,
-            'matchArtist'    => $artist,
-            'matchTrackId'   => '',
-            'isSynthetic'    => true,
-            'syntheticTitle' => $title,
-            'syntheticArtist'=> $artist,
-        ];
+        $result = ['notFound' => true];
     }
     cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
     jsonResponse($result);
