@@ -189,6 +189,13 @@ if ($_perfilStandalone) {
            sentido — la única forma de salir es cerrando la ventana iframe
            desde el shell padre. Lo ocultamos completamente. */
         #profile-sidebar-back { display: none !important; }
+        /* Cursor de arrastre en el title-bar: grab cuando el user
+           puede agarrarlo, grabbing mientras lo está moviendo. Los
+           botones (min/max/close) mantienen pointer normal. */
+        #profile-window > .title-bar { cursor: grab; }
+        #profile-window > .title-bar.is-dragging { cursor: grabbing; }
+        #profile-window > .title-bar .title-bar-controls,
+        #profile-window > .title-bar .title-bar-controls * { cursor: default; }
     </style>
     <script>
         /* Flag global para que la JS de perfil sepa que está en standalone
@@ -5605,8 +5612,28 @@ var PROFILE_USERS = <?php
 
             case 'perfil-drag-move':
                 if (!_dragState || _dragState.winId !== winId) return;
-                winEl.style.left = (_dragState.startLeft + (e.data.dx || 0)) + 'px';
-                winEl.style.top  = (_dragState.startTop  + (e.data.dy || 0)) + 'px';
+                var _newLeft = _dragState.startLeft + (e.data.dx || 0);
+                var _newTop  = _dragState.startTop  + (e.data.dy || 0);
+                /* Clamp: la ventana NO puede salir por encima del viewport
+                   ni perderse por los lados/abajo. Mantenemos al menos
+                   ~40px de title-bar visible en cada lado para que el
+                   user pueda recuperarla con un drag. Sin esto la ventana
+                   del perfil ajeno se podía subir hasta quedar fuera de
+                   la pantalla y ya no había forma de volver a agarrarla. */
+                var _wbW = winEl.offsetWidth  || 400;
+                var _wbH = winEl.offsetHeight || 200;
+                var _vpW = window.innerWidth;
+                var _vpH = window.innerHeight;
+                var _minVisible = 40;
+                var _maxLeft = _vpW - _minVisible;
+                var _minLeft = _minVisible - _wbW;
+                var _maxTop  = _vpH - _minVisible;
+                if (_newLeft < _minLeft) _newLeft = _minLeft;
+                else if (_newLeft > _maxLeft) _newLeft = _maxLeft;
+                if (_newTop < 0) _newTop = 0;
+                else if (_newTop > _maxTop) _newTop = _maxTop;
+                winEl.style.left = _newLeft + 'px';
+                winEl.style.top  = _newTop  + 'px';
                 return;
 
             case 'perfil-drag-end':
@@ -5667,11 +5694,13 @@ var PROFILE_USERS = <?php
                 if (e.target.closest('.title-bar-controls')) return;
                 e.preventDefault();
                 var startX = e.screenX, startY = e.screenY;
+                _profileTitleBar.classList.add('is-dragging');
                 _post('perfil-drag-start');
                 function onMove(ev) {
                     _post('perfil-drag-move', { dx: ev.screenX - startX, dy: ev.screenY - startY });
                 }
                 function onUp(ev) {
+                    _profileTitleBar.classList.remove('is-dragging');
                     _post('perfil-drag-end');
                     window.removeEventListener('pointermove', onMove);
                     window.removeEventListener('pointerup', onUp);
