@@ -1866,10 +1866,9 @@ function _resolveAlbumForRow(track, albumSpan) {
             albumSpan.style.display = 'none';
             return;
         }
-        /* " · " con espacio a ambos lados — sin gap del flex, este es
-           el único respiro visual entre el nombre del artista y el del
-           álbum. */
-        albumSpan.textContent = ' · ' + data.albumName;
+        /* Sin separador textual: la división visual la da el
+           border-left + padding del CSS (.pl-item-album-text). */
+        albumSpan.textContent = data.albumName;
         albumSpan.title = 'Ver álbum: ' + data.albumName;
         albumSpan.dataset.albumId = data.spotifyAlbumId || '';
         albumSpan.dataset.albumName = data.albumName || '';
