@@ -1211,9 +1211,10 @@ var PROFILE_USERS = <?php
 
     function pushItemNotif(notif) {
         if (!window.notifSystem || window.notifSystem.isShown(notif.id) || window.notifSystem.isDismissed(notif.id)) return;
-        /* SSE recibió una notif nueva → sonido inmediato. El throttle
-           interno colapsa con el play del polling si llegan a la vez. */
-        if (typeof playProfileNotifSound === 'function') playProfileNotifSound();
+        /* SSE recibió una notif nueva → sonido inmediato (respetando
+           el filtro por tipo). El throttle interno colapsa con el play
+           del polling si llegan a la vez. */
+        if (typeof playProfileNotifSound === 'function') playProfileNotifSound(notif.type);
         var isAction = notif.type === 'invite';
         var verb = CAT_VERBS[notif.category] || 'ver';
         var msg;
@@ -3980,7 +3981,12 @@ var PROFILE_USERS = <?php
                 }
                 if (_prevChatUnread >= 0 && total > _prevChatUnread
                     && typeof playProfileNotifSound === 'function') {
-                    playProfileNotifSound();
+                    /* Hint 'chat' → notifIsMuted lo mapea a categoría
+                       'messages' y silencia si el modo "no molestar"
+                       (mute_messages) está activo. Antes se llamaba
+                       sin hint → el filtro no se aplicaba y el ping
+                       siempre sonaba al recibir un mensaje. */
+                    playProfileNotifSound('chat');
                 }
                 _prevChatUnread = total;
                 renderFollowedNav();
