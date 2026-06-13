@@ -653,9 +653,10 @@ function renderBalance(){
 }
 function renderItems(){
     var view = document.getElementById('tienda-view-principal');
-    /* Categoría Mascotas: placeholder hasta que esté implementada. */
+    /* Categoría Mascotas: placeholder hasta que esté implementada.
+       Ocupa todo el alto disponible y se centra horizontal+verticalmente. */
     if (_activeCat === 'mascotas') {
-        view.innerHTML = '<div class="tienda-empty" style="font-size:18px;padding:40px 20px;">Coming soon...</div>';
+        view.innerHTML = '<div class="tienda-empty" style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:22px;">Coming soon...</div>';
         return;
     }
     var items = _items.filter(function(it){ return (it.categoria || 'discord') === _activeCat; });

@@ -121,14 +121,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
            del color del label "Tu balance". image-rendering:pixelated
            mantiene el escalón al subir de 13px a 22px. */
         #tienda-help-btn {
-            position: absolute;
-            top: 0; left: 0;
-            width: 22px; height: 22px;
-            min-width: 0; min-height: 0; max-width: 22px; max-height: 22px;
+            /* Inline al lado del texto "Tu balance" — el label es flex
+               row gracias a la regla .ti-wallet-label de abajo. */
+            display: inline-block;
+            vertical-align: middle;
+            width: 14px; height: 14px;
+            min-width: 0; min-height: 0; max-width: 14px; max-height: 14px;
             aspect-ratio: 1 / 1;
             box-sizing: border-box;
-            flex: 0 0 22px;
-            padding: 0; margin: 0;
+            padding: 0; margin: 0 0 0 4px;
             background: none;
             border: none;
             color: var(--text-muted, #666);
@@ -156,6 +157,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         #tienda-help-btn:active { transform: translateY(1px); }
         .ti-wallet-label {
+            display: inline-flex; align-items: center;
             font-size: 9px; letter-spacing: 1px;
             text-transform: uppercase;
             color: var(--text-muted, var(--text-faint, #666));
@@ -594,8 +596,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
      desktop para que el JS los rellene sin tocar nada. -->
 <div class="ti-header">
     <div class="ti-wallet">
-        <button type="button" id="tienda-help-btn" title="Cómo conseguir puntos" aria-label="Ayuda">?</button>
-        <div class="ti-wallet-label">Tu balance</div>
+        <div class="ti-wallet-label">Tu balance<button type="button" id="tienda-help-btn" title="Cómo conseguir puntos" aria-label="Ayuda">?</button></div>
         <div class="ti-wallet-amount">
             <span class="ic"><img src="../../assets/img/appIcons/puntosAutismo.png" alt="" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;"></span>
             <span id="tienda-balance-v">—</span>
@@ -779,6 +780,12 @@ function renderBalance(){
 }
 function renderItems(){
     var view = document.getElementById('tienda-view-principal');
+    /* Categoría Mascotas: placeholder hasta que esté implementada.
+       Centrado vertical+horizontal en todo el alto de la vista. */
+    if (_activeCat === 'mascotas') {
+        view.innerHTML = '<div class="tienda-empty" style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:22px;">Coming soon...</div>';
+        return;
+    }
     var items = _items.filter(function(it){ return (it.categoria || 'discord') === _activeCat; });
     if (!items.length) {
         view.innerHTML = '<div class="tienda-empty">No hay items en esta categoría todavía.</div>';

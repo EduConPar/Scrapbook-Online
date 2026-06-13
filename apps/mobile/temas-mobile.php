@@ -709,7 +709,7 @@ $interfacePacks = listInterfacesForUser($pdo, userIdByKey($userKey));
         </section>
         <section class="tm-section">
             <h3 class="tm-section-title"><img src="../../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</h3>
-            <div class="pers-grid" id="pers-mascots-grid"></div>
+            <div class="pers-grid" id="pers-mascots-grid" style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:22px;color:var(--text-muted, var(--text));">Coming soon...</div>
         </section>
     </div>
 </div>
@@ -1580,13 +1580,12 @@ function loadPersonalize() {
         .then(function(d){
             if (!d || !d.ok) throw new Error(d && d.error || 'error');
             renderPersInventory('pers-haros-grid',   d.haros,      d.activeHaro,      'haro');
-            renderPersInventory('pers-mascots-grid', d.mascots,    d.activeMascot,    'mascot');
+            /* Mascotas: placeholder "Coming soon..." — no se llena. */
             renderInterfacePacks();
             renderIconPacks();
         })
         .catch(function(){
             document.getElementById('pers-haros-grid').innerHTML   = '';
-            document.getElementById('pers-mascots-grid').innerHTML = '';
             renderInterfacePacks();
         });
 }
