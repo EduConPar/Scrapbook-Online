@@ -496,14 +496,14 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- MELON REVIEWS DETAILS WINDOW -->
-<div class="window" id="profile-melon-details-window" style="display:none;position:fixed;z-index:10002;width:360px;max-height:65vh;">
-    <div class="title-bar">
+<div class="window" id="profile-melon-details-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:360px;min-width:240px;height:65vh;max-height:65vh;min-height:160px;">
+    <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" id="profile-melon-details-title">Reseñas</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-melon-details-close"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:6px;max-height:55vh;overflow-y:auto;">
+    <div class="window-body" style="padding:6px;flex:1;min-height:0;overflow-y:auto;">
         <div id="profile-melon-details-list"></div>
     </div>
 </div>
@@ -3179,7 +3179,7 @@ var PROFILE_USERS = <?php
             row.appendChild(body);
             list.appendChild(row);
         });
-        win.style.display = 'block';
+        win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
     }
