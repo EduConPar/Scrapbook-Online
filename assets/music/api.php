@@ -699,6 +699,20 @@ case 'find-album': {
         }
     }
 
+    /* GUARD GLOBAL DE RATE-LIMIT: Spotify devuelve Retry-After de
+       hasta 22 horas cuando saturamos el endpoint. Cada request que
+       hagamos durante ese plazo RENUEVA el contador. Si sabemos que
+       estamos en ban, devolvemos 503 inmediatamente sin tocar
+       Spotify — así el ban expira por sí solo. */
+    $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
+    if ($rateLimitedUntil > time()) {
+        jsonResponse([
+            'error'      => 'Spotify rate-limited',
+            'code'       => 'rateLimited',
+            'retryAfter' => $rateLimitedUntil - time(),
+        ], 503);
+    }
+
     $token = getSpotifyToken();
     if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
 
@@ -738,23 +752,34 @@ case 'find-album': {
         if (is_array($data) && isset($data['error']['status']) && (int)$data['error']['status'] === 429) {
             $isRateLimited = true;
         }
-        /* Re-intento UNA vez tras un pequeño backoff. No reintentamos
-           más para no bloquear el endpoint con timeouts en cascada. */
+        /* Si Spotify nos da Retry-After largo (>10s), NO reintentamos
+           — significa que estamos en un ban serio (puede llegar a 22h).
+           Guardamos un guard global y devolvemos rate-limit; el caller
+           del próximo find-album entera ya saldrá temprano sin tocar
+           Spotify, así el ban expira sin renovarse. Para retry-after
+           pequeños (<=10s) sí intentamos UNA vez tras esperar. */
         if ($isRateLimited) {
-            $wait = 0;
+            $retryAfter = 0;
             foreach ($http_response_header ?? [] as $h) {
                 if (stripos($h, 'retry-after:') === 0) {
-                    $wait = max(0, min(3, (int)trim(substr($h, 12))));
+                    $retryAfter = max(0, (int)trim(substr($h, 12)));
                     break;
                 }
             }
-            usleep(($wait ?: 1) * 1000000);
+            if ($retryAfter > 10) {
+                /* Ban serio — persistimos hasta cuándo dura y no
+                   tocamos Spotify mientras tanto. Cap a 24h por
+                   seguridad. */
+                $until = time() + min($retryAfter, 24 * 3600);
+                cacheSet('spotify_rate_limited_until', (string)$until, min($retryAfter, 24 * 3600));
+                return [[], true];
+            }
+            usleep(($retryAfter ?: 1) * 1000000);
             $raw2 = @file_get_contents($url, false, $ctx);
             if ($raw2) {
                 $data2 = json_decode((string)$raw2, true);
                 $items2 = $data2['tracks']['items'] ?? null;
                 if ($items2 !== null) return [$items2, false];
-                /* Sigue rate-limited */
                 if (stripos((string)$raw2, 'too many requests') !== false ||
                     (is_array($data2) && isset($data2['error']['status']) && (int)$data2['error']['status'] === 429)) {
                     return [[], true];
