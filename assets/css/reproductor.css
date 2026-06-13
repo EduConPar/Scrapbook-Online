@@ -129,7 +129,10 @@
     box-shadow: inset 1px 1px var(--bezel-dark-1);
     cursor: pointer;
 }
-#pl-current-album:hover { filter: brightness(1.04); }
+#pl-current-album:hover {
+    background: color-mix(in srgb, var(--accent) 14%, var(--input-bg));
+    border-color: var(--accent);
+}
 #pl-current-album img {
     width: 38px;
     height: 38px;
@@ -158,8 +161,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.pl-current-album-name::before {
-    content: '♫ ';
+.pl-current-album-name { display: flex; align-items: center; gap: 4px; }
+.pl-current-album-name-icon {
+    width: 11px; height: 11px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    flex-shrink: 0;
     opacity: 0.7;
 }
 
@@ -492,6 +499,26 @@
     align-items: flex-start;
     flex-shrink: 0;
 }
+.album-viewer-titlebar-icon {
+    width: 14px; height: 14px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    vertical-align: middle;
+    margin-right: 4px;
+}
+.album-viewer-play-tri {
+    /* Triángulo unicode con tamaño consistente y color del tema —
+       evitamos que aparezca como emoji color en navegadores que lo
+       interpretan así. */
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 9px;
+    color: currentColor;
+    margin-right: 3px;
+}
+#album-viewer .title-bar {
+    cursor: move;
+    touch-action: none;
+}
 #album-viewer-cover {
     width: 80px;
     height: 80px;
@@ -499,6 +526,10 @@
     background: var(--surface-deep);
     border: 1px solid var(--border);
     flex-shrink: 0;
+    cursor: pointer;
+}
+#album-viewer-cover:hover {
+    box-shadow: 0 0 0 2px var(--accent);
 }
 #album-viewer-head-info {
     flex: 1;
@@ -544,10 +575,15 @@
     cursor: pointer;
 }
 .album-viewer-row:last-child { border-bottom: none; }
-.album-viewer-row:hover { background: var(--hover-bg, color-mix(in srgb, var(--accent) 12%, transparent)); }
-.album-viewer-row.is-playing {
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
+.album-viewer-row:hover {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--text);
 }
+.album-viewer-row:hover .album-viewer-title { color: var(--accent-deep, var(--accent)); }
+.album-viewer-row.is-playing {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.album-viewer-row.is-playing .album-viewer-title { font-weight: bold; color: var(--accent-deep, var(--accent)); }
 .album-viewer-row.is-disabled {
     opacity: 0.45;
     cursor: not-allowed;

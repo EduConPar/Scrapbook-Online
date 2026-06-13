@@ -676,36 +676,97 @@ case 'find-album': {
     $cleanTitle = preg_replace('/\s*(?:feat\.?|ft\.?)\s+[^\(\[\-]+/i', ' ', $cleanTitle);
     $cleanTitle = trim(preg_replace('/\s{2,}/', ' ', $cleanTitle));
 
+    /* Trae múltiples candidatos para poder rankear. Spotify ordena por
+       su propia relevancia pero a veces el TOP-1 es un cover o remix
+       que tiene nombre parecido pero NO es la canción del usuario; con
+       limit=10 podemos descartar esos. */
     $tryQuery = function(string $q) use ($token) {
-        if ($q === '') return null;
-        $url = 'https://api.spotify.com/v1/search?type=track&limit=1&market=US&q=' . rawurlencode($q);
+        if ($q === '') return [];
+        $url = 'https://api.spotify.com/v1/search?type=track&limit=10&market=US&q=' . rawurlencode($q);
         $ctx = stream_context_create(['http' => [
             'timeout' => 8, 'ignore_errors' => true,
             'header'  => 'Authorization: Bearer ' . $token,
         ]]);
         $raw = @file_get_contents($url, false, $ctx);
-        if (!$raw) return null;
+        if (!$raw) return [];
         $data = json_decode($raw, true);
-        return $data['tracks']['items'][0] ?? null;
+        return $data['tracks']['items'] ?? [];
     };
 
-    /* Query 1: estructurada con filtros track: y artist: — más precisa. */
-    $item = null;
+    /* Normalización para comparar strings: lowercase, strip diacritics,
+       collapse whitespace y elimina puntuación común. Tolerante a
+       variaciones tipo "feat.", apóstrofes curvos, etc. */
+    $norm = function(string $s): string {
+        $s = mb_strtolower($s);
+        if (class_exists('Transliterator')) {
+            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+            if ($tr) $s = $tr->transliterate($s);
+        }
+        $s = preg_replace('/[^a-z0-9\s]/u', ' ', $s);
+        $s = preg_replace('/\s+/', ' ', $s);
+        return trim($s);
+    };
+
+    $cleanTitleN = $norm($cleanTitle);
+    $artistN     = $norm($artist);
+
+    /* Score por candidato — combina similitud de título (peso alto) y
+       artista (peso medio). similar_text devuelve % de similitud. */
+    $scoreCandidate = function(array $cand) use ($norm, $cleanTitleN, $artistN) {
+        $cTitleN  = $norm((string)($cand['name'] ?? ''));
+        $cArtistN = $norm((string)($cand['artists'][0]['name'] ?? ''));
+        if ($cTitleN === '') return 0.0;
+        $ts = 0.0; similar_text($cleanTitleN, $cTitleN, $ts);
+        $as = 0.0;
+        if ($artistN !== '' && $cArtistN !== '') {
+            similar_text($artistN, $cArtistN, $as);
+        } else {
+            $as = 50.0; /* sin artista que comparar, neutral */
+        }
+        /* Bonus extra si el título normalizado es exactamente igual o
+           si uno está contenido en el otro (cubre "Song" vs "Song -
+           Remastered"). */
+        $bonus = 0.0;
+        if ($cTitleN === $cleanTitleN) $bonus += 20;
+        elseif (str_contains($cTitleN, $cleanTitleN) || str_contains($cleanTitleN, $cTitleN)) $bonus += 10;
+        if ($artistN !== '' && $cArtistN === $artistN) $bonus += 10;
+        return min(100.0, $ts * 0.7 + $as * 0.3 + $bonus);
+    };
+
+    /* Recolecta candidatos de varias queries — más opciones para
+       rankear. La primera (filtrada con track:/artist:) suele dar el
+       mejor; la libre cubre casos donde la estructurada no halló nada. */
+    $candidates = [];
     if ($artist !== '') {
-        $item = $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"');
+        $candidates = array_merge($candidates, $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"'));
     }
-    /* Query 2: si la estructurada no encuentra, búsqueda libre. */
-    if (!$item) {
-        $item = $tryQuery(trim($cleanTitle . ' ' . $artist));
+    if (count($candidates) < 3) {
+        $candidates = array_merge($candidates, $tryQuery(trim($cleanTitle . ' ' . $artist)));
     }
 
+    /* Dedupe por id de track. */
+    $seen = []; $uniq = [];
+    foreach ($candidates as $c) {
+        $cid = $c['id'] ?? '';
+        if ($cid === '' || isset($seen[$cid])) continue;
+        $seen[$cid] = true;
+        $uniq[] = $c;
+    }
+
+    /* Rankea y elige el mejor que supere un threshold mínimo. */
+    $best = null; $bestScore = 0.0;
+    foreach ($uniq as $c) {
+        $sc = $scoreCandidate($c);
+        if ($sc > $bestScore) { $best = $c; $bestScore = $sc; }
+    }
+    $MIN_SCORE = 60.0; /* por debajo: dudoso match, mejor "no encontrado" */
+    if ($bestScore < $MIN_SCORE) $best = null;
+
     $result = ['notFound' => true];
-    if ($item && isset($item['album'])) {
-        $alb = $item['album'];
+    if ($best && isset($best['album'])) {
+        $alb = $best['album'];
         $img = '';
         if (!empty($alb['images'])) {
-            /* Spotify devuelve las imágenes de más grande a más pequeña.
-               La de tamaño medio (~300px) es ideal para la mini-cover. */
             $img = $alb['images'][1]['url'] ?? $alb['images'][0]['url'] ?? '';
         }
         $result = [
@@ -716,8 +777,14 @@ case 'find-album': {
             'albumUrl'       => $alb['external_urls']['spotify'] ?? '',
             'isSingle'       => ($alb['album_type'] ?? '') === 'single',
             'releaseDate'    => $alb['release_date'] ?? '',
-            'matchTitle'     => $item['name']   ?? '',
-            'matchArtist'    => $item['artists'][0]['name'] ?? '',
+            'matchTitle'     => $best['name']   ?? '',
+            'matchArtist'    => $best['artists'][0]['name'] ?? '',
+            /* matchTrackId: el ID de la canción dentro del álbum que
+               coincide con la búsqueda. El cliente lo usa para destacar
+               la fila correspondiente en el viewer, garantizando que
+               "la canción desde la que se busca está en el álbum". */
+            'matchTrackId'   => $best['id']     ?? '',
+            'score'          => round($bestScore, 1),
         ];
     }
     cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);

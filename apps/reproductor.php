@@ -293,15 +293,20 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
      reproduce hasta que el usuario lo pide explícitamente con el botón
      "Reproducir álbum" o haciendo click en una canción concreta. -->
 <div class="window" id="album-viewer">
-    <div class="title-bar">
-        <div class="title-bar-text">💿 Álbum</div>
+    <div class="title-bar" id="album-viewer-titlebar">
+        <div class="title-bar-text">
+            <img src="assets/img/appIcons/musicaIcon.png" alt="" class="album-viewer-titlebar-icon">
+            Álbum
+        </div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="album-viewer-close"></button>
         </div>
     </div>
     <div class="window-body" id="album-viewer-body">
         <div id="album-viewer-header">
-            <img id="album-viewer-cover" src="" alt="">
+            <!-- Cover clickable: izq → reproducir álbum; derecho → context
+                 menu para añadirlo a playlist / perfil. -->
+            <img id="album-viewer-cover" src="" alt="" title="Click derecho para más opciones">
             <div id="album-viewer-head-info">
                 <div id="album-viewer-name">Cargando…</div>
                 <div id="album-viewer-artist"></div>
@@ -310,7 +315,9 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
         </div>
         <div id="album-viewer-tracks"></div>
         <div id="album-viewer-footer">
-            <button class="button" id="album-viewer-play" disabled>▶ Reproducir álbum</button>
+            <button class="button" id="album-viewer-play" disabled>
+                <span class="album-viewer-play-tri">▶</span> Reproducir álbum
+            </button>
         </div>
     </div>
 </div>
@@ -1383,6 +1390,10 @@ function _applyAlbumState(payload) {
             albumName:      payload.albumName || '',
             image:          payload.albumImage || '',
             isSingle:       !!payload.isSingle,
+            /* Título del track que matcheó dentro del álbum — usado por
+               el viewer para destacar la fila correspondiente. */
+            matchTitle:     payload.matchTitle || '',
+            albumUrl:       payload.albumUrl   || '',
         };
         if (playerTitle) {
             playerTitle.classList.add('has-album');
@@ -1423,7 +1434,15 @@ function _renderCurrentAlbumWidget() {
     lbl.textContent = 'Álbum del track actual';
     const nm = document.createElement('div');
     nm.className = 'pl-current-album-name';
-    nm.textContent = label;
+    /* Icono de notas (imagen) en vez del emoji ♫. */
+    const noteIcon = document.createElement('img');
+    noteIcon.src = 'assets/img/appIcons/songIcon.png';
+    noteIcon.alt = '';
+    noteIcon.className = 'pl-current-album-name-icon';
+    nm.appendChild(noteIcon);
+    const nmText = document.createElement('span');
+    nmText.textContent = label;
+    nm.appendChild(nmText);
     info.appendChild(lbl);
     info.appendChild(nm);
     widget.appendChild(info);
@@ -1552,10 +1571,34 @@ async function openAlbumViewer(albumId, albumName) {
             dur.textContent = t.duration ? formatTime(t.duration) : '';
             row.appendChild(num); row.appendChild(info); row.appendChild(dur);
             row.addEventListener('click', () => _playAlbumFrom(i));
+            /* Click derecho → menú contextual de la canción: añadir a
+               playlist / al perfil. Reusamos el ctx menú de tracks ya
+               existente del reproductor. */
+            row.addEventListener('contextmenu', ev => {
+                ev.preventDefault();
+                const trackData = { title: t.title, artist: t.artist, videoId: null };
+                const r = _albumViewerCurrent && _albumViewerCurrent.resolved;
+                if (r && r[i] && r[i].videoId) trackData.videoId = r[i].videoId;
+                if (typeof window.openTrackCtxMenu === 'function') {
+                    window.openTrackCtxMenu(ev, trackData);
+                }
+            });
             tracksEl.appendChild(row);
         });
 
         _albumViewerCurrent = { albumId, meta, resolved: null };
+        /* Si find-album devolvió matchTrackId, lo guardamos para destacar
+           la fila correspondiente (la canción desde la que se buscó). */
+        if (_currentAlbum && _currentAlbum.matchTitle) {
+            const matchNorm = (_currentAlbum.matchTitle || '').toLowerCase().trim();
+            Array.from(tracksEl.querySelectorAll('.album-viewer-row')).forEach((r, i) => {
+                if ((meta.tracks[i].title || '').toLowerCase().trim() === matchNorm) {
+                    r.classList.add('is-playing');
+                    /* Scroll para que el track encontrado esté visible. */
+                    r.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
 
         /* 2) En background: resolver videoIds. Mientras tanto, los
            clicks de tracks devolverán un mensaje pidiendo esperar. */
@@ -1638,7 +1681,9 @@ function _playAlbumFrom(origIdx) {
     playlist.length = 0;
     playable.forEach(t => playlist.push({ videoId: t.videoId, title: t.title, artist: t.artist }));
     currentTrack = actualStart;
-    updatePlayerTitle('💿 ' + (meta.name || 'Álbum'));
+    /* Sin emoji: el título de la ventana del reproductor identifica
+       el álbum por el nombre solo. */
+    updatePlayerTitle(meta.name || 'Álbum');
     updateTrackUI(actualStart);
     if (typeof MelonPlayerState !== 'undefined') {
         try { MelonPlayerState.setPlaylist(virtualId, actualStart); } catch (_) {}
@@ -1646,6 +1691,9 @@ function _playAlbumFrom(origIdx) {
     if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
         ytPlayer.loadVideoById(playlist[actualStart].videoId);
     }
+    /* Loguear como álbum escuchado para wrapped. Una sola llamada por
+       sesión de play (dedupe 60s en backend). */
+    _logAlbumPlay();
     /* Cerrar el viewer al pulsar play — el usuario ya tiene el track
        sonando en el reproductor pequeño. */
     closeAlbumViewer();
@@ -1677,6 +1725,188 @@ if (playerTitle) {
     const closeBtn = document.getElementById('album-viewer-close');
     if (closeBtn) closeBtn.addEventListener('click', closeAlbumViewer);
 })();
+
+/* ── Draggable de la title bar ── (mismo patrón que player-titlebar). */
+(function() {
+    const win      = document.getElementById('album-viewer');
+    const titlebar = document.getElementById('album-viewer-titlebar');
+    if (!win || !titlebar) return;
+    let dragging = false, ox, oy, pid = -1;
+    titlebar.addEventListener('pointerdown', function(e) {
+        if (e.target.tagName === 'BUTTON') return;
+        dragging = true;
+        pid = e.pointerId;
+        try { titlebar.setPointerCapture(pid); } catch (_) {}
+        const rect = win.getBoundingClientRect();
+        /* Al arrastrar por primera vez: convertir el centrado
+           (transform translate(-50%,-50%)) en left/top absolutos para
+           que el mover por delta sea sin saltos. */
+        win.style.left      = rect.left + 'px';
+        win.style.top       = rect.top  + 'px';
+        win.style.transform = 'none';
+        ox = e.clientX - rect.left;
+        oy = e.clientY - rect.top;
+    });
+    titlebar.addEventListener('pointermove', function(e) {
+        if (!dragging || e.pointerId !== pid) return;
+        win.style.left = (e.clientX - ox) + 'px';
+        win.style.top  = (e.clientY - oy) + 'px';
+    });
+    function end(e) {
+        if (e && e.pointerId !== pid) return;
+        dragging = false; pid = -1;
+        try { titlebar.releasePointerCapture(e ? e.pointerId : pid); } catch (_) {}
+    }
+    titlebar.addEventListener('pointerup',     end);
+    titlebar.addEventListener('pointercancel', end);
+})();
+
+/* ── Context menu del cover del álbum ──
+   Click derecho → opciones para añadir el ÁLBUM ENTERO a una playlist
+   o al perfil. Patrón: añadir todos los tracks resueltos a la playlist
+   de destino (uno a uno respetando dedupe), o llamar al endpoint del
+   perfil que registra un álbum. */
+(function() {
+    const cover = document.getElementById('album-viewer-cover');
+    if (!cover) return;
+    cover.addEventListener('contextmenu', ev => {
+        ev.preventDefault();
+        if (!_albumViewerCurrent) return;
+        _showAlbumCtxMenu(ev.clientX, ev.clientY);
+    });
+})();
+
+/* Construye un menú flotante reusando el chrome del ctx menu de
+   tracks. Lo posicionamos absoluto al hacer click. */
+function _showAlbumCtxMenu(x, y) {
+    /* Reusamos el contenedor del ctx menu existente (#pl-ctx-menu-el),
+       que ya tiene CSS + auto-cierre al click fuera. */
+    const menu = document.getElementById('pl-ctx-menu-el');
+    if (!menu || !_albumViewerCurrent) return;
+    menu.innerHTML = '';
+
+    const addPl = document.createElement('div');
+    addPl.className = 'pl-menu-item';
+    addPl.textContent = 'Añadir álbum a playlist';
+    addPl.addEventListener('click', () => {
+        menu.style.display = 'none';
+        _addAlbumToPlaylistFlow();
+    });
+    menu.appendChild(addPl);
+
+    const addProfile = document.createElement('div');
+    addProfile.className = 'pl-menu-item';
+    addProfile.textContent = 'Añadir álbum a mi perfil';
+    addProfile.addEventListener('click', () => {
+        menu.style.display = 'none';
+        _addAlbumToProfile();
+    });
+    menu.appendChild(addProfile);
+
+    menu.style.display = 'block';
+    const cw = menu.offsetWidth, ch = menu.offsetHeight;
+    menu.style.left = Math.min(x, window.innerWidth  - cw - 8) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - ch - 8) + 'px';
+}
+
+/* Picker reutilizado para elegir playlist destino y volcar TODOS los
+   tracks resueltos del álbum. Sin dedupe en backend para álbumes —
+   confiamos en el check del cliente (mismo videoId no se duplica). */
+async function _addAlbumToPlaylistFlow() {
+    if (!_albumViewerCurrent || !_albumViewerCurrent.resolved) {
+        alert('Aún resolviendo el álbum, prueba en un momento.');
+        return;
+    }
+    /* Lista de playlists del usuario para elegir destino. */
+    let playlists;
+    try {
+        const r = await fetch('assets/music/api.php?action=get-playlists');
+        playlists = await r.json();
+    } catch (_) { alert('Error de red.'); return; }
+    if (!Array.isArray(playlists) || !playlists.length) {
+        alert('No tienes playlists. Crea una primero.');
+        return;
+    }
+    /* Picker simple inline — un prompt con índices. Para UX más
+       elaborada se podría reusar #add-to-picker, pero el picker actual
+       está atado al ctx de un track concreto. */
+    let msg = 'Añadir el álbum a:\n';
+    playlists.forEach((p, i) => { msg += (i + 1) + '. ' + p.name + '\n'; });
+    const ans = prompt(msg + '\nNúmero de playlist:');
+    const idx = parseInt(ans, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= playlists.length) return;
+    const pl = playlists[idx];
+
+    /* Fusiona los tracks (skip los que ya están). */
+    const existing = new Set(pl.tracks.map(t => t.videoId));
+    const toAdd = _albumViewerCurrent.resolved
+        .filter(t => t.videoId && !existing.has(t.videoId))
+        .map(t => ({ title: t.title, artist: t.artist, videoId: t.videoId, duration: t.duration || 0 }));
+    if (!toAdd.length) { alert('Todas las canciones ya están en esa playlist.'); return; }
+    const merged = pl.tracks.concat(toAdd);
+
+    try {
+        const r = await fetch('assets/music/api.php?action=save-playlist-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: pl.id, name: pl.name, tracks: merged }),
+        });
+        const data = await r.json();
+        if (data && data.error) throw new Error(data.error);
+        alert('✔ ' + toAdd.length + ' canción(es) añadidas a "' + pl.name + '".');
+    } catch (e) {
+        alert('Error al guardar: ' + (e.message || e));
+    }
+}
+
+/* Registra el álbum en el perfil del usuario. Delegamos a
+   window.profileAddAlbum (expuesto por perfil.php) — abre la app de
+   perfil, mete el álbum en lists.music con type:'album' y ofrece
+   reseña. Mantiene paridad con el flujo de "añadir canción al perfil". */
+function _addAlbumToProfile() {
+    if (!_albumViewerCurrent) return;
+    const { albumId, meta } = _albumViewerCurrent;
+    if (typeof window.profileAddAlbum !== 'function') {
+        alert('La app de Perfil no está disponible en esta sesión.');
+        return;
+    }
+    window.profileAddAlbum({
+        name:           meta.name,
+        artist:         meta.artist || '',
+        image:          (_currentAlbum && _currentAlbum.image) || meta.image || '',
+        spotifyAlbumId: albumId,
+    });
+}
+
+/* Loguea una reproducción de álbum en wrapped — para que el resumen
+   anual cuente "álbumes escuchados". Dedupe de 60s vive en backend.
+   Lo llamamos desde _playAlbumFrom (cuando el usuario realmente da
+   play, sea botón "Reproducir álbum" o click directo en una canción). */
+function _logAlbumPlay() {
+    if (!_albumViewerCurrent) return;
+    const { albumId, meta } = _albumViewerCurrent;
+    const body = JSON.stringify({
+        albumTitle:     meta.name,
+        artist:         meta.artist || '',
+        actionType:     'play',
+        spotifyAlbumId: albumId,
+        coverUrl:       (_currentAlbum && _currentAlbum.image) || meta.image || '',
+    });
+    try {
+        if (navigator.sendBeacon) {
+            const blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon('assets/music/wrapped-api.php?action=log-album', blob)) return;
+        }
+    } catch (_) {}
+    try {
+        fetch('assets/music/wrapped-api.php?action=log-album', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body,
+            keepalive: true,
+        }).catch(() => {});
+    } catch (_) {}
+}
 
 function resolveAndShowAlbum(track) {
     /* Reset entre tracks. */

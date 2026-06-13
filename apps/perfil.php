@@ -2444,6 +2444,69 @@ var PROFILE_USERS = <?php
     };
 
     /* Exposed globally so the player right-click menu can add the current track */
+    /* Análogo a profileAddTrackAndReview pero para álbumes — se usa
+       desde el reproductor (ctx menu del cover del álbum). Acepta
+       { name, artist, spotifyAlbumId, image } y crea un item de
+       tipo "album" en lists.music con su propia entrada (dedupe por
+       spotifyAlbumId / título normalizado). */
+    window.profileAddAlbum = function(album) {
+        if (!album || !album.name) return;
+        if (taskbarManager.isRegistered('profile-window')) {
+            taskbarManager.restore('profile-window');
+        } else {
+            profileWin.style.height = Math.max(380, window.innerHeight - 80) + 'px';
+            taskbarManager.register('profile-window', 'Perfil', '<img src="assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
+            startItemNotifStream();
+        }
+        function doAdd() {
+            var albTitle = (album.name || '').toLowerCase().trim();
+            var existIdx = -1;
+            for (var i = 0; i < lists.music.length; i++) {
+                var it = lists.music[i];
+                if (it.type !== 'album') continue;
+                if (album.spotifyAlbumId && it.spotifyAlbumId === album.spotifyAlbumId) { existIdx = i; break; }
+                if (albTitle && (it.title || '').toLowerCase().trim() === albTitle) { existIdx = i; break; }
+            }
+            var targetIdx;
+            if (existIdx !== -1) {
+                targetIdx = existIdx;
+            } else {
+                var entry = {
+                    id:             'music_' + Date.now(),
+                    type:           'album',
+                    title:          album.name || 'Sin título',
+                    artist:         album.artist || '',
+                    image:          album.image || '',
+                    featured:       false,
+                    spotifyAlbumId: album.spotifyAlbumId || '',
+                };
+                lists.music.push(entry);
+                saveCategory('music');
+                updateCounts();
+                renderMusicView(currentMusicTab);
+                renderMusicDestacados();
+                targetIdx = lists.music.length - 1;
+            }
+            var prompt = document.getElementById('profile-review-prompt');
+            document.getElementById('profile-review-prompt-msg').textContent = existIdx !== -1
+                ? '"' + (album.name || 'Sin título') + '" ya está en tu lista. ¿Editar la reseña?'
+                : '¿Añadir una reseña para "' + (album.name || 'Sin título') + '"?';
+            prompt.style.display = 'block';
+            prompt.style.left = Math.round((window.innerWidth  - prompt.offsetWidth)  / 2) + 'px';
+            prompt.style.top  = Math.round((window.innerHeight - prompt.offsetHeight) / 2) + 'px';
+            var yesBtn = document.getElementById('profile-review-prompt-yes');
+            var noBtn  = document.getElementById('profile-review-prompt-no');
+            var newYes = yesBtn.cloneNode(true); yesBtn.parentNode.replaceChild(newYes, yesBtn);
+            var newNo  = noBtn.cloneNode(true);  noBtn.parentNode.replaceChild(newNo,  noBtn);
+            (function(idx) {
+                newYes.addEventListener('click', function() { prompt.style.display = 'none'; showMusicReviewWindow(idx); });
+                newNo.addEventListener('click',  function() { prompt.style.display = 'none'; });
+            })(targetIdx);
+        }
+        if (!loaded) { loaded = true; loadLists(function() { updateCounts(); showMusicView(); doAdd(); }); loadProfile(); }
+        else doAdd();
+    };
+
     window.profileAddTrackAndReview = function(track) {
         if (!track || !track.videoId) return;
         if (taskbarManager.isRegistered('profile-window')) {
