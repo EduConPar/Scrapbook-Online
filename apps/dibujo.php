@@ -1063,6 +1063,8 @@ function _loadPerCanvas(snap) {
     state.strokeBuffer = null; state.strokeBufferCtx = null;
     state.strokeIsEraser = false; state.strokeBufferLayerIdx = -1;
     state.strokeBufferBelowIdx = -1;
+    /* Tab switch: el cache below/above pertenece al tab anterior. */
+    _invalidateStrokeCache();
     /* Display canvas debe ajustarse al tamaño del lienzo del tab. */
     display.width = state.width;
     display.height = state.height;
@@ -1303,6 +1305,7 @@ function deleteGroup(groupId) {
 function toggleLayerClipMask(layerIdx, on) {
     if (!state.layers[layerIdx]) return;
     state.layers[layerIdx].clipMask = on;
+    _invalidateStrokeCache();
     composite();
 }
 
@@ -1340,7 +1343,276 @@ function resetCanvas(w, h, bg) {
     renderLayers();
 }
 
-function composite() {
+/* ── Compositing optimizado ──
+   Para lienzos grandes el coste por composite era inaceptable: cada
+   pointermove (incluso a 120 Hz) creaba un canvas fresco del tamaño
+   completo del lienzo, dibujaba TODAS las capas otra vez y dejaba el
+   anterior al GC. Tres optimizaciones combinadas:
+
+   1) rAF throttling: las llamadas a composite() se coalescen a una por
+      frame. Eventos repetidos en un mismo frame no causan trabajo extra.
+
+   2) Scratch canvas persistente: el canvas off-screen para clipping/
+      buffer-blit se reusa entre llamadas. clearRect + redraw es
+      órdenes de magnitud más barato que createElement+resize en
+      lienzos grandes.
+
+   3) Cache below/above durante un trazo: la única capa que cambia
+      durante un stroke es la activa + strokeBuffer. Cacheamos el
+      compuesto "todo lo de abajo" + "todo lo de arriba" UNA vez al
+      iniciar el trazo (o al cambiar de capa activa) y solo recombinamos
+      la activa con el buffer en cada frame. El stack puede tener N
+      capas; el trabajo por frame es ~constante en N.
+
+      Limitación: si una capa POR ENCIMA de la activa tiene clipMask
+      con groupId == activa.groupId, depende de la activa y el cache
+      de arriba sería incorrecto. En ese caso desactivamos el atajo
+      y caemos al camino completo. Es raro en la práctica. */
+let _scratchCanvas = null, _scratchCtx = null;
+/* Si rect=null limpia el scratch entero (legacy). Si rect={x,y,w,h}
+   limpia solo ese rect — usado por el sub-rect path para no pagar
+   O(canvas) en lienzos grandes. El caller debe responsabilizarse de
+   no leer fuera del rect que limpió. */
+function _getScratchCanvas(rect) {
+    if (!_scratchCanvas) {
+        _scratchCanvas = document.createElement('canvas');
+        _scratchCtx = _scratchCanvas.getContext('2d');
+    }
+    if (_scratchCanvas.width !== state.width || _scratchCanvas.height !== state.height) {
+        _scratchCanvas.width = state.width;
+        _scratchCanvas.height = state.height;
+    }
+    if (rect) {
+        _scratchCtx.clearRect(rect.x, rect.y, rect.w, rect.h);
+    } else {
+        _scratchCtx.clearRect(0, 0, state.width, state.height);
+    }
+    _scratchCtx.globalCompositeOperation = 'source-over';
+    _scratchCtx.globalAlpha = 1;
+    return _scratchCtx;
+}
+
+/* ── Dirty rect tracking ──
+   Para no repintar el lienzo entero cuando solo cambia un círculo de
+   N px. applyStrokeSample añade el bbox del dab/segmento aquí;
+   _compositeNow lo usa para restringir clear+drawImage. En lienzos
+   grandes (4k×4k), el coste por frame baja órdenes de magnitud — un
+   trazo afecta ~100×100 px, no 16M. */
+let _dirty = null;
+function _markDirty(x, y, w, h) {
+    if (w <= 0 || h <= 0) return;
+    if (!_dirty) { _dirty = { x, y, w, h }; return; }
+    const x1 = Math.min(_dirty.x, x);
+    const y1 = Math.min(_dirty.y, y);
+    const x2 = Math.max(_dirty.x + _dirty.w, x + w);
+    const y2 = Math.max(_dirty.y + _dirty.h, y + h);
+    _dirty.x = x1; _dirty.y = y1;
+    _dirty.w = x2 - x1; _dirty.h = y2 - y1;
+}
+function _clampDirtyToCanvas() {
+    if (!_dirty) return null;
+    const dx = Math.max(0, Math.floor(_dirty.x));
+    const dy = Math.max(0, Math.floor(_dirty.y));
+    const r  = Math.min(state.width,  Math.ceil(_dirty.x + _dirty.w));
+    const b  = Math.min(state.height, Math.ceil(_dirty.y + _dirty.h));
+    const w = r - dx, h = b - dy;
+    if (w <= 0 || h <= 0) return null;
+    return { x: dx, y: dy, w, h };
+}
+function _markDabDirty(x, y, width) {
+    /* +2 px de margen por anti-alias / radial-gradient. */
+    const pad = Math.max(2, width / 2 + 2);
+    _markDirty(x - pad, y - pad, 2 * pad, 2 * pad);
+}
+function _markSegmentDirty(from, to, maxWidth) {
+    const pad = Math.max(2, maxWidth / 2 + 2);
+    const minX = Math.min(from.x, to.x) - pad;
+    const minY = Math.min(from.y, to.y) - pad;
+    const maxX = Math.max(from.x, to.x) + pad;
+    const maxY = Math.max(from.y, to.y) + pad;
+    _markDirty(minX, minY, maxX - minX, maxY - minY);
+}
+
+let _strokeCache = null; /* {below, above, activeIdx, fastPath} */
+function _invalidateStrokeCache() {
+    _strokeCache = null;
+    /* Si algo más fuera del trazo afectó el stack (visibility, opacity,
+       layer reorder), un sub-rect composite dejaría datos viejos en el
+       resto del display. Forzamos repintado completo en el próximo
+       composite reseteando el dirty rect. */
+    _dirty = null;
+}
+
+function _composeRangeTo(ctx, fromIdx, toIdx) {
+    /* Compone capas en [fromIdx, toIdx) sobre ctx, sin tener en cuenta
+       el strokeBuffer (es el "estado estable" de cada extremo del stack
+       durante el trazo). Misma lógica de clipping que el camino full. */
+    for (let i = fromIdx; i < toIdx; i++) {
+        const layer = state.layers[i];
+        if (!layer.visible) continue;
+        const below = i > 0 ? state.layers[i - 1] : null;
+        const shouldClip = layer.clipMask
+            && layer.groupId != null
+            && below
+            && below.groupId === layer.groupId;
+        if (!shouldClip) {
+            ctx.globalAlpha = layer.opacity;
+            ctx.drawImage(layer.canvas, 0, 0);
+            ctx.globalAlpha = 1;
+            continue;
+        }
+        const oc = _getScratchCanvas();
+        oc.drawImage(layer.canvas, 0, 0);
+        oc.globalCompositeOperation = 'destination-in';
+        oc.drawImage(below.canvas, 0, 0);
+        oc.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = layer.opacity;
+        ctx.drawImage(_scratchCanvas, 0, 0);
+        ctx.globalAlpha = 1;
+    }
+}
+
+function _aboveDependsOnActive(activeIdx) {
+    /* La capa activa+1 tiene clipMask y comparte grupo con la activa:
+       su renderizado depende del contenido de la activa, así que un
+       cache "above" pre-renderizado sería incorrecto. */
+    const a = state.layers[activeIdx];
+    const above = state.layers[activeIdx + 1];
+    if (!above || !above.clipMask || above.groupId == null) return false;
+    return above.groupId === a.groupId;
+}
+
+function _ensureStrokeCache(activeIdx) {
+    if (_strokeCache && _strokeCache.activeIdx === activeIdx && _strokeCache.fastPath) return _strokeCache;
+    if (_aboveDependsOnActive(activeIdx)) {
+        _strokeCache = { activeIdx, fastPath: false };
+        return _strokeCache;
+    }
+    const below = document.createElement('canvas');
+    below.width = state.width; below.height = state.height;
+    _composeRangeTo(below.getContext('2d'), 0, activeIdx);
+
+    const above = document.createElement('canvas');
+    above.width = state.width; above.height = state.height;
+    _composeRangeTo(above.getContext('2d'), activeIdx + 1, state.layers.length);
+
+    _strokeCache = { below, above, activeIdx, fastPath: true };
+    return _strokeCache;
+}
+
+/* Versión sub-rect: igual que _compositeActiveLayerInto pero limita
+   clear+drawImage al rect (dx, dy, dw, dh). Para las composite ops
+   especiales (destination-in con below, destination-out con buffer)
+   usamos clip path para que solo afecten al rect — sin clip, esas ops
+   tocarían el scratch entero y serían O(canvas). Con clip son O(rect). */
+function _compositeActiveLayerIntoRect(ctx, activeIdx, dx, dy, dw, dh) {
+    const layer = state.layers[activeIdx];
+    if (!layer.visible) return;
+    const below = activeIdx > 0 ? state.layers[activeIdx - 1] : null;
+    const shouldClip = layer.clipMask
+        && layer.groupId != null
+        && below
+        && below.groupId === layer.groupId;
+    const hasBuf = state.strokeBuffer && state.strokeBufferLayerIdx === activeIdx;
+    if (!shouldClip && !hasBuf) {
+        ctx.globalAlpha = layer.opacity;
+        ctx.drawImage(layer.canvas, dx, dy, dw, dh, dx, dy, dw, dh);
+        ctx.globalAlpha = 1;
+        return;
+    }
+    const oc = _getScratchCanvas({ x: dx, y: dy, w: dw, h: dh });
+    /* Clip al rect: las composite ops solo afectan dentro del rect. */
+    oc.save();
+    oc.beginPath();
+    oc.rect(dx, dy, dw, dh);
+    oc.clip();
+    oc.drawImage(layer.canvas, dx, dy, dw, dh, dx, dy, dw, dh);
+    if (hasBuf) {
+        if (state.strokeIsEraser) {
+            oc.globalCompositeOperation = 'destination-out';
+            oc.drawImage(state.strokeBuffer, dx, dy, dw, dh, dx, dy, dw, dh);
+            oc.globalCompositeOperation = 'source-over';
+        } else {
+            oc.drawImage(state.strokeBuffer, dx, dy, dw, dh, dx, dy, dw, dh);
+        }
+    }
+    if (shouldClip) {
+        oc.globalCompositeOperation = 'destination-in';
+        oc.drawImage(below.canvas, dx, dy, dw, dh, dx, dy, dw, dh);
+        oc.globalCompositeOperation = 'source-over';
+    }
+    oc.restore();
+    ctx.globalAlpha = layer.opacity;
+    ctx.drawImage(_scratchCanvas, dx, dy, dw, dh, dx, dy, dw, dh);
+    ctx.globalAlpha = 1;
+}
+
+function _compositeActiveLayerInto(ctx, activeIdx) {
+    const layer = state.layers[activeIdx];
+    if (!layer.visible) return;
+    const below = activeIdx > 0 ? state.layers[activeIdx - 1] : null;
+    const shouldClip = layer.clipMask
+        && layer.groupId != null
+        && below
+        && below.groupId === layer.groupId;
+    const hasBuf = state.strokeBuffer && state.strokeBufferLayerIdx === activeIdx;
+    if (!shouldClip && !hasBuf) {
+        ctx.globalAlpha = layer.opacity;
+        ctx.drawImage(layer.canvas, 0, 0);
+        ctx.globalAlpha = 1;
+        return;
+    }
+    const oc = _getScratchCanvas();
+    oc.drawImage(layer.canvas, 0, 0);
+    if (hasBuf) {
+        if (state.strokeIsEraser) {
+            oc.globalCompositeOperation = 'destination-out';
+            oc.drawImage(state.strokeBuffer, 0, 0);
+            oc.globalCompositeOperation = 'source-over';
+        } else {
+            oc.drawImage(state.strokeBuffer, 0, 0);
+        }
+    }
+    if (shouldClip) {
+        oc.globalCompositeOperation = 'destination-in';
+        oc.drawImage(below.canvas, 0, 0);
+        oc.globalCompositeOperation = 'source-over';
+    }
+    ctx.globalAlpha = layer.opacity;
+    ctx.drawImage(_scratchCanvas, 0, 0);
+    ctx.globalAlpha = 1;
+}
+
+function _compositeNow() {
+    /* Atajo: durante un trazo (strokeBuffer activo) usamos los caches
+       below/above y solo recompositamos la capa activa. Si tenemos
+       dirty rect además, restringimos clear+drawImage a ese rect —
+       el blit pasa de 16M px a unos pocos miles en lienzos grandes. */
+    const hasStroke = !!state.strokeBuffer && state.strokeBufferLayerIdx >= 0;
+    if (hasStroke) {
+        const ai = state.strokeBufferLayerIdx;
+        const cache = _ensureStrokeCache(ai);
+        if (cache.fastPath) {
+            const d = _clampDirtyToCanvas();
+            if (d) {
+                /* Restringido al dirty rect. */
+                dctx.clearRect(d.x, d.y, d.w, d.h);
+                dctx.drawImage(cache.below, d.x, d.y, d.w, d.h, d.x, d.y, d.w, d.h);
+                _compositeActiveLayerIntoRect(dctx, ai, d.x, d.y, d.w, d.h);
+                dctx.drawImage(cache.above, d.x, d.y, d.w, d.h, d.x, d.y, d.w, d.h);
+            } else {
+                /* Sin dirty rect (primer frame del stroke) — pintamos todo. */
+                dctx.clearRect(0, 0, state.width, state.height);
+                dctx.drawImage(cache.below, 0, 0);
+                _compositeActiveLayerInto(dctx, ai);
+                dctx.drawImage(cache.above, 0, 0);
+            }
+            _dirty = null;
+            return;
+        }
+    }
+    _dirty = null;
+    /* Camino completo: dibuja todas las capas. */
     dctx.clearRect(0, 0, state.width, state.height);
     for (let i = 0; i < state.layers.length; i++) {
         const layer = state.layers[i];
@@ -1357,16 +1629,10 @@ function composite() {
             dctx.globalAlpha = 1;
             continue;
         }
-        /* Construimos una "capa efectiva" combinando la base + el
-           buffer del trazo en curso (si lo hay) y aplicando la
-           máscara de la capa de abajo (si shouldClip). */
-        const off = document.createElement('canvas');
-        off.width = state.width; off.height = state.height;
-        const oc = off.getContext('2d');
+        const oc = _getScratchCanvas();
         oc.drawImage(layer.canvas, 0, 0);
         if (hasActiveBuffer) {
             if (state.strokeIsEraser) {
-                /* En modo eraser el buffer marca lo que hay que borrar. */
                 oc.globalCompositeOperation = 'destination-out';
                 oc.drawImage(state.strokeBuffer, 0, 0);
                 oc.globalCompositeOperation = 'source-over';
@@ -1377,11 +1643,27 @@ function composite() {
         if (shouldClip) {
             oc.globalCompositeOperation = 'destination-in';
             oc.drawImage(below.canvas, 0, 0);
+            oc.globalCompositeOperation = 'source-over';
         }
         dctx.globalAlpha = layer.opacity;
-        dctx.drawImage(off, 0, 0);
+        dctx.drawImage(_scratchCanvas, 0, 0);
         dctx.globalAlpha = 1;
     }
+}
+
+let _compositeScheduled = false;
+function composite() {
+    if (_compositeScheduled) return;
+    _compositeScheduled = true;
+    requestAnimationFrame(() => {
+        _compositeScheduled = false;
+        _compositeNow();
+    });
+}
+/* Para llamadas síncronas críticas (cierre de trazo, exports). */
+function compositeSync() {
+    _compositeScheduled = false;
+    _compositeNow();
 }
 
 /* Dibuja la miniatura de una capa dentro de un <canvas> pequeño con
@@ -1408,6 +1690,10 @@ function updateActiveLayerThumb() {
 }
 
 function renderLayers() {
+    /* Cualquier rebuild de la lista de capas implica que el stack ha
+       cambiado (add/remove/reorder/activa). El cache below/above debe
+       reconstruirse en el próximo composite durante stroke. */
+    _invalidateStrokeCache();
     const list = $('layers-list');
     list.innerHTML = '';
     /* Iteración en reverso para que la capa con índice más alto (la
@@ -1440,10 +1726,10 @@ function renderLayers() {
             '<span class="layer-name">' + layer.name + '</span>' +
             '<input type="range" class="layer-opacity" min="0" max="100" value="' + Math.round(layer.opacity * 100) + '">';
         item.querySelector('input[type=checkbox]').addEventListener('change', e => {
-            layer.visible = e.target.checked; composite();
+            layer.visible = e.target.checked; _invalidateStrokeCache(); composite();
         });
         item.querySelector('.layer-opacity').addEventListener('input', e => {
-            layer.opacity = +e.target.value / 100; composite();
+            layer.opacity = +e.target.value / 100; _invalidateStrokeCache(); composite();
         });
         item.querySelector('.layer-name').addEventListener('dblclick', async () => {
             const nm = await winPrompt({
@@ -1804,6 +2090,7 @@ function applyUndoEntry(entry, toRedo) {
         toRedo.push({ kind: 'layer-op', layers: curLayers, activeIdx: curActive, groups: curGroups });
         renderLayers();
     }
+    _invalidateStrokeCache();
     composite();
 }
 $('btn-undo').addEventListener('click', () => {
@@ -1964,8 +2251,14 @@ function applyStrokeSample(rawPt, isLocal) {
             ctx.clip();
         }
     }
-    if (!state.lastDab) stampDab(ctx, pt.x, pt.y, pt.p, state.color, brush, isEraserForStamp);
-    else paintSegment(ctx, state.lastDab, pt, state.color, brush, isEraserForStamp);
+    if (!state.lastDab) {
+        stampDab(ctx, pt.x, pt.y, pt.p, state.color, brush, isEraserForStamp);
+        _markDabDirty(pt.x, pt.y, pressureToWidth(pt.p));
+    } else {
+        paintSegment(ctx, state.lastDab, pt, state.color, brush, isEraserForStamp);
+        const maxP = Math.max(state.lastDab.p, pt.p);
+        _markSegmentDirty(state.lastDab, pt, pressureToWidth(maxP));
+    }
     if (state.selection) ctx.restore();
     state.lastDab = pt;
     composite();
@@ -1982,6 +2275,10 @@ function applyStrokeSample(rawPt, isLocal) {
    ════════════════════════════════════════════════════════════════════ */
 function pickColorAt(x, y) {
     if (x < 0 || y < 0 || x >= state.width || y >= state.height) return null;
+    /* Si hay un composite programado vía rAF, el display puede estar
+       stale para el cuentagotas. Forzamos un compositeSync para leer
+       los píxeles actuales sin esperar al próximo frame. */
+    if (_compositeScheduled) compositeSync();
     const px = dctx.getImageData(x|0, y|0, 1, 1).data;
     if (px[3] === 0) return null;
     return '#' + [0,1,2].map(i => px[i].toString(16).padStart(2, '0')).join('');
@@ -2102,7 +2399,12 @@ function endPointer(e) {
     netSend({ type: 'stroke-end', strokeId: state.strokeId });
     state.strokeId = null;
     state.lastDab = null;
-    composite();
+    /* Cache obsoleto: la capa activa cambió (volcamos el buffer en
+       ella). Próximo stroke reconstruye. */
+    _invalidateStrokeCache();
+    /* Síncrono: el thumb update lee de layer.canvas (no afecta) pero
+       queremos el display ya pintado por si export sigue inmediatamente. */
+    compositeSync();
     updateActiveLayerThumb();
 }
 display.addEventListener('pointerup',     endPointer);
