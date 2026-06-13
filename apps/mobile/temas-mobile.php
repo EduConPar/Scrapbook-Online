@@ -659,6 +659,17 @@ $interfacePacks = listInterfacesForUser($pdo, userIdByKey($userKey));
             <input type="file" id="theme-import-file" accept="application/json,.json" style="display:none;">
         </div>
         <div id="temas-editor"></div>
+        <!-- Slider de tamaño de fuente: delta en px sumado a TODAS las
+             fuentes (mantiene jerarquías). -6 = más pequeño, +10 = más
+             grande. Cambio en vivo via window.setFontScaleDelta + se
+             propaga al shell padre con postMessage. -->
+        <div id="temas-font-row" class="color-field" style="margin-top:14px;">
+            <div class="color-field-label">Tamaño de fuente (delta px)</div>
+            <div class="color-field-row" style="gap:8px;align-items:center;">
+                <input type="range" id="theme-font-delta" min="-6" max="10" step="1" value="0" style="flex:1 1 auto;min-width:0;">
+                <span id="theme-font-delta-readout" style="min-width:3.5em;text-align:right;font-variant-numeric:tabular-nums;">0</span>
+            </div>
+        </div>
         <div id="temas-status">Crea un tema nuevo o selecciona uno existente para editarlo.</div>
     </div>
 </div>
@@ -1024,6 +1035,15 @@ function getEditorColors() {
     COLOR_DEFS.forEach(function(def) {
         c[def.key] = document.getElementById('hex-' + def.key).value;
     });
+    /* fontDelta NO es un color pero viaja en el mismo objeto colors
+       para que el backend lo persista sin cambios de schema. Clamp
+       defensivo por si el slider está en un estado raro. */
+    var fdEl = document.getElementById('theme-font-delta');
+    var fd = fdEl ? parseInt(fdEl.value, 10) : 0;
+    if (!isFinite(fd)) fd = 0;
+    if (fd < -6) fd = -6;
+    if (fd >  10) fd = 10;
+    c.fontDelta = fd;
     return c;
 }
 
@@ -1033,6 +1053,29 @@ function setEditorColors(colors) {
         document.getElementById('hex-' + def.key).value = v;
         if (/^#[0-9a-f]{6}$/i.test(v)) document.getElementById('col-' + def.key).value = v;
     });
+    /* fontDelta: si el tema lo trae, lo metemos en el slider y lo
+       aplicamos en vivo. Default 0 (no toca nada). */
+    var fd = 0;
+    if (colors && typeof colors.fontDelta === 'number') fd = colors.fontDelta;
+    if (fd < -6) fd = -6;
+    if (fd >  10) fd = 10;
+    var fdEl  = document.getElementById('theme-font-delta');
+    var fdOut = document.getElementById('theme-font-delta-readout');
+    if (fdEl) fdEl.value = String(fd);
+    if (fdOut) fdOut.textContent = (fd > 0 ? '+' : '') + fd + (fd === 0 ? '' : ' px');
+    if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(fd);
+    _propagateFontDelta(fd);
+}
+
+/* Notifica al shell padre y al iframe activo del escritorio (si lo
+   hubiera) el nuevo delta. El shell, a su vez, lo retransmite a su
+   app-frame para que el preview en vivo abarque todo. */
+function _propagateFontDelta(d) {
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'font-scale-delta', delta: d }, '*');
+        }
+    } catch (_) {}
 }
 
 function resetEditor() {
@@ -1274,6 +1317,9 @@ document.getElementById('temas-deactivate').addEventListener('click', function()
               activeName = '';
               renderList();
               applyLiveTheme('', '');
+              /* Sin tema → fontDelta vuelve a 0 (tamaño base). */
+              if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(0);
+              _propagateFontDelta(0);
               /* Sin tema → fondo/icono GLOBAL del usuario (su baseline) */
               applyThemeAssets(USER_GLOBAL_WP, USER_GLOBAL_SI);
               if (window._setWpPreview) window._setWpPreview(USER_GLOBAL_WP);
@@ -1321,6 +1367,20 @@ document.getElementById('theme-save').addEventListener('click', function() {
       });
 });
 
+/* Slider de tamaño de fuente: live preview mientras el usuario
+   arrastra. NO persiste hasta que se guarde el tema. */
+(function wireFontSlider() {
+    var sl  = document.getElementById('theme-font-delta');
+    var out = document.getElementById('theme-font-delta-readout');
+    if (!sl) return;
+    sl.addEventListener('input', function() {
+        var d = parseInt(sl.value, 10) || 0;
+        if (out) out.textContent = (d > 0 ? '+' : '') + d + (d === 0 ? '' : ' px');
+        if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(d);
+        _propagateFontDelta(d);
+    });
+})();
+
 document.getElementById('theme-activate').addEventListener('click', function() {
     var name = nameInput.value.trim();
     if (!name) { statusEl.textContent = 'Selecciona un tema primero.'; return; }
@@ -1338,6 +1398,14 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           /* d.cssPath viene de api.php apuntando a uploads/themes/.
              Antes hardcodeábamos assets/themes/ → 404. */
           applyLiveTheme(d.className, d.cssPath);
+          /* Al activar, el fontDelta del tema toma efecto inmediato en
+             el shell + la app abierta. Si no lo guarda, 0 (base). */
+          var fd = 0;
+          if (savedThemes[name] && savedThemes[name].colors && typeof savedThemes[name].colors.fontDelta === 'number') {
+              fd = savedThemes[name].colors.fontDelta;
+          }
+          if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(fd);
+          _propagateFontDelta(fd);
           /* Aplicar el fondo y el icono vinculados al tema (o el DEFAULT si no tiene) */
           applyThemeAssets(d.wallpaper || THEME_DEFAULT_WP, d.startIcon || THEME_DEFAULT_SI);
           /* Reflejar en Personalización los assets efectivos del tema activo */

@@ -140,14 +140,28 @@ $haroUid       = userIdByKey($desktopUserKey);
 /** @var PDO $pdo */
 $haroSlug      = $haroUid ? activeHaroSlug($pdo, $haroUid) : 'green';
 $haroAssets    = haroPaths($haroSlug);
+$activeFsDelta = 0; /* default: sin escalado */
 if ($activeTheme !== '') {
     $uid = userIdByKey($desktopUserKey);
     $tWp = ''; $tSi = '';
     if ($uid) {
-        $st = themesPdo()->prepare("SELECT wallpaper, start_icon FROM themes WHERE user_id = ? AND name = ?");
+        $st = themesPdo()->prepare("SELECT wallpaper, start_icon, colors FROM themes WHERE user_id = ? AND name = ?");
         $st->execute([$uid, $activeTheme]);
         $arow = $st->fetch(PDO::FETCH_ASSOC);
-        if ($arow) { $tWp = (string)$arow['wallpaper']; $tSi = (string)$arow['start_icon']; }
+        if ($arow) {
+            $tWp = (string)$arow['wallpaper'];
+            $tSi = (string)$arow['start_icon'];
+            /* Delta de tamaño de fuente. Vive en themes.colors junto a
+               la paleta — el cliente lo guarda ahí desde la app de
+               Temas. Lo emitimos a JS para que font-scale.js lo aplique
+               desde el primer paint. Clamp coincide con el del backend. */
+            $themeColorsRaw = json_decode((string)$arow['colors'], true);
+            if (is_array($themeColorsRaw) && isset($themeColorsRaw['fontDelta'])) {
+                $activeFsDelta = (int)$themeColorsRaw['fontDelta'];
+                if ($activeFsDelta < -6) $activeFsDelta = -6;
+                if ($activeFsDelta >  10) $activeFsDelta = 10;
+            }
+        }
     }
     /* Si el tema tiene asset propio y existe → úsalo; si no, mantén el
        wallpaper/icono global del usuario calculado arriba (no se cae al
@@ -273,6 +287,11 @@ $_isTablet = isTabletDevice();
         require_once __DIR__ . '/assets/php/active-interface.php';
         emitInterfaceCss('');
     ?>
+    <!-- Delta de fuente del tema activo. Se setea ANTES de cargar
+         interface-loader.js para que el font-scale.js que se inyecta
+         desde ahí ya vea el valor correcto y aplique el escalado en
+         el primer paint (sin flash de tamaño base). -->
+    <script>window.__fontScaleDelta = <?php echo (int)$activeFsDelta; ?>;</script>
     <script src="assets/js/interface-loader.js"></script>
     <script>
     (function(){
@@ -855,6 +874,19 @@ window.addEventListener('message', function(e) {
             var childHref = basePath ? '../' + basePath : '';
             applyThemeToDocument(fr.contentDocument, className, childHref);
         });
+    } else if (e.data.type === 'font-scale-delta' && typeof e.data.delta === 'number') {
+        /* La app de Temas envía este mensaje en cada cambio del
+           slider de tamaño de fuente. Lo aplicamos al shell + a
+           todos los iframes hijos para preview en vivo y al activar
+           el tema. */
+        if (typeof window.setFontScaleDelta === 'function') {
+            window.setFontScaleDelta(e.data.delta);
+        }
+        var iframes = document.querySelectorAll('iframe');
+        for (var i = 0; i < iframes.length; i++) {
+            try { iframes[i].contentWindow.postMessage({ type: 'font-scale-delta', delta: e.data.delta }, '*'); }
+            catch (_) {}
+        }
     } else if (e.data.type === 'theme-color-preview') {
         /* Live preview de un color del editor de Temas — aplica el
            CSS var al body del shell Y a todos los iframes hijos (apps

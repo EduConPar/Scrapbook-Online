@@ -213,6 +213,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         $themeBgColor = $candidate;
     }
 }
+
+/* Delta de tamaño de fuente del tema activo (px). Default 0. Lo
+   emitimos como `window.__fontScaleDelta` ANTES de cargar
+   interface-loader.js — así font-scale.js lo lee al boot y el primer
+   paint del shell + del iframe ya sale con el tamaño correcto. */
+$activeFsDelta = 0;
+if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors']['fontDelta'])) {
+    $activeFsDelta = (int)$_userThemes['themes'][$activeTheme]['colors']['fontDelta'];
+    if ($activeFsDelta < -6) $activeFsDelta = -6;
+    if ($activeFsDelta >  10) $activeFsDelta = 10;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -273,6 +284,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         require_once __DIR__ . '/assets/php/active-interface.php';
         emitInterfaceCss('');
     ?>
+    <!-- Delta de tamaño de fuente del tema activo, antes del loader
+         para que font-scale.js lo lea ya correcto al boot. -->
+    <script>window.__fontScaleDelta = <?= (int)$activeFsDelta ?>;</script>
     <script src="assets/js/interface-loader.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
@@ -1662,6 +1676,19 @@ if ('serviceWorker' in navigator) {
             });
             if (newClass) keep.push(newClass);
             document.body.className = keep.join(' ');
+        }
+        else if (d.type === 'font-scale-delta' && typeof d.delta === 'number') {
+            /* Slider del tamaño de fuente en temas-mobile cambió. Lo
+               aplicamos al shell y al iframe de la app abierta (si lo
+               hay) para preview en vivo y al activar el tema. */
+            if (typeof window.setFontScaleDelta === 'function') {
+                window.setFontScaleDelta(d.delta);
+            }
+            var fr = document.getElementById('app-frame');
+            if (fr && fr.contentWindow) {
+                try { fr.contentWindow.postMessage({ type:'font-scale-delta', delta:d.delta }, '*'); }
+                catch (_) {}
+            }
         }
     });
 

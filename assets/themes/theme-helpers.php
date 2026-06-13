@@ -640,6 +640,12 @@ function generateThemeCss($className, $colors) {
     $lines[] = '    --t-accent-text:  ' . $norm['accentText']  . ';';
     $lines[] = '    --t-border:       ' . $norm['border']      . ';';
     $lines[] = '    --t-grad:         linear-gradient(90deg, ' . $norm['titlebarStart'] . ', ' . $norm['titlebarEnd'] . ');';
+    /* Delta de tamaño de fuente. Lo lee font-scale.js para escalar
+       TODAS las font-size de la app de forma uniforme. */
+    $fsDelta = isset($colors['fontDelta']) ? (int)$colors['fontDelta'] : 0;
+    if ($fsDelta < -6) $fsDelta = -6;
+    if ($fsDelta >  10) $fsDelta = 10;
+    $lines[] = '    --fs-delta:       ' . $fsDelta . 'px;';
     $lines[] = '}';
     return implode("\n", $lines) . "\n";
 }

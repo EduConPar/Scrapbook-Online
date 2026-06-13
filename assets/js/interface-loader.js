@@ -57,4 +57,34 @@
         try { window.top.location.reload(); }
         catch (_) { location.reload(); }
     };
+
+    /* ── Inyección de font-scale.js ──
+       Todas las apps cargan interface-loader.js; aprovechamos para
+       cargar también font-scale.js (el escalado global de fuentes
+       según el tema). En iframes leemos el delta del padre (mismo
+       origen) antes de inyectar el script — así el primer paint del
+       iframe ya tiene el escalado correcto y no hay flash. */
+    (function loadFontScale() {
+        /* Heredar delta del padre si vivimos en un iframe. */
+        if (typeof window.__fontScaleDelta !== 'number') {
+            try {
+                var parentDelta = window.parent && window.parent.__fontScaleDelta;
+                if (typeof parentDelta === 'number') {
+                    window.__fontScaleDelta = parentDelta;
+                }
+            } catch (_) { /* cross-origin → seguimos con 0 */ }
+        }
+        /* Path absoluto al asset, derivado del propio script para no
+           depender de paths relativos al documento. */
+        var thisScript = document.currentScript;
+        var src = '/assets/js/font-scale.js';
+        if (thisScript && thisScript.src) {
+            try { src = new URL('font-scale.js', thisScript.src).href; }
+            catch (_) {}
+        }
+        var s = document.createElement('script');
+        s.src = src;
+        s.async = false;
+        document.head.appendChild(s);
+    })();
 })();

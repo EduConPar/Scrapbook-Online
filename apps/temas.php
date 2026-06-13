@@ -529,6 +529,14 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         <div id="temas-editor">
             <!-- color fields injected by JS -->
         </div>
+        <!-- Tamaño de fuente: delta que se suma a TODAS las font-size
+             de la app. 0 = tamaño por defecto; cada paso ±1 px. Vive
+             como propiedad del tema (themes.colors.fontDelta). -->
+        <div id="temas-font-row" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid var(--border);">
+            <label for="theme-font-delta" style="font-size:11px;flex-shrink:0;">Tamaño de fuente</label>
+            <input type="range" id="theme-font-delta" min="-6" max="10" step="1" value="0" style="flex:1;">
+            <span id="theme-font-delta-val" style="font-size:11px;min-width:48px;text-align:right;">0 px</span>
+        </div>
         <div id="temas-status">Crea un tema nuevo o selecciona uno existente para editarlo.</div>
         <!-- Biblioteca (grid de temas publicados) -->
         <div id="temas-library" hidden>
@@ -849,6 +857,13 @@ function getEditorColors() {
             c[def.key] = def.def;
         }
     });
+    /* fontDelta vive junto a los colores en themes.colors. Lo añadimos
+       al payload guardado y se transmite igual que los colores. */
+    var fsSlider = document.getElementById('theme-font-delta');
+    if (fsSlider) {
+        var d = parseInt(fsSlider.value, 10);
+        if (isFinite(d)) c.fontDelta = d;
+    }
     return c;
 }
 
@@ -867,7 +882,53 @@ function setEditorColors(colors) {
             HIDDEN_COLORS[def.key] = v;
         }
     });
+    /* Carga fontDelta (default 0). */
+    var fsSlider  = document.getElementById('theme-font-delta');
+    var fsReadout = document.getElementById('theme-font-delta-val');
+    var d = (colors && typeof colors.fontDelta === 'number') ? colors.fontDelta : 0;
+    if (d < -6) d = -6; if (d > 10) d = 10;
+    if (fsSlider)  fsSlider.value = d;
+    if (fsReadout) fsReadout.textContent = (d >= 0 ? '+' : '') + d + ' px';
+    /* Aplica el delta a esta misma app (preview en vivo en la propia
+       app de Temas). Si esta es la ventana padre, también propaga a
+       los iframes hijos del shell vía postMessage. */
+    if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(d);
+    _propagateFontDelta(d);
 }
+
+/* Helper: propaga el delta a TODOS los iframes (perfil, reproductor,
+   etc.) y al padre si vivimos como iframe del shell. Mismo origen, así
+   que postMessage es suficiente. */
+function _propagateFontDelta(d) {
+    try {
+        /* Subimos al top y desde ahí bajamos a todos los iframes. */
+        var top = window.top || window;
+        if (top !== window) {
+            top.postMessage({ type: 'font-scale-delta', delta: d }, '*');
+        }
+        if (typeof top.setFontScaleDelta === 'function') {
+            top.setFontScaleDelta(d);
+        }
+        var iframes = top.document ? top.document.querySelectorAll('iframe') : [];
+        for (var i = 0; i < iframes.length; i++) {
+            try { iframes[i].contentWindow.postMessage({ type: 'font-scale-delta', delta: d }, '*'); }
+            catch (_) {}
+        }
+    } catch (_) { /* cross-origin → silenciamos */ }
+}
+
+/* Listener del slider: cambio en vivo. */
+(function wireFontSlider() {
+    var sl = document.getElementById('theme-font-delta');
+    var rd = document.getElementById('theme-font-delta-val');
+    if (!sl) return;
+    sl.addEventListener('input', function() {
+        var d = parseInt(sl.value, 10) || 0;
+        if (rd) rd.textContent = (d >= 0 ? '+' : '') + d + ' px';
+        if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(d);
+        _propagateFontDelta(d);
+    });
+})();
 
 function resetEditor() {
     nameInput.value = '';
@@ -1084,6 +1145,9 @@ document.getElementById('temas-deactivate').addEventListener('click', function()
               activeName = '';
               renderList();
               applyLiveTheme('', '');
+              /* Sin tema → fontDelta vuelve a 0 (tamaño base). */
+              if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(0);
+              _propagateFontDelta(0);
               /* Sin tema → fondo/icono GLOBAL del usuario (su baseline) */
               applyThemeAssets(USER_GLOBAL_WP, USER_GLOBAL_SI);
               if (window._setWpPreview) window._setWpPreview(USER_GLOBAL_WP);
@@ -1152,6 +1216,14 @@ document.getElementById('theme-activate').addEventListener('click', function() {
              apuntaba a assets/themes/ → 404 → el <link> quedaba roto y
              el tema activo se veía como el default hasta recargar. */
           applyLiveTheme(d.className, d.cssPath);
+          /* Al activar, el fontDelta del tema toma efecto inmediato en
+             todas las apps. Si el tema no tiene fontDelta guardado, 0. */
+          var fd = 0;
+          if (savedThemes[name] && savedThemes[name].colors && typeof savedThemes[name].colors.fontDelta === 'number') {
+              fd = savedThemes[name].colors.fontDelta;
+          }
+          if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(fd);
+          _propagateFontDelta(fd);
           /* Aplicar el fondo y el icono vinculados al tema (o el DEFAULT si no tiene) */
           applyThemeAssets(d.wallpaper || THEME_DEFAULT_WP, d.startIcon || THEME_DEFAULT_SI);
           /* Reflejar en Personalización los assets efectivos del tema activo */
