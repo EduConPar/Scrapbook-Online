@@ -478,6 +478,46 @@ input[type=range].tb-slider{
         inset -2px -2px var(--bezel-light-2);
 }
 .brush-btn canvas{display:block;width:32px;height:22px;image-rendering:auto}
+/* Botón "+" y custom — comparten el chrome con los built-in pero
+   muestran feedback distinto: custom tiene cinta en una esquina,
+   "+" centra un símbolo grande. */
+.brush-btn.brush-btn-custom{position:relative}
+.brush-btn.brush-btn-custom::after{
+    content:'';position:absolute;top:1px;right:1px;
+    width:5px;height:5px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 0 1px var(--win-bg);
+}
+.brush-btn.brush-btn-add{
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;line-height:1;font-weight:bold;
+    color:var(--text-muted);
+    width:38px;height:30px;
+}
+.brush-btn.brush-btn-add:hover{color:var(--text)}
+/* Modal "+ Nuevo pincel": ventana 98 modal centrada. */
+#brush-import-modal{
+    display:none;position:fixed;left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    width:340px;max-width:92vw;z-index:9700;
+    flex-direction:column;
+}
+#brush-import-modal.open{display:flex}
+#brush-import-modal .window-body{
+    padding:10px;display:flex;flex-direction:column;gap:8px;
+}
+#brush-import-modal label{font-size:11px;display:flex;align-items:center;gap:6px}
+#brush-import-modal label .lbl{flex-shrink:0;width:64px}
+#brush-import-modal label input[type=range]{flex:1}
+#brush-import-modal .readout{flex-shrink:0;width:32px;text-align:right;font-size:10px;color:var(--text-muted)}
+#brush-import-modal .row-buttons{
+    display:flex;justify-content:flex-end;gap:4px;margin-top:4px;
+}
+#brush-import-preview{
+    width:100%;height:50px;background:var(--input-bg);
+    border:1px solid var(--border);
+    box-shadow:inset 1px 1px var(--bezel-dark-1);
+}
 .brush-opacity-row{
     display:flex;align-items:center;gap:4px;margin-top:6px;
 }
@@ -828,7 +868,7 @@ body.iface-kawaii #canvas-wrap{
     <button class="menu-btn" id="menu-archivo">Archivo</button>
     <div class="popup-menu" id="menu-archivo-popup">
         <div class="popup-item" data-act="new">Nuevo lienzo...</div>
-        <div class="popup-item" data-act="open-ora">Abrir imagen / .ora / .kra...</div>
+        <div class="popup-item" data-act="open-ora">Abrir imagen / .ora / .kra / .psd...</div>
         <div class="popup-sep"></div>
         <div class="popup-item" data-act="save-gallery">Guardar <small>(Ctrl+S)</small></div>
         <div class="popup-item" data-act="download-ora">Descargar como .ora</div>
@@ -836,8 +876,52 @@ body.iface-kawaii #canvas-wrap{
         <div class="popup-item" data-act="save-zip">Exportar capas (ZIP)</div>
     </div>
     <input type="file" id="ora-file-input"
-           accept=".ora,.kra,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/*"
+           accept=".ora,.kra,.psd,.psb,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif,image/*"
            style="display:none">
+</div>
+
+<!-- MODAL: importar pincel custom (image brush).
+     Sube un PNG con alfa, ajusta spacing/scatter/flow/curva y guarda. -->
+<div id="brush-import-modal" class="window">
+    <div class="title-bar">
+        <div class="title-bar-text">+ Nuevo pincel</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="brush-import-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div style="font-size:11px;color:var(--text-muted);line-height:1.4;">
+            Sube un PNG (idealmente con fondo transparente). Su silueta se
+            usa como sello; el color de pintura se aplica al usar el pincel.
+        </div>
+        <input type="file" id="brush-import-file" accept="image/png,image/webp,image/jpeg">
+        <input type="text" id="brush-import-name" placeholder="Nombre del pincel" maxlength="40">
+        <canvas id="brush-import-preview" width="300" height="50"></canvas>
+        <label>
+            <span class="lbl">Spacing</span>
+            <input type="range" id="brush-import-spacing" min="1" max="50" value="10">
+            <span class="readout" id="brush-import-spacing-r">0.10</span>
+        </label>
+        <label>
+            <span class="lbl">Scatter</span>
+            <input type="range" id="brush-import-scatter" min="0" max="100" value="0">
+            <span class="readout" id="brush-import-scatter-r">0.00</span>
+        </label>
+        <label>
+            <span class="lbl">Flow</span>
+            <input type="range" id="brush-import-flow" min="1" max="100" value="100">
+            <span class="readout" id="brush-import-flow-r">1.00</span>
+        </label>
+        <label>
+            <span class="lbl">Curva</span>
+            <input type="range" id="brush-import-curve" min="5" max="30" value="10">
+            <span class="readout" id="brush-import-curve-r">1.0</span>
+        </label>
+        <div class="row-buttons">
+            <button class="button" id="brush-import-cancel">Cancelar</button>
+            <button class="button" id="brush-import-ok">Guardar</button>
+        </div>
+    </div>
 </div>
 
 <div id="toolbar">
@@ -1005,6 +1089,128 @@ const BRUSHES = {
     blender:  { hardEdge:false, alphaCurve:0.6, flow:0.18, spacing:0.03, scatter:0,
                 blender:true,   dragWeight:0.85 },
 };
+
+/* ── Pinceles personalizados (image brushes) ──
+   El usuario sube un PNG con transparencia. Su silueta se usa como
+   "sello" — cada dab pinta esa forma teñida con el color activo. Es lo
+   que Krita / Procreate llaman "image brush" / "custom brush".
+
+   Almacenamiento en localStorage por usuario (mismo origen):
+     { id, name, dataUrl, spacing, alphaCurve, flow, scatter }
+   El alphaMask vivo (ImageBitmap/Image) se hidrata al boot y al añadir.
+   El template tinted final se cachea en _dabTemplates como cualquier
+   brush built-in — key prefijada con 'c:<id>'. */
+const CUSTOM_BRUSHES = {};
+const CUSTOM_BRUSHES_KEY = 'dibujo:custom-brushes';
+
+function _fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload  = () => resolve(r.result);
+        r.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        r.readAsDataURL(file);
+    });
+}
+
+async function _hydrateAlphaMask(brush) {
+    if (brush.alphaMask) return;
+    if (!brush.dataUrl) return;
+    const img = new Image();
+    img.src = brush.dataUrl;
+    try { await img.decode(); }
+    catch (_) { /* algunos navegadores no soportan decode() — sigue */ }
+    if (typeof createImageBitmap !== 'undefined') {
+        try { brush.alphaMask = await createImageBitmap(img); return; }
+        catch (_) { /* fallback */ }
+    }
+    brush.alphaMask = img;
+}
+
+function _loadCustomBrushesFromStorage() {
+    let arr;
+    try { arr = JSON.parse(localStorage.getItem(CUSTOM_BRUSHES_KEY) || '[]'); }
+    catch (_) { arr = []; }
+    if (!Array.isArray(arr)) return;
+    for (const b of arr) {
+        if (!b || !b.id || !b.dataUrl) continue;
+        CUSTOM_BRUSHES[b.id] = {
+            id:         b.id,
+            name:       b.name || 'Pincel',
+            dataUrl:    b.dataUrl,
+            spacing:    typeof b.spacing    === 'number' ? b.spacing    : 0.10,
+            alphaCurve: typeof b.alphaCurve === 'number' ? b.alphaCurve : 1.0,
+            flow:       typeof b.flow       === 'number' ? b.flow       : 1.0,
+            scatter:    typeof b.scatter    === 'number' ? b.scatter    : 0.0,
+            kind: 'image', hardEdge: false, alphaMask: null,
+        };
+        /* Hidrata async — no bloqueamos boot. Hasta que termine el dab
+           se renderea como un círculo soft (fallback en stampDab). */
+        _hydrateAlphaMask(CUSTOM_BRUSHES[b.id]).then(() => {
+            /* Refresca la preview cuando esté la máscara lista. */
+            if (typeof renderBrushGrid === 'function') renderBrushGrid();
+        });
+    }
+}
+
+function _saveCustomBrushesToStorage() {
+    const arr = Object.values(CUSTOM_BRUSHES).map(b => ({
+        id: b.id, name: b.name, dataUrl: b.dataUrl,
+        spacing: b.spacing, alphaCurve: b.alphaCurve,
+        flow: b.flow, scatter: b.scatter,
+    }));
+    try { localStorage.setItem(CUSTOM_BRUSHES_KEY, JSON.stringify(arr)); }
+    catch (e) {
+        alert('No se pudo guardar el pincel — quedan demasiados (almacenamiento lleno). Borra alguno.');
+    }
+}
+
+/* Invalida los templates tintados de un brush concreto. Llamar tras
+   editar o borrar. */
+function _invalidateBrushTemplates(brushId) {
+    for (const k of Array.from(_dabTemplates.keys())) {
+        if (k.startsWith('c:' + brushId + ':')) {
+            const old = _dabTemplates.get(k);
+            if (old && typeof old.close === 'function') old.close();
+            _dabTemplates.delete(k);
+        }
+    }
+}
+
+async function addCustomBrush(opts) {
+    const dataUrl = (typeof opts.fileOrDataUrl === 'string')
+        ? opts.fileOrDataUrl
+        : await _fileToDataUrl(opts.fileOrDataUrl);
+    const id = 'c-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const brush = {
+        id, name: (opts.name || '').trim() || 'Mi pincel',
+        dataUrl,
+        spacing:    opts.spacing    != null ? opts.spacing    : 0.10,
+        alphaCurve: opts.alphaCurve != null ? opts.alphaCurve : 1.0,
+        flow:       opts.flow       != null ? opts.flow       : 1.0,
+        scatter:    opts.scatter    != null ? opts.scatter    : 0.0,
+        kind: 'image', hardEdge: false, alphaMask: null,
+    };
+    CUSTOM_BRUSHES[id] = brush;
+    await _hydrateAlphaMask(brush);
+    _saveCustomBrushesToStorage();
+    renderBrushGrid();
+    return id;
+}
+
+function deleteCustomBrush(id) {
+    if (!CUSTOM_BRUSHES[id]) return;
+    const b = CUSTOM_BRUSHES[id];
+    if (b.alphaMask && typeof b.alphaMask.close === 'function') b.alphaMask.close();
+    _invalidateBrushTemplates(id);
+    delete CUSTOM_BRUSHES[id];
+    _saveCustomBrushesToStorage();
+    if (state.brushName === id) setBrush('round');
+    renderBrushGrid();
+}
+
+function lookupBrush(name) {
+    return BRUSHES[name] || CUSTOM_BRUSHES[name] || null;
+}
 
 const BRUSH_LABELS = {
     round:    'Pincel suave',
@@ -2277,7 +2483,10 @@ const _DAB_TEMPLATE_CAP = 16;
 const _HAS_OFFSCREEN = typeof OffscreenCanvas !== 'undefined'
     && typeof OffscreenCanvas.prototype.transferToImageBitmap === 'function';
 function _getDabTemplate(brush, color) {
-    const key = (brush.hardEdge ? 'h:' : 's:') + color;
+    const isCustom = brush.kind === 'image';
+    const key = isCustom
+        ? ('c:' + brush.id + ':' + color)
+        : (brush.hardEdge ? 'h:' : 's:') + color;
     let tpl = _dabTemplates.get(key);
     if (tpl) return tpl;
     if (_dabTemplates.size >= _DAB_TEMPLATE_CAP) {
@@ -2290,6 +2499,36 @@ function _getDabTemplate(brush, color) {
     const s = DAB_TEMPLATE_SIZE;
     const c = s / 2;
     const r = c - 2;
+
+    /* Custom image brush: pinta el alphaMask del usuario en el scratch
+       y lo tinta con el color usando source-atop. source-atop sobrescribe
+       el RGB conservando el alpha del destino — así el gradient de alfa
+       del PNG (suavidad, textura) se mantiene; sólo cambia el color. */
+    if (isCustom) {
+        if (!brush.alphaMask) return null; /* aún hidratándose — fallback en stampDab */
+        if (_HAS_OFFSCREEN) {
+            const off = new OffscreenCanvas(s, s);
+            const octx = off.getContext('2d');
+            octx.drawImage(brush.alphaMask, 0, 0, s, s);
+            octx.globalCompositeOperation = 'source-atop';
+            octx.fillStyle = color;
+            octx.fillRect(0, 0, s, s);
+            tpl = off.transferToImageBitmap();
+        } else {
+            const cv = document.createElement('canvas');
+            cv.width = s; cv.height = s;
+            const tctx = cv.getContext('2d');
+            tctx.drawImage(brush.alphaMask, 0, 0, s, s);
+            tctx.globalCompositeOperation = 'source-atop';
+            tctx.fillStyle = color;
+            tctx.fillRect(0, 0, s, s);
+            tpl = cv;
+        }
+        _dabTemplates.set(key, tpl);
+        return tpl;
+    }
+
+    /* Built-in: círculo soft o hard como antes. */
     if (_HAS_OFFSCREEN) {
         const off = new OffscreenCanvas(s, s);
         const octx = off.getContext('2d');
@@ -2450,7 +2689,14 @@ function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
        dab — el navegador lo acelera por HW y evitamos N allocations de
        gradient por trazo. Template cacheado por (hardEdge, color). */
     const tpl = _getDabTemplate(brush, color);
-    ctx.drawImage(tpl, x - r, y - r, w, w);
+    if (tpl) {
+        ctx.drawImage(tpl, x - r, y - r, w, w);
+    } else {
+        /* Custom brush con alphaMask aún cargando — fallback a círculo
+           sólido del color para que el trazo no quede vacío. */
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.globalAlpha = 1;
 }
 function paintSegment(ctx, from, to, color, brush, isEraser, sampleCtx) {
@@ -2497,7 +2743,10 @@ function applyStrokeSample(rawPt, isLocal) {
     const ctx = usingBuffer ? state.strokeBufferCtx : activeCtx();
     const isEraser = state.tool === 'eraser';
     const isEraserForStamp = usingBuffer ? false : isEraser;
-    const brush = BRUSHES[isEraser ? 'round' : state.brushName];
+    /* Eraser siempre usa round (built-in). Para el resto consultamos
+       primero los built-in y caemos a los custom; si el brush no existe
+       (e.g. el usuario borró un custom mid-sesión), fallback a round. */
+    const brush = isEraser ? BRUSHES.round : (lookupBrush(state.brushName) || BRUSHES.round);
     if (state.selection) {
         ctx.save();
         const s = state.selection;
@@ -3386,7 +3635,8 @@ function renderBrushPreview(brushName) {
     const cv = document.createElement('canvas');
     cv.width = W; cv.height = H;
     const pctx = cv.getContext('2d', { willReadFrequently: true });
-    const brush = BRUSHES[brushName];
+    const brush = lookupBrush(brushName);
+    if (!brush) return cv;
 
     /* Fondo del preview. Para blender un degradado horizontal para que
        el smudge sea visible. */
@@ -3430,6 +3680,7 @@ function renderBrushPreview(brushName) {
 function renderBrushGrid() {
     const grid = $('brush-grid');
     grid.innerHTML = '';
+    /* Built-in primero. */
     Object.keys(BRUSHES).forEach(name => {
         const btn = document.createElement('button');
         btn.className = 'brush-btn' + (name === state.brushName ? ' active' : '');
@@ -3439,11 +3690,36 @@ function renderBrushGrid() {
         btn.addEventListener('click', () => setBrush(name));
         grid.appendChild(btn);
     });
-    $('brush-current').textContent = BRUSH_LABELS[state.brushName] || state.brushName;
+    /* Custom brushes. Click derecho → eliminar. */
+    Object.values(CUSTOM_BRUSHES).forEach(b => {
+        const btn = document.createElement('button');
+        btn.className = 'brush-btn brush-btn-custom' + (b.id === state.brushName ? ' active' : '');
+        btn.dataset.brush = b.id;
+        btn.title = b.name + ' — clic derecho para borrar';
+        btn.appendChild(renderBrushPreview(b.id));
+        btn.addEventListener('click', () => setBrush(b.id));
+        btn.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            if (confirm('¿Eliminar el pincel "' + b.name + '"?')) deleteCustomBrush(b.id);
+        });
+        grid.appendChild(btn);
+    });
+    /* Botón "+" siempre al final para añadir uno nuevo. */
+    const addBtn = document.createElement('button');
+    addBtn.className = 'brush-btn brush-btn-add';
+    addBtn.title = 'Importar pincel...';
+    addBtn.textContent = '+';
+    addBtn.addEventListener('click', openCustomBrushDialog);
+    grid.appendChild(addBtn);
+
+    const active = lookupBrush(state.brushName);
+    $('brush-current').textContent = BRUSH_LABELS[state.brushName]
+        || (active && active.name)
+        || state.brushName;
 }
 
 function setBrush(name) {
-    if (!BRUSHES[name]) return;
+    if (!lookupBrush(name)) return;
     state.brushName = name;
     /* Si el usuario estaba con goma/cuentagotas/selección, al elegir un
        brush volvemos al modo pincel automáticamente. */
@@ -3453,9 +3729,168 @@ function setBrush(name) {
     document.querySelectorAll('.brush-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.brush === name);
     });
-    $('brush-current').textContent = BRUSH_LABELS[name] || name;
+    const active = lookupBrush(name);
+    $('brush-current').textContent = BRUSH_LABELS[name] || (active && active.name) || name;
 }
+_loadCustomBrushesFromStorage();
 renderBrushGrid();
+
+/* ── Modal "Importar pincel" ──
+   - File picker (PNG/WebP/JPG con alfa para mejores resultados).
+   - 4 sliders: spacing (densidad de dabs), scatter (jitter por dab),
+     flow (opacidad por dab), curva (cómo la presión afecta el alfa).
+   - Preview en vivo: pinta un trazo de ejemplo cada vez que un slider
+     cambia, usando el alphaMask cargado.
+   - Guardar persiste en localStorage y refresca el grid. */
+(function setupCustomBrushModal() {
+    const modal     = $('brush-import-modal');
+    const fileInput = $('brush-import-file');
+    const nameInput = $('brush-import-name');
+    const previewEl = $('brush-import-preview');
+    const spacingEl = $('brush-import-spacing');
+    const scatterEl = $('brush-import-scatter');
+    const flowEl    = $('brush-import-flow');
+    const curveEl   = $('brush-import-curve');
+    const okBtn     = $('brush-import-ok');
+    const cancelBtn = $('brush-import-cancel');
+    const closeBtn  = $('brush-import-close');
+
+    /* alphaMask del PNG cargado mientras está abierto el modal — vive
+       solo aquí hasta que se confirme con Guardar. */
+    let currentMask = null;
+    let currentMaskDataUrl = null;
+
+    function values() {
+        return {
+            spacing:    Math.max(0.01, (+spacingEl.value) / 100),
+            scatter:    Math.max(0,    (+scatterEl.value) / 100),
+            flow:       Math.max(0.01, (+flowEl.value) / 100),
+            alphaCurve: Math.max(0.5,  (+curveEl.value) / 10),
+        };
+    }
+
+    function refreshReadouts() {
+        const v = values();
+        $('brush-import-spacing-r').textContent = v.spacing.toFixed(2);
+        $('brush-import-scatter-r').textContent = v.scatter.toFixed(2);
+        $('brush-import-flow-r').textContent    = v.flow.toFixed(2);
+        $('brush-import-curve-r').textContent   = v.alphaCurve.toFixed(1);
+    }
+
+    function renderPreview() {
+        const v = values();
+        const W = previewEl.width, H = previewEl.height;
+        const pctx = previewEl.getContext('2d', { willReadFrequently: true });
+        pctx.fillStyle = '#ffffff';
+        pctx.fillRect(0, 0, W, H);
+        if (!currentMask) {
+            pctx.fillStyle = '#aaa';
+            pctx.font = '11px sans-serif';
+            pctx.textAlign = 'center';
+            pctx.textBaseline = 'middle';
+            pctx.fillText('Sube un PNG para previsualizar', W / 2, H / 2);
+            return;
+        }
+        /* Construye un brush temporal y pinta un segmento de muestra
+           usando el mismo paintSegment del runtime — así el preview
+           refleja exactamente lo que va a salir al pintar. */
+        const tempBrush = {
+            kind: 'image', hardEdge: false,
+            id: '__preview__', alphaMask: currentMask,
+            spacing: v.spacing, scatter: v.scatter,
+            flow: v.flow, alphaCurve: v.alphaCurve,
+        };
+        const samples = [];
+        const N = 16;
+        for (let i = 0; i <= N; i++) {
+            const t = i / N;
+            const x = 8 + t * (W - 16);
+            const y = H / 2 + Math.sin(t * Math.PI * 1.4) * 8;
+            const p = 0.25 + Math.sin(t * Math.PI) * 0.75;
+            samples.push({ x, y, p });
+        }
+        /* Backup state mutado por stampDab. */
+        const prevSize = state.size, prevOpacity = state.brushOpacity;
+        state.size = 12; state.brushOpacity = 1;
+        for (let i = 1; i < samples.length; i++) {
+            paintSegment(pctx, samples[i-1], samples[i], '#222222', tempBrush, false);
+        }
+        state.size = prevSize; state.brushOpacity = prevOpacity;
+        /* Invalida la entrada de cache para que el siguiente preview
+           refleje cambios de color/params si los hay. */
+        _invalidateBrushTemplates('__preview__');
+    }
+
+    function open() {
+        fileInput.value = '';
+        nameInput.value = '';
+        spacingEl.value = 10;
+        scatterEl.value = 0;
+        flowEl.value    = 100;
+        curveEl.value   = 10;
+        if (currentMask && typeof currentMask.close === 'function') currentMask.close();
+        currentMask = null;
+        currentMaskDataUrl = null;
+        refreshReadouts();
+        renderPreview();
+        modal.classList.add('open');
+    }
+    function close() {
+        modal.classList.remove('open');
+        if (currentMask && typeof currentMask.close === 'function') currentMask.close();
+        currentMask = null;
+        currentMaskDataUrl = null;
+        _invalidateBrushTemplates('__preview__');
+    }
+    window.openCustomBrushDialog = open;
+
+    fileInput.addEventListener('change', async () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+        try {
+            currentMaskDataUrl = await _fileToDataUrl(f);
+            const img = new Image();
+            img.src = currentMaskDataUrl;
+            try { await img.decode(); } catch (_) {}
+            if (typeof createImageBitmap !== 'undefined') {
+                try { currentMask = await createImageBitmap(img); }
+                catch (_) { currentMask = img; }
+            } else {
+                currentMask = img;
+            }
+            if (!nameInput.value) {
+                nameInput.value = (f.name || 'Pincel').replace(/\.[^.]+$/, '');
+            }
+            renderPreview();
+        } catch (e) {
+            alert('No se pudo leer la imagen: ' + (e.message || e));
+        }
+    });
+
+    [spacingEl, scatterEl, flowEl, curveEl].forEach(el => {
+        el.addEventListener('input', () => { refreshReadouts(); renderPreview(); });
+    });
+
+    okBtn.addEventListener('click', async () => {
+        if (!currentMaskDataUrl) { alert('Sube primero una imagen.'); return; }
+        const v = values();
+        try {
+            await addCustomBrush({
+                name:         nameInput.value,
+                fileOrDataUrl: currentMaskDataUrl,
+                spacing:      v.spacing,
+                scatter:      v.scatter,
+                flow:         v.flow,
+                alphaCurve:   v.alphaCurve,
+            });
+            close();
+        } catch (e) {
+            alert('No se pudo guardar el pincel: ' + (e.message || e));
+        }
+    });
+    cancelBtn.addEventListener('click', close);
+    closeBtn.addEventListener('click', close);
+})();
 
 function applyZoom() {
     const zc = $('zoom-container');
@@ -4276,11 +4711,14 @@ async function loadOra(file) {
    - .kra       → loadKraFlattened (extrae mergedimage.png — los layers
                   reales de Krita usan formato de tiles propietario, así
                   que cargamos el composite final como única capa).
+   - .psd/.psb  → loadPsd (capas + grupos + opacity + visibility via
+                  ag-psd, cargado lazy desde CDN solo cuando se necesita).
    - otros      → loadImageAsCanvas (PNG/JPG/GIF/WebP/BMP/AVIF/etc.). */
 async function loadAnyImage(file) {
     const ext = ((file.name || '').toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
-    if (ext === 'ora') return loadOra(file);
-    if (ext === 'kra') return loadKraFlattened(file);
+    if (ext === 'ora')                  return loadOra(file);
+    if (ext === 'kra')                  return loadKraFlattened(file);
+    if (ext === 'psd' || ext === 'psb') return loadPsd(file);
     return loadImageAsCanvas(file);
 }
 
@@ -4331,6 +4769,134 @@ async function loadKraFlattened(file) {
     try { fakeFile = new File([blob], fakeName, { type: 'image/png' }); }
     catch (_) { fakeFile = blob; fakeFile.name = fakeName; }
     return loadImageAsCanvas(fakeFile);
+}
+
+/* ag-psd cargado lazy desde CDN — el bundle UMD pesa ~250 KB y solo
+   hace falta cuando el usuario abre un .psd. Cache de la promise para
+   no descargarlo dos veces si el usuario importa varios PSD. */
+let _agPsdPromise = null;
+function _loadAgPsd() {
+    if (_agPsdPromise) return _agPsdPromise;
+    _agPsdPromise = new Promise((resolve, reject) => {
+        if (typeof window.agPsd !== 'undefined') { resolve(window.agPsd); return; }
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/ag-psd@29.0.0/dist/bundle.js';
+        s.onload = () => {
+            if (typeof window.agPsd === 'undefined') {
+                reject(new Error('ag-psd cargó pero no expuso el namespace'));
+            } else {
+                resolve(window.agPsd);
+            }
+        };
+        s.onerror = () => reject(new Error('No se pudo descargar ag-psd desde el CDN'));
+        document.head.appendChild(s);
+    });
+    return _agPsdPromise;
+}
+
+/* Carga un .psd / .psb (Photoshop) preservando capas, grupos, opacity
+   y visibility. Usa ag-psd para parsear el binario.
+
+   Limitaciones conocidas:
+   - Smart objects y capas vectoriales se rasterizan al canvas que
+     ag-psd nos da (lo mismo hace Photoshop al cargar PSD en otras
+     apps; basta con que el composite final coincida).
+   - Capas de texto se rasterizan también — no preservamos el contenido
+     editable porque la app de dibujo no tiene tool de texto vectorial.
+   - Blend modes distintos de "normal" no los honramos (la app solo
+     soporta source-over). Se aplican como normal — la composición
+     puede diferir ligeramente del original. */
+async function loadPsd(file) {
+    const agPsd = await _loadAgPsd();
+    const buf = await file.arrayBuffer();
+    /* skipCompositeImageData / skipThumbnail aceleran el parse y bajan
+       el pico de memoria — no usamos el composite ni el thumbnail
+       embebido, construimos nuestra propia presentación. */
+    let psd;
+    try {
+        psd = agPsd.readPsd(buf, {
+            skipCompositeImageData: true,
+            skipThumbnail: true,
+            useImageData: false,
+        });
+    } catch (e) {
+        throw new Error('PSD inválido o corrupto: ' + (e && e.message ? e.message : e));
+    }
+    const w = psd.width || 0;
+    const h = psd.height || 0;
+    if (!w || !h) throw new Error('PSD sin dimensiones');
+
+    /* Reset al estado nuevo. */
+    state.width = w; state.height = h;
+    state.layers = [];
+    state.groups = [];
+    state.undoStack = []; state.redoStack = [];
+    state.panX = 0; state.panY = 0;
+    state.currentDriveFileId = null;
+    state.currentDriveFileName = null;
+    _resizeDisplayInternal();
+
+    /* ag-psd estructura: psd.children es el árbol root; cada nodo es
+       una capa raster o un grupo (con propio .children). Procesamos en
+       orden DOM (top→bottom de Photoshop) y al final invertimos: en
+       nuestro modelo idx 0 es la capa más abajo (igual que en loadOra). */
+    const collected = [];
+    function walk(nodes, groupId) {
+        if (!nodes) return;
+        for (const n of nodes) {
+            if (n.children) {
+                /* Grupo: registrar y recursar. PSD no tiene noción de
+                   "clip mask" como ORA; lo dejamos en false. */
+                const name = n.name || ('Grupo ' + (state.groups.length + 1));
+                const g = { id: state.nextGroupId++, name };
+                state.groups.push(g);
+                walk(n.children, g.id);
+            } else {
+                collected.push({
+                    name:    n.name || 'Capa',
+                    /* PSD opacity es 0..255; ag-psd ya lo normaliza a
+                       0..1 si está disponible, pero el campo bruto está
+                       como n.opacity. Default 1 si no viene. */
+                    opacity: typeof n.opacity === 'number' ? n.opacity : 1,
+                    visible: n.hidden !== true,
+                    groupId,
+                    canvas:  n.canvas || null,
+                    left:    typeof n.left === 'number' ? n.left : 0,
+                    top:     typeof n.top  === 'number' ? n.top  : 0,
+                });
+            }
+        }
+    }
+    walk(psd.children, null);
+    collected.reverse();
+
+    for (const entry of collected) {
+        const layer = makeLayer(entry.name);
+        layer.opacity = Math.max(0, Math.min(1, entry.opacity));
+        layer.visible = entry.visible;
+        layer.groupId = entry.groupId;
+        if (entry.canvas) {
+            /* Photoshop guarda cada capa con su propio bbox (left/top
+               son su offset en el lienzo). drawImage a ese offset
+               restaura la posición original. Si la capa cae fuera del
+               lienzo, drawImage la clipa solo. */
+            try {
+                layer.ctx.drawImage(entry.canvas, entry.left, entry.top);
+            } catch (_) { /* capa con canvas inválido — la saltamos */ }
+        }
+        state.layers.push(layer);
+    }
+    if (state.layers.length === 0) {
+        state.layers.push(makeLayer('Capa 1'));
+    }
+    state.activeIdx = state.layers.length - 1;
+    pruneEmptyGroups();
+    state.name = (file && file.name) ? file.name : state.name;
+    state.isDirty = false;
+    applyZoom();
+    composite();
+    renderLayers();
+    renderTabs();
 }
 
 function downloadBlob(blob, name) {
