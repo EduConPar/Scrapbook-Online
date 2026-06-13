@@ -1305,6 +1305,14 @@ document.getElementById('theme-save').addEventListener('click', function() {
           statusEl.textContent = renamed
               ? 'Tema renombrado a "' + name + '".'
               : 'Tema "' + name + '" guardado.';
+          /* Si el tema guardado es el activo, re-aplicar con la cssPath
+             que devuelve api.php (apunta a uploads/themes/, donde viven
+             ahora los CSS regenerados). Construirla a mano apuntando a
+             assets/themes/ daba 404 → tema activo se veía como default
+             hasta recargar. */
+          if (name === activeName && d.cssPath) {
+              applyLiveTheme(d.className, d.cssPath);
+          }
           loadThemes(function(){
               nameInput.value = name;
               if (savedThemes[name]) setEditorColors(migrateLegacyColors(savedThemes[name].colors || {}));
@@ -1327,9 +1335,9 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
           activeName = name;
           renderList();
-          var className = name + '-' + <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
-          var basePath  = 'assets/themes/' + className + '.css';
-          applyLiveTheme(className, basePath);
+          /* d.cssPath viene de api.php apuntando a uploads/themes/.
+             Antes hardcodeábamos assets/themes/ → 404. */
+          applyLiveTheme(d.className, d.cssPath);
           /* Aplicar el fondo y el icono vinculados al tema (o el DEFAULT si no tiene) */
           applyThemeAssets(d.wallpaper || THEME_DEFAULT_WP, d.startIcon || THEME_DEFAULT_SI);
           /* Reflejar en Personalización los assets efectivos del tema activo */
@@ -1338,19 +1346,6 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           if (window._setSiPreview) window._setSiPreview(d.startIcon || THEME_DEFAULT_SI);
           statusEl.textContent = 'Tema "' + name + '" activado.';
       });
-});
-
-/* También aplicar en vivo si se guarda un tema que ya está activo */
-document.getElementById('theme-save').addEventListener('click', function() {
-    /* Hook adicional: si el tema guardado es el activo, re-aplicar para refrescar la cache. */
-    setTimeout(function() {
-        var name = nameInput.value.trim();
-        if (name && name === activeName) {
-            var className = name + '-' + <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
-            var basePath  = 'assets/themes/' + className + '.css';
-            applyLiveTheme(className, basePath);
-        }
-    }, 200);
 });
 
 function applyLiveTheme(className, basePath) {
@@ -1989,8 +1984,11 @@ function downloadLibraryTheme(it){
           }).then(function(r){ return r.json(); })
             .then(function(d2){
                 activeName = name;
-                var className = name + '-' + labelSafe;
-                applyLiveTheme(className, 'assets/themes/' + className + '.css');
+                /* Usar el cssPath/className que devolvió set-active —
+                   apunta a uploads/themes/. assets/themes/ ya no existe
+                   como destino de CSS regenerados. */
+                applyLiveTheme((d2 && d2.className) || (name + '-' + labelSafe),
+                               (d2 && d2.cssPath)  || '');
                 applyThemeAssets((d2 && d2.wallpaper) || THEME_DEFAULT_WP,
                                  (d2 && d2.startIcon) || THEME_DEFAULT_SI);
                 /* Ir a "Mis temas", refrescar lista/previews y dejarlo seleccionado */

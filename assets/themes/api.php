@@ -199,7 +199,15 @@ case 'set-active': {
         }
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
-    jsonResponse(['ok' => true, 'active' => $name, 'wallpaper' => $wallpaper, 'startIcon' => $startIcon]);
+    /* className/cssPath para que el cliente pueda re-pintar el <link
+       active-theme-link> sin construir la ruta a mano (la ruta canónica
+       es uploads/themes/, no assets/themes/ — themeCssRelPath lo sabe). */
+    $resp = ['ok' => true, 'active' => $name, 'wallpaper' => $wallpaper, 'startIcon' => $startIcon];
+    if ($name !== '') {
+        $resp['className'] = themeCssClassName($name, $label);
+        $resp['cssPath']   = themeCssRelPath($name, $label);
+    }
+    jsonResponse($resp);
 }
 
 case 'delete': {

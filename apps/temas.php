@@ -1115,6 +1115,15 @@ document.getElementById('theme-save').addEventListener('click', function() {
           statusEl.textContent = renamed
               ? 'Tema renombrado a "' + name + '".'
               : 'Tema "' + name + '" guardado.';
+          /* Si el tema guardado es el activo, re-aplicar para que el
+             <link id="active-theme-link"> tire la versión nueva del CSS
+             (api.php ya la regeneró con los colores nuevos). Usamos
+             d.cssPath del response — apunta a uploads/themes/, no a
+             assets/themes/. Sin esto los cambios "no se veían" hasta
+             recargar la página. */
+          if (name === activeName && d.cssPath) {
+              applyLiveTheme(d.className, d.cssPath);
+          }
           loadThemes(function(){
               nameInput.value = name;
               if (savedThemes[name]) setEditorColors(migrateLegacyColors(savedThemes[name].colors || {}));
@@ -1137,9 +1146,12 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           if (!d || d.error) { statusEl.textContent = (d && d.error) ? d.error : 'Error'; return; }
           activeName = name;
           renderList();
-          var className = name + '-' + <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
-          var basePath  = 'assets/themes/' + className + '.css';
-          applyLiveTheme(className, basePath);
+          /* La ruta del CSS la SIEMPRE devuelve api.php en d.cssPath
+             (vive en uploads/themes/, no en assets/themes/, desde que
+             los temas se regeneran al vuelo). Construirla a mano aquí
+             apuntaba a assets/themes/ → 404 → el <link> quedaba roto y
+             el tema activo se veía como el default hasta recargar. */
+          applyLiveTheme(d.className, d.cssPath);
           /* Aplicar el fondo y el icono vinculados al tema (o el DEFAULT si no tiene) */
           applyThemeAssets(d.wallpaper || THEME_DEFAULT_WP, d.startIcon || THEME_DEFAULT_SI);
           /* Reflejar en Personalización los assets efectivos del tema activo */
@@ -1148,19 +1160,6 @@ document.getElementById('theme-activate').addEventListener('click', function() {
           if (window._setSiPreview) window._setSiPreview(d.startIcon || THEME_DEFAULT_SI);
           statusEl.textContent = 'Tema "' + name + '" activado.';
       });
-});
-
-/* También aplicar en vivo si se guarda un tema que ya está activo */
-document.getElementById('theme-save').addEventListener('click', function() {
-    /* Hook adicional: si el tema guardado es el activo, re-aplicar para refrescar la cache. */
-    setTimeout(function() {
-        var name = nameInput.value.trim();
-        if (name && name === activeName) {
-            var className = name + '-' + <?php echo json_encode(preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel)); ?>;
-            var basePath  = 'assets/themes/' + className + '.css';
-            applyLiveTheme(className, basePath);
-        }
-    }, 200);
 });
 
 function applyLiveTheme(className, basePath) {
