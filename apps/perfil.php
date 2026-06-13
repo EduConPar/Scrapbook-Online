@@ -506,7 +506,12 @@ if ($_perfilStandalone) {
             <button aria-label="Close" id="profile-melon-details-close"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:6px;flex:1;min-height:0;overflow-y:auto;">
+    <!-- Body sin flex:1: así toma su ALTURA NATURAL (suma de las
+         reseñas + sus márgenes). La ventana sin height fija crece a
+         esa medida. Si el body supera max-height (definido en
+         perfil.css), aparece scroll. Una reseña → body pequeño → ventana
+         compacta. Muchas reseñas → ventana al límite + scroll. -->
+    <div class="window-body" style="padding:6px;overflow-y:auto;flex:0 1 auto;">
         <div id="profile-melon-details-list"></div>
     </div>
 </div>
