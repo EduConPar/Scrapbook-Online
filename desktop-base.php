@@ -828,30 +828,45 @@ window.DesktopState.whenReady = function(cb){
     <div class="taskbar-sep"></div>
     <div id="taskbar-tasks"></div>
     <button class="button" id="tray-player-btn" title="Reproductor">♪▶</button>
-    <button class="button" id="tray-volume-btn" title="Volumen global">🔊</button>
+    <button class="button" id="tray-volume-btn" title="Volumen global"
+            style="padding:0 6px;display:inline-flex;align-items:center;justify-content:center;">
+        <!-- Icono altavoz: SVG outline, sin fondo. Las ondas las
+             actualiza el JS según el nivel (0/bajo/medio/alto). -->
+        <svg id="tray-volume-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path id="tray-vol-wave1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path id="tray-vol-wave2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+    </button>
     <div id="system-tray">
         <span id="tray-clock">00:00</span>
     </div>
 </div>
 
-<!-- POPUP del volumen global. Se ancla al botón #tray-volume-btn al
-     abrirse. Click fuera = cerrar. Slider horizontal: el vertical de
-     CSS (`-webkit-appearance: slider-vertical` / `writing-mode`) está
-     roto en Chromium moderno y el slider quedaba sin pintar — el
-     horizontal funciona en todos los browsers que necesitamos. -->
+<!-- POPUP del volumen global. Layout: altavoz | slider | %.
+     Slider horizontal (el vertical de CSS está roto en Chromium
+     moderno y queda sin pintar). -->
 <div class="window" id="tray-volume-popup"
-     style="display:none;position:fixed;z-index:100000;width:170px;flex-direction:column;">
+     style="display:none;position:fixed;z-index:100000;width:200px;flex-direction:column;">
     <div class="title-bar" style="font-size:10px;">
         <div class="title-bar-text">Volumen</div>
     </div>
-    <div class="window-body" style="padding:8px 10px;display:flex;flex-direction:column;align-items:stretch;gap:6px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">
-            <span>0%</span>
-            <span id="tray-volume-readout" style="font-variant-numeric:tabular-nums;">100%</span>
-            <span>100%</span>
+    <div class="window-body" style="padding:8px 10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true" style="flex-shrink:0;">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+            <input type="range" id="tray-volume-range" min="0" max="100" step="1" value="100"
+                   style="flex:1;min-width:0;">
+            <span id="tray-volume-readout"
+                  style="font-size:11px;font-variant-numeric:tabular-nums;min-width:3em;text-align:right;">100%</span>
         </div>
-        <input type="range" id="tray-volume-range" min="0" max="100" step="1" value="100"
-               style="width:100%;">
     </div>
 </div>
 
@@ -951,7 +966,12 @@ setInterval(updateClock, 1000);
         var pct = Math.round(f * 100);
         if (range && parseInt(range.value, 10) !== pct) range.value = pct;
         if (out) out.textContent = pct + '%';
-        btn.textContent = pct === 0 ? '🔇' : (pct < 40 ? '🔈' : (pct < 75 ? '🔉' : '🔊'));
+        /* Icono altavoz outline: muestra ondas según nivel. < 40%
+           sólo la onda corta; ≥ 75% las dos; 0 ninguna (muted). */
+        var w1 = document.getElementById('tray-vol-wave1');
+        var w2 = document.getElementById('tray-vol-wave2');
+        if (w1) w1.style.display = pct > 0  ? '' : 'none';
+        if (w2) w2.style.display = pct >= 75 ? '' : 'none';
         applyTo(window);
     }
     /* API pública para que reproductor/cualquier app pueda consultar

@@ -360,7 +360,7 @@ if ($_perfilStandalone) {
                     <div id="profile-posts-header">
                         <span>Posts</span>
                         <button type="button" id="profile-notif-btn" title="Notificaciones">
-                            <span class="profile-notif-icon"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;display:block;margin:auto;"></span>
+                            <span class="profile-notif-icon"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;display:block;margin:auto;"></span>
                             <span class="profile-notif-badge" id="profile-notif-badge" style="display:none;">0</span>
                         </button>
                     </div>
@@ -516,14 +516,13 @@ if ($_perfilStandalone) {
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
-            <!-- Botón engranaje propio (no usamos aria-label="Help" porque
-                 98.css le pinta el icono "?" como background del botón
-                 de ayuda de Win98). Sin aria-label el botón renderiza
-                 el contenido textual del span. -->
+            <!-- Botón engranaje. Sin aria-label para no heredar el
+                 sprite del Help button de Win98. Imitamos el patrón de
+                 98.css usando un SVG inline como background-image, así
+                 conserva el mismo tamaño y look que los botones Close/
+                 Min/Max del title-bar. -->
             <button id="profile-notifs-settings-btn" title="Preferencias de notificaciones"
-                    style="margin-right:2px;min-width:18px;min-height:14px;padding:0;font-size:11px;line-height:1;">
-                <span style="display:inline-block;line-height:1;font-size:11px;">⚙</span>
-            </button>
+                    style="margin-right:2px;background-image:url(&quot;data:image/svg+xml;charset=utf-8,%3Csvg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E&quot;);background-position:center;background-repeat:no-repeat;"></button>
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>
@@ -536,28 +535,33 @@ if ($_perfilStandalone) {
 <!-- Preferencias de sonido de notificaciones -->
 <div class="window" id="profile-notif-prefs-window" style="display:none;flex-direction:column;position:fixed;z-index:10003;width:300px;">
     <div class="title-bar" style="flex-shrink:0;">
-        <div class="title-bar-text">Preferencias de notificaciones</div>
+        <div class="title-bar-text">Notificaciones</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-notif-prefs-close"></button>
         </div>
     </div>
     <div class="window-body" style="padding:12px;display:flex;flex-direction:column;gap:10px;font-size:11px;">
-        <p style="margin:0;">Silenciar el sonido de:</p>
+        <p style="margin:0;">Activar el sonido para:</p>
         <!-- IMPORTANTE: 98.css dibuja el cuadrado visualmente en :before
              del <label> HERMANO del <input>. Si el input está DENTRO de
              un label-padre, el :before no aparece y el checkbox queda
-             invisible. Hay que usar siempre <input id> + <label for>. -->
+             invisible. Hay que usar siempre <input id> + <label for>.
+
+             Semántica invertida vs storage: el checkbox refleja "suena"
+             (marcado = recibe ping). El backend persiste `mute_*`, así
+             que al guardar/cargar mapeamos enable = !mute. Default UI:
+             todo marcado (todo activo). -->
         <div class="field-row">
-            <input type="checkbox" id="np-mute-profile">
+            <input type="checkbox" id="np-mute-profile" checked>
             <label for="np-mute-profile">Perfil de otros usuarios (reseñas, posts, follows)</label>
         </div>
         <div class="field-row">
-            <input type="checkbox" id="np-mute-social">
+            <input type="checkbox" id="np-mute-social" checked>
             <label for="np-mute-social">Likes y comentarios</label>
         </div>
         <div class="field-row">
-            <input type="checkbox" id="np-mute-messages">
-            <label for="np-mute-messages">Mensajes (activa el modo "no molestar")</label>
+            <input type="checkbox" id="np-mute-messages" checked>
+            <label for="np-mute-messages">Mensajes (al desactivar, te aparecerás como "no molestar")</label>
         </div>
         <p id="np-status" style="margin:6px 0 0;min-height:14px;color:var(--text-muted,#808080);"></p>
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
@@ -2541,9 +2545,11 @@ var PROFILE_USERS = <?php
         var status = document.getElementById('np-status');
         if (!openBtn || !win) return;
         function open() {
-            cP.checked = !!NOTIF_PREFS.mute_profile;
-            cS.checked = !!NOTIF_PREFS.mute_social;
-            cM.checked = !!NOTIF_PREFS.mute_messages;
+            /* UI: checked = SUENA. Storage: mute_* = true cuando NO
+               suena. Invertimos al cargar. */
+            cP.checked = !NOTIF_PREFS.mute_profile;
+            cS.checked = !NOTIF_PREFS.mute_social;
+            cM.checked = !NOTIF_PREFS.mute_messages;
             status.textContent = '';
             win.style.display = 'flex';
             win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
@@ -2554,10 +2560,11 @@ var PROFILE_USERS = <?php
         if (closeBtn) closeBtn.addEventListener('click', close);
         if (cancel)   cancel.addEventListener('click', close);
         save.addEventListener('click', function(){
+            /* UI: checked = SUENA → storage mute_* = !checked. */
             var payload = {
-                mute_profile:  cP.checked,
-                mute_social:   cS.checked,
-                mute_messages: cM.checked
+                mute_profile:  !cP.checked,
+                mute_social:   !cS.checked,
+                mute_messages: !cM.checked
             };
             status.textContent = 'Guardando…';
             fetch('assets/profile/api.php?action=notif-settings', {
