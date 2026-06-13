@@ -252,10 +252,6 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     <div class="window-body" id="pl-body">
         <!-- HOME VIEW -->
         <div id="pl-home">
-            <!-- Widget del álbum del track actual. Visible solo cuando
-                 el track activo tiene un álbum resuelto en Spotify.
-                 Click → carga el álbum como playlist. JS lo pinta. -->
-            <div id="pl-current-album" style="display:none;"></div>
             <div id="pl-home-list"></div>
             <div id="pl-home-footer">
                 <button class="button" id="pl-create">+ Crear playlist</button>
@@ -288,10 +284,11 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
 </div>
 
 <!-- ALBUM VIEWER — ventana de previsualización de un álbum.
-     El click en el título del track / widget de "Álbum del track actual"
-     abre esta ventana con la lista de canciones del álbum. NO se
-     reproduce hasta que el usuario lo pide explícitamente con el botón
-     "Reproducir álbum" o haciendo click en una canción concreta. -->
+     Se abre al hacer click en el título del track en el reproductor
+     pequeño (cuando hay álbum resuelto) o en el nombre del álbum bajo
+     un track de la lista del editor de playlist. NO se reproduce hasta
+     que el usuario lo pide explícitamente con el botón "Reproducir
+     álbum" o haciendo click en una canción concreta. -->
 <div class="window" id="album-viewer">
     <div class="title-bar" id="album-viewer-titlebar">
         <div class="title-bar-text">
@@ -1374,14 +1371,13 @@ function _albumCacheSet(videoId, payload) {
     _saveAlbumCache();
 }
 
-/* Estado del álbum del track activo. Es el ÚNICO sitio donde vive la
-   metadata del álbum — el reproductor pequeño no lo muestra (solo hace
-   clickable el título de la canción), y la pestaña Playlists lee de
-   aquí para pintar su widget. */
-let _currentAlbum = null; /* { spotifyAlbumId, albumName, image, isSingle } */
+/* Estado del álbum del track activo. El reproductor pequeño no lo
+   muestra como texto — solo hace clickable el título de la canción
+   cuando hay un álbum resuelto, y el click abre el viewer. */
+let _currentAlbum = null; /* { spotifyAlbumId, albumName, image, isSingle, matchTitle, albumUrl } */
 
 function _applyAlbumState(payload) {
-    /* Reset por defecto: sin álbum, título no clickable, widget oculto. */
+    /* Reset por defecto: sin álbum, título no clickable. */
     _currentAlbum = null;
     if (playerTitle) playerTitle.classList.remove('has-album');
     if (payload && !payload.notFound && payload.spotifyAlbumId) {
@@ -1402,52 +1398,6 @@ function _applyAlbumState(payload) {
     } else if (playerTitle) {
         playerTitle.title = '';
     }
-    /* Refresca el widget de la pestaña Playlists si está visible. */
-    _renderCurrentAlbumWidget();
-}
-
-function _renderCurrentAlbumWidget() {
-    const widget = document.getElementById('pl-current-album');
-    if (!widget) return;
-    if (!_currentAlbum) {
-        widget.style.display = 'none';
-        widget.innerHTML = '';
-        return;
-    }
-    const label = _currentAlbum.isSingle
-        ? (_currentAlbum.albumName + ' (single)')
-        : _currentAlbum.albumName;
-    /* Construimos el DOM con createElement para escapar el nombre del
-       álbum sin riesgo de injection (los nombres vienen de Spotify
-       pero igual los higienizamos). */
-    widget.innerHTML = '';
-    if (_currentAlbum.image) {
-        const img = document.createElement('img');
-        img.src = _currentAlbum.image;
-        img.alt = '';
-        widget.appendChild(img);
-    }
-    const info = document.createElement('div');
-    info.className = 'pl-current-album-info';
-    const lbl = document.createElement('div');
-    lbl.className = 'pl-current-album-label';
-    lbl.textContent = 'Álbum del track actual';
-    const nm = document.createElement('div');
-    nm.className = 'pl-current-album-name';
-    /* Icono de notas (imagen) en vez del emoji ♫. */
-    const noteIcon = document.createElement('img');
-    noteIcon.src = 'assets/img/appIcons/songIcon.png';
-    noteIcon.alt = '';
-    noteIcon.className = 'pl-current-album-name-icon';
-    nm.appendChild(noteIcon);
-    const nmText = document.createElement('span');
-    nmText.textContent = label;
-    nm.appendChild(nmText);
-    info.appendChild(lbl);
-    info.appendChild(nm);
-    widget.appendChild(info);
-    widget.title = 'Cargar álbum completo en el reproductor';
-    widget.style.display = 'flex';
 }
 
 /* ── Reproducir álbum como playlist temporal ──
@@ -1462,8 +1412,9 @@ function _renderCurrentAlbumWidget() {
        desde esa posición — el cambio se siente como "seguir escuchando
        pero ahora con next/prev navegando el álbum". Si no, desde la 0. */
 /* ── Album viewer ──
-   El click en el título de la canción / widget abre una ventana de
-   previsualización con la tracklist del álbum. NO reproduce nada hasta
+   El click en el título de la canción (reproductor pequeño) o en el
+   nombre del álbum bajo un track del editor de playlist abre esta
+   ventana de previsualización con la tracklist. NO reproduce nada hasta
    que el usuario lo pide explícitamente (botón "Reproducir álbum" o
    click en una canción). El loading sigue una secuencia:
      1) album-tracks → pintar metadata + lista al instante.
@@ -1710,16 +1661,6 @@ if (playerTitle) {
     });
 }
 
-/* Click en el widget de la pestaña Playlists → mismo destino. */
-(function() {
-    const widget = document.getElementById('pl-current-album');
-    if (!widget) return;
-    widget.addEventListener('click', () => {
-        if (!_currentAlbum) return;
-        openAlbumViewer(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
-    });
-})();
-
 /* Cerrar el viewer con el botón X de su title bar. */
 (function() {
     const closeBtn = document.getElementById('album-viewer-close');
@@ -1906,6 +1847,54 @@ function _logAlbumPlay() {
             keepalive: true,
         }).catch(() => {});
     } catch (_) {}
+}
+
+/* Resuelve el álbum de un track concreto y rellena un <span> con su
+   nombre, dejándolo clickable para abrir el viewer. Usado por la
+   lista de canciones del editor de playlists. Mismo cache local que
+   alimenta el reproductor pequeño, así repeticiones son instantáneas.
+
+   Si el match cae bajo el threshold de find-album (devuelve notFound),
+   el span queda vacío — no mostramos información ruidosa. */
+function _resolveAlbumForRow(track, albumSpan) {
+    if (!track || !track.videoId) return;
+    const vId = track.videoId;
+
+    function paint(data) {
+        if (!data || data.notFound || !data.albumName) {
+            albumSpan.textContent = '';
+            albumSpan.style.display = 'none';
+            return;
+        }
+        albumSpan.textContent = '· ' + data.albumName;
+        albumSpan.title = 'Ver álbum: ' + data.albumName;
+        albumSpan.dataset.albumId = data.spotifyAlbumId || '';
+        albumSpan.dataset.albumName = data.albumName || '';
+        /* Click → abre el viewer. Stop propagation para que no se cuente
+           como click en la fila (que podría reproducir el track). */
+        albumSpan.onclick = ev => {
+            ev.stopPropagation();
+            const id = albumSpan.dataset.albumId;
+            const name = albumSpan.dataset.albumName;
+            if (id && typeof openAlbumViewer === 'function') openAlbumViewer(id, name);
+        };
+    }
+
+    const cached = _albumCacheGet(vId);
+    if (cached !== undefined) { paint(cached); return; }
+
+    const params = new URLSearchParams({
+        title:  track.title || '',
+        artist: track.artist || '',
+    });
+    fetch('assets/music/api.php?action=find-album&' + params.toString())
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            _albumCacheSet(vId, data);
+            paint(data);
+        })
+        .catch(() => { /* offline / endpoint caído → no se muestra nada */ });
 }
 
 function resolveAndShowAlbum(track) {
@@ -2389,9 +2378,6 @@ var addTrackCallback = null;
         plHome.style.display       = 'flex';
         plEditorView.style.display = 'none';
         plTitleText.textContent    = '♪ Playlists';
-        /* Refresca el widget "Álbum del track actual" — puede haberse
-           resuelto mientras el panel estaba cerrado. */
-        if (typeof _renderCurrentAlbumWidget === 'function') _renderCurrentAlbumWidget();
         if (allPlaylists.length > 0) renderHome();
     }
 
@@ -2593,6 +2579,16 @@ var addTrackCallback = null;
             artistSpan.className = 'pl-item-artist-text';
             artistSpan.textContent = track.artist || '—';
             t2.appendChild(artistSpan);
+            /* Span del álbum: vacío al renderizar, se rellena async via
+               find-album. Click → abre el viewer del álbum. Se usa el
+               cache localStorage que ya alimenta el reproductor pequeño,
+               así que tracks vistos antes pintan instantáneo. */
+            var albumSpan = document.createElement('span');
+            albumSpan.className = 'pl-item-album-text';
+            t2.appendChild(albumSpan);
+            if (typeof _resolveAlbumForRow === 'function') {
+                _resolveAlbumForRow(track, albumSpan);
+            }
             if (track.addedBy) {
                 var addedBySpan = document.createElement('span');
                 addedBySpan.className = 'pl-item-addedby';
