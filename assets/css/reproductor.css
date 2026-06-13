@@ -770,7 +770,8 @@
 .pl-item-artist-row {
     display: flex;
     align-items: center;
-    gap: 4px;
+    /* Sin gap: el álbum va pegado al artista. La separación visual la
+       da el " · " prefijo del texto del álbum. */
     overflow: hidden;
     margin-top: 2px;
 }
@@ -779,10 +780,10 @@
     font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
+    /* flex-shrink:0 + ancho según contenido = el artista NUNCA se
+       trunca. Si la fila se queda corta, el que se recorta es el álbum
+       (que está al lado con flex-shrink:1). */
+    flex: 0 0 auto;
 }
 
 .pl-item-addedby {
@@ -791,20 +792,23 @@
     white-space: nowrap;
     flex-shrink: 0;
     font-style: italic;
+    /* Mantiene su separación visual del álbum (el row dejó de usar
+       gap para que artista y álbum queden pegados). */
+    margin-left: 6px;
 }
 
-/* Álbum del track en la lista del editor de playlist. Aparece a la
-   derecha del artista (mismo row), clickable. Vacío hasta que find-album
-   resuelve; oculto con display:none si no hay match para no ocupar gap. */
+/* Álbum del track en la lista del editor de playlist. Pegado a la
+   derecha del artista (la separación visual la da el "· " prefijo del
+   texto). Truncable con ellipsis si la fila se queda corta — el artista
+   tiene prioridad y no se trunca antes que esto. */
 .pl-item-album-text {
     font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex-shrink: 1;
+    flex: 0 1 auto;
     min-width: 0;
-    margin-left: 4px;
     cursor: pointer;
 }
 .pl-item-album-text:empty { display: none; }

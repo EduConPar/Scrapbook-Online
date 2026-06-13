@@ -1477,7 +1477,7 @@ async function openAlbumViewer(albumId, albumName) {
 
     try {
         /* 1) Metadata del álbum + tracklist. */
-        const metaRes = await fetch('../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
+        const metaRes = await fetch('assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
         if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
         const meta = await metaRes.json();
         if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
@@ -1553,7 +1553,7 @@ async function openAlbumViewer(albumId, albumName) {
 
         /* 2) En background: resolver videoIds. Mientras tanto, los
            clicks de tracks devolverán un mensaje pidiendo esperar. */
-        const ytRes = await fetch('../assets/music/api.php?action=yt-search-batch', {
+        const ytRes = await fetch('assets/music/api.php?action=yt-search-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tracks: meta.tracks }),
@@ -1866,7 +1866,10 @@ function _resolveAlbumForRow(track, albumSpan) {
             albumSpan.style.display = 'none';
             return;
         }
-        albumSpan.textContent = '· ' + data.albumName;
+        /* " · " con espacio a ambos lados — sin gap del flex, este es
+           el único respiro visual entre el nombre del artista y el del
+           álbum. */
+        albumSpan.textContent = ' · ' + data.albumName;
         albumSpan.title = 'Ver álbum: ' + data.albumName;
         albumSpan.dataset.albumId = data.spotifyAlbumId || '';
         albumSpan.dataset.albumName = data.albumName || '';
@@ -1914,7 +1917,7 @@ function resolveAndShowAlbum(track) {
         title:  track.title,
         artist: track.artist || '',
     });
-    fetch('../assets/music/api.php?action=find-album&' + params.toString())
+    fetch('assets/music/api.php?action=find-album&' + params.toString())
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (!data) return;
