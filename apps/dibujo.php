@@ -290,7 +290,23 @@ input[type=range].tb-slider{
             color-mix(in srgb, var(--text) 8%, var(--input-bg)) 75%) 8px 8px / 16px 16px,
         var(--input-bg);
 }
-#display-canvas.eraser{cursor:cell}
+#display-canvas.eraser{cursor:none}
+/* Cursor circular del eraser: borde negro + halo blanco para que sea
+   visible sobre cualquier fondo. Vive en coords del lienzo y se escala
+   con el zoom-container (transform aplicado al padre). pointer-events:
+   none para no interferir con los eventos del canvas. */
+#eraser-cursor{
+    position:absolute;
+    display:none;
+    pointer-events:none;
+    border-radius:50%;
+    border:1px solid #000;
+    box-shadow:0 0 0 1px #fff inset, 0 0 0 1px #fff;
+    box-sizing:border-box;
+    z-index:2;
+    transform:translate(-50%, -50%);
+    will-change:left, top, width, height;
+}
 #display-canvas.eyedropper{cursor:copy}
 #display-canvas.selection{cursor:cell}
 #display-canvas.text{cursor:text}
@@ -849,6 +865,11 @@ body.iface-kawaii #canvas-wrap{
     <div id="canvas-wrap">
         <div id="zoom-container">
             <canvas id="display-canvas"></canvas>
+            <!-- Cursor circular para la goma: indica el área que va a
+                 borrar. Vive en zoom-container para escalar con el zoom.
+                 JS posiciona left/top y dimensiones; visible solo cuando
+                 el tool activo es 'eraser' y el puntero está dentro. -->
+            <div id="eraser-cursor"></div>
             <div id="selection-overlay"></div>
             <!-- Acciones que flotan junto a la selección. JS las
                  posiciona en CSS-px del zoom-container, así escalan
@@ -2165,6 +2186,46 @@ function _getDabTemplate(brush, color) {
 }
 function _clearDabTemplates() { _dabTemplates.clear(); }
 
+/* ── Blender sample patch ──
+   getImageData(srcCtx, 1, 1) por dab era prohibitivo en lienzos grandes:
+   cada llamada tiene un overhead fijo (no escala con el área leída).
+   Para spacing 0.03 del blender, eso son ~30 reads por anchura. Aquí
+   pre-leemos un parche cuadrado de PATCH_SIZE px alrededor del dab y
+   samplemos del array en memoria mientras los dabs sigan dentro. Cuando
+   el dab se sale del parche, releemos otro nuevo. */
+const BLENDER_PATCH_SIZE = 128;
+let _blenderPatch = null; /* {data, x, y, w, h, srcCanvas} */
+function _invalidateBlenderPatch() { _blenderPatch = null; }
+function _samplePixelFromCtx(srcCtx, x, y) {
+    const srcW = srcCtx.canvas.width;
+    const srcH = srcCtx.canvas.height;
+    if (x < 0 || y < 0 || x >= srcW || y >= srcH) return null;
+    const p = BLENDER_PATCH_SIZE;
+    let patch = _blenderPatch;
+    const insidePatch = patch
+        && patch.srcCanvas === srcCtx.canvas
+        && x >= patch.x && y >= patch.y
+        && x < patch.x + patch.w && y < patch.y + patch.h;
+    if (!insidePatch) {
+        /* Recentrar el parche en (x, y) — clampado a los límites del
+           source para no pedir píxeles fuera del canvas. */
+        const px = Math.max(0, Math.min(srcW - p, (x | 0) - (p >> 1)));
+        const py = Math.max(0, Math.min(srcH - p, (y | 0) - (p >> 1)));
+        const pw = Math.min(p, srcW - px);
+        const ph = Math.min(p, srcH - py);
+        try {
+            const img = srcCtx.getImageData(px, py, pw, ph);
+            patch = { data: img.data, x: px, y: py, w: pw, h: ph, srcCanvas: srcCtx.canvas };
+            _blenderPatch = patch;
+        } catch (_) { return null; }
+    }
+    const lx = (x | 0) - patch.x;
+    const ly = (y | 0) - patch.y;
+    if (lx < 0 || ly < 0 || lx >= patch.w || ly >= patch.h) return null;
+    const i = (ly * patch.w + lx) * 4;
+    return [patch.data[i], patch.data[i + 1], patch.data[i + 2], patch.data[i + 3]];
+}
+
 function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
     const w = pressureToWidth(pressure);
     if (w < 0.5) return;
@@ -2180,11 +2241,12 @@ function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
        blendPrev → así los colores se embarran a lo largo del trazo. */
     if (brush.blender && !isEraser) {
         const src = sampleCtx || dctx;
-        /* Samplea un punto del lienzo composited. */
+        /* Sample vía patch local cacheado — un getImageData(128,128) cubre
+           docenas de dabs cercanos en vez de uno por dab. */
         const ix = Math.max(0, Math.min(src.canvas.width  - 1, x | 0));
         const iy = Math.max(0, Math.min(src.canvas.height - 1, y | 0));
-        const px = src.getImageData(ix, iy, 1, 1).data;
-        const here = (px[3] === 0)
+        const px = _samplePixelFromCtx(src, ix, iy);
+        const here = (!px || px[3] === 0)
             ? null
             : { r: px[0], g: px[1], b: px[2] };
         /* Si no hay color en este punto ni arrastrado del anterior,
@@ -2363,6 +2425,10 @@ display.addEventListener('pointerdown', e => {
     /* Reset del color arrastrado del blender — cada trazo empieza
        limpio sin "memoria" del trazo anterior. */
     state.blendPrev = null;
+    /* Patch del blender obsoleto entre trazos (puede haber cambiado
+       el contenido del display por otro flujo). Próximo dab del blender
+       lo recarga. */
+    _invalidateBlenderPatch();
     state.strokeId = 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
     const tool = (e.pointerType === 'eraser') ? 'eraser' : state.tool;
     /* Si la capa activa tiene clipMask con base válida, prepara el
@@ -2372,7 +2438,11 @@ display.addEventListener('pointerdown', e => {
         const buf = document.createElement('canvas');
         buf.width = state.width; buf.height = state.height;
         state.strokeBuffer = buf;
-        state.strokeBufferCtx = buf.getContext('2d', { willReadFrequently: true });
+        /* SIN willReadFrequently: el strokeBuffer solo recibe drawImage
+           y composite ops, nunca getImageData. Con willReadFrequently el
+           navegador lo mete en CPU memory y las composite ops sobre él
+           son mucho más lentas en lienzos grandes. */
+        state.strokeBufferCtx = buf.getContext('2d');
         state.strokeIsEraser = (tool === 'eraser');
         state.strokeBufferLayerIdx = state.activeIdx;
         state.strokeBufferBelowIdx = baseIdx;
@@ -2387,6 +2457,7 @@ display.addEventListener('pointermove', e => {
     const pt = eventToCanvas(e);
     $('pos').textContent = 'x: ' + (pt.x|0) + ', y: ' + (pt.y|0);
     $('pressure').textContent = 'p: ' + (e.pressure || 0).toFixed(2);
+    updateEraserCursor(pt);
     if (state.selecting && e.pointerId === state.pid) {
         updateSelection(state.selStart, pt); return;
     }
@@ -2394,6 +2465,32 @@ display.addEventListener('pointermove', e => {
     const samples = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
     for (const s of samples) applyStrokeSample(eventToCanvas(s), true);
 });
+display.addEventListener('pointerleave', () => hideEraserCursor());
+display.addEventListener('pointerenter', e => updateEraserCursor(eventToCanvas(e)));
+
+/* ── Eraser cursor ──
+   Indicador circular del área de borrado. Vive en zoom-container así
+   que escala junto al lienzo y el border-radius se mantiene perfecto a
+   cualquier zoom. left/top en coords del lienzo (pre-transform), w/h
+   en píxeles del lienzo — el padre los escala con su transform. */
+const _eraserCursor = $('eraser-cursor');
+function updateEraserCursor(pt) {
+    if (state.tool !== 'eraser') {
+        if (_eraserCursor.style.display !== 'none') _eraserCursor.style.display = 'none';
+        return;
+    }
+    /* Tamaño = state.size (en coords del lienzo). El zoom lo gestiona
+       el transform del zoom-container — no necesitamos multiplicar. */
+    const d = Math.max(2, state.size);
+    _eraserCursor.style.width  = d + 'px';
+    _eraserCursor.style.height = d + 'px';
+    _eraserCursor.style.left = pt.x + 'px';
+    _eraserCursor.style.top  = pt.y + 'px';
+    if (_eraserCursor.style.display !== 'block') _eraserCursor.style.display = 'block';
+}
+function hideEraserCursor() {
+    if (_eraserCursor.style.display !== 'none') _eraserCursor.style.display = 'none';
+}
 
 function endPointer(e) {
     if (e && e.pointerId !== state.pid) return;
@@ -3097,10 +3194,18 @@ document.querySelectorAll('[data-tool]').forEach(btn => btn.addEventListener('cl
                       : state.tool === 'eyedrop' ? 'eyedropper'
                       : state.tool === 'select'  ? 'selection'
                       : state.tool === 'text'    ? 'text' : '';
+    /* Cambio fuera de eraser → ocultar su cursor circular. */
+    if (state.tool !== 'eraser') hideEraserCursor();
 }));
 $('size').addEventListener('input', e => {
     state.size = +e.target.value;
     $('size-val').textContent = state.size;
+    /* Refrescar diámetro del cursor de la goma si está visible. */
+    if (state.tool === 'eraser' && _eraserCursor.style.display === 'block') {
+        const d = Math.max(2, state.size);
+        _eraserCursor.style.width  = d + 'px';
+        _eraserCursor.style.height = d + 'px';
+    }
 });
 $('smooth').addEventListener('input', e => state.smooth = +e.target.value);
 $('brush-opacity').addEventListener('input', e => {
