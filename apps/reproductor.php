@@ -1382,14 +1382,22 @@ function _albumCacheSet(videoId, payload) {
    cuando hay un álbum resuelto, y el click abre el viewer. */
 let _currentAlbum = null; /* { spotifyAlbumId, albumName, image, isSingle, matchTitle, albumUrl } */
 
+/* videoId para el que el caller forzó el estado del álbum (vía
+   setReproductorAlbumContext). El fetch async de resolveAndShowAlbum,
+   al terminar, NO sobreescribe si el current track sigue siendo el
+   mismo videoId que se forzó — evita la race "updateTrackUI resetea,
+   setReproductorAlbumContext aplica, fetch async pisa con notFound". */
+let _forcedAlbumForVideo = null;
+
 /* Inyecta directamente el álbum activo cuando el caller ya conoce
    el spotifyAlbumId (e.g. el perfil al reproducir un item type=album).
    Bypasea find-album — más rápido y garantiza match exacto. Lo
-   llamamos después de updateTrackUI para que sobreescriba cualquier
-   álbum que find-album hubiera intentado resolver con el title del
-   primer track (que en álbumes-playlist a veces es vago). */
+   llamamos DESPUÉS de updateTrackUI; el _forcedAlbumForVideo bloquea
+   que el fetch en vuelo desencadenado por updateTrackUI lo deshaga. */
 window.setReproductorAlbumContext = function(albumInfo) {
     if (!albumInfo || !albumInfo.spotifyAlbumId) return;
+    const t = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+    _forcedAlbumForVideo = (t && t.videoId) || null;
     _applyAlbumState({
         notFound:       false,
         spotifyAlbumId: albumInfo.spotifyAlbumId,
@@ -1989,6 +1997,12 @@ function _resolveAlbumForRow(track, albumSpan) {
 }
 
 function resolveAndShowAlbum(track) {
+    /* Si cambiamos de track distinto al "forzado externamente",
+       invalida el lock — el nuevo videoId vuelve a pasar por find-album. */
+    const incomingVid = track ? track.videoId : null;
+    if (_forcedAlbumForVideo && incomingVid !== _forcedAlbumForVideo) {
+        _forcedAlbumForVideo = null;
+    }
     /* Reset entre tracks. */
     _applyAlbumState(null);
     if (!track || !track.title) return;
@@ -2010,10 +2024,17 @@ function resolveAndShowAlbum(track) {
         .then(data => {
             if (!data) return;
             _albumCacheSet(requestedFor, data);
-            /* Solo aplicamos si seguimos en el mismo track. */
+            /* Solo aplicamos si seguimos en el mismo track Y si nadie
+               forzó externamente el estado para ese videoId. Sin esa
+               segunda condición, una llamada a setReproductorAlbumContext
+               (perfil cuando reproduce un álbum) era pisada por este
+               fetch al terminar — el viewer dejaba de abrirse. */
             const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
                 ? playlist[currentTrack] : null;
-            if (curTrack && curTrack.videoId === requestedFor) _applyAlbumState(data);
+            if (curTrack && curTrack.videoId === requestedFor
+                         && curTrack.videoId !== _forcedAlbumForVideo) {
+                _applyAlbumState(data);
+            }
         })
         .catch(() => { /* offline / endpoint caído → simplemente no se muestra */ });
 }
