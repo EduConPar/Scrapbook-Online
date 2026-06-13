@@ -586,23 +586,23 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- REVIEW WINDOW -->
-<div class="window" id="profile-review-window" style="display:none;position:fixed;z-index:10002;width:290px;">
-    <div class="title-bar">
+<div class="window" id="profile-review-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:290px;min-width:220px;min-height:200px;max-height:90vh;">
+    <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" id="profile-review-window-title">Review</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-review-window-close"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:10px 12px 12px;">
-        <div style="display:flex;align-items:center;margin-bottom:10px;">
+    <div class="window-body" style="padding:10px 12px 12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;">
+        <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
         </div>
-        <div class="field-row-stacked" style="margin-bottom:10px;">
-            <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;">Comentario (opcional)</label>
-            <textarea id="profile-review-comment" rows="4" style="resize:vertical;width:100%;box-sizing:border-box;" placeholder="Escribe tu opinión..."></textarea>
+        <div class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
+            <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Comentario (opcional)</label>
+            <textarea id="profile-review-comment" rows="4" style="resize:vertical;width:100%;box-sizing:border-box;flex:1;min-height:60px;" placeholder="Escribe tu opinión..."></textarea>
         </div>
-        <div class="field-row" style="justify-content:flex-end;gap:4px;">
+        <div class="field-row" style="justify-content:flex-end;gap:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-review-window-delete" style="margin-right:auto;display:none;"><img src="assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Eliminar</button>
             <button class="button" id="profile-review-window-cancel">Cancelar</button>
             <button class="button" id="profile-review-window-submit">Guardar</button>
@@ -1454,7 +1454,7 @@ var PROFILE_USERS = <?php
             }
         }
         drawStars();
-        win.style.display = 'block';
+        win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
 
@@ -4640,7 +4640,7 @@ var PROFILE_USERS = <?php
             })(i);
             starsEl.appendChild(s);
         }
-        win.style.display = 'block';
+        win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
         function closeWin() { win.style.display = 'none'; }

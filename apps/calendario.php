@@ -92,22 +92,24 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     </div>
 </div>
 
-<!-- NOTIFICACIÓN DE INVITACIÓN RECIBIDA -->
-<div id="partner-notif" style="display:none; position: fixed; bottom: 60px; right: 16px; z-index: 5000;">
-    <div class="window" style="width: 260px;">
-        <div class="title-bar">
-            <div class="title-bar-text">Invitación al calendario</div>
+<!-- MODAL DE FECHA — se abre tras aceptar la notif del sistema general
+     para pedir cuándo empezó la relación antes de confirmar la unión. -->
+<div class="window" id="partner-fecha-modal" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;z-index:9700;">
+    <div class="title-bar">
+        <div class="title-bar-text">Invitación al calendario</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="partner-fecha-close"></button>
         </div>
-        <div class="window-body" style="padding: 10px;">
-            <p id="partner-notif-msg" style="font-size: 11px; margin-bottom: 8px;"></p>
-            <div class="field-row-stacked" style="margin-bottom: 8px;">
-                <label style="font-size: 11px;">Fecha en que empezasteis:</label>
-                <input type="date" id="partner-fecha" style="width: 100%;">
-            </div>
-            <div class="field-row" style="justify-content: flex-end; gap: 4px;">
-                <button class="button" id="partner-reject">Rechazar</button>
-                <button class="button" id="partner-accept">Aceptar</button>
-            </div>
+    </div>
+    <div class="window-body" style="padding:10px;">
+        <p id="partner-fecha-msg" style="font-size:11px;margin:0 0 8px;"></p>
+        <div class="field-row-stacked" style="margin-bottom:10px;">
+            <label for="partner-fecha" style="font-size:11px;">Fecha en que empezasteis:</label>
+            <input type="date" id="partner-fecha" style="width:100%;">
+        </div>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;">
+            <button class="button" id="partner-fecha-cancel">Cancelar</button>
+            <button class="button" id="partner-fecha-confirm">Confirmar</button>
         </div>
     </div>
 </div>
@@ -1488,6 +1490,19 @@ var __invitePollDelay  = CFG.invitePollMinMs;
 var __invitePollTimer  = null;
 var __invitePollEmpty  = 0;     // requests seguidos sin novedad
 
+/* notifSystem vive en el shell padre. El calendario corre dentro de un
+   iframe, así que accedemos a window.parent.notifSystem (mismo origen,
+   no hay restricción). Helper que centraliza el fallback por si el shell
+   no estuviera disponible (standalone, tests). */
+function _parentNotifSystem() {
+    try {
+        if (window.parent && window.parent !== window && window.parent.notifSystem) {
+            return window.parent.notifSystem;
+        }
+    } catch (_) {}
+    return null;
+}
+
 async function checkPartnerInvites() {
     const r = await apiFetch(API_BASE + '?action=get-partner-invites');
     if (!r.ok) {
@@ -1505,12 +1520,32 @@ async function checkPartnerInvites() {
         __invitePollEmpty++;
         return;
     }
+    var notif = _parentNotifSystem();
+    var invId = 'partner-invite-' + inv.id;
+    if (notif && (notif.isShown(invId) || notif.isDismissed(invId))) {
+        /* El shell ya está mostrando la tarjeta de esta invitación —
+           no la dupliquemos en cada tick. */
+        __invitePollEmpty++;
+        return;
+    }
     /* Novedad encontrada — reset agresivo. */
     __invitePollEmpty = 0;
     __invitePollDelay = CFG.invitePollMinMs;
     currentPartnerInvite = inv;
-    document.getElementById('partner-notif-msg').textContent = inv.fromLabel + ' te ha invitado a compartir calendario';
-    document.getElementById('partner-notif').style.display = 'block';
+    if (notif) {
+        notif.show({
+            id:      invId,
+            type:    'action',
+            title:   'Invitación al calendario',
+            message: inv.fromLabel + ' te ha invitado a compartir calendario',
+            sentAt:  inv.sentAt,
+            onAccept: function() { openPartnerFechaModal(inv); },
+            onReject: function() { respondInvite(inv, 'reject', ''); }
+        });
+    } else {
+        /* Sin shell padre — fallback al modal de fecha directo. */
+        openPartnerFechaModal(inv);
+    }
 }
 
 function _schedulePartnerPoll() {
@@ -1527,23 +1562,42 @@ function _schedulePartnerPoll() {
     }, __invitePollDelay);
 }
 
-async function respondInvite(action) {
-    if (!currentPartnerInvite) return;
-    const fecha = document.getElementById('partner-fecha').value;
-    if (action === 'accept' && !fecha) { alert('Por favor introduce la fecha en que empezasteis.'); return; }
+function openPartnerFechaModal(inv) {
+    var modal = document.getElementById('partner-fecha-modal');
+    document.getElementById('partner-fecha-msg').textContent =
+        inv.fromLabel + ' te ha invitado a compartir calendario. Elige la fecha en que empezasteis para confirmar.';
+    document.getElementById('partner-fecha').value = '';
+    modal.style.display = 'block';
+}
+
+function closePartnerFechaModal() {
+    document.getElementById('partner-fecha-modal').style.display = 'none';
+}
+
+async function respondInvite(inv, action, fecha) {
+    if (!inv) return;
+    if (action === 'accept' && !fecha) {
+        alert('Por favor introduce la fecha en que empezasteis.');
+        return;
+    }
     const r = await apiFetch(API_BASE + '?action=respond-partner-invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteId: currentPartnerInvite.id, action: action, fecha: fecha }),
+        body: JSON.stringify({ inviteId: inv.id, action: action, fecha: fecha }),
     });
     if (!r.ok) { alert('Error de red. Inténtalo de nuevo.'); return; }
     if (r.data && r.data.error) { alert(r.data.error); return; }
-    document.getElementById('partner-notif').style.display = 'none';
+    closePartnerFechaModal();
+    currentPartnerInvite = null;
     if (action === 'accept') location.reload();
 }
 
-document.getElementById('partner-accept').addEventListener('click', () => respondInvite('accept'));
-document.getElementById('partner-reject').addEventListener('click', () => respondInvite('reject'));
+document.getElementById('partner-fecha-confirm').addEventListener('click', function() {
+    var fecha = document.getElementById('partner-fecha').value;
+    respondInvite(currentPartnerInvite, 'accept', fecha);
+});
+document.getElementById('partner-fecha-cancel').addEventListener('click', closePartnerFechaModal);
+document.getElementById('partner-fecha-close').addEventListener('click', closePartnerFechaModal);
 
 checkPartnerInvites();
 _schedulePartnerPoll();
@@ -1617,7 +1671,7 @@ window.addEventListener('message', function(e) {
 });
 
 /* ════════════════════════════════════════════════════════════════
-   DRAGGABLE — todas las ventanas popup (invite, día, partner-notif,
+   DRAGGABLE — todas las ventanas popup (invite, día, partner-fecha-modal,
    confirmar). El primer mousedown sobre la title-bar convierte la
    posición CSS (que puede usar transform:translate(-50%,-50%)) a
    left/top absolutos en px y elimina el transform → a partir de ahí
@@ -1699,7 +1753,7 @@ window.addEventListener('message', function(e) {
        a la .window interna. */
     [
         document.getElementById('invite-window'),
-        document.querySelector('#partner-notif > .window'),
+        document.getElementById('partner-fecha-modal'),
         document.querySelector('#popup-dia > .window'),
         document.getElementById('cal-confirm-modal'),
         document.getElementById('countdown-window'),

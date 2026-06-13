@@ -499,6 +499,31 @@ function getUserEffectiveWallpaper($userKey, $label) {
     return $fallback;
 }
 
+/* Resuelve los assets EFECTIVOS de un tema (wallpaper + start-icon) dado
+   lo guardado en BD para ese tema. Misma prioridad que desktop-base.php
+   aplica en la carga inicial: si el tema declara un asset Y el archivo
+   existe → ese. Si no → el global del usuario (getUserWallpaper /
+   getUserStartIcon, que ya hacen su propio fallback a base/seed). Sin
+   esto, el cliente al activar un tema sin assets propios caía a defaults
+   y reseteaba el wallpaper/icono que el usuario tenía configurado como
+   global. */
+function effectiveThemeAssets(string $label, string $themeWallpaper, string $themeStartIcon): array {
+    $root = dirname(__DIR__, 2);
+    $wp = '';
+    if ($themeWallpaper !== '' && is_file($root . '/' . $themeWallpaper)) {
+        $wp = $themeWallpaper;
+    } elseif (function_exists('getUserWallpaper')) {
+        $wp = (string)getUserWallpaper($label);
+    }
+    $si = '';
+    if ($themeStartIcon !== '' && is_file($root . '/' . $themeStartIcon)) {
+        $si = $themeStartIcon;
+    } elseif (function_exists('getUserStartIcon')) {
+        $si = (string)getUserStartIcon($label);
+    }
+    return [$wp, $si];
+}
+
 /**
  * Valida una ruta de asset (wallpaper / start-icon) que viene de la
  * biblioteca: debe estar dentro de assets/img/{wallpapers|start-icons}/

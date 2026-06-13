@@ -219,7 +219,23 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
             $item['completedAt'] = (int)$r['completed_at_ts'];
         }
     }
-    if ($r['review_stars'] !== null) {
+    /* Review POR USUARIO (tabla list_item_reviews). pf_loadAllLists
+       inyecta my_review_* en la fila por LEFT JOIN, así pf_rowToItem
+       resuelve la review del usuario actual sin necesidad de otra query.
+       Si no hay LEFT JOIN (caller legacy), nos lleva al fallback de las
+       columnas viejas list_items.review_* (review del owner, para no
+       romper antiguos consumidores). */
+    if (array_key_exists('my_review_stars', $r)) {
+        if ($r['my_review_stars'] !== null) {
+            $item['review'] = [
+                'stars'   => (float)$r['my_review_stars'],
+                'comment' => (string)($r['my_review_comment'] ?? ''),
+            ];
+            if (!empty($r['my_reviewed_at_ts'])) {
+                $item['review']['reviewedAt'] = (int)$r['my_reviewed_at_ts'];
+            }
+        }
+    } elseif ($r['review_stars'] !== null) {
         $item['review'] = [
             'stars'   => (float)$r['review_stars'],
             'comment' => (string)($r['review_comment'] ?? ''),
@@ -234,19 +250,28 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
 }
 
 /* Carga TODAS las listas del usuario (propias + las compartidas con él
-   por otros). Devuelve la misma estructura que el JSON antiguo. */
+   por otros). Devuelve la misma estructura que el JSON antiguo.
+   Las reviews salen de list_item_reviews y son POR USUARIO: cada uno ve
+   y modifica su propia review. Antes vivían en list_items.review_* y
+   eran "compartidas" — al reseñar un item colaborativo se sobrescribía
+   la review del otro. */
 function pf_loadAllLists(PDO $pdo, int $uid): array {
     $lists = pf_emptyLists();
     /* Propias */
     $stmt = $pdo->prepare("SELECT i.*,
                                   UNIX_TIMESTAMP(i.reviewed_at)  AS reviewed_at_ts,
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
-                                  u.user_key AS shared_from_key
+                                  u.user_key AS shared_from_key,
+                                  myr.stars AS my_review_stars,
+                                  myr.comment AS my_review_comment,
+                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_items i
                            LEFT JOIN usuarios u ON i.shared_from = u.id
+                           LEFT JOIN list_item_reviews myr
+                                ON myr.item_id = i.id AND myr.user_id = ?
                            WHERE i.owner_id = ?
                            ORDER BY i.id ASC");
-    $stmt->execute([$uid]);
+    $stmt->execute([$uid, $uid]);
     $ownRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     /* Las que comparten conmigo: estoy como colaborador → la entrada
@@ -254,13 +279,18 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
     $stmt = $pdo->prepare("SELECT i.*,
                                   UNIX_TIMESTAMP(i.reviewed_at)  AS reviewed_at_ts,
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
-                                  ou.user_key AS owner_key
+                                  ou.user_key AS owner_key,
+                                  myr.stars AS my_review_stars,
+                                  myr.comment AS my_review_comment,
+                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_item_collaborators c
                            JOIN list_items i ON c.item_id = i.id
                            JOIN usuarios ou ON i.owner_id = ou.id
+                           LEFT JOIN list_item_reviews myr
+                                ON myr.item_id = i.id AND myr.user_id = ?
                            WHERE c.user_id = ?
                            ORDER BY i.id ASC");
-    $stmt->execute([$uid]);
+    $stmt->execute([$uid, $uid]);
     $sharedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     /* Cargar colaboradores de las propias en bulk */
@@ -912,6 +942,30 @@ case 'save-lists': {
             return time();
         };
 
+        /* Persiste la review del usuario actual ($uid) sobre $itemId.
+           - Si $clean trae stars>0: UPSERT en list_item_reviews.
+           - Si stars=0 o no se mandó: borra la fila (el usuario "quitó"
+             su reseña).
+           Cada usuario tiene su propia fila — un colaborador NO pisa la
+           review del owner. */
+        $fnPersistReview = function(int $itemId, array $clean) use ($pdo, $uid) {
+            $stars = $clean['review_stars'];
+            $hasReview = $stars !== null && (float)$stars > 0;
+            if (!$hasReview) {
+                $pdo->prepare("DELETE FROM list_item_reviews WHERE item_id = ? AND user_id = ?")
+                    ->execute([$itemId, $uid]);
+                return;
+            }
+            $reviewedAt = $clean['reviewed_at'] !== null ? (int)$clean['reviewed_at'] : time();
+            $pdo->prepare("INSERT INTO list_item_reviews (item_id, user_id, stars, comment, reviewed_at)
+                           VALUES (?, ?, ?, ?, FROM_UNIXTIME(?))
+                           ON DUPLICATE KEY UPDATE
+                             stars = VALUES(stars),
+                             comment = VALUES(comment),
+                             reviewed_at = VALUES(reviewed_at)")
+                ->execute([$itemId, $uid, $stars, $clean['review_comment'], $reviewedAt]);
+        };
+
         foreach ($items as $item) {
             $title = trim($item['title'] ?? '');
             if ($title === '') continue;
@@ -920,7 +974,9 @@ case 'save-lists': {
             $clean = $fnSanitize($item);
 
             if ($isNumeric && in_array((int)$rawId, $myOwnIds, true)) {
-                /* UPDATE de item propio */
+                /* UPDATE de item propio. Las columnas review_stars, review_comment
+                   y reviewed_at de list_items NO se tocan — la review vive ahora
+                   en list_item_reviews por usuario (ver $fnPersistReview). */
                 $id = (int)$rawId;
                 $touchedOwnIds[] = $id;
                 $oldStatus = $oldItems[$id]['status']       ?? null;
@@ -931,23 +987,23 @@ case 'save-lists': {
                 $sql = "UPDATE list_items SET
                             title = ?, image = ?, status = ?, music_type = ?, artist = ?,
                             featured = ?, yt_id = ?, spotify_id = ?, yt_playlist_id = ?,
-                            spotify_album_id = ?, review_stars = ?, review_comment = ?,
-                            reviewed_at  = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . ",
+                            spotify_album_id = ?,
                             completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ? AND owner_id = ?";
                 $params = [
                     $clean['title'], $clean['image'], $clean['status'], $clean['music_type'], $clean['artist'],
                     $clean['featured'], $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'],
-                    $clean['spotify_album_id'], $clean['review_stars'], $clean['review_comment'],
+                    $clean['spotify_album_id'],
                 ];
-                if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
-                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
+                if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $params[] = $id; $params[] = $uid;
                 $pdo->prepare($sql)->execute($params);
+                $fnPersistReview($id, $clean);
             } elseif ($isNumeric && isset($sharedWithMe[(int)$rawId])) {
                 /* UPDATE de item compartido: el dueño es otro, solo puedo
-                   editar mis preferencias visibles (status/featured) y la
-                   review compartida del item. */
+                   editar mis preferencias visibles (status/featured) — ya
+                   NO toco la review compartida del item (era el bug). Mi
+                   review se persiste por usuario via $fnPersistReview. */
                 $id = (int)$rawId;
                 $touchedShared[$id] = $sharedWithMe[$id];
                 $oldStatus = $oldShared[$id]['status']       ?? null;
@@ -956,43 +1012,39 @@ case 'save-lists': {
                     ? $fnCompletedAt($clean['status'], $oldStatus, $oldCompTs)
                     : null;
                 $sql = "UPDATE list_items SET
-                            status = ?, featured = ?, review_stars = ?, review_comment = ?,
-                            reviewed_at  = " . ($clean['reviewed_at'] === null ? "NULL" : "FROM_UNIXTIME(?)") . ",
+                            status = ?, featured = ?,
                             completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ?";
                 $params = [
                     $clean['status'], $clean['featured'],
-                    $clean['review_stars'], $clean['review_comment'],
                 ];
-                if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
-                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
+                if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $params[] = $id;
                 $pdo->prepare($sql)->execute($params);
+                $fnPersistReview($id, $clean);
             } else {
                 /* INSERT (item nuevo) — si entra ya marcado como completed,
-                   completed_at se setea ahora. */
+                   completed_at se setea ahora. La review (si la trae) va a
+                   list_item_reviews por usuario, no a las columnas viejas. */
                 $newCompletedAt = !$isMusic
                     ? $fnCompletedAt($clean['status'], null, null)
                     : null;
                 $sql = "INSERT INTO list_items
                         (owner_id, category, title, image, status, music_type, artist, featured,
-                         yt_id, spotify_id, yt_playlist_id, spotify_album_id,
-                         review_stars, review_comment, reviewed_at, completed_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
-                        ($clean['reviewed_at']   === null ? "NULL" : "FROM_UNIXTIME(?)") . ", " .
-                        ($newCompletedAt        === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
+                         yt_id, spotify_id, yt_playlist_id, spotify_album_id, completed_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
+                        ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
                 $params = [
                     $uid, $category, $clean['title'], $clean['image'], $clean['status'],
                     $clean['music_type'], $clean['artist'], $clean['featured'],
                     $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'], $clean['spotify_album_id'],
-                    $clean['review_stars'], $clean['review_comment'],
                 ];
-                if ($clean['reviewed_at'] !== null) $params[] = $clean['reviewed_at'];
-                if ($newCompletedAt !== null)       $params[] = $newCompletedAt;
+                if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $pdo->prepare($sql)->execute($params);
                 $newId = (int)$pdo->lastInsertId();
                 $touchedOwnIds[] = $newId;
                 if ($rawId !== null) $insertedIds[(string)$rawId] = $newId;
+                $fnPersistReview($newId, $clean);
             }
         }
 
@@ -1817,18 +1869,23 @@ case 'melon-reviews': {
     if ($type !== '' && !in_array($type, ['album','song'], true))  jsonError('Tipo inválido');
     $yearAgo = time() - 365 * 24 * 60 * 60;
 
+    /* Las reviews viven ahora en list_item_reviews por usuario. Cada
+       review se atribuye al user_id que la escribió (no al owner del
+       item). Un item colaborativo con dos reseñas distintas aparece
+       agrupado por título pero con dos entradas en 'reviews'. */
     $sql = "SELECT i.title, i.image, i.artist, i.music_type AS mtype, i.yt_id AS ytId,
                    i.spotify_id AS spotifyId, i.yt_playlist_id AS ytPlaylistId,
                    i.spotify_album_id AS spotifyAlbumId,
-                   i.review_stars AS stars, i.review_comment AS comment,
-                   UNIX_TIMESTAMP(COALESCE(i.reviewed_at, i.created_at)) AS reviewedAt,
+                   r.stars AS stars, r.comment AS comment,
+                   UNIX_TIMESTAMP(COALESCE(r.reviewed_at, i.created_at)) AS reviewedAt,
                    u.user_key AS userKey, u.label AS userLabel
-            FROM list_items i
-            JOIN usuarios u ON i.owner_id = u.id
-            WHERE i.category = ? AND i.review_stars IS NOT NULL AND i.review_stars > 0";
+            FROM list_item_reviews r
+            JOIN list_items i ON r.item_id = i.id
+            JOIN usuarios u ON r.user_id = u.id
+            WHERE i.category = ? AND r.stars > 0";
     $params = [$cat];
     if ($cat === 'music' && $type !== '') { $sql .= " AND i.music_type = ?"; $params[] = $type; }
-    if ($period === 'year') { $sql .= " AND COALESCE(i.reviewed_at, i.created_at) >= FROM_UNIXTIME(?)"; $params[] = $yearAgo; }
+    if ($period === 'year') { $sql .= " AND COALESCE(r.reviewed_at, i.created_at) >= FROM_UNIXTIME(?)"; $params[] = $yearAgo; }
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);

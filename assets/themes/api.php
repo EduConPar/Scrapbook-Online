@@ -199,6 +199,16 @@ case 'set-active': {
         }
         $pdo->commit();
     } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+    /* Devolvemos los assets EFECTIVOS — no los crudos de BD. Si el tema
+       no declara wallpaper/icono propios (o el archivo no existe),
+       caemos al global del usuario en lugar de al default. Sin esto, al
+       activar un tema "solo colores" el cliente reseteaba el wallpaper
+       del usuario al base-wallpaper. La carga inicial de
+       desktop-base.php ya tenía esta lógica; la portamos aquí para que
+       la activación dinámica sea consistente. */
+    if ($name !== '') {
+        [$wallpaper, $startIcon] = effectiveThemeAssets($label, $wallpaper, $startIcon);
+    }
     /* className/cssPath para que el cliente pueda re-pintar el <link
        active-theme-link> sin construir la ruta a mano (la ruta canónica
        es uploads/themes/, no assets/themes/ — themeCssRelPath lo sabe). */
