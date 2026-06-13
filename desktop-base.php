@@ -145,9 +145,24 @@ if ($activeTheme !== '') {
     $uid = userIdByKey($desktopUserKey);
     $tWp = ''; $tSi = '';
     if ($uid) {
-        $st = themesPdo()->prepare("SELECT wallpaper, start_icon, colors FROM themes WHERE user_id = ? AND name = ?");
-        $st->execute([$uid, $activeTheme]);
-        $arow = $st->fetch(PDO::FETCH_ASSOC);
+        /* Filtramos por interface_name además de (user_id, name): la
+           tabla themes tiene UNIQUE (user_id, interface_name, name),
+           así que el mismo "Capi" puede existir para win98 y para
+           kawaii. Sin el filtro, MySQL devolvía cualquiera de las dos
+           y se perdía el fontDelta de la activa. */
+        $arow = null;
+        try {
+            $st = themesPdo()->prepare("SELECT wallpaper, start_icon, colors FROM themes WHERE user_id = ? AND name = ? AND interface_name = ?");
+            $st->execute([$uid, $activeTheme, $_activeInterface]);
+            $arow = $st->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $_) {
+            /* BD legacy sin columna interface_name → caemos al query sin
+               filtrar. Las migraciones idempotentes deberían haber
+               creado la columna ya, pero por si acaso. */
+            $st = themesPdo()->prepare("SELECT wallpaper, start_icon, colors FROM themes WHERE user_id = ? AND name = ?");
+            $st->execute([$uid, $activeTheme]);
+            $arow = $st->fetch(PDO::FETCH_ASSOC);
+        }
         if ($arow) {
             $tWp = (string)$arow['wallpaper'];
             $tSi = (string)$arow['start_icon'];
