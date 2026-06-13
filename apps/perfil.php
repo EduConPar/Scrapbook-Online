@@ -1012,39 +1012,38 @@ var PROFILE_USERS = <?php
             } else if (item) {
                 body.innerHTML = catPlaceholderHTML(cat, 42);
             }
-            if (item && item.collaborators && item.collaborators.length) {
-                var strip = document.createElement('div');
-                strip.className = 'profile-gallery-collabs';
-                item.collaborators.forEach(function(uKey) {
-                    var uInfo = PROFILE_USERS[uKey];
-                    if (!uInfo) return;
-                    var avFrame = document.createElement('div');
-                    avFrame.className = 'profile-avatar-frame';
-                    avFrame.title = uInfo.label;
-                    if (uInfo.image) {
-                        var avImg = document.createElement('img');
-                        avImg.src = uInfo.image;
-                        avImg.alt = uInfo.label;
-                        avFrame.appendChild(avImg);
-                    }
-                    strip.appendChild(avFrame);
-                });
-                body.appendChild(strip);
-            } else if (item && item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-                var strip = document.createElement('div');
-                strip.className = 'profile-gallery-collabs';
-                var hostInfo = PROFILE_USERS[item.sharedFrom];
-                var avFrame = document.createElement('div');
-                avFrame.className = 'profile-avatar-frame';
-                avFrame.title = hostInfo.label;
-                if (hostInfo.image) {
-                    var avImg = document.createElement('img');
-                    avImg.src = hostInfo.image;
-                    avImg.alt = hostInfo.label;
-                    avFrame.appendChild(avImg);
+            if (item) {
+                /* Construye la lista de keys a mostrar en la strip:
+                   - Si soy invitado (item.sharedFrom), el host va primero
+                     y luego los otros colaboradores (el backend ya me
+                     filtró a mí mismo).
+                   - Si soy el dueño, solo los colaboradores. */
+                var collabKeys = [];
+                if (item.sharedFrom) collabKeys.push(item.sharedFrom);
+                if (item.collaborators && item.collaborators.length) {
+                    item.collaborators.forEach(function(k) {
+                        if (k !== item.sharedFrom) collabKeys.push(k);
+                    });
                 }
-                strip.appendChild(avFrame);
-                body.appendChild(strip);
+                if (collabKeys.length) {
+                    var strip = document.createElement('div');
+                    strip.className = 'profile-gallery-collabs';
+                    collabKeys.forEach(function(uKey) {
+                        var uInfo = PROFILE_USERS[uKey];
+                        if (!uInfo) return;
+                        var avFrame = document.createElement('div');
+                        avFrame.className = 'profile-avatar-frame';
+                        avFrame.title = uInfo.label;
+                        if (uInfo.image) {
+                            var avImg = document.createElement('img');
+                            avImg.src = uInfo.image;
+                            avImg.alt = uInfo.label;
+                            avFrame.appendChild(avImg);
+                        }
+                        strip.appendChild(avFrame);
+                    });
+                    body.appendChild(strip);
+                }
             }
             slot.appendChild(body);
 
@@ -1697,10 +1696,20 @@ var PROFILE_USERS = <?php
             } else {
                 imgWrap.innerHTML = catPlaceholderHTML(cat, 48);
             }
+            /* Strip de avatares: si es item compartido, el host va
+               primero y luego el resto de invitados; si es propio,
+               solo los colaboradores. */
+            var collabKeys = [];
+            if (item.sharedFrom) collabKeys.push(item.sharedFrom);
             if (item.collaborators && item.collaborators.length) {
+                item.collaborators.forEach(function(k) {
+                    if (k !== item.sharedFrom) collabKeys.push(k);
+                });
+            }
+            if (collabKeys.length) {
                 var collabStrip = document.createElement('div');
                 collabStrip.className = 'profile-gallery-collabs';
-                item.collaborators.forEach(function(uKey) {
+                collabKeys.forEach(function(uKey) {
                     var uInfo = PROFILE_USERS[uKey];
                     if (!uInfo) return;
                     var avFrame = document.createElement('div');
@@ -1715,21 +1724,6 @@ var PROFILE_USERS = <?php
                     collabStrip.appendChild(avFrame);
                 });
                 imgWrap.appendChild(collabStrip);
-            } else if (item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-                var hostStrip = document.createElement('div');
-                hostStrip.className = 'profile-gallery-collabs';
-                var hostInfo = PROFILE_USERS[item.sharedFrom];
-                var avFrame = document.createElement('div');
-                avFrame.className = 'profile-avatar-frame';
-                avFrame.title = hostInfo.label;
-                if (hostInfo.image) {
-                    var avImg = document.createElement('img');
-                    avImg.src = hostInfo.image;
-                    avImg.alt = hostInfo.label;
-                    avFrame.appendChild(avImg);
-                }
-                hostStrip.appendChild(avFrame);
-                imgWrap.appendChild(hostStrip);
             }
 
             var footer = document.createElement('div');
@@ -4438,24 +4432,25 @@ var PROFILE_USERS = <?php
             } else if (item) {
                 body.textContent = item.type === 'album' ? '💿' : '🎵';
             }
-            if (item && item.collaborators && item.collaborators.length) {
-                var strip = document.createElement('div');
-                strip.className = 'profile-gallery-collabs';
-                item.collaborators.forEach(function(uKey) {
-                    var uInfo = PROFILE_USERS[uKey]; if (!uInfo) return;
-                    var avFrame = document.createElement('div'); avFrame.className = 'profile-avatar-frame'; avFrame.title = uInfo.label;
-                    if (uInfo.image) { var avImg = document.createElement('img'); avImg.src = uInfo.image; avImg.alt = uInfo.label; avFrame.appendChild(avImg); }
-                    strip.appendChild(avFrame);
-                });
-                body.appendChild(strip);
-            } else if (item && item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-                var strip = document.createElement('div');
-                strip.className = 'profile-gallery-collabs';
-                var hostInfo = PROFILE_USERS[item.sharedFrom];
-                var avFrame = document.createElement('div'); avFrame.className = 'profile-avatar-frame'; avFrame.title = hostInfo.label;
-                if (hostInfo.image) { var avImg = document.createElement('img'); avImg.src = hostInfo.image; avImg.alt = hostInfo.label; avFrame.appendChild(avImg); }
-                strip.appendChild(avFrame);
-                body.appendChild(strip);
+            if (item) {
+                var collabKeys = [];
+                if (item.sharedFrom) collabKeys.push(item.sharedFrom);
+                if (item.collaborators && item.collaborators.length) {
+                    item.collaborators.forEach(function(k) {
+                        if (k !== item.sharedFrom) collabKeys.push(k);
+                    });
+                }
+                if (collabKeys.length) {
+                    var strip = document.createElement('div');
+                    strip.className = 'profile-gallery-collabs';
+                    collabKeys.forEach(function(uKey) {
+                        var uInfo = PROFILE_USERS[uKey]; if (!uInfo) return;
+                        var avFrame = document.createElement('div'); avFrame.className = 'profile-avatar-frame'; avFrame.title = uInfo.label;
+                        if (uInfo.image) { var avImg = document.createElement('img'); avImg.src = uInfo.image; avImg.alt = uInfo.label; avFrame.appendChild(avImg); }
+                        strip.appendChild(avFrame);
+                    });
+                    body.appendChild(strip);
+                }
             }
             slot.appendChild(body);
             if (item) {
@@ -4620,21 +4615,21 @@ var PROFILE_USERS = <?php
                 featBadge.className = 'music-featured-badge'; featBadge.textContent = '★';
                 right.appendChild(featBadge);
             }
+            var collabKeys = [];
+            if (item.sharedFrom) collabKeys.push(item.sharedFrom);
             if (item.collaborators && item.collaborators.length) {
+                item.collaborators.forEach(function(k) {
+                    if (k !== item.sharedFrom) collabKeys.push(k);
+                });
+            }
+            if (collabKeys.length) {
                 var strip = document.createElement('div'); strip.className = 'music-list-collabs';
-                item.collaborators.forEach(function(uKey) {
+                collabKeys.forEach(function(uKey) {
                     var uInfo = PROFILE_USERS[uKey]; if (!uInfo) return;
                     var av = document.createElement('div'); av.className = 'profile-avatar-frame music-list-av'; av.title = uInfo.label;
                     if (uInfo.image) { var avImg = document.createElement('img'); avImg.src = uInfo.image; avImg.alt = uInfo.label; av.appendChild(avImg); }
                     strip.appendChild(av);
                 });
-                right.appendChild(strip);
-            } else if (item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-                var strip = document.createElement('div'); strip.className = 'music-list-collabs';
-                var hostInfo = PROFILE_USERS[item.sharedFrom];
-                var av = document.createElement('div'); av.className = 'profile-avatar-frame music-list-av'; av.title = hostInfo.label;
-                if (hostInfo.image) { var avImg = document.createElement('img'); avImg.src = hostInfo.image; avImg.alt = hostInfo.label; av.appendChild(avImg); }
-                strip.appendChild(av);
                 right.appendChild(strip);
             }
             row.appendChild(right);
@@ -5918,13 +5913,18 @@ var PROFILE_USERS = <?php
         + String(hoy.getMonth() + 1).padStart(2, '0') + '-'
         + String(hoy.getDate()).padStart(2, '0');
     var desc = '';
+    var withKeys = [];
+    if (item.sharedFrom) withKeys.push(item.sharedFrom);
     if (item.collaborators && item.collaborators.length) {
-        var collabLabels = item.collaborators.map(function(k) {
+        item.collaborators.forEach(function(k) {
+            if (k !== item.sharedFrom) withKeys.push(k);
+        });
+    }
+    if (withKeys.length) {
+        var labels = withKeys.map(function(k) {
             return PROFILE_USERS[k] ? PROFILE_USERS[k].label : k;
         });
-        desc = 'Con ' + collabLabels.join(', ');
-    } else if (item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-        desc = 'Con ' + PROFILE_USERS[item.sharedFrom].label;
+        desc = 'Con ' + labels.join(', ');
     }
     console.log('enviando save-momento:', JSON.stringify({
     pareja_id:   parejaId,

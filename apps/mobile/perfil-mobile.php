@@ -2187,13 +2187,18 @@ function crearMomentoFromItem(cat, item) {
                 String(d.getMonth() + 1).padStart(2, '0') + '-' +
                 String(d.getDate()).padStart(2, '0');
     var desc = '';
+    var withKeys = [];
+    if (item.sharedFrom) withKeys.push(item.sharedFrom);
     if (item.collaborators && item.collaborators.length) {
-        var labels = item.collaborators.map(function(k){
+        item.collaborators.forEach(function(k) {
+            if (k !== item.sharedFrom) withKeys.push(k);
+        });
+    }
+    if (withKeys.length) {
+        var labels = withKeys.map(function(k){
             return (PROFILE_USERS[k] && PROFILE_USERS[k].label) || k;
         });
         desc = 'Con ' + labels.join(', ');
-    } else if (item.sharedFrom && PROFILE_USERS[item.sharedFrom]) {
-        desc = 'Con ' + PROFILE_USERS[item.sharedFrom].label;
     }
     fetch(COUPLE_API + '?action=save-momento', {
         method: 'POST',

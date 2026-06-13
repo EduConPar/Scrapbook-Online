@@ -293,16 +293,25 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
     $stmt->execute([$uid, $uid]);
     $sharedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    /* Cargar colaboradores de las propias en bulk */
+    /* Cargar colaboradores de TODOS los items (propios + compartidos)
+       en una sola query bulk. Antes sólo se cargaban los de los
+       propios → en los compartidos el invitado veía únicamente el
+       avatar del host, no el resto de invitados.
+       Excluimos al usuario actual (c.user_id <> ?) para no duplicar
+       su propio avatar al lado del host en items compartidos. */
+    $allIds = array_merge(
+        array_column($ownRows, 'id'),
+        array_column($sharedRows, 'id')
+    );
     $collabsByItem = [];
-    if (!empty($ownRows)) {
-        $ids = array_column($ownRows, 'id');
-        $place = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $pdo->prepare("SELECT c.item_id, u.user_key
-                               FROM list_item_collaborators c
-                               JOIN usuarios u ON c.user_id = u.id
-                               WHERE c.item_id IN ($place)");
-        $stmt->execute($ids);
+    if (!empty($allIds)) {
+        $place = implode(',', array_fill(0, count($allIds), '?'));
+        $sql = "SELECT c.item_id, u.user_key
+                FROM list_item_collaborators c
+                JOIN usuarios u ON c.user_id = u.id
+                WHERE c.item_id IN ($place) AND c.user_id <> ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(array_merge($allIds, [$uid]));
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $collabsByItem[(int)$r['item_id']][] = $r['user_key'];
         }
@@ -314,7 +323,10 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
     }
     foreach ($sharedRows as $r) {
         $cat = $r['category'];
-        $lists[$cat][] = pf_rowToItem($r, $r['owner_key'], []);
+        /* En items compartidos, `sharedFrom` es el host (owner) y
+           `collaborators` son los OTROS invitados (la query ya filtró
+           al usuario actual, así que su propio avatar no se duplica). */
+        $lists[$cat][] = pf_rowToItem($r, $r['owner_key'], $collabsByItem[(int)$r['id']] ?? []);
     }
     return $lists;
 }
