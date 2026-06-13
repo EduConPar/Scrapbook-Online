@@ -180,7 +180,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         if ($_origIfaceCookie === null) unset($_COOKIE['activeInterface']);
         else $_COOKIE['activeInterface'] = $_origIfaceCookie;
     ?>
-    <script src="../../assets/js/interface-loader.js"></script>
+    <script src="../../assets/js/interface-loader.js?v=fs1"></script>
     <link rel="stylesheet" href="../../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">

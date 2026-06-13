@@ -82,6 +82,11 @@
             try { src = new URL('font-scale.js', thisScript.src).href; }
             catch (_) {}
         }
+        /* Cache-bust: si en producción (Hostinger) la versión anterior
+           del font-scale.js está cacheada en disco, este sufijo fuerza
+           al navegador a traer la actual. Bumpea este valor cuando
+           edites font-scale.js. */
+        src += (src.indexOf('?') === -1 ? '?' : '&') + 'v=fs1';
         var s = document.createElement('script');
         s.src = src;
         s.async = false;

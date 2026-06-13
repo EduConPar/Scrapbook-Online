@@ -171,7 +171,7 @@ if ($_perfilStandalone) {
         if ($_origIfaceCookie === null) unset($_COOKIE['activeInterface']);
         else $_COOKIE['activeInterface'] = $_origIfaceCookie;
     ?>
-    <script src="assets/js/interface-loader.js"></script>
+    <script src="assets/js/interface-loader.js?v=fs1"></script>
     <style>
         /* Standalone: el iframe contiene 1 sola ventana que llena el
            viewport. Sin escritorio, sin taskbar — el shell padre

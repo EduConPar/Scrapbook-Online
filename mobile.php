@@ -287,7 +287,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <!-- Delta de tamaño de fuente del tema activo, antes del loader
          para que font-scale.js lo lea ya correcto al boot. -->
     <script>window.__fontScaleDelta = <?= (int)$activeFsDelta ?>;</script>
-    <script src="assets/js/interface-loader.js"></script>
+    <script src="assets/js/interface-loader.js?v=fs1"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
         /* Tweaks específicos de mobile.php — todo lo común vive en

@@ -292,7 +292,7 @@ $_isTablet = isTabletDevice();
          desde ahí ya vea el valor correcto y aplique el escalado en
          el primer paint (sin flash de tamaño base). -->
     <script>window.__fontScaleDelta = <?php echo (int)$activeFsDelta; ?>;</script>
-    <script src="assets/js/interface-loader.js"></script>
+    <script src="assets/js/interface-loader.js?v=fs1"></script>
     <script>
     (function(){
         if (window.__win98DialogsLoaded) return;

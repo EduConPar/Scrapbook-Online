@@ -128,7 +128,7 @@ $currentSkin = $hasMascota ? ($mascota['skin'] ?? 'gabriel') : 'gabriel';
     <title>Mascota</title>
     <script src="../assets/js/icon-pack.js"></script>
     <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
-    <script src="../assets/js/interface-loader.js"></script>
+    <script src="../assets/js/interface-loader.js?v=fs1"></script>
     <link rel="stylesheet" href="../assets/css/98.css">
     <link rel="stylesheet" href="../assets/css/tokens.css">
     <link rel="stylesheet" href="../assets/css/base.css">

@@ -41,7 +41,7 @@ if ($userKey && file_exists($themeHelpers)) {
 <?php if ($activeThemeCss): ?>
 <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
 <?php endif; ?>
-<script src="../assets/js/interface-loader.js"></script>
+<script src="../assets/js/interface-loader.js?v=fs1"></script>
 <style>
 @font-face { font-family:'Allison'; src:url('../assets/fonts/Allison-Regular.ttf') format('truetype'); }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
