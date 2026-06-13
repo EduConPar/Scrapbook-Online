@@ -821,11 +821,13 @@ function buildEditor() {
             picker.addEventListener('input', function() {
                 hex.value = picker.value;
                 _applyLivePreview(picker.value);
+                _autoSaveExisting();
             });
             hex.addEventListener('input', function() {
                 if (/^#[0-9a-f]{6}$/i.test(hex.value)) {
                     picker.value = hex.value;
                     _applyLivePreview(hex.value);
+                    _autoSaveExisting();
                 }
             });
             row.appendChild(picker);
@@ -927,7 +929,95 @@ function _propagateFontDelta(d) {
         if (rd) rd.textContent = (d >= 0 ? '+' : '') + d + ' px';
         if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(d);
         _propagateFontDelta(d);
+        _autoSaveExisting();
     });
+})();
+
+/* ── AUTO-SAVE de temas existentes ──
+   Cualquier cambio (color, hex, slider de fuente, nombre) en un tema
+   YA persistido se guarda automáticamente sin tener que pulsar
+   "Guardar". Se identifica por `editingOriginalName`: si es null es
+   un tema nuevo todavía sin nombre → flujo manual con el botón. */
+var _autoSaveTimer = null;
+var _autoSaveInFlight = false;
+function _autoSaveExisting() {
+    /* Tema nuevo (sin guardar todavía) → no auto-save. */
+    if (!editingOriginalName) return;
+    /* Coalesce ráfagas de eventos (el color picker dispara `input`
+       muchas veces por segundo mientras se arrastra). */
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(_autoSaveFlush, 400);
+}
+function _autoSaveFlush() {
+    _autoSaveTimer = null;
+    if (_autoSaveInFlight) {
+        /* Otra request en vuelo — reintenta cuando termine. */
+        _autoSaveTimer = setTimeout(_autoSaveFlush, 200);
+        return;
+    }
+    if (!editingOriginalName) return;
+    var name = nameInput.value.trim();
+    if (!name) return;
+    var colors  = getEditorColors();
+    var oldName = editingOriginalName;
+    var renamed = (oldName !== name);
+    _autoSaveInFlight = true;
+    fetch('../assets/themes/api.php?action=save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, colors: colors, oldName: oldName })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+          _autoSaveInFlight = false;
+          if (!d || d.error) {
+              statusEl.textContent = (d && d.error) ? d.error : 'Error guardando.';
+              return;
+          }
+          /* Actualizar el espejo en memoria sin recargar la lista
+             entera (para no perder selección/scroll). */
+          if (renamed) {
+              if (savedThemes[oldName]) {
+                  savedThemes[name] = savedThemes[oldName];
+                  delete savedThemes[oldName];
+              } else {
+                  savedThemes[name] = savedThemes[name] || {};
+              }
+              if (activeName === oldName) activeName = name;
+              editingOriginalName = name;
+          } else {
+              savedThemes[name] = savedThemes[name] || {};
+          }
+          savedThemes[name].colors = colors;
+          /* Si el tema que estamos editando es el activo, hay que
+             re-apuntar el <link id="active-theme-link"> al CSS recién
+             regenerado por el backend. Sin esto, los cambios sólo se
+             ven en el live preview pero no persisten visualmente al
+             recargar otras apps que ya estaban abiertas. */
+          if (name === activeName && d.cssPath) {
+              applyLiveTheme(d.className, d.cssPath);
+          }
+          statusEl.textContent = 'Guardado automáticamente.';
+      })
+      .catch(function(){
+          _autoSaveInFlight = false;
+          statusEl.textContent = 'Error de red al guardar.';
+      });
+}
+
+/* Disparadores del auto-save sobre el nombre del tema. Debounce más
+   largo para no renombrar/duplicar mientras el usuario aún escribe. */
+(function wireNameAutoSave(){
+    if (!nameInput) return;
+    var nameTimer = null;
+    nameInput.addEventListener('input', function(){
+        if (!editingOriginalName) return;
+        if (nameTimer) clearTimeout(nameTimer);
+        nameTimer = setTimeout(_autoSaveExisting, 900);
+    });
+    /* Si el usuario sale del input (blur) o pulsa enter, persistir
+       inmediatamente sin esperar al debounce. */
+    nameInput.addEventListener('blur',  function(){ if (editingOriginalName) _autoSaveExisting(); });
+    nameInput.addEventListener('change',function(){ if (editingOriginalName) _autoSaveExisting(); });
 })();
 
 function resetEditor() {

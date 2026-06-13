@@ -1018,9 +1018,15 @@ function buildEditor() {
             hex.maxLength = 9;
             hex.dataset.key = def.key;
             hex.id = 'hex-' + def.key;
-            picker.addEventListener('input', function() { hex.value = picker.value; });
+            picker.addEventListener('input', function() {
+                hex.value = picker.value;
+                _autoSaveExisting();
+            });
             hex.addEventListener('input', function() {
-                if (/^#[0-9a-f]{6}$/i.test(hex.value)) picker.value = hex.value;
+                if (/^#[0-9a-f]{6}$/i.test(hex.value)) {
+                    picker.value = hex.value;
+                    _autoSaveExisting();
+                }
             });
             row.appendChild(picker);
             row.appendChild(hex);
@@ -1368,7 +1374,7 @@ document.getElementById('theme-save').addEventListener('click', function() {
 });
 
 /* Slider de tamaño de fuente: live preview mientras el usuario
-   arrastra. NO persiste hasta que se guarde el tema. */
+   arrastra. Persiste automáticamente si el tema ya existía. */
 (function wireFontSlider() {
     var sl  = document.getElementById('theme-font-delta');
     var out = document.getElementById('theme-font-delta-readout');
@@ -1378,7 +1384,82 @@ document.getElementById('theme-save').addEventListener('click', function() {
         if (out) out.textContent = (d > 0 ? '+' : '') + d + (d === 0 ? '' : ' px');
         if (typeof window.setFontScaleDelta === 'function') window.setFontScaleDelta(d);
         _propagateFontDelta(d);
+        _autoSaveExisting();
     });
+})();
+
+/* ── AUTO-SAVE de temas existentes ──
+   Cualquier cambio (color, hex, slider de fuente, nombre) en un tema
+   YA persistido se guarda automáticamente sin tener que pulsar
+   "Guardar". Se identifica por `editingOriginalName`: si es null es
+   un tema nuevo todavía sin nombre → flujo manual con el botón. */
+var _autoSaveTimer = null;
+var _autoSaveInFlight = false;
+function _autoSaveExisting() {
+    if (!editingOriginalName) return;
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(_autoSaveFlush, 400);
+}
+function _autoSaveFlush() {
+    _autoSaveTimer = null;
+    if (_autoSaveInFlight) {
+        _autoSaveTimer = setTimeout(_autoSaveFlush, 200);
+        return;
+    }
+    if (!editingOriginalName) return;
+    var name = nameInput.value.trim();
+    if (!name) return;
+    var colors  = getEditorColors();
+    var oldName = editingOriginalName;
+    var renamed = (oldName !== name);
+    _autoSaveInFlight = true;
+    fetch('../../assets/themes/api.php?action=save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, colors: colors, oldName: oldName })
+    }).then(function(r){ return r.json(); })
+      .then(function(d){
+          _autoSaveInFlight = false;
+          if (!d || d.error) {
+              statusEl.textContent = (d && d.error) ? d.error : 'Error guardando.';
+              return;
+          }
+          if (renamed) {
+              if (savedThemes[oldName]) {
+                  savedThemes[name] = savedThemes[oldName];
+                  delete savedThemes[oldName];
+              } else {
+                  savedThemes[name] = savedThemes[name] || {};
+              }
+              if (activeName === oldName) activeName = name;
+              editingOriginalName = name;
+          } else {
+              savedThemes[name] = savedThemes[name] || {};
+          }
+          savedThemes[name].colors = colors;
+          if (name === activeName && d.cssPath) {
+              applyLiveTheme(d.className, d.cssPath);
+          }
+          statusEl.textContent = 'Guardado automáticamente.';
+      })
+      .catch(function(){
+          _autoSaveInFlight = false;
+          statusEl.textContent = 'Error de red al guardar.';
+      });
+}
+
+/* Auto-save al editar el nombre del tema (debounce largo para no
+   renombrar mientras el usuario aún escribe). */
+(function wireNameAutoSave(){
+    if (!nameInput) return;
+    var nameTimer = null;
+    nameInput.addEventListener('input', function(){
+        if (!editingOriginalName) return;
+        if (nameTimer) clearTimeout(nameTimer);
+        nameTimer = setTimeout(_autoSaveExisting, 900);
+    });
+    nameInput.addEventListener('blur',  function(){ if (editingOriginalName) _autoSaveExisting(); });
+    nameInput.addEventListener('change',function(){ if (editingOriginalName) _autoSaveExisting(); });
 })();
 
 document.getElementById('theme-activate').addEventListener('click', function() {

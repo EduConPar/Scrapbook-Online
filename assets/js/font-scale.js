@@ -48,7 +48,20 @@
     }
 
     function setRootVar(delta) {
-        document.documentElement.style.setProperty('--fs-delta', delta + 'px');
+        /* OJO con la especificidad: el CSS del tema activo emite
+           `--fs-delta: Npx` dentro de `body.tema-xxx-userLabel`, lo
+           que PISA un setProperty plano en <html> (selector class
+           gana al inline). Para que el JS siempre gane:
+             - inline en <html> con `important`
+             - inline en <body> con `important` (cubre el caso del
+               selector class del tema, mismo nodo).
+           Así el slider en vivo + el primer paint emitido por PHP
+           siempre se imponen al valor congelado en el CSS del tema. */
+        var val = delta + 'px';
+        document.documentElement.style.setProperty('--fs-delta', val, 'important');
+        if (document.body) {
+            document.body.style.setProperty('--fs-delta', val, 'important');
+        }
     }
 
     /* ── Generación del overlay (UNA vez por sesión) ──
@@ -212,6 +225,13 @@
         buildOverlay();
         rewriteAllInline();
         installObserver();
+        /* Pases extra en intervalos crecientes — en PWA móvil las
+           hojas vienen del cache de Service Worker y a veces se
+           incorporan a document.styleSheets justo después del boot,
+           sin disparar `load` (si load ya pasó). Cubre ese hueco. */
+        setTimeout(() => { buildOverlay(); rewriteAllInline(); }, 100);
+        setTimeout(() => { buildOverlay(); rewriteAllInline(); }, 500);
+        setTimeout(() => { buildOverlay(); rewriteAllInline(); }, 1500);
         window.addEventListener('load', () => {
             /* Segundo pase: las hojas externas cargadas tarde se
                incorporan a styleSheets cuando load termina. */
