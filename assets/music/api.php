@@ -713,18 +713,56 @@ case 'find-album': {
     /* Trae múltiples candidatos para poder rankear. Spotify ordena por
        su propia relevancia pero a veces el TOP-1 es un cover o remix
        que tiene nombre parecido pero NO es la canción del usuario; con
-       limit=10 podemos descartar esos. */
+       limit=10 podemos descartar esos.
+
+       Devuelve [items, rateLimited]. rateLimited=true cuando Spotify
+       responde 429 — el caller usa esto para NO cachear notFound
+       (sería una decisión basada en un fallo temporal). */
     $tryQuery = function(string $q) use ($token) {
-        if ($q === '') return [];
+        if ($q === '') return [[], false];
         $url = 'https://api.spotify.com/v1/search?type=track&limit=10&market=US&q=' . rawurlencode($q);
         $ctx = stream_context_create(['http' => [
             'timeout' => 8, 'ignore_errors' => true,
             'header'  => 'Authorization: Bearer ' . $token,
         ]]);
         $raw = @file_get_contents($url, false, $ctx);
-        if (!$raw) return [];
-        $data = json_decode($raw, true);
-        return $data['tracks']['items'] ?? [];
+        if (!$raw) return [[], false];
+        /* Detección de 429: el body es "Too many requests" en texto plano
+           o JSON {"error":{"status":429}}. Spotify a veces incluye el
+           header Retry-After con segundos para esperar. */
+        $isRateLimited = false;
+        if (stripos((string)$raw, 'too many requests') !== false) {
+            $isRateLimited = true;
+        }
+        $data = json_decode((string)$raw, true);
+        if (is_array($data) && isset($data['error']['status']) && (int)$data['error']['status'] === 429) {
+            $isRateLimited = true;
+        }
+        /* Re-intento UNA vez tras un pequeño backoff. No reintentamos
+           más para no bloquear el endpoint con timeouts en cascada. */
+        if ($isRateLimited) {
+            $wait = 0;
+            foreach ($http_response_header ?? [] as $h) {
+                if (stripos($h, 'retry-after:') === 0) {
+                    $wait = max(0, min(3, (int)trim(substr($h, 12))));
+                    break;
+                }
+            }
+            usleep(($wait ?: 1) * 1000000);
+            $raw2 = @file_get_contents($url, false, $ctx);
+            if ($raw2) {
+                $data2 = json_decode((string)$raw2, true);
+                $items2 = $data2['tracks']['items'] ?? null;
+                if ($items2 !== null) return [$items2, false];
+                /* Sigue rate-limited */
+                if (stripos((string)$raw2, 'too many requests') !== false ||
+                    (is_array($data2) && isset($data2['error']['status']) && (int)$data2['error']['status'] === 429)) {
+                    return [[], true];
+                }
+            }
+            return [[], true];
+        }
+        return [$data['tracks']['items'] ?? [], false];
     };
 
     /* Normalización para comparar strings: lowercase, strip diacritics,
@@ -785,13 +823,22 @@ case 'find-album': {
 
     /* Recolecta candidatos de varias queries — más opciones para
        rankear. La primera (filtrada con track:/artist:) suele dar el
-       mejor; la libre cubre casos donde la estructurada no halló nada. */
+       mejor; la libre cubre casos donde la estructurada no halló nada.
+
+       wasRateLimited rastrea si alguna sub-query topó con 429. Si todas
+       las que devolvieron 0 items fueron por rate-limit, no cacheamos
+       el resultado — la próxima vez puede encontrar el álbum. */
     $candidates = [];
+    $wasRateLimited = false;
     if ($artist !== '') {
-        $candidates = array_merge($candidates, $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"'));
+        [$items, $rl] = $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"');
+        $candidates = array_merge($candidates, $items);
+        $wasRateLimited = $wasRateLimited || $rl;
     }
     if (count($candidates) < 3) {
-        $candidates = array_merge($candidates, $tryQuery(trim($cleanTitle . ' ' . $artist)));
+        [$items, $rl] = $tryQuery(trim($cleanTitle . ' ' . $artist));
+        $candidates = array_merge($candidates, $items);
+        $wasRateLimited = $wasRateLimited || $rl;
     }
 
     /* Dedupe por id de track. */
@@ -869,15 +916,23 @@ case 'find-album': {
     }
 
     /* Si nada superó ninguno de los niveles de la cascada (Spotify no
-       devolvió candidatos o todos eran muy malos), devolvemos
-       notFound — el cliente NO muestra álbum para esa canción. */
+       devolvió candidatos o todos eran muy malos), gestionamos dos
+       casos:
+         - Rate limit (429): NO cacheamos y devolvemos un error con
+           status 503 + code rateLimited. El cliente sabe que es
+           transitorio y NO lo cacheará localmente, así la próxima vez
+           reintenta.
+         - notFound real: cacheamos por sólo 5 min para que un fallo
+           transitorio no quede pegado 7 días, pero un álbum real
+           encontrado sí se cachea 7 días (no caduca). */
     if ($result === null) {
+        if ($wasRateLimited) {
+            jsonResponse([
+                'error' => 'Spotify rate-limited (try again in a few seconds)',
+                'code'  => 'rateLimited',
+            ], 503);
+        }
         $result = ['notFound' => true];
-        /* TTL corto (5 min) para notFound: si Spotify estaba caído o
-           el rate-limit nos cortó, queremos reintentar pronto. Sin esta
-           protección un fallo transitorio dejaba la canción sin álbum
-           durante 7 días. Resultados positivos (album real) sí los
-           cacheamos los 7 días — esos no caducan. */
         cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 5 * 60);
     } else {
         cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);

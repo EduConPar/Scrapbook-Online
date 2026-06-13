@@ -2030,6 +2030,29 @@ function _logAlbumPlay() {
 
    Si el match cae bajo el threshold de find-album (devuelve notFound),
    el span queda vacío — no mostramos información ruidosa. */
+/* ── Semáforo de concurrencia para find-album ──
+   El editor de playlist puede renderizar 20+ tracks, cada uno
+   disparando una request a find-album. Lanzarlas todas en paralelo
+   satura el rate-limit de Spotify (429), después de lo cual todas
+   devuelven "sin álbum". Limitamos a 3 simultáneas; el resto entra a
+   una cola y se ejecuta cuando se libera un slot. */
+const _ALBUM_CONCURRENCY = 3;
+let _albumInFlight = 0;
+const _albumQueue = [];
+function _albumNextSlot() {
+    if (_albumInFlight >= _ALBUM_CONCURRENCY || !_albumQueue.length) return;
+    _albumInFlight++;
+    const job = _albumQueue.shift();
+    job().finally(() => {
+        _albumInFlight--;
+        _albumNextSlot();
+    });
+}
+function _albumQueueRun(jobFn) {
+    _albumQueue.push(jobFn);
+    _albumNextSlot();
+}
+
 function _resolveAlbumForRow(track, albumSpan) {
     if (!track || !track.videoId) return;
     const vId = track.videoId;
@@ -2067,17 +2090,21 @@ function _resolveAlbumForRow(track, albumSpan) {
         title:  track.title || '',
         artist: track.artist || '',
     });
-    fetch('assets/music/api.php?action=find-album&' + params.toString())
-        .then(r => r.ok ? r.json() : null)
+    /* La request va a la cola del semáforo. Si la queja del backend es
+       "rate-limited" (HTTP 503 con code:rateLimited), no cacheamos
+       nada — la próxima visita al editor la reintenta. */
+    _albumQueueRun(() => fetch('assets/music/api.php?action=find-album&' + params.toString())
+        .then(r => {
+            if (r.status === 503) return null; /* rate-limit transitorio: skip silente */
+            return r.ok ? r.json() : null;
+        })
         .then(data => {
             if (!data) return;
-            /* Solo cachear si es un álbum real — los notFound NO se
-               cachean en cliente para reintentar la próxima vez. */
             const norm = _normalizeAlbumPayload(data, track);
             if (norm) _albumCacheSet(vId, norm);
             paint(data);
         })
-        .catch(() => { /* offline / endpoint caído → no se muestra nada */ });
+        .catch(() => { /* offline / endpoint caído → no se muestra nada */ }));
 }
 
 /* Filtra el payload del backend: solo aceptamos respuestas con un
@@ -2124,8 +2151,15 @@ function resolveAndShowAlbum(track) {
         artist: track.artist || '',
     });
     fetch('assets/music/api.php?action=find-album&' + params.toString())
-        .then(r => r.ok ? r.json() : null)
+        .then(r => {
+            /* 503 = rate-limited por Spotify. Tratamos como silente:
+               no cacheamos nada, no actualizamos UI. La próxima
+               visita al track reintentará. */
+            if (r.status === 503) return null;
+            return r.ok ? r.json() : null;
+        })
         .then(data => {
+            if (!data) return;
             /* Solo cacheamos álbumes REALES — un null (notFound o red
                caída) NO lo cacheamos, así la próxima vez se reintenta
                y puede encontrar el álbum cuando Spotify se recupere o
