@@ -120,6 +120,17 @@ ensureLoginUsers();
 function getUserImage($label)
 {
     $safe = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+    $root = dirname(__DIR__);
+    /* 1) Carpeta de subidas de usuario — sobrevive a los deploys de
+       Hostinger porque está gitignored. Aquí van TODAS las fotos
+       subidas vía save-profile-photo.php, incluidas las de Capi/Angie
+       si las cambian. Si existe aquí, tiene precedencia. */
+    foreach (['webp', 'jpg', 'jpeg', 'png', 'gif'] as $ext) {
+        if (file_exists($root . "/uploads/profile-photos/{$safe}.{$ext}")) {
+            return "uploads/profile-photos/{$safe}.{$ext}";
+        }
+    }
+    /* 2) Fallback al seed versionado del repo (Capi.jpg / Angie.jpg). */
     foreach (['jpg', 'jpeg', 'png', 'gif'] as $ext) {
         if (file_exists(__DIR__ . "/img/{$safe}.{$ext}")) {
             return "assets/img/{$safe}.{$ext}";

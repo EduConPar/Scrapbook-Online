@@ -502,14 +502,17 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- PROFILE NOTIFICATIONS WINDOW -->
-<div class="window" id="profile-notifs-window" style="display:none;position:fixed;z-index:10002;width:320px;max-height:60vh;">
-    <div class="title-bar">
+<!-- flex-direction:column + body flex:1 + min-height:0 → al resizear
+     la ventana, el body se encoge con ella y aparece scroll en lugar
+     de items que sobresalen por abajo. -->
+<div class="window" id="profile-notifs-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:320px;height:60vh;max-height:60vh;min-height:120px;">
+    <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>
-    <div class="window-body" id="profile-notifs-body" style="padding:6px;max-height:50vh;overflow-y:auto;">
+    <div class="window-body" id="profile-notifs-body" style="padding:6px;flex:1;min-height:0;overflow-y:auto;">
         <div id="profile-notifs-list"></div>
         <div id="profile-notifs-empty" style="display:none;padding:14px;text-align:center;font-size:11px;color:#808080;">No tienes notificaciones</div>
     </div>
@@ -2369,7 +2372,10 @@ var PROFILE_USERS = <?php
         var win = document.getElementById('profile-notifs-window');
         if (!win) return;
         renderProfileNotifs();
-        win.style.display = 'block';
+        /* flex (no block) para que flex-direction:column de la ventana
+           se active y el window-body pueda usar flex:1 para encogerse
+           con la ventana al hacerse pequeña. */
+        win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
         /* Marca todas como leídas en servidor + UI */
@@ -3618,6 +3624,14 @@ var PROFILE_USERS = <?php
         chatWithUser = userKey;
         chatLastSeenId = null;
         chatLastSig    = '';
+        /* Limpia el listado de mensajes ANTES de pedir los del nuevo
+           usuario: si abres un chat sin mensajes (ej. el primero con
+           alguien), loadChatMessages devuelve [] y renderChatMessages
+           hace early-return porque el sig ('' nuevo) coincide con el
+           que dejamos en chatLastSig ('' reset). Como no re-renderiza,
+           el DOM se quedaba con los mensajes del chat anterior. */
+        var msgsEl = document.getElementById('profile-chat-messages');
+        if (msgsEl) msgsEl.innerHTML = '';
         /* Pinta status (En línea / Última vez …) inmediatamente con el
            snapshot que ya tenemos en memoria — el siguiente refresh
            cada 20s lo actualiza si cambia. */

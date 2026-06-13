@@ -1,7 +1,12 @@
 <?php
 /* Sube/actualiza la foto de perfil del usuario logueado.
-   Se guarda como <userLabel>.<ext> en assets/img/ y elimina la versión
-   anterior si existía con otra extensión. */
+   Se guarda como <userLabel>.<ext> en /uploads/profile-photos/.
+   ANTES se guardaba en /assets/img/ pero las fotos de Capi/Angie están
+   tracked en el repo (como seeds default) y el auto-deploy de Hostinger
+   hace `git reset --hard`, sobrescribiendo cualquier foto subida que
+   coincida con esos nombres. Las subidas viven ahora fuera del directorio
+   tracked, donde sobreviven los deploys.
+   Limpia también versiones legacy en assets/img/ por si las hubiera. */
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 require_once dirname(__DIR__) . '/config.php';
@@ -25,22 +30,45 @@ if ($file['size'] > 5 * 1024 * 1024) { echo json_encode(['error' => 'Máximo 5MB
 $info = @getimagesize($file['tmp_name']);
 if (!$info) { echo json_encode(['error' => 'Archivo no válido como imagen']); exit; }
 
-/* Nombre base = label sin caracteres raros (igual que getUserImage) */
-$baseName = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
-$dir      = __DIR__;
+/* Nombre base = label sin caracteres raros (igual que getUserImage). */
+$baseName  = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+$assetsDir = __DIR__;                                       /* legacy: assets/img/ */
+$uploadDir = dirname(__DIR__, 2) . '/uploads/profile-photos';
 
-/* Borrar versiones previas con cualquier extensión */
-foreach ($allowed as $e) {
-    $old = $dir . '/' . $baseName . '.' . $e;
-    if (file_exists($old)) @unlink($old);
+/* Crea el directorio de subidas si no existe (típico tras un deploy
+   limpio o primera instalación). */
+if (!is_dir($uploadDir)) {
+    if (!@mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
+        echo json_encode(['error' => 'No se pudo crear ' . $uploadDir]); exit;
+    }
 }
 
-$dest = $dir . '/' . $baseName . '.' . $ext;
+/* Borrar cualquier versión previa, en AMBOS sitios:
+   - El nuevo (uploads/profile-photos/): por si el usuario cambia de
+     extensión (jpg → png) y el viejo seguiría siendo encontrado.
+   - El viejo (assets/img/): para limpiar fotos subidas con el path
+     antiguo, que ya no se servirán. Capi.jpg / Angie.jpg en assets/img/
+     SE PRESERVAN porque son seed del repo (no se borrarían sin que
+     el usuario haya subido una propia, en cuyo caso queremos que la
+     suya en uploads/ tome precedencia y aún así borrar el seed de
+     assets/img/ es indeseable — sólo borramos cuando la foto antigua
+     pertenece a este mismo $baseName y no es la del seed protegido). */
+$seedProtected = in_array($baseName, ['Capi', 'Angie'], true);
+foreach ($allowed as $e) {
+    $oldUploads = $uploadDir   . '/' . $baseName . '.' . $e;
+    if (file_exists($oldUploads)) @unlink($oldUploads);
+    if (!$seedProtected) {
+        $oldAssets = $assetsDir . '/' . $baseName . '.' . $e;
+        if (file_exists($oldAssets)) @unlink($oldAssets);
+    }
+}
+
+$dest = $uploadDir . '/' . $baseName . '.' . $ext;
 if (!move_uploaded_file($file['tmp_name'], $dest)) {
     echo json_encode(['error' => 'No se pudo guardar la foto (revisa permisos)']); exit;
 }
 
 echo json_encode([
     'ok'    => true,
-    'photo' => 'assets/img/' . $baseName . '.' . $ext,
+    'photo' => 'uploads/profile-photos/' . $baseName . '.' . $ext,
 ]);

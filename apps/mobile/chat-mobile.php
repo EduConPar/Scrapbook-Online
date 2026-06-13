@@ -52,11 +52,19 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     }
 }
 
-/* Avatar helper (mismo patrón que perfil-mobile.php). */
+/* Avatar helper (mismo patrón que getUserImage en assets/config.php).
+   Mira primero en uploads/profile-photos/ (sube de usuarios, sobrevive
+   los deploys de Hostinger porque está gitignored), después cae al
+   seed del repo en assets/img/. */
 function getUserImage_chat($label) {
     $safe = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
+    $root = dirname(__DIR__, 2);
+    foreach (['webp','png','jpg','jpeg','gif'] as $ext) {
+        $p = $root . "/uploads/profile-photos/{$safe}.{$ext}";
+        if (file_exists($p)) return "uploads/profile-photos/{$safe}.{$ext}";
+    }
     foreach (['png','jpg','jpeg','gif'] as $ext) {
-        $p = dirname(__DIR__, 2) . "/assets/img/{$safe}.{$ext}";
+        $p = $root . "/assets/img/{$safe}.{$ext}";
         if (file_exists($p)) return "assets/img/{$safe}.{$ext}";
     }
     return '';

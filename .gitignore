@@ -71,3 +71,11 @@ Thumbs.db
 # Subidas de momentos (fotos privadas).
 /uploads/momentos/*
 !/uploads/momentos/.gitkeep
+
+# Fotos de perfil subidas por usuarios. Viven aquí (fuera de
+# assets/img/) para que NO entren en conflicto con los seeds
+# Capi.jpg / Angie.jpg que sí están tracked: si guardábamos en
+# assets/img/ el git reset --hard del auto-deploy de Hostinger
+# restauraba el seed y la foto subida se perdía.
+/uploads/profile-photos/*
+!/uploads/profile-photos/.gitkeep
