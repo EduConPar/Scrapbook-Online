@@ -516,7 +516,14 @@ if ($_perfilStandalone) {
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
-            <button aria-label="Help" id="profile-notifs-settings-btn" title="Preferencias de notificaciones" style="margin-right:2px;">?</button>
+            <!-- Botón engranaje propio (no usamos aria-label="Help" porque
+                 98.css le pinta el icono "?" como background del botón
+                 de ayuda de Win98). Sin aria-label el botón renderiza
+                 el contenido textual del span. -->
+            <button id="profile-notifs-settings-btn" title="Preferencias de notificaciones"
+                    style="margin-right:2px;min-width:18px;min-height:14px;padding:0;font-size:11px;line-height:1;">
+                <span style="display:inline-block;line-height:1;font-size:11px;">⚙</span>
+            </button>
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>
@@ -534,20 +541,24 @@ if ($_perfilStandalone) {
             <button aria-label="Close" id="profile-notif-prefs-close"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:12px;display:flex;flex-direction:column;gap:8px;font-size:11px;">
-        <p style="margin:0 0 4px;">Silenciar el sonido de:</p>
-        <label style="display:flex;align-items:center;gap:6px;">
+    <div class="window-body" style="padding:12px;display:flex;flex-direction:column;gap:10px;font-size:11px;">
+        <p style="margin:0;">Silenciar el sonido de:</p>
+        <!-- IMPORTANTE: 98.css dibuja el cuadrado visualmente en :before
+             del <label> HERMANO del <input>. Si el input está DENTRO de
+             un label-padre, el :before no aparece y el checkbox queda
+             invisible. Hay que usar siempre <input id> + <label for>. -->
+        <div class="field-row">
             <input type="checkbox" id="np-mute-profile">
-            <span>Perfil de otros usuarios (reseñas, posts, follows)</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;">
+            <label for="np-mute-profile">Perfil de otros usuarios (reseñas, posts, follows)</label>
+        </div>
+        <div class="field-row">
             <input type="checkbox" id="np-mute-social">
-            <span>Likes y comentarios</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;">
+            <label for="np-mute-social">Likes y comentarios</label>
+        </div>
+        <div class="field-row">
             <input type="checkbox" id="np-mute-messages">
-            <span>Mensajes (activa el modo "no molestar")</span>
-        </label>
+            <label for="np-mute-messages">Mensajes (activa el modo "no molestar")</label>
+        </div>
         <p id="np-status" style="margin:6px 0 0;min-height:14px;color:var(--text-muted,#808080);"></p>
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
             <button class="button" id="np-cancel">Cerrar</button>

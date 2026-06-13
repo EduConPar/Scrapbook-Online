@@ -835,17 +835,23 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- POPUP del volumen global. Se ancla al botón #tray-volume-btn al
-     abrirse. Click fuera = cerrar. Slider vertical estilo Win98. -->
+     abrirse. Click fuera = cerrar. Slider horizontal: el vertical de
+     CSS (`-webkit-appearance: slider-vertical` / `writing-mode`) está
+     roto en Chromium moderno y el slider quedaba sin pintar — el
+     horizontal funciona en todos los browsers que necesitamos. -->
 <div class="window" id="tray-volume-popup"
-     style="display:none;position:fixed;z-index:100000;width:60px;flex-direction:column;">
+     style="display:none;position:fixed;z-index:100000;width:170px;flex-direction:column;">
     <div class="title-bar" style="font-size:10px;">
         <div class="title-bar-text">Volumen</div>
     </div>
-    <div class="window-body" style="padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;">
-        <span id="tray-volume-readout" style="font-size:10px;font-variant-numeric:tabular-nums;">100%</span>
+    <div class="window-body" style="padding:8px 10px;display:flex;flex-direction:column;align-items:stretch;gap:6px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;">
+            <span>0%</span>
+            <span id="tray-volume-readout" style="font-variant-numeric:tabular-nums;">100%</span>
+            <span>100%</span>
+        </div>
         <input type="range" id="tray-volume-range" min="0" max="100" step="1" value="100"
-               orient="vertical"
-               style="writing-mode:bt-lr;-webkit-appearance:slider-vertical;appearance:slider-vertical;width:24px;height:120px;">
+               style="width:100%;">
     </div>
 </div>
 
