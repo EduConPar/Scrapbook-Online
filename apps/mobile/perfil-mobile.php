@@ -1225,7 +1225,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             color: var(--text-faint, #888);
             margin-left: 2px;
         }
-        /* Badge "Melon must" inline (sólo cuando avg > 4.4) — placa
+        /* Badge "Melon must" inline (avg ≥ 4.6 con ≥ 2 reseñas) — placa
            gold con gradient + relieve (highlight superior + sombra
            inferior interna + drop shadow + borde oscuro). Estética
            tipo "trofeo" / medal pin. */
@@ -3296,7 +3296,11 @@ function renderMelonItems() {
         music:  (MELON_STATE.type === 'song' ? '🎵' : '💿')
     };
     pageItems.forEach(function(item, idx){
-        var isMust = item.avg > 4.4;
+        /* "Melon must": nota media ≥ 4.6 con al menos 2 reseñas.
+           El mínimo de reseñas evita que una sola puntuación extrema
+           (4.6+ de una sola persona) marque el item como must — la
+           curaduría exige consenso. */
+        var isMust = item.avg >= 4.6 && item.count >= 2;
 
         /* Poster — reusa la estructura .pf-item-poster de "Mis listas":
            img si hay cover, div.placeholder con emoji si no. */

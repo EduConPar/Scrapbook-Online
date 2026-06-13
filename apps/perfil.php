@@ -3120,7 +3120,11 @@ var PROFILE_USERS = <?php
 
         var isMusic = (melonCat === 'music');
         pageItems.forEach(function(item) {
-            var isMust = item.avg > 4.4;
+            /* "Melon must": nota media ≥ 4.6 con al menos 2 reseñas.
+               El mínimo de reseñas evita que una sola puntuación
+               extrema (4.6+ de una sola persona) marque el item como
+               must — la curaduría exige consenso. */
+            var isMust = item.avg >= 4.6 && item.count >= 2;
             var slot = document.createElement('div');
             slot.className = 'profile-encurso-slot filled melon-slot'
                 + (isMusic ? ' melon-slot-music' : '')
