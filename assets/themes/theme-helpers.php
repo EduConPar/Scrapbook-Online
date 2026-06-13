@@ -492,7 +492,13 @@ function getUserEffectiveWallpaper($userKey, $label) {
         $st = themesPdo()->prepare("SELECT wallpaper FROM themes WHERE user_id = ? AND name = ?");
         $st->execute([$uid, $active]);
         $tWp = (string)$st->fetchColumn();
-        if ($tWp !== '' && is_file(dirname(__DIR__, 2) . '/' . $tWp)) return $tWp;
+        if ($tWp !== '') {
+            /* Restaura desde BD si el deploy borró el archivo. */
+            if (!is_file(dirname(__DIR__, 2) . '/' . $tWp)) {
+                restoreThemeAssetFromDb($tWp, 'wallpaper');
+            }
+            if (is_file(dirname(__DIR__, 2) . '/' . $tWp)) return $tWp;
+        }
     }
     /* Tema activo sin wallpaper propio (o el archivo ya no existe) →
        fondo global del usuario (que a su vez cae al base-wallpaper). */
@@ -509,6 +515,15 @@ function getUserEffectiveWallpaper($userKey, $label) {
    global. */
 function effectiveThemeAssets(string $label, string $themeWallpaper, string $themeStartIcon): array {
     $root = dirname(__DIR__, 2);
+    /* Si la ruta del tema apunta a un archivo que no existe en
+       filesystem (deploy lo borró) pero tenemos blob en BD, lo
+       restauramos antes de la verificación is_file. */
+    if ($themeWallpaper !== '' && !is_file($root . '/' . $themeWallpaper)) {
+        restoreThemeAssetFromDb($themeWallpaper, 'wallpaper');
+    }
+    if ($themeStartIcon !== '' && !is_file($root . '/' . $themeStartIcon)) {
+        restoreThemeAssetFromDb($themeStartIcon, 'start_icon');
+    }
     $wp = '';
     if ($themeWallpaper !== '' && is_file($root . '/' . $themeWallpaper)) {
         $wp = $themeWallpaper;
@@ -522,6 +537,33 @@ function effectiveThemeAssets(string $label, string $themeWallpaper, string $the
         $si = (string)getUserStartIcon($label);
     }
     return [$wp, $si];
+}
+
+/* Dado el path del asset (themes.wallpaper o themes.start_icon), busca
+   el row en `themes` cuya columna apunte a él y, si existe blob en
+   `<kind>_data`, restaura el archivo al filesystem. Idempotente: no
+   hace nada si el archivo ya existe. `$kind` debe ser 'wallpaper' o
+   'start_icon'. */
+function restoreThemeAssetFromDb(string $relPath, string $kind): void {
+    if (!in_array($kind, ['wallpaper', 'start_icon'], true)) return;
+    $root = dirname(__DIR__, 2);
+    $full = $root . '/' . $relPath;
+    if (is_file($full)) return;
+    try {
+        $pdo = themesPdo();
+        $dataCol = $kind . '_data';
+        $extCol  = $kind . '_ext';
+        $st = $pdo->prepare("SELECT $dataCol AS d, $extCol AS e FROM themes
+                             WHERE $kind = ? AND $dataCol IS NOT NULL LIMIT 1");
+        $st->execute([$relPath]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row || empty($row['d'])) return;
+        $dir = dirname($full);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true)) return;
+        @file_put_contents($full, $row['d']);
+    } catch (Throwable $_) {
+        /* Migración pendiente o sin permisos → seguimos. */
+    }
 }
 
 /**

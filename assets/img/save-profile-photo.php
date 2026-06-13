@@ -73,6 +73,13 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
    deploy, getUserImage() restaura el archivo desde aquí. */
 try {
     require_once dirname(__DIR__, 2) . '/db.php';
+    /* Asegura que existan las columnas (idempotente). Si la migración
+       no había corrido en Hostinger, sin esto el UPDATE fallaría
+       silenciosamente y la foto vivía solo en filesystem → muerte por
+       deploy. */
+    if (function_exists('_ensureUserPhotoColumns')) {
+        _ensureUserPhotoColumns($pdo);
+    }
     $blob = file_get_contents($dest);
     if ($blob !== false) {
         $stmt = $pdo->prepare("UPDATE usuarios SET photo_data = ?, photo_ext = ? WHERE user_key = ?");
@@ -82,8 +89,9 @@ try {
         $stmt->execute();
     }
 } catch (Throwable $e) {
-    /* Si la BD aún no tiene las columnas (migración pendiente), no
-       rompemos el upload — la foto sigue accesible vía filesystem. */
+    /* Si la BD aún no tiene las columnas (migración pendiente o sin
+       permisos de ALTER), no rompemos el upload — la foto sigue
+       accesible vía filesystem hasta el próximo deploy. */
 }
 
 echo json_encode([

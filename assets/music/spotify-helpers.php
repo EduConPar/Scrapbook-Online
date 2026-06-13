@@ -73,7 +73,12 @@ function ytNorm(string $s): string {
 }
 
 /** Extrae hasta $max candidatos del HTML de results de YouTube con su
- *  videoId, título, canal y duración (cuando están disponibles). */
+ *  videoId, título, canal y duración (cuando están disponibles).
+ *  Filtra YouTube Shorts: vienen envueltos en `reelItemRenderer` o
+ *  `shortsLockupViewModel`, mientras que los vídeos normales viven en
+ *  `videoRenderer`. Importar Shorts como audios para una playlist es
+ *  basura por diseño: son verticales, ~60s, mal masterizados — así que
+ *  los descartamos antes de scorear. */
 function ytExtractCandidates(string $html, int $max = 7): array {
     $candidates = [];
     if ($html === '') return $candidates;
@@ -84,6 +89,21 @@ function ytExtractCandidates(string $html, int $max = 7): array {
         if (isset($seen[$vid])) continue;
         $seen[$vid] = true;
         $offset = $m[0][$idx][1];
+        /* Ventana de contexto hacia atrás (~1.5k chars) para identificar
+           el contenedor JSON que envuelve a este videoId. Si el último
+           marcador de tipo que aparece antes del match es de Short,
+           skip — buscamos el más cercano para no confundirnos con
+           contenedores hermanos previos del feed. */
+        $back  = substr($html, max(0, $offset - 1500), $offset - max(0, $offset - 1500));
+        $posVideo = max(strrpos($back, '"videoRenderer"'),
+                        strrpos($back, '"compactVideoRenderer"'),
+                        strrpos($back, '"playlistVideoRenderer"'));
+        $posShort = max(strrpos($back, '"reelItemRenderer"'),
+                        strrpos($back, '"shortsLockupViewModel"'),
+                        strrpos($back, '"reelWatchEndpoint"'),
+                        strrpos($back, '"shortsShelfRenderer"'),
+                        strrpos($back, '"reelShelfRenderer"'));
+        if ($posShort !== false && $posShort > $posVideo) continue;
         $snippet = substr($html, $offset, 4000);
 
         $cand = ['videoId' => $vid, 'pos' => count($candidates)];

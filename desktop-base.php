@@ -181,6 +181,14 @@ if ($activeTheme !== '') {
     /* Si el tema tiene asset propio y existe → úsalo; si no, mantén el
        wallpaper/icono global del usuario calculado arriba (no se cae al
        default salvo que el propio global tampoco exista). */
+    /* Si el path del tema apunta a un archivo borrado por el deploy,
+       intentamos restaurarlo desde el blob en BD antes de validar. */
+    if ($tWp !== '' && !file_exists(__DIR__ . '/' . $tWp)) {
+        if (function_exists('restoreThemeAssetFromDb')) restoreThemeAssetFromDb($tWp, 'wallpaper');
+    }
+    if ($tSi !== '' && !file_exists(__DIR__ . '/' . $tSi)) {
+        if (function_exists('restoreThemeAssetFromDb')) restoreThemeAssetFromDb($tSi, 'start_icon');
+    }
     if ($tWp !== '' && file_exists(__DIR__ . '/' . $tWp)) $wallpaper = $tWp;
     if ($tSi !== '' && file_exists(__DIR__ . '/' . $tSi)) $startIcon = $tSi;
 }

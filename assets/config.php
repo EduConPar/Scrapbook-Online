@@ -142,6 +142,50 @@ function getUserImage($label)
     return '';
 }
 
+/* Migración idempotente: añade las columnas blob a `usuarios` y
+   `themes` si no existen. Sin esto, los UPDATE en los endpoints fallan
+   silenciosamente (try/catch) y los assets solo viven en /uploads/ o
+   /assets/img/, donde un `git reset --hard` del deploy los borra.
+   La fuente de verdad debe ser la BD; el filesystem es caché.
+
+   `usuarios`:
+     - photo_data       + photo_ext       — foto de perfil
+     - wallpaper_data   + wallpaper_ext   — wallpaper global del usuario
+     - start_icon_data  + start_icon_ext  — icono inicio global del usuario
+   `themes`:
+     - wallpaper_data   + wallpaper_ext   — wallpaper específico del tema
+     - start_icon_data  + start_icon_ext  — icono inicio específico del tema
+*/
+function _ensureUserPhotoColumns(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    $cols = [
+        ['usuarios', 'photo_data',       'LONGBLOB',    'label'],
+        ['usuarios', 'photo_ext',        'VARCHAR(8)',  'photo_data'],
+        ['usuarios', 'wallpaper_data',   'LONGBLOB',    'photo_ext'],
+        ['usuarios', 'wallpaper_ext',    'VARCHAR(8)',  'wallpaper_data'],
+        ['usuarios', 'start_icon_data',  'LONGBLOB',    'wallpaper_ext'],
+        ['usuarios', 'start_icon_ext',   'VARCHAR(8)',  'start_icon_data'],
+        ['themes',   'wallpaper_data',   'LONGBLOB',    'wallpaper'],
+        ['themes',   'wallpaper_ext',    'VARCHAR(8)',  'wallpaper_data'],
+        ['themes',   'start_icon_data',  'LONGBLOB',    'start_icon'],
+        ['themes',   'start_icon_ext',   'VARCHAR(8)',  'start_icon_data'],
+    ];
+    foreach ($cols as [$tbl, $col, $type, $after]) {
+        try {
+            $exists = $pdo->query("SHOW COLUMNS FROM $tbl LIKE " . $pdo->quote($col))->fetch();
+            if (!$exists) {
+                $pdo->exec("ALTER TABLE $tbl ADD COLUMN $col $type NULL AFTER $after");
+            }
+        } catch (Throwable $_) {
+            /* BD legacy sin permisos de ALTER, columna `after` ausente, o
+               cualquier otro fallo: seguimos con las demás. */
+        }
+    }
+}
+
 /* Lee el blob de la foto desde usuarios.photo_data y lo escribe al
    filesystem como caché. Devuelve la ruta relativa o '' si no hay
    blob / la columna no existe / falla la escritura. */
@@ -151,6 +195,7 @@ function _restorePhotoFromDb(string $label, string $safe): string
         require_once dirname(__DIR__) . '/db.php';
         global $pdo;
         if (!isset($pdo)) return '';
+        _ensureUserPhotoColumns($pdo);
         $stmt = $pdo->prepare("SELECT photo_data, photo_ext FROM usuarios WHERE label = ? AND photo_data IS NOT NULL LIMIT 1");
         $stmt->execute([$label]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -178,12 +223,52 @@ function getUserWallpaper($label)
             }
         }
     }
+    /* Fallback BD: si el filesystem se borró en un deploy, restauramos
+       desde usuarios.wallpaper_data al filesystem y devolvemos la ruta. */
+    $restored = _restoreUserAssetFromDb(
+        $label,
+        strtolower($safe),
+        __DIR__ . '/img/wallpapers',
+        'assets/img/wallpapers',
+        '-wallpaper',
+        'wallpaper_data',
+        'wallpaper_ext'
+    );
+    if ($restored !== '') return $restored;
     foreach (['png', 'jpg', 'jpeg', 'webp', 'gif'] as $ext) {
         if (file_exists(__DIR__ . "/img/wallpapers/base-wallpaper.{$ext}")) {
             return "assets/img/wallpapers/base-wallpaper.{$ext}";
         }
     }
     return '';
+}
+
+/* Lee un blob (wallpaper/start_icon) desde `usuarios` y lo escribe al
+   filesystem como caché. Genérico: el llamador especifica las columnas
+   y la carpeta destino. Devuelve la ruta relativa o '' si no se pudo. */
+function _restoreUserAssetFromDb(string $label, string $safeLower, string $dirAbs,
+                                  string $dirRel, string $suffix,
+                                  string $dataCol, string $extCol): string
+{
+    try {
+        require_once dirname(__DIR__) . '/db.php';
+        global $pdo;
+        if (!isset($pdo)) return '';
+        _ensureUserPhotoColumns($pdo);
+        $stmt = $pdo->prepare("SELECT $dataCol AS d, $extCol AS e FROM usuarios
+                               WHERE label = ? AND $dataCol IS NOT NULL LIMIT 1");
+        $stmt->execute([$label]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || empty($row['d']) || empty($row['e'])) return '';
+        $ext = preg_replace('/[^a-z0-9]/', '', strtolower($row['e']));
+        if (!in_array($ext, ['jpg','jpeg','png','gif','webp','svg'], true)) return '';
+        if (!is_dir($dirAbs) && !@mkdir($dirAbs, 0775, true)) return '';
+        $path = $dirAbs . '/' . $safeLower . $suffix . '.' . $ext;
+        if (@file_put_contents($path, $row['d']) === false) return '';
+        return $dirRel . '/' . $safeLower . $suffix . '.' . $ext;
+    } catch (Throwable $_) {
+        return '';
+    }
 }
 
 /* Fondo por defecto de la app (base-wallpaper). Se usa cuando un tema activo
@@ -206,7 +291,17 @@ function getUserStartIcon($label)
             return "assets/img/start-icons/{$safe}-start-icon.{$ext}";
         }
     }
-    return '';
+    /* Fallback BD: restaura desde usuarios.start_icon_data si el archivo
+       del filesystem desapareció por el deploy. */
+    $restored = _restoreUserAssetFromDb(
+        $label, $safe,
+        __DIR__ . '/img/start-icons',
+        'assets/img/start-icons',
+        '-start-icon',
+        'start_icon_data',
+        'start_icon_ext'
+    );
+    return $restored;
 }
 
 /* Self-heal del stub `desktops/<label>-desktop.php`. Si por cualquier

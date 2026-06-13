@@ -496,7 +496,7 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- MELON REVIEWS DETAILS WINDOW -->
-<div class="window" id="profile-melon-details-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:360px;min-width:240px;max-width:95vw;height:65vh;max-height:65vh;min-height:160px;">
+<div class="window" id="profile-melon-details-window" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:280px;min-width:220px;max-width:95vw;height:65vh;max-height:65vh;min-height:160px;">
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" id="profile-melon-details-title">Reseñas</div>
         <div class="title-bar-controls">
@@ -560,7 +560,7 @@ if ($_perfilStandalone) {
 </div>
 
 <!-- REVIEW VIEW WINDOW (ver una reseña concreta) -->
-<div class="window" id="profile-review-view" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:300px;min-width:240px;max-width:95vw;max-height:90vh;">
+<div class="window" id="profile-review-view" style="display:none;flex-direction:column;position:fixed;z-index:10002;width:240px;min-width:200px;max-width:95vw;max-height:90vh;">
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text">★ Review</div>
         <div class="title-bar-controls">

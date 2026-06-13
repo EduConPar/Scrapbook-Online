@@ -45,13 +45,37 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
 
 $relPath = 'assets/img/start-icons/' . $baseName . '.' . $ext;
 
-if ($theme !== '') {
-    require_once dirname(dirname(dirname(__DIR__))) . '/db.php';
-    try {
-        $stmt = $pdo->prepare("UPDATE themes t JOIN usuarios u ON t.user_id = u.id
-                               SET t.start_icon = ? WHERE u.user_key = ? AND t.name = ?");
-        $stmt->execute([$relPath, $userKey, $theme]);
-    } catch (Throwable $e) { /* no bloquea la subida */ }
+/* Persistir blob en BD para sobrevivir al deploy (assets/img/start-icons/
+   está gitignored pero un FS wipe lo borraría igual). getUserStartIcon()
+   restaura desde aquí si el archivo falta. */
+require_once dirname(dirname(dirname(__DIR__))) . '/db.php';
+try {
+    if (function_exists('_ensureUserPhotoColumns')) {
+        _ensureUserPhotoColumns($pdo);
+    }
+    $blob = @file_get_contents($dest);
+    if ($blob !== false) {
+        if ($theme !== '') {
+            $stmt = $pdo->prepare("UPDATE themes t JOIN usuarios u ON t.user_id = u.id
+                                   SET t.start_icon = ?, t.start_icon_data = ?, t.start_icon_ext = ?
+                                   WHERE u.user_key = ? AND t.name = ?");
+            $stmt->bindValue(1, $relPath);
+            $stmt->bindParam(2, $blob, PDO::PARAM_LOB);
+            $stmt->bindValue(3, $ext);
+            $stmt->bindValue(4, $userKey);
+            $stmt->bindValue(5, $theme);
+            $stmt->execute();
+        } else {
+            $stmt = $pdo->prepare("UPDATE usuarios SET start_icon_data = ?, start_icon_ext = ?
+                                   WHERE user_key = ?");
+            $stmt->bindParam(1, $blob, PDO::PARAM_LOB);
+            $stmt->bindValue(2, $ext);
+            $stmt->bindValue(3, $userKey);
+            $stmt->execute();
+        }
+    }
+} catch (Throwable $e) {
+    /* No bloquea: el icono sigue en filesystem hasta el próximo deploy. */
 }
 
 echo json_encode(['ok' => true, 'icon' => $relPath, 'theme' => $theme]);

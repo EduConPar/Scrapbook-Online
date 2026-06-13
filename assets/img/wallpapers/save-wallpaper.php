@@ -45,14 +45,42 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
 
 $relPath = 'assets/img/wallpapers/' . $baseName . '.' . $ext;
 
-/* Si es de un tema, persistir la ruta en el registro del tema */
-if ($theme !== '') {
-    require_once dirname(dirname(dirname(__DIR__))) . '/db.php';
-    try {
-        $stmt = $pdo->prepare("UPDATE themes t JOIN usuarios u ON t.user_id = u.id
-                               SET t.wallpaper = ? WHERE u.user_key = ? AND t.name = ?");
-        $stmt->execute([$relPath, $userKey, $theme]);
-    } catch (Throwable $e) { /* no bloquea la subida */ }
+/* Persistir blob en BD para que sobreviva al `git reset --hard` del
+   deploy (assets/img/wallpapers/ está gitignored pero un deploy que
+   limpie el FS lo borraría también). La BD es fuente de verdad;
+   getUserWallpaper() restaura desde aquí si el archivo falta. */
+require_once dirname(dirname(dirname(__DIR__))) . '/db.php';
+try {
+    if (function_exists('_ensureUserPhotoColumns')) {
+        _ensureUserPhotoColumns($pdo);
+    }
+    $blob = @file_get_contents($dest);
+    if ($blob !== false) {
+        if ($theme !== '') {
+            /* Tema: ruta + blob en `themes` para ese user+tema */
+            $stmt = $pdo->prepare("UPDATE themes t JOIN usuarios u ON t.user_id = u.id
+                                   SET t.wallpaper = ?, t.wallpaper_data = ?, t.wallpaper_ext = ?
+                                   WHERE u.user_key = ? AND t.name = ?");
+            $stmt->bindValue(1, $relPath);
+            $stmt->bindParam(2, $blob, PDO::PARAM_LOB);
+            $stmt->bindValue(3, $ext);
+            $stmt->bindValue(4, $userKey);
+            $stmt->bindValue(5, $theme);
+            $stmt->execute();
+        } else {
+            /* Global del usuario: blob en `usuarios` */
+            $stmt = $pdo->prepare("UPDATE usuarios SET wallpaper_data = ?, wallpaper_ext = ?
+                                   WHERE user_key = ?");
+            $stmt->bindParam(1, $blob, PDO::PARAM_LOB);
+            $stmt->bindValue(2, $ext);
+            $stmt->bindValue(3, $userKey);
+            $stmt->execute();
+        }
+    }
+} catch (Throwable $e) {
+    /* Si la BD aún no tiene columnas (migración pendiente) o no hay
+       permisos de ALTER, no bloqueamos la subida — el wallpaper sigue
+       accesible vía filesystem hasta el próximo deploy. */
 }
 
 echo json_encode(['ok' => true, 'wallpaper' => $relPath, 'theme' => $theme]);

@@ -58,8 +58,14 @@ if ($stmt->fetch()) {
     echo json_encode(['error' => 'Ese nombre ya existe']); exit;
 }
 
-/* Foto opcional */
+/* Foto opcional — la guardamos en uploads/profile-photos/ (fuera del
+   directorio tracked por git para que `git reset --hard` del deploy
+   no la borre) Y también en BD como blob (fuente de verdad para
+   sobrevivir wipe de filesystem). Encajamos la subida a BD DESPUÉS
+   del INSERT en usuarios (necesitamos el user_key). */
 $hasPhoto = isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK && $_FILES['photo']['size'] > 0;
+$photoExt = null;
+$photoBlob = null;
 if ($hasPhoto) {
     $f = $_FILES['photo'];
     if ($f['size'] > 5 * 1024 * 1024) {
@@ -70,19 +76,26 @@ if ($hasPhoto) {
     if (!isset($allowed[$mime])) {
         echo json_encode(['error' => 'Foto inválida (jpg/png/gif/webp)']); exit;
     }
-    $ext = $allowed[$mime];
+    $photoExt = $allowed[$mime];
 
-    /* Quitar fotos previas con el mismo nombre por si acaso */
-    $imgDir = __DIR__ . '/assets/img/';
+    /* Carpeta persistente (no tracked) */
+    $uploadDir = __DIR__ . '/uploads/profile-photos';
+    if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
+        echo json_encode(['error' => 'No se pudo crear el directorio de subidas']); exit;
+    }
+    /* Limpiar versiones previas con el mismo nombre. */
     foreach (['jpg', 'jpeg', 'png', 'gif', 'webp'] as $oldExt) {
-        $oldPath = $imgDir . $username . '.' . $oldExt;
+        $oldPath = $uploadDir . '/' . $username . '.' . $oldExt;
         if (file_exists($oldPath)) @unlink($oldPath);
     }
 
-    $dest = $imgDir . $username . '.' . $ext;
+    $dest = $uploadDir . '/' . $username . '.' . $photoExt;
     if (!move_uploaded_file($f['tmp_name'], $dest)) {
         echo json_encode(['error' => 'No se pudo guardar la foto']); exit;
     }
+    /* Lee el binario para guardarlo en BD justo después del INSERT. */
+    $photoBlob = @file_get_contents($dest);
+    if ($photoBlob === false) $photoBlob = null;
 }
 
 /* Siguiente user_key libre: maxN(user_key 'userN') + 1 */
@@ -122,6 +135,26 @@ try {
     /* Solo rollback del stub si lo creamos en ESTA invocación. */
     if ($createdStub) @unlink($desktopStub);
     echo json_encode(['error' => 'No se pudo guardar el usuario en BD']); exit;
+}
+
+/* Persiste el blob de la foto en usuarios.photo_data + photo_ext. Es
+   la fuente de verdad: si el filesystem se borra en un deploy,
+   getUserImage() la restaura desde aquí. Sin esto la foto del registro
+   inicial moría con el primer `git reset --hard`. */
+if ($photoBlob !== null && $photoExt !== null) {
+    try {
+        if (function_exists('_ensureUserPhotoColumns')) {
+            _ensureUserPhotoColumns($pdo);
+        }
+        $stmt = $pdo->prepare("UPDATE usuarios SET photo_data = ?, photo_ext = ? WHERE user_key = ?");
+        $stmt->bindParam(1, $photoBlob, PDO::PARAM_LOB);
+        $stmt->bindValue(2, $photoExt);
+        $stmt->bindValue(3, $newKey);
+        $stmt->execute();
+    } catch (Throwable $_) {
+        /* La foto sigue accesible vía filesystem; al primer deploy se
+           perderá, pero el registro del usuario está hecho. No abortamos. */
+    }
 }
 
 echo json_encode(['ok' => true, 'userKey' => $newKey, 'label' => $username]);
