@@ -781,9 +781,10 @@ function renderBalance(){
 function renderItems(){
     var view = document.getElementById('tienda-view-principal');
     /* Categoría Mascotas: placeholder hasta que esté implementada.
-       Centrado vertical+horizontal en todo el alto de la vista. */
+       height:100% rellena el alto visible del .ti-pane (flex:1), así
+       el flex-center realmente centra el texto en pantalla. */
     if (_activeCat === 'mascotas') {
-        view.innerHTML = '<div class="tienda-empty" style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:22px;">Coming soon...</div>';
+        view.innerHTML = '<div class="tienda-empty" style="display:flex;align-items:center;justify-content:center;height:100%;font-size:22px;">Coming soon...</div>';
         return;
     }
     var items = _items.filter(function(it){ return (it.categoria || 'discord') === _activeCat; });

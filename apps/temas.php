@@ -545,7 +545,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             </section>
             <section class="pers-section">
                 <h3 class="pers-section-title"><img src="../assets/img/appIcons/mascotaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Mascotas</h3>
-                <div class="pers-grid" id="pers-mascots-grid" style="display:flex;align-items:center;justify-content:center;min-height:60vh;font-size:22px;color:var(--text-muted, var(--text));">Coming soon...</div>
+                <div class="pers-grid" id="pers-mascots-grid" style="font-size:13px;color:var(--text-muted, var(--text));padding:6px 0;">Coming soon...</div>
             </section>
         </div>
     </div>
