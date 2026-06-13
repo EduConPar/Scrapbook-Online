@@ -285,8 +285,17 @@ function seedDefaultTheme($userKey, $label) {
     @file_put_contents($cssPath, $css);
 }
 
+/* Carpeta donde viven los CSS de temas regenerados por usuario.
+   ANTES era __DIR__ (assets/themes), pero los CSS de Capi/Angie estaban
+   tracked en el repo como seeds y el auto-deploy de Hostinger
+   (git reset --hard) los restauraba, perdiéndose los cambios que los
+   usuarios habían guardado. Ahora viven en uploads/themes/ (gitignored)
+   donde sobreviven los deploys. mkdir on-demand cubre instalación
+   limpia y entornos donde la carpeta no existía aún. */
 function themesDir() {
-    return __DIR__;
+    $dir = dirname(__DIR__, 2) . '/uploads/themes';
+    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+    return $dir;
 }
 
 /* Asegura que la conexión PDO esté disponible y devuelve el handle.
@@ -441,7 +450,10 @@ function themeCssFile($themeName, $label) {
 function themeCssRelPath($themeName, $label) {
     $safeTheme = sanitizeThemeName($themeName);
     $safeLabel = preg_replace('/[^A-Za-z0-9_-]/', '', $label);
-    return 'assets/themes/' . $safeTheme . '-' . $safeLabel . '.css';
+    /* URL relativa a la raíz del proyecto. Coherente con themesDir():
+       los CSS viven en uploads/themes/ (fuera de assets/) para
+       sobrevivir el git reset --hard del auto-deploy. */
+    return 'uploads/themes/' . $safeTheme . '-' . $safeLabel . '.css';
 }
 
 function themeCssClassName($themeName, $label) {

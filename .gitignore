@@ -79,3 +79,11 @@ Thumbs.db
 # restauraba el seed y la foto subida se perdía.
 /uploads/profile-photos/*
 !/uploads/profile-photos/.gitkeep
+
+# CSS de temas regenerados por usuario. Misma razón que las fotos: los
+# CSS de Capi/Angie estaban tracked en assets/themes/ como seeds y el
+# deploy los restauraba, sobrescribiendo los cambios del usuario.
+# Ahora viven aquí (gitignored), assets/themes/api.php los regenera al
+# vuelo desde la BD si faltan.
+/uploads/themes/*
+!/uploads/themes/.gitkeep
