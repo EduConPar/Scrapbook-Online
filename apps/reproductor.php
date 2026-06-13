@@ -317,6 +317,9 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             </button>
         </div>
     </div>
+    <!-- Resize handle en la esquina inferior derecha. Drag para
+         redimensionar; min 280×220 para evitar colapso. -->
+    <div id="album-viewer-resize"></div>
 </div>
 
 <!-- ADD TRACK DIALOG -->
@@ -1349,7 +1352,10 @@ function updateTrackUI(index)
    Race: si el usuario cambia de track antes de que la query termine,
    la respuesta podría llegar para un track "viejo". Capturamos el
    videoId al iniciar el lookup y comprobamos al volver. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache';
+/* :v2 al final invalida los caches generados con el algoritmo viejo de
+   find-album (threshold 60, matcher de artista menos preciso) — esos
+   "notFound" en cliente pisaban la nueva lógica que sí encuentra match. */
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v2';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;
@@ -1375,6 +1381,25 @@ function _albumCacheSet(videoId, payload) {
    muestra como texto — solo hace clickable el título de la canción
    cuando hay un álbum resuelto, y el click abre el viewer. */
 let _currentAlbum = null; /* { spotifyAlbumId, albumName, image, isSingle, matchTitle, albumUrl } */
+
+/* Inyecta directamente el álbum activo cuando el caller ya conoce
+   el spotifyAlbumId (e.g. el perfil al reproducir un item type=album).
+   Bypasea find-album — más rápido y garantiza match exacto. Lo
+   llamamos después de updateTrackUI para que sobreescriba cualquier
+   álbum que find-album hubiera intentado resolver con el title del
+   primer track (que en álbumes-playlist a veces es vago). */
+window.setReproductorAlbumContext = function(albumInfo) {
+    if (!albumInfo || !albumInfo.spotifyAlbumId) return;
+    _applyAlbumState({
+        notFound:       false,
+        spotifyAlbumId: albumInfo.spotifyAlbumId,
+        albumName:      albumInfo.albumName || '',
+        albumImage:     albumInfo.image     || '',
+        isSingle:       false,
+        matchTitle:     albumInfo.matchTitle || '',
+        albumUrl:       '',
+    });
+};
 
 function _applyAlbumState(payload) {
     /* Reset por defecto: sin álbum, título no clickable. */
@@ -1423,7 +1448,13 @@ function _applyAlbumState(payload) {
    tracks quedan disabled — el usuario ve la lista pero no puede tocar
    nada todavía. */
 let _albumViewerCurrent = null; /* { albumId, meta, resolved } */
-let _albumViewerLoading = false;
+/* Cada apertura incrementa el token. Los awaits en background
+   comparan contra el token vigente al volver: si cambió (otro click
+   inició una nueva apertura, o el usuario cerró), descartan su
+   resultado sin tocar nada. Patrón "cancelable async" — más robusto
+   que un boolean _loading que puede quedar atascado en true si un
+   error rompe el finally o el cierre interrumpe el flow. */
+let _albumViewerToken = 0;
 
 function _albumViewerEl(id) { return document.getElementById(id); }
 
@@ -1435,13 +1466,19 @@ function closeAlbumViewer() {
     }
     win.style.display = 'none';
     _albumViewerCurrent = null;
+    /* Invalida cualquier carga en vuelo — su .then() verá un token
+       distinto al actual y se autodescartará al volver. */
+    _albumViewerToken++;
 }
 
 async function openAlbumViewer(albumId, albumName) {
-    if (_albumViewerLoading || !albumId) return;
+    if (!albumId) return;
     const win = _albumViewerEl('album-viewer');
     if (!win) return;
-    _albumViewerLoading = true;
+    /* Token de esta apertura concreta. Cualquier await tardío que use
+       _albumViewerToken para verificar verá un valor distinto si entre
+       medias alguien cerró o abrió otro álbum. */
+    const myToken = ++_albumViewerToken;
 
     const nameEl   = _albumViewerEl('album-viewer-name');
     const artistEl = _albumViewerEl('album-viewer-artist');
@@ -1478,8 +1515,10 @@ async function openAlbumViewer(albumId, albumName) {
     try {
         /* 1) Metadata del álbum + tracklist. */
         const metaRes = await fetch('assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
+        if (myToken !== _albumViewerToken) return; /* obsoleto */
         if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
         const meta = await metaRes.json();
+        if (myToken !== _albumViewerToken) return;
         if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
 
         nameEl.textContent   = meta.name || albumName || 'Álbum';
@@ -1558,8 +1597,10 @@ async function openAlbumViewer(albumId, albumName) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tracks: meta.tracks }),
         });
+        if (myToken !== _albumViewerToken) return;
         if (!ytRes.ok) throw new Error('No se pudo resolver el álbum en YouTube');
         const ytData = await ytRes.json();
+        if (myToken !== _albumViewerToken) return;
         /* yt-search-batch puede devolver menos items que los enviados
            (descarta los que no tienen título). Para mapear de vuelta
            index original → videoId, normalizamos por título. */
@@ -1591,10 +1632,13 @@ async function openAlbumViewer(albumId, albumName) {
             playBtn.textContent = 'No disponible';
         }
     } catch (e) {
-        tracksEl.innerHTML = '<div class="album-viewer-msg">Error: ' + (e.message || e) + '</div>';
-        playBtn.textContent = 'No disponible';
-    } finally {
-        _albumViewerLoading = false;
+        /* Solo pintamos el error si nuestro token sigue siendo el
+           vigente — si no, esta apertura fue superada por otra y la UI
+           ya está mostrando el álbum nuevo. */
+        if (myToken === _albumViewerToken) {
+            tracksEl.innerHTML = '<div class="album-viewer-msg">Error: ' + (e.message || e) + '</div>';
+            playBtn.textContent = 'No disponible';
+        }
     }
 }
 
@@ -1700,6 +1744,51 @@ if (playerTitle) {
     }
     titlebar.addEventListener('pointerup',     end);
     titlebar.addEventListener('pointercancel', end);
+})();
+
+/* ── Resize handle (esquina inferior derecha) ──
+   Pointer Events para mouse + touch. Min size definido en CSS pero lo
+   replicamos aquí en JS para no depender de getComputedStyle por
+   frame. */
+(function() {
+    const win    = document.getElementById('album-viewer');
+    const handle = document.getElementById('album-viewer-resize');
+    if (!win || !handle) return;
+    const MIN_W = 280, MIN_H = 220;
+    let pid = -1, startX, startY, startW, startH;
+    handle.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        pid = e.pointerId;
+        try { handle.setPointerCapture(pid); } catch (_) {}
+        /* Si la ventana sigue centrada por transform, la pasamos a
+           coords absolutas para que el width/height se aplique sin que
+           el transform la re-centre. */
+        const rect = win.getBoundingClientRect();
+        win.style.left      = rect.left + 'px';
+        win.style.top       = rect.top  + 'px';
+        win.style.transform = 'none';
+        startX = e.clientX;
+        startY = e.clientY;
+        startW = win.offsetWidth;
+        startH = win.offsetHeight;
+    });
+    handle.addEventListener('pointermove', function(e) {
+        if (e.pointerId !== pid) return;
+        const newW = Math.max(MIN_W, startW + (e.clientX - startX));
+        const newH = Math.max(MIN_H, startH + (e.clientY - startY));
+        /* Cap a viewport: -16px de margen para no quedar pegado al
+           borde derecho/inferior. */
+        win.style.width  = Math.min(newW, window.innerWidth  - 16) + 'px';
+        win.style.height = Math.min(newH, window.innerHeight - 16) + 'px';
+    });
+    function endResize(e) {
+        if (e && e.pointerId !== pid) return;
+        try { handle.releasePointerCapture(e ? e.pointerId : pid); } catch (_) {}
+        pid = -1;
+    }
+    handle.addEventListener('pointerup',     endResize);
+    handle.addEventListener('pointercancel', endResize);
 })();
 
 /* ── Context menu del cover del álbum ──

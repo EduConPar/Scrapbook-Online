@@ -570,27 +570,43 @@ case 'yt-search-batch': {
         return $out;
     };
 
+    require_once __DIR__ . '/spotify-helpers.php'; /* ytExtract*, ytPickBest* */
+
     /* ── Fase 1: TODAS las búsquedas en paralelo (chunks de 10).
-       Extrae el primer videoId del HTML de results. */
+       Para cada track extraemos los candidatos del HTML de results y
+       elegimos el mejor por score combinado (título + artista + canal
+       + duración + posición), no el primero. Las trap-words
+       (karaoke/cover/instrumental/etc.) penalizan fuerte para evitar
+       falsos positivos típicos en imports de CSV de Spotify. */
     $searchUrls = [];
     foreach ($items as $i => $it) {
         $searchUrls[$i] = 'https://www.youtube.com/results?search_query=' . urlencode($it['query']);
     }
     foreach ($multiFetch($searchUrls, 10) as $i => $html) {
-        if ($html && preg_match('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) {
-            $items[$i]['videoId'] = $m[1];
+        $best = ytPickBestCandidate(ytExtractCandidates($html, 7), $items[$i]);
+        if (!$best) continue;
+        $items[$i]['videoId'] = $best['videoId'];
+        if (!empty($best['duration'])) {
+            /* Si la duración vino en el HTML de results, evita el watch
+               fetch de Fase 2. */
+            $items[$i]['duration'] = $best['duration'];
         }
     }
 
-    /* ── Fase 2: TODOS los /watch en paralelo para `lengthSeconds`.
-       Skip si la búsqueda no devolvió videoId. */
+    /* ── Fase 2: completar duración para los que aún no la tienen
+       (la sacamos del HTML de results si pudimos; este watch fetch es
+       el fallback). */
     $watchUrls = [];
     foreach ($items as $i => $it) {
-        if ($it['videoId']) $watchUrls[$i] = 'https://www.youtube.com/watch?v=' . $it['videoId'];
+        if ($it['videoId'] && !$it['duration']) {
+            $watchUrls[$i] = 'https://www.youtube.com/watch?v=' . $it['videoId'];
+        }
     }
-    foreach ($multiFetch($watchUrls, 10) as $i => $html) {
-        if ($html && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $html, $d)) {
-            $items[$i]['duration'] = (int)$d[1];
+    if ($watchUrls) {
+        foreach ($multiFetch($watchUrls, 10) as $i => $html) {
+            if ($html && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $html, $d)) {
+                $items[$i]['duration'] = (int)$d[1];
+            }
         }
     }
 
@@ -631,7 +647,13 @@ case 'spotify-track': {
     $title    = $track['name'];
     $artist   = $track['artists'][0]['name'] ?? '';
     $duration = isset($track['duration_ms']) ? (int)round($track['duration_ms'] / 1000) : 0;
-    $videoId  = searchYouTubeVideoId($title . ' ' . $artist . ' audio');
+    /* Pasamos los metadatos al helper: dentro escoge el mejor match por
+       título + canal + duración, no el primer videoId que devuelva
+       YouTube (que solía ser un cover o lyrics video). */
+    $videoId  = searchYouTubeVideoId(
+        $title . ' ' . $artist . ' audio',
+        ['title' => $title, 'artist' => $artist, 'duration' => $duration]
+    );
     if (!$videoId) jsonError('No se encontró el vídeo en YouTube', 502);
     jsonResponse(['title' => $title, 'artist' => $artist, 'duration' => $duration, 'videoId' => $videoId]);
 }
@@ -710,26 +732,42 @@ case 'find-album': {
     $cleanTitleN = $norm($cleanTitle);
     $artistN     = $norm($artist);
 
+    /* Devuelve la MEJOR similitud entre el artista buscado y cualquiera
+       de los artistas del candidato (Spotify suele devolver varios:
+       ["A", "B", "C"] para "A feat. B feat. C"). Si cualquiera matchea,
+       el candidato es válido — los feats arruinaban el match antes. */
+    $bestArtistSim = function(array $cand) use ($norm, $artistN) {
+        if ($artistN === '') return 100.0;
+        $best = 0.0;
+        foreach (($cand['artists'] ?? []) as $a) {
+            $candArtistN = $norm((string)($a['name'] ?? ''));
+            if ($candArtistN === '') continue;
+            /* Match exacto = 100. Substring (tolera "A" vs "A & B") = 80. */
+            if ($candArtistN === $artistN) return 100.0;
+            if (str_contains($candArtistN, $artistN) || str_contains($artistN, $candArtistN)) {
+                $best = max($best, 80.0);
+                continue;
+            }
+            $s = 0.0; similar_text($artistN, $candArtistN, $s);
+            if ($s > $best) $best = $s;
+        }
+        return $best;
+    };
+
     /* Score por candidato — combina similitud de título (peso alto) y
-       artista (peso medio). similar_text devuelve % de similitud. */
-    $scoreCandidate = function(array $cand) use ($norm, $cleanTitleN, $artistN) {
+       mejor similitud de artista del listado. */
+    $scoreCandidate = function(array $cand) use ($norm, $cleanTitleN, $bestArtistSim) {
         $cTitleN  = $norm((string)($cand['name'] ?? ''));
-        $cArtistN = $norm((string)($cand['artists'][0]['name'] ?? ''));
         if ($cTitleN === '') return 0.0;
         $ts = 0.0; similar_text($cleanTitleN, $cTitleN, $ts);
-        $as = 0.0;
-        if ($artistN !== '' && $cArtistN !== '') {
-            similar_text($artistN, $cArtistN, $as);
-        } else {
-            $as = 50.0; /* sin artista que comparar, neutral */
-        }
+        $as = $bestArtistSim($cand);
         /* Bonus extra si el título normalizado es exactamente igual o
            si uno está contenido en el otro (cubre "Song" vs "Song -
            Remastered"). */
         $bonus = 0.0;
         if ($cTitleN === $cleanTitleN) $bonus += 20;
         elseif (str_contains($cTitleN, $cleanTitleN) || str_contains($cleanTitleN, $cTitleN)) $bonus += 10;
-        if ($artistN !== '' && $cArtistN === $artistN) $bonus += 10;
+        if ($as >= 100) $bonus += 10;
         return min(100.0, $ts * 0.7 + $as * 0.3 + $bonus);
     };
 
@@ -753,13 +791,30 @@ case 'find-album': {
         $uniq[] = $c;
     }
 
+    /* FILTRO HARD DE ARTISTA: si conocemos el artista de la canción,
+       descartamos cualquier candidato cuyo artista no coincida con un
+       50% mínimo de similitud. Sin esto, una canción "Yesterday" del
+       usuario podía matchear un álbum random de otro artista que tenía
+       un track del mismo título — el álbum mostrado no tenía sentido.
+
+       Si no conocemos el artista (string vacío), saltamos el filtro:
+       en ese caso lo único que tenemos es el título y el ranking
+       puro hará el trabajo. */
+    if ($artistN !== '') {
+        $uniq = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
+            return $bestArtistSim($c) >= 50.0;
+        }));
+    }
+
     /* Rankea y elige el mejor que supere un threshold mínimo. */
     $best = null; $bestScore = 0.0;
     foreach ($uniq as $c) {
         $sc = $scoreCandidate($c);
         if ($sc > $bestScore) { $best = $c; $bestScore = $sc; }
     }
-    $MIN_SCORE = 60.0; /* por debajo: dudoso match, mejor "no encontrado" */
+    /* Threshold relajado a 50 — el filtro de artista ya hizo el trabajo
+       fino. Por debajo: candidato dudoso aunque el artista cuadre. */
+    $MIN_SCORE = 50.0;
     if ($bestScore < $MIN_SCORE) $best = null;
 
     $result = ['notFound' => true];
@@ -874,7 +929,12 @@ case 'tidal-track': {
     if (!TIDAL_CLIENT_ID || !TIDAL_CLIENT_SECRET) jsonError('Falta configurar las credenciales de Tidal (.env)', 503);
     $meta = tidalGetTrack($trackId);
     if (!$meta) jsonError('No se pudo obtener el track de Tidal', 502);
-    $video = searchYouTubeVideo($meta['title'] . ' ' . $meta['artist'] . ' audio');
+    /* Mismo helper que spotify-track: pasamos title/artist/duration
+       para que escoja el mejor candidato (no el primero). */
+    $video = searchYouTubeVideo(
+        $meta['title'] . ' ' . $meta['artist'] . ' audio',
+        ['title' => $meta['title'], 'artist' => $meta['artist'], 'duration' => (int)($meta['duration'] ?? 0)]
+    );
     if (!$video) jsonError('No se encontró el vídeo en YouTube', 502);
     jsonResponse([
         'title'    => $meta['title'],

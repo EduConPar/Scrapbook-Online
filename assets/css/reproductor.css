@@ -419,7 +419,8 @@
 }
 
 /* Album viewer: ventana de previsualización del álbum. Mismo patrón
-   visual que playlist-editor pero más compacto y sin edición. */
+   visual que playlist-editor. Resizeable por la esquina inferior
+   derecha (handle propio en JS). */
 #album-viewer {
     display: none;
     flex-direction: column;
@@ -428,9 +429,31 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: 380px;
-    max-height: 80vh;
+    height: 520px;
+    min-width: 280px;
+    min-height: 220px;
+    max-width: 95vw;
+    max-height: 95vh;
     z-index: 2050;
 }
+/* Handle de resize triangular en la esquina, similar al chrome de
+   Win98 (líneas diagonales). pointer-events del padre van por encima:
+   solo este captura los pointerdown del resize. */
+#album-viewer-resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    touch-action: none;
+    z-index: 10;
+    background:
+        linear-gradient(135deg, transparent 50%, var(--text-muted) 50%) center / 4px 4px no-repeat,
+        linear-gradient(135deg, transparent 60%, var(--text-muted) 60%) right bottom / 8px 8px no-repeat;
+    opacity: 0.55;
+}
+#album-viewer-resize:hover { opacity: 1; }
 #album-viewer-body {
     flex: 1;
     min-height: 0;

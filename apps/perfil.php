@@ -4503,6 +4503,21 @@ var PROFILE_USERS = <?php
             currentTrack = 0;
             updateTrackUI(0);
             updatePlayerTitle(item.title + (item.artist ? ' – ' + item.artist : ''));
+            /* Si reproducimos un ALBUM y conocemos su spotifyAlbumId,
+               inyectamos el contexto en el reproductor para que el
+               título de la canción sea clickable y abra el viewer del
+               álbum correcto (mismo del item, no uno random buscado a
+               partir del title del primer track). Para songs, el flow
+               normal de updateTrackUI → resolveAndShowAlbum hace su
+               trabajo via find-album. */
+            if (item.type === 'album' && item.spotifyAlbumId
+                && typeof window.setReproductorAlbumContext === 'function') {
+                window.setReproductorAlbumContext({
+                    spotifyAlbumId: item.spotifyAlbumId,
+                    albumName:      item.title  || '',
+                    image:          item.image  || '',
+                });
+            }
             if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
                 ytPlayer.loadVideoById(playlist[0].videoId);
             }

@@ -48,7 +48,141 @@ function getSpotifyWebToken() {
     return $data['accessToken'];
 }
 
-function searchYouTubeVideo($query) {
+/* ── Helpers de matching YouTube ──
+   Compartidos por yt-search-batch (api.php), spotify-track y
+   tidal-track para que TODOS los flujos de importación elijan el mejor
+   resultado en vez del primero. Score por candidato:
+     - Título (40%): similar_text contra el título esperado.
+     - Canal (25%): similar_text contra el artista esperado; bonus si
+       el canal es *Topic o *VEVO (uploads oficiales del label).
+     - Duración (25%): proximidad a la esperada (±15s = ~100, >60s = 0).
+     - Posición (10%): orden de YouTube.
+   Penalización: -25 por cada "trap word" (karaoke/cover/instrumental/
+   remix/live/8-bit/sped up/lyrics video/etc.) presente en el título
+   del candidato pero NO en el track original. */
+
+function ytNorm(string $s): string {
+    $s = mb_strtolower($s);
+    if (class_exists('Transliterator')) {
+        $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+        if ($tr) $s = $tr->transliterate($s);
+    }
+    $s = preg_replace('/[^a-z0-9\s]/u', ' ', $s);
+    $s = preg_replace('/\s+/', ' ', $s);
+    return trim($s);
+}
+
+/** Extrae hasta $max candidatos del HTML de results de YouTube con su
+ *  videoId, título, canal y duración (cuando están disponibles). */
+function ytExtractCandidates(string $html, int $max = 7): array {
+    $candidates = [];
+    if ($html === '') return $candidates;
+    if (!preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m, PREG_OFFSET_CAPTURE)) return $candidates;
+    $seen = [];
+    foreach ($m[1] as $idx => $vidMatch) {
+        $vid = $vidMatch[0];
+        if (isset($seen[$vid])) continue;
+        $seen[$vid] = true;
+        $offset = $m[0][$idx][1];
+        $snippet = substr($html, $offset, 4000);
+
+        $cand = ['videoId' => $vid, 'pos' => count($candidates)];
+
+        if (preg_match('/"title"\s*:\s*\{[^}]*?"text"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"/', $snippet, $tm)) {
+            $cand['title'] = json_decode('"' . $tm[1] . '"');
+        }
+        if (preg_match('/"(?:longBylineText|ownerText)"\s*:\s*\{[^}]*?"text"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"/', $snippet, $cm)) {
+            $cand['channel'] = json_decode('"' . $cm[1] . '"');
+        }
+        if (preg_match('/"lengthText"\s*:\s*\{(?:[^}]*?"accessibility"[^}]*?\})?[^}]*?"simpleText"\s*:\s*"([\d:]+)"/', $snippet, $lm)) {
+            $parts = array_map('intval', explode(':', $lm[1]));
+            $secs = 0;
+            foreach ($parts as $p) { $secs = $secs * 60 + $p; }
+            $cand['duration'] = $secs;
+        }
+
+        $candidates[] = $cand;
+        if (count($candidates) >= $max) break;
+    }
+    return $candidates;
+}
+
+const YT_TRAP_WORDS = [
+    'karaoke', 'cover', 'covered by', 'instrumental', 'remix', 'live',
+    '8 bit', '8bit', 'sped up', 'slowed', 'reverb', 'reaction',
+    'lyrics video', 'lyric video', 'tutorial',
+    'piano version', 'guitar version', 'metal version', 'parody',
+];
+
+/** Score combinado para un candidato vs el track esperado.
+ *  $track: ['title'=>string, 'artist'=>string, 'duration'=>int (seg)] */
+function ytScoreCandidate(array $cand, array $track): float {
+    $expTitleN  = ytNorm($track['title']  ?? '');
+    $expArtistN = ytNorm($track['artist'] ?? '');
+    $expDur     = (int)($track['duration'] ?? 0);
+    $candTitleN = isset($cand['title'])   ? ytNorm($cand['title'])   : '';
+    $candChanN  = isset($cand['channel']) ? ytNorm($cand['channel']) : '';
+
+    $titleScore = 0;
+    if ($candTitleN !== '' && $expTitleN !== '') {
+        $t = 0.0; similar_text($expTitleN, $candTitleN, $t);
+        $titleScore = $t;
+        if (str_contains($candTitleN, $expTitleN)) $titleScore = max($titleScore, 95);
+    }
+
+    $candChanCleanN = trim(preg_replace('/\b(topic|vevo|official|records|music)\b/i', '', $candChanN));
+    $candChanCleanN = preg_replace('/\s+/', ' ', $candChanCleanN);
+    $chanScore = 50;
+    if ($expArtistN !== '' && $candChanCleanN !== '') {
+        $c = 0.0; similar_text($expArtistN, $candChanCleanN, $c);
+        $chanScore = $c;
+        if (str_contains($candChanCleanN, $expArtistN) || str_contains($expArtistN, $candChanCleanN)) {
+            $chanScore = max($chanScore, 85);
+        }
+        if (preg_match('/\b(topic|vevo)\b/i', $candChanN)) $chanScore = min(100, $chanScore + 10);
+    }
+
+    $durScore = 50;
+    if ($expDur > 0 && !empty($cand['duration'])) {
+        $diff = abs((int)$cand['duration'] - $expDur);
+        if      ($diff <= 5)  $durScore = 100;
+        else if ($diff <= 15) $durScore = 95;
+        else if ($diff <= 60) $durScore = 95 - ($diff - 15) * 1.5;
+        else                  $durScore = 0;
+    }
+
+    $posScore = max(0, 100 - (int)($cand['pos'] ?? 0) * 14);
+
+    $score = $titleScore * 0.40 + $chanScore * 0.25 + $durScore * 0.25 + $posScore * 0.10;
+
+    foreach (YT_TRAP_WORDS as $w) {
+        if ($candTitleN !== '' && str_contains($candTitleN, $w) && !str_contains($expTitleN, $w)) {
+            $score -= 25;
+        }
+    }
+    if ($candTitleN !== '' && (str_contains($candTitleN, 'official audio') ||
+                                str_contains($candTitleN, 'official music video'))) {
+        $score += 5;
+    }
+    return max(0, min(120, $score));
+}
+
+/** Elige el mejor candidato para un track. Devuelve null si ninguno
+ *  pasa un score mínimo (por ejemplo: queries vacías o results raros). */
+function ytPickBestCandidate(array $candidates, array $track, float $minScore = 35.0): ?array {
+    if (!$candidates) return null;
+    $best = null; $bestScore = 0.0;
+    foreach ($candidates as $c) {
+        $sc = ytScoreCandidate($c, $track);
+        if ($sc > $bestScore) { $bestScore = $sc; $best = $c; }
+    }
+    return ($best && $bestScore >= $minScore) ? $best : null;
+}
+
+/** Lookup completo para un track concreto: busca en YouTube, scoree
+ *  los candidatos y devuelve el mejor con videoId + duration. Usado
+ *  por spotify-track y tidal-track. */
+function searchYouTubeVideo($query, ?array $track = null) {
     $headers = implode("\r\n", [
         'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language: en-US,en;q=0.9',
@@ -59,23 +193,39 @@ function searchYouTubeVideo($query) {
     ]]);
     $html = @file_get_contents('https://www.youtube.com/results?search_query=' . urlencode($query), false, $searchCtx);
     if (!$html) return null;
-    if (!preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) return null;
-    $videoId = $m[1][0];
 
-    $duration = 0;
-    $watchCtx = stream_context_create(['http' => [
-        'timeout' => 10, 'ignore_errors' => true, 'header' => $headers,
-    ]]);
-    $watchHtml = @file_get_contents('https://www.youtube.com/watch?v=' . $videoId, false, $watchCtx);
-    if ($watchHtml && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $watchHtml, $d)) {
-        $duration = intval($d[1]);
+    /* Si tenemos info del track esperado (título/artista/duración),
+       usamos el scoring. Si no, fallback al primer videoId que aparezca
+       (compat hacia atrás para llamadas viejas que solo pasaban query). */
+    if ($track) {
+        $cands = ytExtractCandidates($html, 7);
+        $best  = ytPickBestCandidate($cands, $track);
+        if (!$best) return null;
+        $videoId = $best['videoId'];
+        $duration = $best['duration'] ?? 0;
+    } else {
+        if (!preg_match_all('/"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"/', $html, $m)) return null;
+        $videoId = $m[1][0];
+        $duration = 0;
+    }
+
+    /* Fallback de duración: si el HTML de results no la trajo, vamos al
+       watch para sacarla. Skip si ya la tenemos. */
+    if (!$duration) {
+        $watchCtx = stream_context_create(['http' => [
+            'timeout' => 10, 'ignore_errors' => true, 'header' => $headers,
+        ]]);
+        $watchHtml = @file_get_contents('https://www.youtube.com/watch?v=' . $videoId, false, $watchCtx);
+        if ($watchHtml && preg_match('/"lengthSeconds"\s*:\s*"(\d+)"/', $watchHtml, $d)) {
+            $duration = intval($d[1]);
+        }
     }
 
     return ['videoId' => $videoId, 'duration' => $duration];
 }
 
-function searchYouTubeVideoId($query) {
-    $result = searchYouTubeVideo($query);
+function searchYouTubeVideoId($query, ?array $track = null) {
+    $result = searchYouTubeVideo($query, $track);
     return $result ? $result['videoId'] : null;
 }
 
