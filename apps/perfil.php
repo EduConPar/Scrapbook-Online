@@ -516,13 +516,12 @@ if ($_perfilStandalone) {
     <div class="title-bar" style="flex-shrink:0;">
         <div class="title-bar-text" style="display:inline-flex;align-items:center;gap:4px;"><img src="assets/img/appIcons/bellIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;">Notificaciones</div>
         <div class="title-bar-controls">
-            <!-- Botón engranaje. Sin aria-label para no heredar el
-                 sprite del Help button de Win98. Imitamos el patrón de
-                 98.css usando un SVG inline como background-image, así
-                 conserva el mismo tamaño y look que los botones Close/
-                 Min/Max del title-bar. -->
-            <button id="profile-notifs-settings-btn" title="Preferencias de notificaciones"
-                    style="margin-right:2px;background-image:url(&quot;data:image/svg+xml;charset=utf-8,%3Csvg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/%3E%3C/svg%3E&quot;);background-position:center;background-repeat:no-repeat;"></button>
+            <!-- Botón engranaje. Sin aria-label (evita el sprite "?" del
+                 Help button de 98.css). El background-image vive en un
+                 <style> dedicado más abajo, en vez de inline, para que
+                 el patrón sea idéntico al de Close/Min/Max y herede los
+                 bezels Win98 sin clashes con escape de comillas. -->
+            <button id="profile-notifs-settings-btn" title="Preferencias de notificaciones"></button>
             <button aria-label="Close" id="profile-notifs-close"></button>
         </div>
     </div>

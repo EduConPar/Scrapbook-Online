@@ -1429,16 +1429,19 @@ case 'presence': {
         if ((int)$r['isOnline']) $online[] = $r['user_key'];
         $lastSeen[$r['user_key']] = (int)$r['lastAt'];
     }
-    /* DND set: user_keys con `mute_messages = "true"` en user_settings.
-       try/catch para no romper si la tabla user_settings no existe
-       (instalaciones nuevas / migraciones pendientes). */
+    /* DND set: user_keys con `mute_messages = true` en user_settings.
+       El endpoint `notif-settings` (POST) guarda con json_encode(bool)
+       → el valor SQL es la string literal `true` SIN comillas (es JSON
+       de un boolean, no de un string). Por eso comparamos con `'true'`,
+       NO con `'\"true\"'` (que sería el JSON de un STRING).
+       try/catch para no romper si la tabla user_settings no existe. */
     $dnd = [];
     try {
         $st2 = $pdo->query("
             SELECT u.user_key
               FROM user_settings s
               JOIN usuarios u ON u.id = s.user_id
-             WHERE s.key_name = 'mute_messages' AND s.value = '\"true\"'
+             WHERE s.key_name = 'mute_messages' AND s.value = 'true'
         ");
         foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $k) $dnd[] = $k;
     } catch (Throwable $_) {}
