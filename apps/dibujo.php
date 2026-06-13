@@ -1017,6 +1017,40 @@ const display = $('display-canvas');
 /* willReadFrequently mejora el rendimiento del cuentagotas. */
 const dctx = display.getContext('2d', { alpha: true, willReadFrequently: true });
 
+/* ── Display viewport sizing ──
+   Antes el display.width/height eran iguales al lienzo (e.g. 4000×4000).
+   A zoom 25% la pantalla solo muestra una porción, pero el composite
+   seguía pintando 16M de píxeles. Las apps profesionales (Krita, GIMP)
+   solo renderizan la región visible.
+
+   Aquí el internal del display = (lienzo × zoom × devicePixelRatio),
+   limitado al tamaño nominal del lienzo (a zoom > 100% no agrandamos
+   — el navegador upscalea el blit sin trabajo extra). A zoom 25% sobre
+   un 4k×4k pasamos de 16M de píxeles a ~1M (zoom 0.25² × dpr) — 16×
+   menos work por frame.
+
+   Las composite ops siguen escribiéndose en coords del LIENZO; lo
+   conseguimos aplicando setTransform(scale,0,0,scale,0,0) al dctx
+   al inicio de cada _compositeNow. Lectura (getImageData) usa coords
+   internas del canvas — los call sites escalan manualmente. */
+const _DPR = Math.max(1, window.devicePixelRatio || 1);
+function _displayScale() {
+    /* Ratio entre el internal del display y el tamaño del lienzo.
+       Igual en X e Y porque resize manteniendo aspect ratio. */
+    return display.width / state.width;
+}
+function _resizeDisplayInternal() {
+    const cssW = state.width  * state.zoom;
+    const cssH = state.height * state.zoom;
+    const iw = Math.max(1, Math.min(state.width,  Math.round(cssW * _DPR)));
+    const ih = Math.max(1, Math.min(state.height, Math.round(cssH * _DPR)));
+    if (display.width === iw && display.height === ih) return;
+    display.width = iw;
+    display.height = ih;
+    /* Cache below/above viven a tamaño antiguo del display — obsoleto. */
+    _invalidateStrokeCache();
+}
+
 const state = {
     width: 1280, height: 720, bg: '#ffffff',
     layers: [], activeIdx: 0, nextLayerId: 1,
@@ -1086,9 +1120,9 @@ function _loadPerCanvas(snap) {
     state.strokeBufferBelowIdx = -1;
     /* Tab switch: el cache below/above pertenece al tab anterior. */
     _invalidateStrokeCache();
-    /* Display canvas debe ajustarse al tamaño del lienzo del tab. */
-    display.width = state.width;
-    display.height = state.height;
+    /* Display internal sigue el viewport (zoom × DPR, capped al lienzo).
+       Como state.zoom puede venir cambiado del tab, recalculamos. */
+    _resizeDisplayInternal();
     /* Overlay de selección — reset visual; refreshSelectionOverlay se
        encarga de mostrarlo si state.selection existe. */
     const ov = $('selection-overlay');
@@ -1126,7 +1160,7 @@ function createNewTab(opts) {
     state.panX = 0; state.panY = 0; state.zoom = 1;
     state.currentDriveFileId = null; state.currentDriveFileName = null;
     state.name = name; state.isDirty = false;
-    display.width = w; display.height = h;
+    _resizeDisplayInternal();
     const bgLayer = makeLayer('Fondo');
     bgLayer.ctx.fillStyle = bg; bgLayer.ctx.fillRect(0, 0, w, h);
     const draw = makeLayer('Capa 1');
@@ -1352,7 +1386,7 @@ function resetCanvas(w, h, bg) {
     const draw = makeLayer('Capa 1');
     state.layers.push(bgLayer, draw);
     state.activeIdx = 1;
-    display.width = w; display.height = h;
+    _resizeDisplayInternal();
     state.undoStack = []; state.redoStack = [];
     /* Reset pan al crear un lienzo nuevo. */
     state.panX = 0; state.panY = 0;
@@ -1390,19 +1424,26 @@ function resetCanvas(w, h, bg) {
       de arriba sería incorrecto. En ese caso desactivamos el atajo
       y caemos al camino completo. Es raro en la práctica. */
 let _scratchCanvas = null, _scratchCtx = null;
-/* Si rect=null limpia el scratch entero (legacy). Si rect={x,y,w,h}
-   limpia solo ese rect — usado por el sub-rect path para no pagar
-   O(canvas) en lienzos grandes. El caller debe responsabilizarse de
-   no leer fuera del rect que limpió. */
+/* Scratch del MISMO tamaño que el display (viewport × DPR), no del
+   lienzo. Las ops se escriben en coords del lienzo via setTransform
+   escalado — el motor las downscalea al internal del scratch en el
+   acto, así NO pagamos N píxeles del lienzo: pagamos N píxeles del
+   display. En lienzo 4k a zoom 25% son ~1 MB en vez de ~32 MB por
+   composite.
+
+   Si rect=null limpia entero; si rect={x,y,w,h} (en coords lienzo)
+   limpia solo ese sub-rect. */
 function _getScratchCanvas(rect) {
     if (!_scratchCanvas) {
         _scratchCanvas = document.createElement('canvas');
         _scratchCtx = _scratchCanvas.getContext('2d');
     }
-    if (_scratchCanvas.width !== state.width || _scratchCanvas.height !== state.height) {
-        _scratchCanvas.width = state.width;
-        _scratchCanvas.height = state.height;
+    if (_scratchCanvas.width !== display.width || _scratchCanvas.height !== display.height) {
+        _scratchCanvas.width = display.width;
+        _scratchCanvas.height = display.height;
     }
+    const s = _displayScale();
+    _scratchCtx.setTransform(s, 0, 0, s, 0, 0);
     if (rect) {
         _scratchCtx.clearRect(rect.x, rect.y, rect.w, rect.h);
     } else {
@@ -1477,6 +1518,9 @@ function _composeRangeTo(ctx, fromIdx, toIdx) {
             && below
             && below.groupId === layer.groupId;
         if (!shouldClip) {
+            /* ctx llega con transform escalado pre-aplicado → drawImage
+               de layer.canvas (tamaño lienzo) downscalea al cache (que
+               vive a tamaño display). */
             ctx.globalAlpha = layer.opacity;
             ctx.drawImage(layer.canvas, 0, 0);
             ctx.globalAlpha = 1;
@@ -1487,9 +1531,14 @@ function _composeRangeTo(ctx, fromIdx, toIdx) {
         oc.globalCompositeOperation = 'destination-in';
         oc.drawImage(below.canvas, 0, 0);
         oc.globalCompositeOperation = 'source-over';
+        /* Blit scratch (tamaño display) → ctx (tamaño display) 1:1 en
+           coords internas — el escalado ya pasó al pintar al scratch. */
+        const sCur = ctx.getTransform();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.globalAlpha = layer.opacity;
         ctx.drawImage(_scratchCanvas, 0, 0);
         ctx.globalAlpha = 1;
+        ctx.setTransform(sCur);
     }
 }
 
@@ -1504,28 +1553,45 @@ function _aboveDependsOnActive(activeIdx) {
 }
 
 function _ensureStrokeCache(activeIdx) {
-    if (_strokeCache && _strokeCache.activeIdx === activeIdx && _strokeCache.fastPath) return _strokeCache;
+    if (_strokeCache
+        && _strokeCache.activeIdx === activeIdx
+        && _strokeCache.fastPath
+        && _strokeCache.cacheW === display.width
+        && _strokeCache.cacheH === display.height) return _strokeCache;
     if (_aboveDependsOnActive(activeIdx)) {
         _strokeCache = { activeIdx, fastPath: false };
         return _strokeCache;
     }
-    const below = document.createElement('canvas');
-    below.width = state.width; below.height = state.height;
-    _composeRangeTo(below.getContext('2d'), 0, activeIdx);
+    /* Cache al tamaño del DISPLAY (viewport × DPR), no del lienzo. Las
+       capas se downscalean al construirse — el blit posterior a dctx es
+       1:1 sin overhead de scaling. En lienzo 4k a zoom 25% pasamos de
+       64 MB por cache (2 × 32 MB) a ~4 MB. La construcción también es
+       ~16× más barata. */
+    const s = _displayScale();
+    const dw = display.width, dh = display.height;
+    const mkCacheCtx = () => {
+        const cv = document.createElement('canvas');
+        cv.width = dw; cv.height = dh;
+        const c = cv.getContext('2d');
+        c.setTransform(s, 0, 0, s, 0, 0);
+        return { cv, c };
+    };
+    const b = mkCacheCtx();
+    _composeRangeTo(b.c, 0, activeIdx);
+    const a = mkCacheCtx();
+    _composeRangeTo(a.c, activeIdx + 1, state.layers.length);
 
-    const above = document.createElement('canvas');
-    above.width = state.width; above.height = state.height;
-    _composeRangeTo(above.getContext('2d'), activeIdx + 1, state.layers.length);
-
-    _strokeCache = { below, above, activeIdx, fastPath: true };
+    _strokeCache = { below: b.cv, above: a.cv, activeIdx, fastPath: true,
+                     cacheW: dw, cacheH: dh, scale: s };
     return _strokeCache;
 }
 
-/* Versión sub-rect: igual que _compositeActiveLayerInto pero limita
-   clear+drawImage al rect (dx, dy, dw, dh). Para las composite ops
-   especiales (destination-in con below, destination-out con buffer)
-   usamos clip path para que solo afecten al rect — sin clip, esas ops
-   tocarían el scratch entero y serían O(canvas). Con clip son O(rect). */
+/* Versión sub-rect. ctx debe llegar SIN transform aplicado (identidad).
+   Esta función gestiona los transforms internamente:
+     - Para drawImage(layer.canvas, ...) usa scratch con transform
+       escalado, así layer (a tamaño lienzo) se downscalea al display.
+     - Para blit final scratch → ctx, usa 1:1 en coords internas del
+       display (scratch ya vive a tamaño display). */
 function _compositeActiveLayerIntoRect(ctx, activeIdx, dx, dy, dw, dh) {
     const layer = state.layers[activeIdx];
     if (!layer.visible) return;
@@ -1535,14 +1601,24 @@ function _compositeActiveLayerIntoRect(ctx, activeIdx, dx, dy, dw, dh) {
         && below
         && below.groupId === layer.groupId;
     const hasBuf = state.strokeBuffer && state.strokeBufferLayerIdx === activeIdx;
+    const s = _displayScale();
+    /* Rect en internas DISPLAY (integer) para el blit final 1:1. */
+    const ix = Math.floor(dx * s);
+    const iy = Math.floor(dy * s);
+    const iw = Math.min(display.width  - ix, Math.ceil((dx + dw) * s) - ix);
+    const ih = Math.min(display.height - iy, Math.ceil((dy + dh) * s) - iy);
     if (!shouldClip && !hasBuf) {
+        /* Aplica transform escalado solo durante este draw — atómico
+           y no contamina al caller. */
+        ctx.setTransform(s, 0, 0, s, 0, 0);
         ctx.globalAlpha = layer.opacity;
         ctx.drawImage(layer.canvas, dx, dy, dw, dh, dx, dy, dw, dh);
         ctx.globalAlpha = 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         return;
     }
+    /* Scratch viene CON transform escalado pre-aplicado por _getScratchCanvas. */
     const oc = _getScratchCanvas({ x: dx, y: dy, w: dw, h: dh });
-    /* Clip al rect: las composite ops solo afectan dentro del rect. */
     oc.save();
     oc.beginPath();
     oc.rect(dx, dy, dw, dh);
@@ -1563,8 +1639,12 @@ function _compositeActiveLayerIntoRect(ctx, activeIdx, dx, dy, dw, dh) {
         oc.globalCompositeOperation = 'source-over';
     }
     oc.restore();
+    /* Blit final scratch → ctx en coords internas del display: ambos
+       canvases tienen el mismo tamaño físico, así que es 1:1 (no hay
+       escalado en el navegador, máxima velocidad). */
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = layer.opacity;
-    ctx.drawImage(_scratchCanvas, dx, dy, dw, dh, dx, dy, dw, dh);
+    ctx.drawImage(_scratchCanvas, ix, iy, iw, ih, ix, iy, iw, ih);
     ctx.globalAlpha = 1;
 }
 
@@ -1577,12 +1657,16 @@ function _compositeActiveLayerInto(ctx, activeIdx) {
         && below
         && below.groupId === layer.groupId;
     const hasBuf = state.strokeBuffer && state.strokeBufferLayerIdx === activeIdx;
+    const s = _displayScale();
     if (!shouldClip && !hasBuf) {
+        ctx.setTransform(s, 0, 0, s, 0, 0);
         ctx.globalAlpha = layer.opacity;
         ctx.drawImage(layer.canvas, 0, 0);
         ctx.globalAlpha = 1;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         return;
     }
+    /* Scratch viene con transform escalado pre-aplicado. */
     const oc = _getScratchCanvas();
     oc.drawImage(layer.canvas, 0, 0);
     if (hasBuf) {
@@ -1599,16 +1683,20 @@ function _compositeActiveLayerInto(ctx, activeIdx) {
         oc.drawImage(below.canvas, 0, 0);
         oc.globalCompositeOperation = 'source-over';
     }
+    /* Blit scratch (display size) → ctx (display size) en internas, 1:1. */
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = layer.opacity;
     ctx.drawImage(_scratchCanvas, 0, 0);
     ctx.globalAlpha = 1;
 }
 
 function _compositeNow() {
+    const s = _displayScale();
     /* Atajo: durante un trazo (strokeBuffer activo) usamos los caches
-       below/above y solo recompositamos la capa activa. Si tenemos
-       dirty rect además, restringimos clear+drawImage a ese rect —
-       el blit pasa de 16M px a unos pocos miles en lienzos grandes. */
+       below/above (a tamaño display) y solo recompositamos la capa
+       activa. Cache → dctx es un blit 1:1 sin scaling (ambos al
+       tamaño display), por lo que el navegador puede ejecutarlo
+       acelerado por HW. */
     const hasStroke = !!state.strokeBuffer && state.strokeBufferLayerIdx >= 0;
     if (hasStroke) {
         const ai = state.strokeBufferLayerIdx;
@@ -1616,14 +1704,24 @@ function _compositeNow() {
         if (cache.fastPath) {
             const d = _clampDirtyToCanvas();
             if (d) {
-                /* Restringido al dirty rect. */
-                dctx.clearRect(d.x, d.y, d.w, d.h);
-                dctx.drawImage(cache.below, d.x, d.y, d.w, d.h, d.x, d.y, d.w, d.h);
+                /* Coords internas del display para clear+blit cache 1:1.
+                   floor/ceil asegura que el rect entero (sin sub-pixel
+                   gaps en el borde) cubre el área correspondiente. */
+                const ix = Math.floor(d.x * s);
+                const iy = Math.floor(d.y * s);
+                const iw = Math.min(display.width  - ix, Math.ceil((d.x + d.w) * s) - ix);
+                const ih = Math.min(display.height - iy, Math.ceil((d.y + d.h) * s) - iy);
+                dctx.setTransform(1, 0, 0, 1, 0, 0);
+                dctx.clearRect(ix, iy, iw, ih);
+                dctx.drawImage(cache.below, ix, iy, iw, ih, ix, iy, iw, ih);
                 _compositeActiveLayerIntoRect(dctx, ai, d.x, d.y, d.w, d.h);
-                dctx.drawImage(cache.above, d.x, d.y, d.w, d.h, d.x, d.y, d.w, d.h);
+                /* _compositeActiveLayerIntoRect dejó dctx en transform
+                   identidad — listo para el siguiente blit 1:1. */
+                dctx.drawImage(cache.above, ix, iy, iw, ih, ix, iy, iw, ih);
             } else {
                 /* Sin dirty rect (primer frame del stroke) — pintamos todo. */
-                dctx.clearRect(0, 0, state.width, state.height);
+                dctx.setTransform(1, 0, 0, 1, 0, 0);
+                dctx.clearRect(0, 0, display.width, display.height);
                 dctx.drawImage(cache.below, 0, 0);
                 _compositeActiveLayerInto(dctx, ai);
                 dctx.drawImage(cache.above, 0, 0);
@@ -1633,7 +1731,9 @@ function _compositeNow() {
         }
     }
     _dirty = null;
-    /* Camino completo: dibuja todas las capas. */
+    /* Camino completo: dibuja todas las capas. setTransform escalado
+       una sola vez; cada drawImage(layer.canvas) downscalea al display. */
+    dctx.setTransform(s, 0, 0, s, 0, 0);
     dctx.clearRect(0, 0, state.width, state.height);
     for (let i = 0; i < state.layers.length; i++) {
         const layer = state.layers[i];
@@ -1650,6 +1750,7 @@ function _compositeNow() {
             dctx.globalAlpha = 1;
             continue;
         }
+        /* Scratch viene con transform escalado pre-aplicado. */
         const oc = _getScratchCanvas();
         oc.drawImage(layer.canvas, 0, 0);
         if (hasActiveBuffer) {
@@ -1666,8 +1767,13 @@ function _compositeNow() {
             oc.drawImage(below.canvas, 0, 0);
             oc.globalCompositeOperation = 'source-over';
         }
+        /* Blit scratch (display size) → dctx (display size) 1:1.
+           Reseteamos transform para que (0,0) sean coords internas; al
+           final del loop volvemos al transform escalado. */
+        dctx.setTransform(1, 0, 0, 1, 0, 0);
         dctx.globalAlpha = layer.opacity;
         dctx.drawImage(_scratchCanvas, 0, 0);
+        dctx.setTransform(s, 0, 0, s, 0, 0);
         dctx.globalAlpha = 1;
     }
 }
@@ -2242,9 +2348,13 @@ function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
     if (brush.blender && !isEraser) {
         const src = sampleCtx || dctx;
         /* Sample vía patch local cacheado — un getImageData(128,128) cubre
-           docenas de dabs cercanos en vez de uno por dab. */
-        const ix = Math.max(0, Math.min(src.canvas.width  - 1, x | 0));
-        const iy = Math.max(0, Math.min(src.canvas.height - 1, y | 0));
+           docenas de dabs cercanos en vez de uno por dab. Si el source
+           es el display (que ahora vive a tamaño viewport), escalamos
+           coords lienzo → internas. Otros sources (sampleCtx custom)
+           viven a tamaño lienzo. */
+        const sScale = (src === dctx) ? _displayScale() : 1;
+        const ix = Math.max(0, Math.min(src.canvas.width  - 1, Math.round(x * sScale)));
+        const iy = Math.max(0, Math.min(src.canvas.height - 1, Math.round(y * sScale)));
         const px = _samplePixelFromCtx(src, ix, iy);
         const here = (!px || px[3] === 0)
             ? null
@@ -2388,7 +2498,13 @@ function pickColorAt(x, y) {
        stale para el cuentagotas. Forzamos un compositeSync para leer
        los píxeles actuales sin esperar al próximo frame. */
     if (_compositeScheduled) compositeSync();
-    const px = dctx.getImageData(x|0, y|0, 1, 1).data;
+    /* Display internal puede ser más pequeño que el lienzo (viewport
+       size). getImageData NO respeta el transform — escalamos coords
+       lienzo → internas manualmente. */
+    const s = _displayScale();
+    const ix = Math.max(0, Math.min(display.width  - 1, Math.round(x * s)));
+    const iy = Math.max(0, Math.min(display.height - 1, Math.round(y * s)));
+    const px = dctx.getImageData(ix, iy, 1, 1).data;
     if (px[3] === 0) return null;
     return '#' + [0,1,2].map(i => px[i].toString(16).padStart(2, '0')).join('');
 }
@@ -3301,6 +3417,10 @@ function applyZoom() {
     zc.style.transform = 'translate(' + state.panX + 'px,' + state.panY + 'px)';
     display.style.width  = state.width  * state.zoom + 'px';
     display.style.height = state.height * state.zoom + 'px';
+    /* Internal del display sigue el viewport visible — composite y blit
+       trabajan en menos píxeles a zoom < 100%. */
+    _resizeDisplayInternal();
+    composite();
     refreshSelectionOverlay();
     $('zoom-val').textContent = Math.round(state.zoom * 100) + '%';
 }
@@ -4039,7 +4159,7 @@ async function loadOra(file) {
     state.panX = 0; state.panY = 0;
     state.currentDriveFileId = null;
     state.currentDriveFileName = null;
-    display.width = w; display.height = h;
+    _resizeDisplayInternal();
 
     /* Recorre el <stack> raíz. Para cada <stack> anidada creamos un
        grupo nuevo. Para cada <layer> guardamos sus props y src.
@@ -4132,7 +4252,7 @@ async function loadImageAsCanvas(file) {
     state.panX = 0; state.panY = 0;
     state.currentDriveFileId = null;
     state.currentDriveFileName = null;
-    display.width = w; display.height = h;
+    _resizeDisplayInternal();
     /* Nombre de capa = nombre del fichero sin extensión. */
     const layerName = (file.name || 'Capa').replace(/\.[^.]+$/, '') || 'Capa';
     const layer = makeLayer(layerName);
