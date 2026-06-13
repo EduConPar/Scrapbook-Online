@@ -1352,10 +1352,11 @@ function updateTrackUI(index)
    Race: si el usuario cambia de track antes de que la query termine,
    la respuesta podría llegar para un track "viejo". Capturamos el
    videoId al iniciar el lookup y comprobamos al volver. */
-/* :v2 al final invalida los caches generados con el algoritmo viejo de
-   find-album (threshold 60, matcher de artista menos preciso) — esos
-   "notFound" en cliente pisaban la nueva lógica que sí encuentra match. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache:v2';
+/* :v3 al final — bumpeamos para invalidar los notFound:true cacheados
+   antes de añadir la cascada de fallbacks + álbum sintético. Sin esto,
+   tracks que dieron notFound con el algoritmo viejo se quedarían así
+   en cliente aunque el backend ya devuelva algo. */
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v3';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;
@@ -1521,13 +1522,37 @@ async function openAlbumViewer(albumId, albumName) {
     }
 
     try {
-        /* 1) Metadata del álbum + tracklist. */
-        const metaRes = await fetch('assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
-        if (myToken !== _albumViewerToken) return; /* obsoleto */
-        if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
-        const meta = await metaRes.json();
-        if (myToken !== _albumViewerToken) return;
-        if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
+        /* Si el albumId es sintético (find-album no encontró match en
+           Spotify), no fetcheamos: construimos la tracklist localmente
+           a partir del track que está sonando ahora. El usuario igual
+           ve la ventana con una entrada — el título sigue siendo
+           clickable, mantenemos la promesa de "TODAS las canciones
+           tienen álbum". */
+        let meta;
+        if (typeof albumId === 'string' && albumId.startsWith('synthetic:')) {
+            const curTrack = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+            const t = curTrack || {};
+            meta = {
+                name:   (_currentAlbum && _currentAlbum.albumName) || albumName || t.title || 'Single',
+                artist: t.artist || '',
+                image:  t.videoId ? ('https://img.youtube.com/vi/' + t.videoId + '/mqdefault.jpg') : '',
+                tracks: [{
+                    title:    t.title  || 'Track',
+                    artist:   t.artist || '',
+                    duration: 0,
+                }],
+                __synthetic: true,
+                __syntheticVideoId: t.videoId || null,
+            };
+            if (myToken !== _albumViewerToken) return;
+        } else {
+            const metaRes = await fetch('assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
+            if (myToken !== _albumViewerToken) return; /* obsoleto */
+            if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
+            meta = await metaRes.json();
+            if (myToken !== _albumViewerToken) return;
+            if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
+        }
 
         nameEl.textContent   = meta.name || albumName || 'Álbum';
         artistEl.textContent = meta.artist || '';
@@ -1598,29 +1623,39 @@ async function openAlbumViewer(albumId, albumName) {
             });
         }
 
-        /* 2) En background: resolver videoIds. Mientras tanto, los
-           clicks de tracks devolverán un mensaje pidiendo esperar. */
-        const ytRes = await fetch('assets/music/api.php?action=yt-search-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tracks: meta.tracks }),
-        });
-        if (myToken !== _albumViewerToken) return;
-        if (!ytRes.ok) throw new Error('No se pudo resolver el álbum en YouTube');
-        const ytData = await ytRes.json();
-        if (myToken !== _albumViewerToken) return;
-        /* yt-search-batch puede devolver menos items que los enviados
-           (descarta los que no tienen título). Para mapear de vuelta
-           index original → videoId, normalizamos por título. */
-        const ytTracks = ytData.tracks || [];
-        const byTitle = {};
-        ytTracks.forEach(t => { if (t && t.title) byTitle[t.title] = t.videoId || null; });
-        const resolved = meta.tracks.map(t => ({
-            title:   t.title,
-            artist:  t.artist,
-            duration: t.duration || 0,
-            videoId: byTitle[t.title] || null,
-        }));
+        /* 2) Resolver videoIds. Para álbumes sintéticos saltamos el
+           yt-search-batch — el videoId ya lo conocemos (es el del track
+           sonando ahora). Para álbumes reales, fetch en background. */
+        let resolved;
+        if (meta.__synthetic) {
+            resolved = [{
+                title:    meta.tracks[0].title,
+                artist:   meta.tracks[0].artist,
+                duration: 0,
+                videoId:  meta.__syntheticVideoId || null,
+            }];
+        } else {
+            const ytRes = await fetch('assets/music/api.php?action=yt-search-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tracks: meta.tracks }),
+            });
+            if (myToken !== _albumViewerToken) return;
+            if (!ytRes.ok) throw new Error('No se pudo resolver el álbum en YouTube');
+            const ytData = await ytRes.json();
+            if (myToken !== _albumViewerToken) return;
+            /* yt-search-batch puede devolver menos items que los enviados
+               (descarta los que no tienen título). Mapeo por título. */
+            const ytTracks = ytData.tracks || [];
+            const byTitle = {};
+            ytTracks.forEach(t => { if (t && t.title) byTitle[t.title] = t.videoId || null; });
+            resolved = meta.tracks.map(t => ({
+                title:   t.title,
+                artist:  t.artist,
+                duration: t.duration || 0,
+                videoId: byTitle[t.title] || null,
+            }));
+        }
 
         _albumViewerCurrent.resolved = resolved;
 
@@ -1644,8 +1679,50 @@ async function openAlbumViewer(albumId, albumName) {
            vigente — si no, esta apertura fue superada por otra y la UI
            ya está mostrando el álbum nuevo. */
         if (myToken === _albumViewerToken) {
-            tracksEl.innerHTML = '<div class="album-viewer-msg">Error: ' + (e.message || e) + '</div>';
-            playBtn.textContent = 'No disponible';
+            /* Fallback: en lugar de dejar al usuario con "Error", pintamos
+               un viewer mínimo con la canción que está sonando — el
+               botón "Reproducir álbum" reactivado lo deja seguir
+               escuchando lo que estaba. Mantiene la promesa: nunca un
+               álbum sin viewer utilizable. */
+            const curTrack = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+            nameEl.textContent   = (curTrack && curTrack.title)  || albumName || 'Álbum';
+            artistEl.textContent = (curTrack && curTrack.artist) || '';
+            metaEl.textContent   = '1 canción';
+            if (curTrack && curTrack.videoId) {
+                coverEl.src = 'https://img.youtube.com/vi/' + curTrack.videoId + '/mqdefault.jpg';
+            }
+            tracksEl.innerHTML = '';
+            const row = document.createElement('div');
+            row.className = 'album-viewer-row is-playing';
+            row.innerHTML =
+                '<span class="album-viewer-num">1</span>' +
+                '<div class="album-viewer-info">' +
+                  '<div class="album-viewer-title"></div>' +
+                  '<div class="album-viewer-artist"></div>' +
+                '</div>' +
+                '<span class="album-viewer-dur"></span>';
+            row.querySelector('.album-viewer-title').textContent  = (curTrack && curTrack.title)  || 'Track';
+            row.querySelector('.album-viewer-artist').textContent = (curTrack && curTrack.artist) || '';
+            row.addEventListener('click', () => _playAlbumFrom(0));
+            tracksEl.appendChild(row);
+            _albumViewerCurrent = {
+                albumId,
+                meta: { name: nameEl.textContent, artist: artistEl.textContent, image: coverEl.src,
+                        tracks: [{ title: row.querySelector('.album-viewer-title').textContent,
+                                   artist: row.querySelector('.album-viewer-artist').textContent,
+                                   duration: 0 }] },
+                resolved: [{ title: row.querySelector('.album-viewer-title').textContent,
+                             artist: row.querySelector('.album-viewer-artist').textContent,
+                             duration: 0,
+                             videoId: (curTrack && curTrack.videoId) || null }],
+            };
+            if (curTrack && curTrack.videoId) {
+                playBtn.disabled = false;
+                playBtn.textContent = '▶ Reproducir';
+                playBtn.onclick = () => _playAlbumFrom(0);
+            } else {
+                playBtn.textContent = 'No disponible';
+            }
         }
     }
 }
@@ -1958,17 +2035,21 @@ function _resolveAlbumForRow(track, albumSpan) {
     const vId = track.videoId;
 
     function paint(data) {
-        if (!data || data.notFound || !data.albumName) {
+        /* Normaliza para que un notFound o data nula se conviertan en
+           sintético — la fila siempre muestra algún álbum clickable. */
+        const norm = _normalizeAlbumPayload(data, track);
+        if (!norm.albumName) {
             albumSpan.textContent = '';
             albumSpan.style.display = 'none';
             return;
         }
         /* Sin separador textual: la división visual la da el
            border-left + padding del CSS (.pl-item-album-text). */
-        albumSpan.textContent = data.albumName;
-        albumSpan.title = 'Ver álbum: ' + data.albumName;
-        albumSpan.dataset.albumId = data.spotifyAlbumId || '';
-        albumSpan.dataset.albumName = data.albumName || '';
+        albumSpan.textContent = norm.albumName;
+        albumSpan.title = 'Ver álbum: ' + norm.albumName;
+        albumSpan.dataset.albumId = norm.spotifyAlbumId || '';
+        albumSpan.dataset.albumName = norm.albumName || '';
+        albumSpan.style.display = '';
         /* Click → abre el viewer. Stop propagation para que no se cuente
            como click en la fila (que podría reproducir el track). */
         albumSpan.onclick = ev => {
@@ -1996,6 +2077,32 @@ function _resolveAlbumForRow(track, albumSpan) {
         .catch(() => { /* offline / endpoint caído → no se muestra nada */ });
 }
 
+/* Garantiza que cualquier respuesta del backend produzca un álbum
+   utilizable. Si el backend devuelve notFound:true (cache legacy, error
+   raro, server viejo) lo convertimos en sintético en el cliente
+   también — así nunca dejamos de tener has-album en el título. */
+function _normalizeAlbumPayload(data, track) {
+    if (data && !data.notFound && data.spotifyAlbumId) return data;
+    /* Sintetizamos a partir del track actual. */
+    const title  = (track && track.title)  || '';
+    const artist = (track && track.artist) || '';
+    let hash = '';
+    for (let i = 0; i < title.length; i++) hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
+    for (let i = 0; i < artist.length; i++) hash = ((hash << 5) - hash + artist.charCodeAt(i)) | 0;
+    return {
+        notFound:       false,
+        albumName:      title || 'Single',
+        albumImage:     '',
+        spotifyAlbumId: 'synthetic:' + (hash >>> 0).toString(16),
+        albumUrl:       '',
+        isSingle:       true,
+        matchTitle:     title,
+        matchArtist:    artist,
+        matchTrackId:   '',
+        isSynthetic:    true,
+    };
+}
+
 function resolveAndShowAlbum(track) {
     /* Si cambiamos de track distinto al "forzado externamente",
        invalida el lock — el nuevo videoId vuelve a pasar por find-album. */
@@ -2010,7 +2117,12 @@ function resolveAndShowAlbum(track) {
     /* Cache hit por videoId. */
     const vId = track.videoId;
     const cached = _albumCacheGet(vId);
-    if (cached !== undefined) { _applyAlbumState(cached); return; }
+    if (cached !== undefined) {
+        /* Cache puede ser legacy notFound — normalizamos para que igual
+           produzca un álbum sintético clickable. */
+        _applyAlbumState(_normalizeAlbumPayload(cached, track));
+        return;
+    }
 
     /* Fetch al backend. Guardamos el videoId actual y verificamos al
        volver para no pintar el álbum de un track que ya no está. */
@@ -2022,21 +2134,29 @@ function resolveAndShowAlbum(track) {
     fetch('assets/music/api.php?action=find-album&' + params.toString())
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-            if (!data) return;
-            _albumCacheSet(requestedFor, data);
-            /* Solo aplicamos si seguimos en el mismo track Y si nadie
-               forzó externamente el estado para ese videoId. Sin esa
-               segunda condición, una llamada a setReproductorAlbumContext
-               (perfil cuando reproduce un álbum) era pisada por este
-               fetch al terminar — el viewer dejaba de abrirse. */
+            /* Normalizamos para que un notFound o red caída se
+               conviertan en sintético — la promesa "todas las canciones
+               tienen álbum" se mantiene del lado del cliente también. */
+            const normalized = _normalizeAlbumPayload(data, track);
+            _albumCacheSet(requestedFor, normalized);
             const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
                 ? playlist[currentTrack] : null;
             if (curTrack && curTrack.videoId === requestedFor
                          && curTrack.videoId !== _forcedAlbumForVideo) {
-                _applyAlbumState(data);
+                _applyAlbumState(normalized);
             }
         })
-        .catch(() => { /* offline / endpoint caído → simplemente no se muestra */ });
+        .catch(() => {
+            /* Offline / endpoint caído → sintético igual; el título sigue
+               siendo clickable y abre el viewer con la canción actual. */
+            const normalized = _normalizeAlbumPayload(null, track);
+            const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
+                ? playlist[currentTrack] : null;
+            if (curTrack && curTrack.videoId === requestedFor
+                         && curTrack.videoId !== _forcedAlbumForVideo) {
+                _applyAlbumState(normalized);
+            }
+        });
 }
 
 function startProgress()

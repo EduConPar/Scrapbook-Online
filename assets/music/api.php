@@ -680,11 +680,18 @@ case 'find-album': {
     $artist = trim((string)($_GET['artist'] ?? ''));
     if ($title === '') jsonError('title requerido');
 
-    $cacheKey = 'album_lookup_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    /* v2 en la key invalida cache previo (entradas con notFound:true
+       de antes de la cascada + sintético). Sin esto, los tracks ya
+       buscados antes seguirían devolviendo notFound durante 7 días. */
+    $cacheKey = 'album_lookup_v2_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
-        if (is_array($decoded)) { jsonResponse($decoded); }
+        if (is_array($decoded) && empty($decoded['notFound'])) {
+            /* Solo aceptamos cache hit si tiene álbum — un notFound
+               legacy se reprocesa con la cascada para devolver algo. */
+            jsonResponse($decoded);
+        }
     }
 
     $token = getSpotifyToken();
@@ -791,33 +798,46 @@ case 'find-album': {
         $uniq[] = $c;
     }
 
-    /* FILTRO HARD DE ARTISTA: si conocemos el artista de la canción,
-       descartamos cualquier candidato cuyo artista no coincida con un
-       50% mínimo de similitud. Sin esto, una canción "Yesterday" del
-       usuario podía matchear un álbum random de otro artista que tenía
-       un track del mismo título — el álbum mostrado no tenía sentido.
+    /* CASCADA DE FALLBACKS para garantizar que TODAS las canciones
+       reciban un álbum cuando Spotify devuelve resultados. Empezamos
+       estrictos (artista debe coincidir + score alto) y relajamos
+       progresivamente hasta agarrar algo razonable. Si Spotify no
+       devolvió nada de nada, caemos al álbum sintético del final. */
+    $pickBest = function(array $list, float $minScore) use ($scoreCandidate) {
+        $best = null; $bestScore = 0.0;
+        foreach ($list as $c) {
+            $sc = $scoreCandidate($c);
+            if ($sc > $bestScore) { $best = $c; $bestScore = $sc; }
+        }
+        return ($best && $bestScore >= $minScore) ? $best : null;
+    };
 
-       Si no conocemos el artista (string vacío), saltamos el filtro:
-       en ese caso lo único que tenemos es el título y el ranking
-       puro hará el trabajo. */
+    $best = null;
+    /* Nivel 1: artista coincide (≥50%) Y score combinado ≥50. */
     if ($artistN !== '') {
-        $uniq = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
+        $filtered = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
             return $bestArtistSim($c) >= 50.0;
         }));
+        $best = $pickBest($filtered, 50.0);
+    }
+    /* Nivel 2: artista coincide pero score muy bajo aún acepta (≥35). */
+    if (!$best && $artistN !== '') {
+        $filtered = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
+            return $bestArtistSim($c) >= 35.0;
+        }));
+        $best = $pickBest($filtered, 35.0);
+    }
+    /* Nivel 3: olvida el filtro de artista, pero score decente (≥40). */
+    if (!$best) {
+        $best = $pickBest($uniq, 40.0);
+    }
+    /* Nivel 4: el TOP-1 absoluto, sin importar score. Si Spotify lo
+       puso primero, probablemente es lo más cercano que hay. */
+    if (!$best && !empty($uniq)) {
+        $best = $uniq[0];
     }
 
-    /* Rankea y elige el mejor que supere un threshold mínimo. */
-    $best = null; $bestScore = 0.0;
-    foreach ($uniq as $c) {
-        $sc = $scoreCandidate($c);
-        if ($sc > $bestScore) { $best = $c; $bestScore = $sc; }
-    }
-    /* Threshold relajado a 50 — el filtro de artista ya hizo el trabajo
-       fino. Por debajo: candidato dudoso aunque el artista cuadre. */
-    $MIN_SCORE = 50.0;
-    if ($bestScore < $MIN_SCORE) $best = null;
-
-    $result = ['notFound' => true];
+    $result = null;
     if ($best && isset($best['album'])) {
         $alb = $best['album'];
         $img = '';
@@ -839,7 +859,33 @@ case 'find-album': {
                la fila correspondiente en el viewer, garantizando que
                "la canción desde la que se busca está en el álbum". */
             'matchTrackId'   => $best['id']     ?? '',
-            'score'          => round($bestScore, 1),
+            'isSynthetic'    => false,
+        ];
+    }
+
+    /* ÁLBUM SINTÉTICO: si Spotify no devolvió absolutamente nada (red
+       caída, canción rarísima, query rota), el cliente igual recibe un
+       "álbum" usable. El spotifyAlbumId lleva prefijo "synthetic:"
+       para que el viewer lo reconozca y muestre la tracklist localmente
+       (con solo la canción consultada) sin llamar a album-tracks de
+       Spotify. Resultado: TODAS las canciones tienen álbum clickable,
+       como pidió el usuario. */
+    if ($result === null) {
+        $hash = substr(md5(mb_strtolower($title) . '|' . mb_strtolower($artist)), 0, 16);
+        $result = [
+            'notFound'       => false,
+            'albumName'      => $title,
+            'albumImage'     => '',
+            'spotifyAlbumId' => 'synthetic:' . $hash,
+            'albumUrl'       => '',
+            'isSingle'       => true,
+            'releaseDate'    => '',
+            'matchTitle'     => $title,
+            'matchArtist'    => $artist,
+            'matchTrackId'   => '',
+            'isSynthetic'    => true,
+            'syntheticTitle' => $title,
+            'syntheticArtist'=> $artist,
         ];
     }
     cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
