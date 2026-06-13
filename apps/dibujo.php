@@ -2118,6 +2118,53 @@ function pressureToWidth(p) {
     const adj = Math.pow(Math.max(0, Math.min(1, p)), 1.5);
     return state.size * (0.10 + 0.90 * adj);
 }
+/* ── Dab template cache ──
+   Crear createRadialGradient + arc + fill por cada dab era el coste
+   dominante con airbrush/chalk/round (50+ dabs por anchura). Cacheamos
+   un canvas pequeño con el dab "tipo" pre-pintado por (brush.hardEdge,
+   color) y lo blitteamos con drawImage redimensionando — el navegador
+   acelera por HW. Para hardEdge un círculo plano; para soft un radial.
+   La opacidad por dab sigue aplicándose con globalAlpha, así el efecto
+   de presión y flow se conserva.
+
+   No se aplica al blender (color dinámico por dab) ni a sample con
+   selection rotation activa (necesitaría rotar también el template);
+   en esos casos caemos al render directo. */
+const DAB_TEMPLATE_SIZE = 128;
+const _dabTemplates = new Map(); /* key → HTMLCanvasElement */
+const _DAB_TEMPLATE_CAP = 16;
+function _getDabTemplate(brush, color) {
+    const key = (brush.hardEdge ? 'h:' : 's:') + color;
+    let tpl = _dabTemplates.get(key);
+    if (tpl) return tpl;
+    if (_dabTemplates.size >= _DAB_TEMPLATE_CAP) {
+        /* LRU naive: borra el primero (el más antiguo en orden de
+           inserción de Map). */
+        const firstKey = _dabTemplates.keys().next().value;
+        _dabTemplates.delete(firstKey);
+    }
+    const s = DAB_TEMPLATE_SIZE;
+    tpl = document.createElement('canvas');
+    tpl.width = s; tpl.height = s;
+    const tctx = tpl.getContext('2d');
+    const c = s / 2;
+    const r = c - 2;
+    if (brush.hardEdge) {
+        tctx.fillStyle = color;
+        tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+    } else {
+        const g = tctx.createRadialGradient(c, c, 0, c, c, r);
+        g.addColorStop(0,    color);
+        g.addColorStop(0.55, color);
+        g.addColorStop(1,    color + '00');
+        tctx.fillStyle = g;
+        tctx.beginPath(); tctx.arc(c, c, r, 0, Math.PI * 2); tctx.fill();
+    }
+    _dabTemplates.set(key, tpl);
+    return tpl;
+}
+function _clearDabTemplates() { _dabTemplates.clear(); }
+
 function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
     const w = pressureToWidth(pressure);
     if (w < 0.5) return;
@@ -2187,16 +2234,11 @@ function stampDab(ctx, x, y, pressure, color, brush, isEraser, sampleCtx) {
     }
     ctx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
     ctx.globalAlpha = Math.pow(pressure, brush.alphaCurve) * brush.flow * state.brushOpacity;
-    if (brush.hardEdge) {
-        ctx.fillStyle = color;
-    } else {
-        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0,    color);
-        g.addColorStop(0.55, color);
-        g.addColorStop(1,    color + '00');
-        ctx.fillStyle = g;
-    }
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    /* drawImage(template) en lugar de createRadialGradient+arc+fill por
+       dab — el navegador lo acelera por HW y evitamos N allocations de
+       gradient por trazo. Template cacheado por (hardEdge, color). */
+    const tpl = _getDabTemplate(brush, color);
+    ctx.drawImage(tpl, x - r, y - r, w, w);
     ctx.globalAlpha = 1;
 }
 function paintSegment(ctx, from, to, color, brush, isEraser, sampleCtx) {
@@ -2216,10 +2258,15 @@ function stabilize(pt) {
     state.stab.push(pt);
     if (state.stab.length > CFG.STABILIZER_MAX) state.stab.shift();
     const n = Math.min(state.stab.length, state.smooth);
+    /* Iteramos sobre el slice in-place — evitamos crear un array nuevo
+       por sample. Con muchos samples por frame el slice + GC sumaba. */
+    const start = state.stab.length - n;
     let x = 0, y = 0, p = 0;
-    const slice = state.stab.slice(-n);
-    for (const s of slice) { x += s.x; y += s.y; p += s.p; }
-    return { x: x/n, y: y/n, p: p/n };
+    for (let i = start; i < state.stab.length; i++) {
+        const s = state.stab[i];
+        x += s.x; y += s.y; p += s.p;
+    }
+    return { x: x / n, y: y / n, p: p / n };
 }
 function applyStrokeSample(rawPt, isLocal) {
     const pt = isLocal ? stabilize(rawPt) : rawPt;
