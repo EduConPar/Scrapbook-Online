@@ -291,7 +291,18 @@
 }
 
 .profile-nav-icon { font-size: 14px; line-height: 1; flex-shrink: 0; }
-.profile-nav-label { flex: 1; }
+/* min-width:0 anula el `auto` por defecto que impide a un flex-item
+   encogerse por debajo del tamaño natural de su contenido. Sin esto,
+   un label largo (nombre de un usuario seguido) desborda el contenedor
+   y empuja el icono de chat (.profile-nav-chat) fuera de la sidebar.
+   overflow+ellipsis recorta con "…" en lugar de hacer overflow. */
+.profile-nav-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .profile-nav-count {
     font-size: 10px;
     color: var(--text-muted);
