@@ -3709,7 +3709,14 @@ function renderBrushGrid() {
     addBtn.className = 'brush-btn brush-btn-add';
     addBtn.title = 'Importar pincel...';
     addBtn.textContent = '+';
-    addBtn.addEventListener('click', openCustomBrushDialog);
+    /* Resuelve openCustomBrushDialog en el momento del click (cuando el
+       IIFE setupCustomBrushModal ya lo ha expuesto), no en el attach:
+       renderBrushGrid se invoca al boot antes del setup del modal, y
+       en estricto mode una referencia directa a una variable no
+       declarada lanza ReferenceError ahí mismo. */
+    addBtn.addEventListener('click', () => {
+        if (typeof window.openCustomBrushDialog === 'function') window.openCustomBrushDialog();
+    });
     grid.appendChild(addBtn);
 
     const active = lookupBrush(state.brushName);

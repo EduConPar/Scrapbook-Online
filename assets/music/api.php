@@ -10,6 +10,7 @@
    GET   ?action=yt-duration&id=VIDEOID
    GET   ?action=spotify-track&url=...
    GET   ?action=find-album&title=...&artist=...
+   GET   ?action=album-tracks&id=SPOTIFY_ALBUM_ID
    GET   ?action=tidal-track&url=...
 
    POST  ?action=tidal-playlist        { url }
@@ -719,6 +720,77 @@ case 'find-album': {
             'matchArtist'    => $item['artists'][0]['name'] ?? '',
         ];
     }
+    cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
+    jsonResponse($result);
+}
+
+/* Lista las canciones de un álbum de Spotify dado su ID. NO resuelve
+   videoIds de YouTube — eso lo hace el cliente con yt-search-batch (ya
+   existente), así esta llamada es rápida y barata. Cache 7 días: los
+   álbumes no cambian de tracklist.
+
+   Devuelve: { name, artist, image, tracks: [{title, artist, duration}] } */
+case 'album-tracks': {
+    require_once __DIR__ . '/spotify-helpers.php';
+    $albumId = preg_replace('/[^A-Za-z0-9]/', '', $_GET['id'] ?? '');
+    if (!$albumId) jsonError('id requerido');
+
+    $cacheKey = 'album_tracks_' . $albumId;
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        $decoded = json_decode($cached, true);
+        if (is_array($decoded)) { jsonResponse($decoded); }
+    }
+
+    $token = getSpotifyToken();
+    if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
+
+    /* Metadata del álbum (nombre, artista principal, cover). Una sola
+       request — Spotify ya devuelve los tracks embebidos. */
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 10, 'ignore_errors' => true,
+        'header'  => 'Authorization: Bearer ' . $token,
+    ]]);
+    $raw = @file_get_contents('https://api.spotify.com/v1/albums/' . $albumId . '?market=US', false, $ctx);
+    if (!$raw) jsonError('No se pudo leer el álbum', 502);
+    $album = json_decode($raw, true);
+    if (!isset($album['name'])) jsonError('Álbum no encontrado', 404);
+
+    $items = $album['tracks']['items'] ?? [];
+    /* Si el álbum tiene más de 50 tracks, Spotify pagina. Seguimos el
+       cursor 'next' hasta agotar (paranoid loop con tope para no entrar
+       en bucle infinito si la API rompe). */
+    $next = $album['tracks']['next'] ?? null;
+    $safety = 5;
+    while ($next && $safety-- > 0) {
+        $more = @file_get_contents($next, false, $ctx);
+        if (!$more) break;
+        $page = json_decode($more, true);
+        if (!isset($page['items'])) break;
+        $items = array_merge($items, $page['items']);
+        $next = $page['next'] ?? null;
+    }
+
+    $tracks = [];
+    foreach ($items as $t) {
+        if (empty($t['name'])) continue;
+        $tracks[] = [
+            'title'    => (string)$t['name'],
+            'artist'   => (string)($t['artists'][0]['name'] ?? ($album['artists'][0]['name'] ?? '')),
+            'duration' => isset($t['duration_ms']) ? (int)round($t['duration_ms'] / 1000) : 0,
+        ];
+    }
+
+    $image = '';
+    if (!empty($album['images'])) {
+        $image = $album['images'][1]['url'] ?? $album['images'][0]['url'] ?? '';
+    }
+    $result = [
+        'name'   => (string)$album['name'],
+        'artist' => (string)($album['artists'][0]['name'] ?? ''),
+        'image'  => $image,
+        'tracks' => $tracks,
+    ];
     cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
     jsonResponse($result);
 }

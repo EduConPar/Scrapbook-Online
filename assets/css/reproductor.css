@@ -103,24 +103,62 @@
     color: var(--text-muted);
 }
 
-/* Álbum resuelto vía Spotify search — opcional, oculto si no hay match.
-   Clickable: abre el álbum en Spotify. */
-#player-album {
-    display: inline-block;
-    font-size: 10px;
-    color: var(--link-text, var(--accent));
-    text-decoration: none;
-    margin-top: 2px;
-    max-width: 220px;
+/* Cuando el track actual tiene álbum resuelto, el TÍTULO de la
+   canción pasa a ser clickable: abre el álbum como playlist temporal.
+   Antes esto era un link aparte (#player-album) debajo del artista;
+   ahora vive integrado en el título para no saturar el mini-player. */
+#player-title.has-album {
+    cursor: pointer;
+}
+#player-title.has-album:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--link-text, var(--accent));
+    text-underline-offset: 2px;
+}
+
+/* Widget "Álbum del track actual" en la home view del editor de
+   playlists. Es el único sitio donde se muestra el nombre del álbum. */
+#pl-current-album {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    box-shadow: inset 1px 1px var(--bezel-dark-1);
+    cursor: pointer;
+}
+#pl-current-album:hover { filter: brightness(1.04); }
+#pl-current-album img {
+    width: 38px;
+    height: 38px;
+    object-fit: cover;
+    background: var(--surface-deep);
+    flex-shrink: 0;
+}
+.pl-current-album-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+}
+.pl-current-album-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+.pl-current-album-name {
+    font-size: 12px;
+    color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
 }
-#player-album:hover { text-decoration: underline; }
-#player-album::before {
-    /* Mini icono musical antes del nombre del álbum para distinguirlo
-       del artista visualmente sin meter otro img tag. */
+.pl-current-album-name::before {
     content: '♫ ';
     opacity: 0.7;
 }

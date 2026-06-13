@@ -51,13 +51,12 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
                     <span id="lt-live-dot" title="" style="display:none;position:absolute;top:3px;right:3px;width:9px;height:9px;border-radius:50%;background:var(--accent, #1db954);box-shadow:0 0 5px var(--accent, #1db954),0 0 1px rgba(0,0,0,0.5);animation:ltLivePulse 1.2s ease-in-out infinite;z-index:5;"></span>
                 </div>
                 <div id="player-info">
+                    <!-- Si el track actual tiene álbum resuelto, este
+                         <p> se vuelve clickable: abre el álbum como
+                         playlist temporal. El nombre del álbum NO se
+                         muestra aquí — vive en el panel de Playlists. -->
                     <p id="player-title">Sin título</p>
                     <p id="player-artist">—</p>
-                    <!-- Álbum resuelto vía music/api.php?action=find-album.
-                         Es clickable: abre el álbum en Spotify. Vacío
-                         hasta que la query termine; si Spotify no devuelve
-                         match, queda oculto. -->
-                    <a id="player-album" href="#" target="_blank" rel="noopener" style="display:none;"></a>
                     <div id="player-addedby"></div>
                 </div>
             </div>
@@ -253,6 +252,10 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     <div class="window-body" id="pl-body">
         <!-- HOME VIEW -->
         <div id="pl-home">
+            <!-- Widget del álbum del track actual. Visible solo cuando
+                 el track activo tiene un álbum resuelto en Spotify.
+                 Click → carga el álbum como playlist. JS lo pinta. -->
+            <div id="pl-current-album" style="display:none;"></div>
             <div id="pl-home-list"></div>
             <div id="pl-home-footer">
                 <button class="button" id="pl-create">+ Crear playlist</button>
@@ -670,6 +673,13 @@ function sendWrappedLog(track, listenedS, playlistId) {
     /* Si escuchó menos de 3s no lo contamos como play — evita inflar
        counts por taps accidentales que cambian de track al instante. */
     if (listenedS < 3) return;
+    /* IDs virtuales (e.g. "spotify-album:xxx" cuando el usuario carga
+       un álbum como playlist temporal) no apuntan a ningún row real;
+       el backend hace (int)playlistId y dejaría un 0 falso. Mandamos
+       null en su lugar — la columna es NULLable. */
+    if (typeof playlistId === 'string' && playlistId.indexOf(':') >= 0) {
+        playlistId = null;
+    }
     var body = JSON.stringify({
         videoId:    track.videoId,
         title:      track.title,
@@ -1204,7 +1214,6 @@ const playerWindow  = document.getElementById('music-player');
 const playerCover   = document.getElementById('player-cover');
 const playerTitle   = document.getElementById('player-title');
 const playerArtist  = document.getElementById('player-artist');
-const playerAlbum   = document.getElementById('player-album');
 const playerProg    = document.getElementById('player-progress');
 const playerCurrent = document.getElementById('player-current');
 const playerDur     = document.getElementById('player-duration');
@@ -1330,38 +1339,185 @@ function _albumCacheSet(videoId, payload) {
     _saveAlbumCache();
 }
 
-function _renderAlbum(payload) {
-    if (!playerAlbum) return;
-    if (!payload || payload.notFound) {
-        playerAlbum.style.display = 'none';
-        playerAlbum.removeAttribute('href');
-        playerAlbum.textContent = '';
-        return;
+/* Estado del álbum del track activo. Es el ÚNICO sitio donde vive la
+   metadata del álbum — el reproductor pequeño no lo muestra (solo hace
+   clickable el título de la canción), y la pestaña Playlists lee de
+   aquí para pintar su widget. */
+let _currentAlbum = null; /* { spotifyAlbumId, albumName, image, isSingle } */
+
+function _applyAlbumState(payload) {
+    /* Reset por defecto: sin álbum, título no clickable, widget oculto. */
+    _currentAlbum = null;
+    if (playerTitle) playerTitle.classList.remove('has-album');
+    if (payload && !payload.notFound && payload.spotifyAlbumId) {
+        _currentAlbum = {
+            spotifyAlbumId: payload.spotifyAlbumId,
+            albumName:      payload.albumName || '',
+            image:          payload.albumImage || '',
+            isSingle:       !!payload.isSingle,
+        };
+        if (playerTitle) {
+            playerTitle.classList.add('has-album');
+            playerTitle.title = 'Reproducir álbum completo: ' + _currentAlbum.albumName;
+        }
+    } else if (playerTitle) {
+        playerTitle.title = '';
     }
-    const label = payload.isSingle ? (payload.albumName + ' (single)') : payload.albumName;
-    playerAlbum.textContent = label || '';
-    if (payload.albumUrl) {
-        playerAlbum.href = payload.albumUrl;
-        playerAlbum.title = 'Abrir álbum en Spotify';
-    } else {
-        playerAlbum.removeAttribute('href');
-        playerAlbum.title = '';
-    }
-    playerAlbum.style.display = label ? 'inline-block' : 'none';
+    /* Refresca el widget de la pestaña Playlists si está visible. */
+    _renderCurrentAlbumWidget();
 }
 
+function _renderCurrentAlbumWidget() {
+    const widget = document.getElementById('pl-current-album');
+    if (!widget) return;
+    if (!_currentAlbum) {
+        widget.style.display = 'none';
+        widget.innerHTML = '';
+        return;
+    }
+    const label = _currentAlbum.isSingle
+        ? (_currentAlbum.albumName + ' (single)')
+        : _currentAlbum.albumName;
+    /* Construimos el DOM con createElement para escapar el nombre del
+       álbum sin riesgo de injection (los nombres vienen de Spotify
+       pero igual los higienizamos). */
+    widget.innerHTML = '';
+    if (_currentAlbum.image) {
+        const img = document.createElement('img');
+        img.src = _currentAlbum.image;
+        img.alt = '';
+        widget.appendChild(img);
+    }
+    const info = document.createElement('div');
+    info.className = 'pl-current-album-info';
+    const lbl = document.createElement('div');
+    lbl.className = 'pl-current-album-label';
+    lbl.textContent = 'Álbum del track actual';
+    const nm = document.createElement('div');
+    nm.className = 'pl-current-album-name';
+    nm.textContent = label;
+    info.appendChild(lbl);
+    info.appendChild(nm);
+    widget.appendChild(info);
+    widget.title = 'Cargar álbum completo en el reproductor';
+    widget.style.display = 'flex';
+}
+
+/* ── Reproducir álbum como playlist temporal ──
+   El album se trata como una "playlist no guardada": IDs virtuales con
+   prefijo "spotify-album:" para que la sync entre tabs y el highlight
+   de currentPlaylistId no choquen con IDs reales (que son numéricos).
+
+   Estado:
+     - _albumLoading: true mientras está en flight, para deduplicar
+       clicks rápidos.
+     - Si el track actual está en el tracklist resuelto, arrancamos
+       desde esa posición — el cambio se siente como "seguir escuchando
+       pero ahora con next/prev navegando el álbum". Si no, desde la 0. */
+let _albumLoading = false;
+async function openAlbumAsPlaylist(albumId, albumName) {
+    if (_albumLoading || !albumId) return;
+    _albumLoading = true;
+    /* Feedback en el sitio que esté visible. La pestaña Playlists tiene
+       el widget; el reproductor pequeño solo muestra el cursor wait
+       en el título (no cambiamos el textContent: el usuario sigue
+       viendo qué está sonando hasta que el álbum cargue). */
+    const widget = document.getElementById('pl-current-album');
+    const widgetPrev = widget ? widget.innerHTML : null;
+    if (widget && widget.style.display !== 'none') {
+        widget.innerHTML = '<div class="pl-current-album-info"><div class="pl-current-album-name">Cargando álbum…</div></div>';
+    }
+    if (playerTitle) playerTitle.style.cursor = 'wait';
+    try {
+        /* 1) Tracklist de Spotify (title/artist/duration). */
+        const metaRes = await fetch('../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
+        if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
+        const meta = await metaRes.json();
+        if (!meta.tracks || !meta.tracks.length) throw new Error('Álbum sin canciones');
+
+        /* 2) Resuelve cada track a un videoId de YouTube (en paralelo,
+           backend). yt-search-batch ya hace concurrencia limitada y
+           devuelve los items en el mismo orden que se mandaron. */
+        const ytRes = await fetch('../assets/music/api.php?action=yt-search-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tracks: meta.tracks }),
+        });
+        if (!ytRes.ok) throw new Error('No se pudo resolver el álbum en YouTube');
+        const ytData = await ytRes.json();
+        const resolved = (ytData.tracks || [])
+            .filter(t => t && t.videoId)
+            .map(t => ({ videoId: t.videoId, title: t.title, artist: t.artist }));
+        if (!resolved.length) throw new Error('Ninguna canción del álbum se encontró en YouTube');
+
+        /* 3) Si el track sonando ahora está en el álbum, arrancamos
+           desde ahí. Comparamos por title normalizado para tolerar
+           pequeñas diferencias (mayúsculas, acentos, etc.). */
+        const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+        const currentTitle = (typeof playlist !== 'undefined' && playlist[currentTrack])
+            ? norm(playlist[currentTrack].title) : '';
+        let startAt = 0;
+        if (currentTitle) {
+            const found = resolved.findIndex(t => norm(t.title) === currentTitle);
+            if (found >= 0) startAt = found;
+        }
+
+        /* 4) Cárgalo como playlist activa. ID virtual con prefijo
+           'spotify-album:' — no choca con IDs reales de allPlaylists. */
+        const virtualId = 'spotify-album:' + albumId;
+        currentPlaylistId = virtualId;
+        currentPlaylistHasCollabs = false;
+        playlist.length = 0;
+        resolved.forEach(t => playlist.push(t));
+        currentTrack = startAt;
+        updatePlayerTitle('💿 ' + (meta.name || albumName || 'Álbum'));
+        updateTrackUI(startAt);
+        if (typeof MelonPlayerState !== 'undefined') {
+            try { MelonPlayerState.setPlaylist(virtualId, startAt); } catch (_) {}
+        }
+        if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+            ytPlayer.loadVideoById(playlist[startAt].videoId);
+        }
+    } catch (e) {
+        alert('No se pudo cargar el álbum: ' + (e.message || e));
+        /* Restaura el widget si lo estábamos enseñando como "Cargando…". */
+        if (widget && widgetPrev != null) widget.innerHTML = widgetPrev;
+    } finally {
+        _albumLoading = false;
+        if (playerTitle) playerTitle.style.cursor = '';
+    }
+}
+
+/* Click en el TÍTULO de la canción → abre su álbum como playlist. Solo
+   actúa cuando el título tiene la clase has-album (la setea
+   _applyAlbumState al resolver un álbum válido). */
+if (playerTitle) {
+    playerTitle.addEventListener('click', () => {
+        if (!playerTitle.classList.contains('has-album')) return;
+        if (!_currentAlbum) return;
+        openAlbumAsPlaylist(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+    });
+}
+
+/* Click en el widget de la pestaña Playlists → mismo destino. */
+(function() {
+    const widget = document.getElementById('pl-current-album');
+    if (!widget) return;
+    widget.addEventListener('click', () => {
+        if (!_currentAlbum) return;
+        openAlbumAsPlaylist(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+    });
+})();
+
 function resolveAndShowAlbum(track) {
-    if (!playerAlbum) return;
     /* Reset entre tracks. */
-    playerAlbum.style.display = 'none';
-    playerAlbum.textContent = '';
-    playerAlbum.removeAttribute('href');
+    _applyAlbumState(null);
     if (!track || !track.title) return;
 
     /* Cache hit por videoId. */
     const vId = track.videoId;
     const cached = _albumCacheGet(vId);
-    if (cached !== undefined) { _renderAlbum(cached); return; }
+    if (cached !== undefined) { _applyAlbumState(cached); return; }
 
     /* Fetch al backend. Guardamos el videoId actual y verificamos al
        volver para no pintar el álbum de un track que ya no está. */
@@ -1378,7 +1534,7 @@ function resolveAndShowAlbum(track) {
             /* Solo aplicamos si seguimos en el mismo track. */
             const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
                 ? playlist[currentTrack] : null;
-            if (curTrack && curTrack.videoId === requestedFor) _renderAlbum(data);
+            if (curTrack && curTrack.videoId === requestedFor) _applyAlbumState(data);
         })
         .catch(() => { /* offline / endpoint caído → simplemente no se muestra */ });
 }
@@ -1834,6 +1990,9 @@ var addTrackCallback = null;
         plHome.style.display       = 'flex';
         plEditorView.style.display = 'none';
         plTitleText.textContent    = '♪ Playlists';
+        /* Refresca el widget "Álbum del track actual" — puede haberse
+           resuelto mientras el panel estaba cerrado. */
+        if (typeof _renderCurrentAlbumWidget === 'function') _renderCurrentAlbumWidget();
         if (allPlaylists.length > 0) renderHome();
     }
 
