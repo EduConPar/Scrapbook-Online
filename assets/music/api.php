@@ -9,6 +9,7 @@
    GET   ?action=yt-title&id=VIDEOID
    GET   ?action=yt-duration&id=VIDEOID
    GET   ?action=spotify-track&url=...
+   GET   ?action=find-album&title=...&artist=...
    GET   ?action=tidal-track&url=...
 
    POST  ?action=tidal-playlist        { url }
@@ -632,6 +633,94 @@ case 'spotify-track': {
     $videoId  = searchYouTubeVideoId($title . ' ' . $artist . ' audio');
     if (!$videoId) jsonError('No se encontró el vídeo en YouTube', 502);
     jsonResponse(['title' => $title, 'artist' => $artist, 'duration' => $duration, 'videoId' => $videoId]);
+}
+
+/* Busca el álbum al que pertenece una canción usando Spotify Search.
+   Patrón: el cliente llama con title + artist (los datos que tiene del
+   track de YouTube) y devolvemos lo que Spotify reporta como mejor match.
+
+   Estrategia:
+     1. Cache hit por md5(title:artist) → return.
+     2. Spotify search type=track con "track:<title> artist:<artist>"
+        (más preciso que query libre — Spotify ignora ruidos como
+        "[Official Video]" o "feat. X").
+     3. Si no hay match, búsqueda libre (sin filtros) como fallback.
+     4. Si nada, devolvemos { notFound: true } y cacheamos también (7d)
+        para no martillear el endpoint con queries que no resuelven.
+
+   Singles: en Spotify a veces el "álbum" es la misma canción. Lo
+   marcamos con isSingle=true para que el cliente decida si lo muestra
+   ("Single" en vez del nombre del álbum). */
+case 'find-album': {
+    require_once __DIR__ . '/spotify-helpers.php';
+    $title  = trim((string)($_GET['title']  ?? ''));
+    $artist = trim((string)($_GET['artist'] ?? ''));
+    if ($title === '') jsonError('title requerido');
+
+    $cacheKey = 'album_lookup_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    $cached = cacheGet($cacheKey);
+    if ($cached !== null) {
+        $decoded = json_decode($cached, true);
+        if (is_array($decoded)) { jsonResponse($decoded); }
+    }
+
+    $token = getSpotifyToken();
+    if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
+
+    /* Limpia ruido típico de títulos de YouTube que confunde la
+       búsqueda de Spotify ("(Official Music Video)", "[HD]", "(Audio)",
+       "feat. X", etc.). Conservativo: lo aplicamos en el query, NO
+       cambiamos el title original (la cache key lo usa para dedupe). */
+    $cleanTitle = preg_replace('/[\[\(](?:official|music|video|audio|hd|hq|lyrics?|mv|m\/v|live|live performance|visualizer|extended|remaster(ed)?(\s+\d+)?)[\]\)\s\-]*/i', ' ', $title);
+    $cleanTitle = preg_replace('/\s*(?:feat\.?|ft\.?)\s+[^\(\[\-]+/i', ' ', $cleanTitle);
+    $cleanTitle = trim(preg_replace('/\s{2,}/', ' ', $cleanTitle));
+
+    $tryQuery = function(string $q) use ($token) {
+        if ($q === '') return null;
+        $url = 'https://api.spotify.com/v1/search?type=track&limit=1&market=US&q=' . rawurlencode($q);
+        $ctx = stream_context_create(['http' => [
+            'timeout' => 8, 'ignore_errors' => true,
+            'header'  => 'Authorization: Bearer ' . $token,
+        ]]);
+        $raw = @file_get_contents($url, false, $ctx);
+        if (!$raw) return null;
+        $data = json_decode($raw, true);
+        return $data['tracks']['items'][0] ?? null;
+    };
+
+    /* Query 1: estructurada con filtros track: y artist: — más precisa. */
+    $item = null;
+    if ($artist !== '') {
+        $item = $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"');
+    }
+    /* Query 2: si la estructurada no encuentra, búsqueda libre. */
+    if (!$item) {
+        $item = $tryQuery(trim($cleanTitle . ' ' . $artist));
+    }
+
+    $result = ['notFound' => true];
+    if ($item && isset($item['album'])) {
+        $alb = $item['album'];
+        $img = '';
+        if (!empty($alb['images'])) {
+            /* Spotify devuelve las imágenes de más grande a más pequeña.
+               La de tamaño medio (~300px) es ideal para la mini-cover. */
+            $img = $alb['images'][1]['url'] ?? $alb['images'][0]['url'] ?? '';
+        }
+        $result = [
+            'notFound'       => false,
+            'albumName'      => $alb['name'] ?? '',
+            'albumImage'     => $img,
+            'spotifyAlbumId' => $alb['id'] ?? '',
+            'albumUrl'       => $alb['external_urls']['spotify'] ?? '',
+            'isSingle'       => ($alb['album_type'] ?? '') === 'single',
+            'releaseDate'    => $alb['release_date'] ?? '',
+            'matchTitle'     => $item['name']   ?? '',
+            'matchArtist'    => $item['artists'][0]['name'] ?? '',
+        ];
+    }
+    cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
+    jsonResponse($result);
 }
 
 /* ─── Tidal ───────────────────────────────────────────────── */

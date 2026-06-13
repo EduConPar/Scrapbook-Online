@@ -103,6 +103,28 @@
     color: var(--text-muted);
 }
 
+/* Álbum resuelto vía Spotify search — opcional, oculto si no hay match.
+   Clickable: abre el álbum en Spotify. */
+#player-album {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--link-text, var(--accent));
+    text-decoration: none;
+    margin-top: 2px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+#player-album:hover { text-decoration: underline; }
+#player-album::before {
+    /* Mini icono musical antes del nombre del álbum para distinguirlo
+       del artista visualmente sin meter otro img tag. */
+    content: '♫ ';
+    opacity: 0.7;
+}
+
 #player-addedby {
     display: none;
     align-items: center;

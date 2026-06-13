@@ -4,6 +4,13 @@
 require_once dirname(__DIR__) . '/assets/config.php';
 require_once dirname(__DIR__) . '/db.php';
 
+/* Defaults defensivos por si el archivo se incluye sin haber preparado
+   el contexto. En el flujo real de desktop-base.php ambas variables
+   vienen ya seteadas; el isset() corta el path de undefined-variable
+   tanto para PHP runtime como para los analizadores estáticos. */
+if (!isset($desktopUserKey)) { $desktopUserKey = ''; }
+if (!isset($hasPlayer))      { $hasPlayer = false; }
+
 /* Pool global de pistas que el reproductor muestra al inicio:
    1) Listado estático por defecto para user1/user2 (semilla histórica).
    2) Pistas añadidas vía add-track → tabla music_extras. */
@@ -46,6 +53,11 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
                 <div id="player-info">
                     <p id="player-title">Sin título</p>
                     <p id="player-artist">—</p>
+                    <!-- Álbum resuelto vía music/api.php?action=find-album.
+                         Es clickable: abre el álbum en Spotify. Vacío
+                         hasta que la query termine; si Spotify no devuelve
+                         match, queda oculto. -->
+                    <a id="player-album" href="#" target="_blank" rel="noopener" style="display:none;"></a>
                     <div id="player-addedby"></div>
                 </div>
             </div>
@@ -1192,6 +1204,7 @@ const playerWindow  = document.getElementById('music-player');
 const playerCover   = document.getElementById('player-cover');
 const playerTitle   = document.getElementById('player-title');
 const playerArtist  = document.getElementById('player-artist');
+const playerAlbum   = document.getElementById('player-album');
 const playerProg    = document.getElementById('player-progress');
 const playerCurrent = document.getElementById('player-current');
 const playerDur     = document.getElementById('player-duration');
@@ -1228,6 +1241,7 @@ function updateTrackUI(index)
     playerArtist.textContent = track.artist || '—';
     playerCover.crossOrigin = 'anonymous';
     playerCover.src = `https://img.youtube.com/vi/${track.videoId}/mqdefault.jpg`;
+    resolveAndShowAlbum(track);
 
     var addedByEl = document.getElementById('player-addedby');
     addedByEl.innerHTML = '';
@@ -1283,6 +1297,90 @@ function updateTrackUI(index)
     }
     _wrappedLastTrack      = track;
     _wrappedLastPlaylistId = currentPlaylistId;
+}
+
+/* ── Resolución de álbum ──
+   El track no trae el álbum (los datos vienen de YouTube). Lo
+   resolvemos via Spotify Search en backend (music/api.php?action=
+   find-album) y cacheamos por videoId en localStorage para no repetir
+   la query — ni entre tracks, ni entre sesiones, ni entre tabs.
+
+   Race: si el usuario cambia de track antes de que la query termine,
+   la respuesta podría llegar para un track "viejo". Capturamos el
+   videoId al iniciar el lookup y comprobamos al volver. */
+const ALBUM_CACHE_KEY = 'reproductor:album-cache';
+let _albumCacheMem = null;
+function _loadAlbumCache() {
+    if (_albumCacheMem) return _albumCacheMem;
+    try { _albumCacheMem = JSON.parse(localStorage.getItem(ALBUM_CACHE_KEY) || '{}'); }
+    catch (_) { _albumCacheMem = {}; }
+    return _albumCacheMem;
+}
+function _saveAlbumCache() {
+    try { localStorage.setItem(ALBUM_CACHE_KEY, JSON.stringify(_albumCacheMem)); }
+    catch (_) { /* localStorage lleno — ignoramos, el backend también cachea */ }
+}
+function _albumCacheGet(videoId) {
+    if (!videoId) return undefined;
+    return _loadAlbumCache()[videoId];
+}
+function _albumCacheSet(videoId, payload) {
+    if (!videoId) return;
+    _loadAlbumCache()[videoId] = payload;
+    _saveAlbumCache();
+}
+
+function _renderAlbum(payload) {
+    if (!playerAlbum) return;
+    if (!payload || payload.notFound) {
+        playerAlbum.style.display = 'none';
+        playerAlbum.removeAttribute('href');
+        playerAlbum.textContent = '';
+        return;
+    }
+    const label = payload.isSingle ? (payload.albumName + ' (single)') : payload.albumName;
+    playerAlbum.textContent = label || '';
+    if (payload.albumUrl) {
+        playerAlbum.href = payload.albumUrl;
+        playerAlbum.title = 'Abrir álbum en Spotify';
+    } else {
+        playerAlbum.removeAttribute('href');
+        playerAlbum.title = '';
+    }
+    playerAlbum.style.display = label ? 'inline-block' : 'none';
+}
+
+function resolveAndShowAlbum(track) {
+    if (!playerAlbum) return;
+    /* Reset entre tracks. */
+    playerAlbum.style.display = 'none';
+    playerAlbum.textContent = '';
+    playerAlbum.removeAttribute('href');
+    if (!track || !track.title) return;
+
+    /* Cache hit por videoId. */
+    const vId = track.videoId;
+    const cached = _albumCacheGet(vId);
+    if (cached !== undefined) { _renderAlbum(cached); return; }
+
+    /* Fetch al backend. Guardamos el videoId actual y verificamos al
+       volver para no pintar el álbum de un track que ya no está. */
+    const requestedFor = vId;
+    const params = new URLSearchParams({
+        title:  track.title,
+        artist: track.artist || '',
+    });
+    fetch('../assets/music/api.php?action=find-album&' + params.toString())
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            _albumCacheSet(requestedFor, data);
+            /* Solo aplicamos si seguimos en el mismo track. */
+            const curTrack = (typeof playlist !== 'undefined' && playlist.length && typeof currentTrack === 'number')
+                ? playlist[currentTrack] : null;
+            if (curTrack && curTrack.videoId === requestedFor) _renderAlbum(data);
+        })
+        .catch(() => { /* offline / endpoint caído → simplemente no se muestra */ });
 }
 
 function startProgress()
