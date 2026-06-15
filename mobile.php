@@ -418,6 +418,35 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             margin-top: 6px;
         }
 
+        /* ── MODAL ELIMINAR CUENTA ── (mismo backdrop+ventana que cp). */
+        #mh-del-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 91;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        #mh-del-backdrop.is-open { display: flex; }
+        #mh-del-window { width: 100%; max-width: 320px; display: flex; flex-direction: column; }
+        #mh-del-window .window-body {
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        #mh-del-window label { font-size: 11px; }
+        #mh-del-window input[type="password"] {
+            width: 100%;
+            box-sizing: border-box;
+            min-height: 26px;
+            font-size: 13px;
+            margin-top: 3px;
+        }
+        #mh-del-status { font-size: 11px; min-height: 14px; margin: 4px 0 0; }
+
         /* Modal notificaciones — reutiliza el patrón visual de #mh-cp. */
         #mh-notif-backdrop {
             position: fixed; inset: 0;
@@ -1223,17 +1252,24 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <!-- Input oculto: el OS abre su propio file picker como "modal". -->
             <input type="file" id="mh-set-photo-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
             <button class="mh-set-btn" type="button" id="mh-set-change-password">
-                <span class="mh-set-emoji">🔑</span>
+                <!-- Icono de llaves con fallback al emoji 🔑 si el PNG
+                     no existe en el pack activo. onerror reemplaza el
+                     <img> por el texto del span padre. -->
+                <span class="mh-set-emoji" id="mh-set-cp-icon"><img src="assets/img/appIcons/keysIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;" onerror="var p=this.parentNode; p.textContent='🔑';"></span>
                 <span class="mh-set-text">Cambiar contraseña
                     <small>Actualiza la contraseña de tu cuenta</small>
                 </span>
             </button>
             <a class="mh-set-btn danger" href="logout.php?to=manual">
-                <span class="mh-set-emoji">🚪</span>
                 <span class="mh-set-text">Cerrar sesión
                     <small>Sale y vuelve a la pantalla de login</small>
                 </span>
             </a>
+            <button class="mh-set-btn danger" type="button" id="mh-set-delete-account">
+                <span class="mh-set-text">Eliminar cuenta
+                    <small>Borra permanentemente tu cuenta y todos sus datos</small>
+                </span>
+            </button>
         </div>
     </div>
 </div>
@@ -1261,6 +1297,33 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <div id="mh-cp-actions">
                 <button id="mh-cp-cancel">Cancelar</button>
                 <button id="mh-cp-ok" class="default">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ELIMINAR CUENTA — pide contraseña, llama a delete-user.php.
+     Acción IRREVERSIBLE: el backend borra los datos del usuario en
+     cascada. Tras OK redirige a logout para limpiar la sesión. -->
+<div id="mh-del-backdrop">
+    <div class="window" id="mh-del-window">
+        <div class="title-bar">
+            <div class="title-bar-text">Eliminar cuenta</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-del-close" type="button"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <p style="margin:0 0 8px;font-size:11px;color:var(--error-text,#800000);">
+                Esto borrará permanentemente tu cuenta y todos sus datos. La acción es irreversible.
+            </p>
+            <label>Contraseña actual:
+                <input type="password" id="mh-del-password" autocomplete="current-password">
+            </label>
+            <p id="mh-del-status"></p>
+            <div id="mh-cp-actions">
+                <button id="mh-del-cancel" type="button">Cancelar</button>
+                <button id="mh-del-ok" type="button" class="default" style="color:var(--error-text,#800000);">Eliminar</button>
             </div>
         </div>
     </div>
@@ -3786,10 +3849,79 @@ window.MuShell = (function(){
         });
     });
 
+    /* ── modal eliminar cuenta ── */
+    var delOpen   = document.getElementById('mh-set-delete-account');
+    var delBp     = document.getElementById('mh-del-backdrop');
+    var delClose  = document.getElementById('mh-del-close');
+    var delCancel = document.getElementById('mh-del-cancel');
+    var delOk     = document.getElementById('mh-del-ok');
+    var delPwd    = document.getElementById('mh-del-password');
+    var delStatus = document.getElementById('mh-del-status');
+    var MY_USER_KEY = <?= json_encode($userKey) ?>;
+
+    function delReset(){
+        if (delPwd) delPwd.value = '';
+        if (delStatus) { delStatus.textContent = ''; delStatus.style.color = ''; }
+        if (delOk) delOk.disabled = false;
+    }
+    function delOpenModal(){
+        delReset();
+        closeSettings();
+        delBp.classList.add('is-open');
+        setTimeout(function(){ delPwd && delPwd.focus(); }, 30);
+    }
+    function delCloseModal(){ delBp.classList.remove('is-open'); delReset(); }
+
+    if (delOpen)   delOpen.addEventListener('click', delOpenModal);
+    if (delClose)  delClose.addEventListener('click', delCloseModal);
+    if (delCancel) delCancel.addEventListener('click', delCloseModal);
+    if (delBp) delBp.addEventListener('click', function(e){
+        if (e.target === delBp) delCloseModal();
+    });
+
+    async function delSubmit(){
+        function err(msg){ delStatus.style.color = 'var(--error-text,#c00)'; delStatus.textContent = msg; }
+        var p = delPwd.value;
+        if (!p) return err('Introduce tu contraseña para confirmar.');
+        delOk.disabled = true;
+        delStatus.style.color = 'var(--text-muted,#666)';
+        delStatus.textContent = 'Eliminando…';
+        try {
+            /* delete-user.php espera form-urlencoded: user + password. */
+            var body = new URLSearchParams();
+            body.set('user', MY_USER_KEY);
+            body.set('password', p);
+            var resp = await fetch('delete-user.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            });
+            var data = await resp.json().catch(function(){ return { error: 'Respuesta inválida' }; });
+            if (!resp.ok || data.error){
+                err('✗ ' + (data.error || ('HTTP ' + resp.status)));
+                delOk.disabled = false;
+                return;
+            }
+            delStatus.style.color = 'var(--accent-deep,#080)';
+            delStatus.textContent = '✔ Cuenta eliminada. Cerrando sesión…';
+            /* logout para limpiar la sesión y volver a la landing. */
+            setTimeout(function(){ window.location.href = 'logout.php?to=manual'; }, 700);
+        } catch (e) {
+            err('✗ Error de red: ' + e.message);
+            delOk.disabled = false;
+        }
+    }
+    if (delOk) delOk.addEventListener('click', delSubmit);
+    if (delPwd) delPwd.addEventListener('keydown', function(ev){
+        if (ev.key === 'Enter')       { ev.preventDefault(); delSubmit(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); delCloseModal(); }
+    });
+
     /* Esc global cierra cualquier panel abierto. */
     document.addEventListener('keydown', function(ev){
         if (ev.key !== 'Escape') return;
-        if (cpBp && cpBp.classList.contains('is-open')) cpCloseModal();
+        if (delBp && delBp.classList.contains('is-open')) delCloseModal();
+        else if (cpBp && cpBp.classList.contains('is-open')) cpCloseModal();
         else if (settingsBp && settingsBp.classList.contains('is-open')) closeSettings();
     });
 })();

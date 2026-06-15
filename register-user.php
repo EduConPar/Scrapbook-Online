@@ -71,28 +71,54 @@ if ($hasPhoto) {
     if ($f['size'] > 5 * 1024 * 1024) {
         echo json_encode(['error' => 'Foto demasiado grande (máx 5MB)']); exit;
     }
-    $mime = function_exists('mime_content_type') ? mime_content_type($f['tmp_name']) : '';
-    $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
-    if (!isset($allowed[$mime])) {
-        echo json_encode(['error' => 'Foto inválida (jpg/png/gif/webp)']); exit;
+    /* Detectamos el formato con `getimagesize` además de mime_content_type:
+       más fiable en Hostinger (algunos hosts devuelven '' o
+       application/octet-stream para mime_content_type sobre archivos
+       en /tmp). getimagesize lee bytes mágicos del archivo, da el
+       IMAGETYPE_* canónico. */
+    $imgInfo = @getimagesize($f['tmp_name']);
+    $imageType = $imgInfo ? (int)$imgInfo[2] : 0;
+    $typeToExt = [
+        IMAGETYPE_JPEG => 'jpg',
+        IMAGETYPE_PNG  => 'png',
+        IMAGETYPE_GIF  => 'gif',
+        IMAGETYPE_WEBP => 'webp',
+    ];
+    if (isset($typeToExt[$imageType])) {
+        $photoExt = $typeToExt[$imageType];
+    } else {
+        /* Fallback a mime_content_type por si getimagesize tampoco le
+           gusta (HEIC raros, etc.). Si NINGUNO funciona, error claro. */
+        $mime = function_exists('mime_content_type') ? mime_content_type($f['tmp_name']) : '';
+        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+        if (!isset($allowed[$mime])) {
+            echo json_encode(['error' => 'Foto inválida (jpg/png/gif/webp). Detectado: ' . ($mime ?: 'desconocido')]); exit;
+        }
+        $photoExt = $allowed[$mime];
     }
-    $photoExt = $allowed[$mime];
 
     /* Carpeta persistente (no tracked) */
     $uploadDir = __DIR__ . '/uploads/profile-photos';
     if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0775, true) && !is_dir($uploadDir)) {
-        echo json_encode(['error' => 'No se pudo crear el directorio de subidas']); exit;
+        echo json_encode(['error' => 'No se pudo crear ' . $uploadDir]); exit;
     }
-    /* Limpiar versiones previas con el mismo nombre. */
-    foreach (['jpg', 'jpeg', 'png', 'gif', 'webp'] as $oldExt) {
+    if (!is_writable($uploadDir)) {
+        echo json_encode(['error' => 'Sin permisos de escritura en ' . $uploadDir]); exit;
+    }
+    /* Limpiar versiones previas con el mismo nombre, en todas las exts
+       que getUserImage también busca (jpeg incluido por compat). */
+    foreach (['webp', 'jpg', 'jpeg', 'png', 'gif'] as $oldExt) {
         $oldPath = $uploadDir . '/' . $username . '.' . $oldExt;
         if (file_exists($oldPath)) @unlink($oldPath);
     }
 
     $dest = $uploadDir . '/' . $username . '.' . $photoExt;
     if (!move_uploaded_file($f['tmp_name'], $dest)) {
-        echo json_encode(['error' => 'No se pudo guardar la foto']); exit;
+        echo json_encode(['error' => 'move_uploaded_file falló → ' . $dest]); exit;
     }
+    /* Permisos legibles para el web server (algunos hosts crean el
+       archivo con permisos restrictivos). */
+    @chmod($dest, 0664);
     /* Lee el binario para guardarlo en BD justo después del INSERT. */
     $photoBlob = @file_get_contents($dest);
     if ($photoBlob === false) $photoBlob = null;
@@ -157,4 +183,30 @@ if ($photoBlob !== null && $photoExt !== null) {
     }
 }
 
-echo json_encode(['ok' => true, 'userKey' => $newKey, 'label' => $username]);
+/* Verificación final: que getUserImage() encuentre la foto que acabamos
+   de subir. Si NO la encuentra, ha habido un desajuste de paths/permisos
+   y avisamos al cliente con info de debug para no devolver "ok: true"
+   silenciando un fallo. La cuenta queda creada igual — el usuario puede
+   subir la foto desde Ajustes después. */
+$photoUrl = '';
+if ($hasPhoto) {
+    /* Forzamos un re-fetch limpio: ensureLoginUsers ya cargó la lista
+       antes del INSERT, así que el label del nuevo user no está en
+       memoria todavía. Pasamos $username directamente a getUserImage. */
+    $photoUrl = getUserImage($username);
+}
+$response = ['ok' => true, 'userKey' => $newKey, 'label' => $username];
+if ($hasPhoto) {
+    $response['photoUrl']    = $photoUrl;
+    $response['photoSaved']  = ($photoUrl !== '');
+    if ($photoUrl === '') {
+        /* La foto se subió (move_uploaded_file OK), pero getUserImage
+           no la ve. Probable bug de path o de permisos de lectura — lo
+           reportamos para diagnosticar sin romper el registro. */
+        $expected = isset($dest) ? $dest : '?';
+        $response['photoWarning'] = 'La foto se guardó en ' . $expected
+            . ' pero getUserImage("' . $username . '") no la encuentra.'
+            . ' Revisa permisos del directorio o el sanitizado del label.';
+    }
+}
+echo json_encode($response);

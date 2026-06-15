@@ -620,6 +620,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     status.style.display = '';
                     return;
                 }
+                /* Si la foto se subió pero getUserImage no la encuentra,
+                   el backend devuelve photoWarning con el diagnóstico.
+                   Lo mostramos en consola para diagnosticar pero
+                   seguimos al login: la cuenta sí está creada. */
+                if (d.photoWarning) {
+                    try { console.warn('[register] photo:', d.photoWarning); } catch (_) {}
+                }
                 /* Cuenta creada → auto-login con las credenciales que el
                    usuario acaba de escribir. Inyectamos los valores en el
                    formulario de login y lo enviamos: mobile-landing.php

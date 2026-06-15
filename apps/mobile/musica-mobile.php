@@ -372,33 +372,83 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         /* Mientras se resuelve el long-press del album, da feedback. */
         .mu-track-album.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
 
-        /* ─ Album viewer ─ ventana modal con cover + lista de tracks. */
+        /* Título del track activo cuando ya se resolvió su álbum:
+           subrayado punteado + cursor pointer para sugerir que es
+           clickable. Sin la clase queda neutro. Aplica tanto al
+           mini-player como al fullscreen. */
+        .mu-player-title.is-album-clickable,
+        .mu-full-title.is-album-clickable {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+        }
+
+        /* ─ Album viewer ─ ventana ENTERA fullscreen (no modal).
+           Cubre todo el viewport con su propia title-bar Win98 + body
+           scrolleable. Se pliega por encima del shell de mu-list. */
+        #mu-album-fullview {
+            position: fixed; inset: 0;
+            z-index: 70;
+            background: var(--win-bg, silver);
+            display: none;
+            flex-direction: column;
+            box-sizing: border-box;
+            padding-top:    env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        #mu-album-fullview.is-open { display: flex; }
+        .ma-titlebar {
+            flex-shrink: 0;
+        }
         .mu-album-header {
             display: flex; gap: 10px; align-items: center;
-            padding: 8px 10px 12px;
+            padding: 10px 12px 8px;
+            flex-shrink: 0;
         }
         .mu-album-cover {
-            width: 80px; height: 80px;
+            width: 90px; height: 90px;
             object-fit: cover;
             image-rendering: pixelated;
             flex-shrink: 0;
             background: var(--inset-bg, #000);
         }
         .mu-album-info { flex: 1; min-width: 0; }
-        .mu-album-name { font-size: 14px; font-weight: bold; }
-        .mu-album-artist { font-size: 12px; color: var(--text-faint, #666); margin-top: 2px; }
-        .mu-album-actions { display: flex; gap: 6px; padding: 0 10px 8px; flex-wrap: wrap; }
-        .mu-album-actions .button { flex: 1 1 auto; min-width: 100px; }
-        .mu-album-tracks { max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border, #c0c0c0); }
+        .mu-album-name { font-size: 15px; font-weight: bold; line-height: 1.2; }
+        .mu-album-artist { font-size: 12px; color: var(--text-faint, #666); margin-top: 3px; }
+        .mu-album-actions {
+            display: flex; gap: 6px;
+            padding: 0 12px 10px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .mu-album-actions .button { flex: 1 1 auto; min-width: 90px; font-size: 12px; }
+        .mu-album-actions .button.play-album {
+            flex-basis: 100%;
+            background: var(--accent, #1db954);
+            color: var(--accent-text, #fff);
+            font-weight: bold;
+        }
+        .mu-album-tracks {
+            flex: 1; min-height: 0;
+            overflow-y: auto;
+            border-top: 1px solid var(--border, #c0c0c0);
+            -webkit-overflow-scrolling: touch;
+        }
         .mu-album-track {
             display: flex; gap: 6px; align-items: center;
-            padding: 6px 10px;
+            padding: 8px 12px;
             border-bottom: 1px solid color-mix(in srgb, var(--border, #c0c0c0) 30%, transparent);
-            font-size: 12px;
+            font-size: 13px;
             cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
         }
-        .mu-album-track:active { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
-        .mu-album-track-num { width: 22px; flex-shrink: 0; color: var(--text-faint, #888); text-align: right; }
+        .mu-album-track:active,
+        .mu-album-track.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+        .mu-album-track.is-playing { background: color-mix(in srgb, var(--accent, #1db954) 25%, transparent); font-weight: bold; }
+        .mu-album-track-num { width: 24px; flex-shrink: 0; color: var(--text-faint, #888); text-align: right; }
         .mu-album-track-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mu-album-track-dur { color: var(--text-faint, #888); font-size: 11px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
         .mu-track-dur {
@@ -2273,6 +2323,10 @@ function muFullRefresh() {
     var tr = QUEUE[CUR_IDX];
     document.getElementById('mu-full-title').textContent  = tr.title  || tr.videoId || '—';
     document.getElementById('mu-full-artist').textContent = tr.artist || '';
+    /* Sincroniza la clase is-album-clickable según el cache del track
+       activo. Si el álbum se resuelve después (cuando termine la cola),
+       _muPaintAlbumForVid también vuelve a llamar aquí. */
+    if (typeof _muRefreshPlayerAlbumLink === 'function') _muRefreshPlayerAlbumLink();
     /* Re-evalúa marquee con el texto nuevo. */
     muSetupMarquee('mu-full-title-wrap',  'mu-full-title-track',  'mu-full-title');
     muSetupMarquee('mu-full-artist-wrap', 'mu-full-artist-track', 'mu-full-artist');
@@ -2315,8 +2369,29 @@ function muFullSyncPlay(isPlaying) {
 /* Tap en el mini-player (excepto en los botones) → abre fullscreen. */
 document.getElementById('mu-player').addEventListener('click', function(e){
     if (e.target.closest('button')) return;      /* clicks de control siguen su flujo */
+    /* Click EXACTO en el título con álbum resuelto → abre viewer del
+       álbum en lugar del fullscreen. */
+    var titleEl = e.target.closest('.mu-player-title.is-album-clickable');
+    if (titleEl && titleEl.dataset.albumKey) {
+        e.stopPropagation();
+        _muOpenAlbumViewer(titleEl.dataset.albumKey, titleEl.dataset.albumName || '');
+        return;
+    }
     muFullOpen();
 });
+
+/* Mismo gesto en el fullscreen: tap en el título con álbum resuelto
+   abre el viewer del álbum. */
+(function(){
+    var ft = document.getElementById('mu-full-title');
+    if (!ft) return;
+    ft.addEventListener('click', function(e){
+        if (!ft.classList.contains('is-album-clickable')) return;
+        if (!ft.dataset.albumKey) return;
+        e.stopPropagation();
+        _muOpenAlbumViewer(ft.dataset.albumKey, ft.dataset.albumName || '');
+    });
+})();
 document.getElementById('mu-full-close').addEventListener('click', muFullClose);
 /* Chevron-down al pie → minimiza el fullscreen. Mismo comportamiento
    que la X del title-bar, pero accesible con el pulgar. */
@@ -2772,6 +2847,13 @@ function playCurrent() {
     /* Info en el mini-player. */
     document.getElementById('mu-now-title').textContent  = tr.title  || tr.videoId;
     document.getElementById('mu-now-artist').textContent = tr.artist || '';
+    /* Si el álbum del track está cacheado, marca los títulos como
+       clickables. Si no, _muPaintAlbumForVid lo hará cuando la cola
+       termine de resolverlo. */
+    if (typeof _muRefreshPlayerAlbumLink === 'function') _muRefreshPlayerAlbumLink();
+    /* Si el viewer del álbum está abierto, sincroniza el highlight de
+       la fila activa con el track que está sonando. */
+    if (typeof _muHighlightAlbumPlayingRow === 'function') _muHighlightAlbumPlayingRow();
     document.getElementById('mu-thumb').innerHTML =
         '<img src="https://i.ytimg.com/vi/' + esc(tr.videoId) + '/mqdefault.jpg" alt="">';
     document.getElementById('mu-player').classList.add('visible');
@@ -3786,6 +3868,38 @@ function _muPaintAlbumForVid(vid, norm) {
             sp.dataset.albumName = norm.albumName;
         }
     }
+    /* Si el track activo (sonando ahora) coincide con este videoId,
+       sincroniza también el título del player (mini + fullscreen) para
+       que apunte al viewer de ESTE álbum. */
+    if (typeof QUEUE !== 'undefined' && CUR_IDX >= 0 && QUEUE[CUR_IDX] && QUEUE[CUR_IDX].videoId === vid) {
+        _muRefreshPlayerAlbumLink();
+    }
+}
+
+/* ── Actualiza la clase + dataset de los dos títulos del player
+   según el álbum cacheado del track activo. Llamado cuando cambia
+   el track o cuando se resuelve un álbum nuevo del track sonando. */
+function _muRefreshPlayerAlbumLink() {
+    var miniTitle = document.getElementById('mu-now-title');
+    var fullTitle = document.getElementById('mu-full-title');
+    var cur = (typeof QUEUE !== 'undefined' && CUR_IDX >= 0) ? QUEUE[CUR_IDX] : null;
+    var cached = cur ? _muAlbumCacheGet(cur.videoId) : null;
+    var key  = cached ? (cached.albumKey || cached.spotifyAlbumId || '') : '';
+    var name = cached ? (cached.albumName || '') : '';
+    [miniTitle, fullTitle].forEach(function(el){
+        if (!el) return;
+        if (key) {
+            el.classList.add('is-album-clickable');
+            el.dataset.albumKey  = key;
+            el.dataset.albumName = name;
+            el.title = 'Ver álbum: ' + name;
+        } else {
+            el.classList.remove('is-album-clickable');
+            el.dataset.albumKey  = '';
+            el.dataset.albumName = '';
+            el.title = '';
+        }
+    });
 }
 
 /* ── Resuelve el álbum de UN track: cache primero, fetch (en cola) si
@@ -3878,26 +3992,76 @@ function muOpenAlbumFromTrack(tr) {
         .catch(function(){ muAlert('Error de red al buscar el álbum.'); });
 }
 
-function _muOpenAlbumViewer(albumId, albumName) {
-    var bodyHtml =
-        '<div class="mu-album-header">' +
-            '<img class="mu-album-cover" id="mu-album-view-cover" alt="">' +
-            '<div class="mu-album-info">' +
-                '<div class="mu-album-name" id="mu-album-view-name">' + esc(albumName || 'Álbum') + '</div>' +
-                '<div class="mu-album-artist" id="mu-album-view-artist"></div>' +
-            '</div>' +
-        '</div>' +
-        '<div class="mu-album-actions">' +
-            '<button class="button" type="button" data-act="addProfile">➕ Añadir a perfil</button>' +
-            '<button class="button" type="button" data-act="addPl">📋 Añadir a playlist</button>' +
-        '</div>' +
-        '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
-            '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>' +
-        '</div>';
-    var m = muOpenModal({ title: 'Álbum', body: bodyHtml });
+/* Estado del viewer fullscreen abierto (para el highlight de track
+   activo y para que reproducir un track NO cierre la ventana). */
+var _muAlbumFullCurrent = null; /* { albumId, album } o null */
 
-    /* Carga tracks del álbum (cache por albumId). */
-    function paintTracks(album) {
+function _muOpenAlbumViewer(albumId, albumName) {
+    var fv = document.getElementById('mu-album-fullview');
+    if (!fv) {
+        /* Crea el overlay la primera vez. Reusable entre aperturas. */
+        fv = document.createElement('div');
+        fv.id = 'mu-album-fullview';
+        fv.innerHTML =
+            '<div class="window ma-titlebar">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text" id="mu-album-view-titlebar-text">Álbum</div>' +
+                    '<div class="title-bar-controls">' +
+                        '<button aria-label="Close" id="mu-album-view-close" type="button"></button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="mu-album-header">' +
+                '<img class="mu-album-cover" id="mu-album-view-cover" alt="">' +
+                '<div class="mu-album-info">' +
+                    '<div class="mu-album-name" id="mu-album-view-name">Álbum</div>' +
+                    '<div class="mu-album-artist" id="mu-album-view-artist"></div>' +
+                '</div>' +
+            '</div>' +
+            '<div class="mu-album-actions">' +
+                '<button class="button play-album" type="button" data-act="playAlbum">▶ Reproducir álbum</button>' +
+                '<button class="button" type="button" data-act="addProfile">➕ Añadir a perfil</button>' +
+                '<button class="button" type="button" data-act="addPl">📋 Añadir a playlist</button>' +
+            '</div>' +
+            '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
+                '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>' +
+            '</div>';
+        document.body.appendChild(fv);
+
+        document.getElementById('mu-album-view-close').addEventListener('click', _muCloseAlbumViewer);
+        fv.querySelector('[data-act="playAlbum"]').addEventListener('click', function(){
+            var cur = _muAlbumFullCurrent;
+            if (!cur || !cur.album || !cur.album.tracks || !cur.album.tracks.length) {
+                muAlert('Aún cargando el álbum…');
+                return;
+            }
+            /* Reproducir desde el principio, SIN cerrar el viewer. */
+            _muPlayAlbumFrom(cur.album, 0);
+        });
+        fv.querySelector('[data-act="addProfile"]').addEventListener('click', function(){
+            var cur = _muAlbumFullCurrent;
+            if (!cur || !cur.album) { muAlert('Aún cargando el álbum…'); return; }
+            muAddAlbumToProfile(cur.albumId, cur.album);
+        });
+        fv.querySelector('[data-act="addPl"]').addEventListener('click', function(){
+            var cur = _muAlbumFullCurrent;
+            if (!cur || !cur.album) { muAlert('Aún cargando el álbum…'); return; }
+            muAddAlbumToPlaylist(cur.album);
+        });
+    }
+
+    /* Estado inicial: cabecera con lo que sabemos, lista en "Cargando…". */
+    _muAlbumFullCurrent = { albumId: albumId, album: null };
+    document.getElementById('mu-album-view-titlebar-text').textContent = 'Álbum';
+    document.getElementById('mu-album-view-name').textContent = albumName || 'Álbum';
+    document.getElementById('mu-album-view-artist').textContent = '';
+    document.getElementById('mu-album-view-cover').src = '';
+    document.getElementById('mu-album-view-tracks').innerHTML =
+        '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>';
+    fv.classList.add('is-open');
+
+    function applyAlbum(album) {
+        _muAlbumFullCurrent = { albumId: albumId, album: album };
         document.getElementById('mu-album-view-cover').src = album.image || '';
         document.getElementById('mu-album-view-name').textContent = album.name || albumName || 'Álbum';
         document.getElementById('mu-album-view-artist').textContent = album.artist || '';
@@ -3910,21 +4074,20 @@ function _muOpenAlbumViewer(albumId, albumName) {
         album.tracks.forEach(function(t, idx){
             var row = document.createElement('div');
             row.className = 'mu-album-track';
+            row.dataset.idx = String(idx);
             row.innerHTML =
                 '<div class="mu-album-track-num">' + (idx + 1) + '</div>' +
                 '<div class="mu-album-track-title">' + esc(t.title || '') +
                     (t.artist ? ' <span style="color:var(--text-faint,#888);">— ' + esc(t.artist) + '</span>' : '') +
                 '</div>' +
                 '<div class="mu-album-track-dur">' + (t.duration ? fmtDur(t.duration) : '—') + '</div>';
-            row.addEventListener('click', function(){
-                m.close();
-                _muPlayAlbumFrom(album, idx);
-            });
             tracksEl.appendChild(row);
         });
+        _muHighlightAlbumPlayingRow();
     }
+
     if (_muAlbumViewCache[albumId]) {
-        paintTracks(_muAlbumViewCache[albumId]);
+        applyAlbum(_muAlbumViewCache[albumId]);
     } else {
         fetch('../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId))
             .then(function(r){ return r.ok ? r.json() : null; })
@@ -3935,25 +4098,185 @@ function _muOpenAlbumViewer(albumId, albumName) {
                     return;
                 }
                 _muAlbumViewCache[albumId] = data;
-                paintTracks(data);
+                applyAlbum(data);
             })
             .catch(function(){
                 document.getElementById('mu-album-view-tracks').innerHTML =
                     '<div style="padding:14px;text-align:center;color:var(--error-text,#c00);">Error de red.</div>';
             });
     }
-    m.body.querySelector('[data-act="addProfile"]').addEventListener('click', function(){
-        var album = _muAlbumViewCache[albumId];
-        if (!album) { muAlert('Aún cargando el álbum…'); return; }
-        m.close();
-        muAddAlbumToProfile(albumId, album);
+}
+
+function _muCloseAlbumViewer() {
+    var fv = document.getElementById('mu-album-fullview');
+    if (fv) fv.classList.remove('is-open');
+    _muAlbumFullCurrent = null;
+}
+
+/* Marca con .is-playing la fila que coincide con el track activo del
+   reproductor (por título + artista). Llamado al pintar el álbum y
+   cuando cambia el track (vía playCurrent). */
+function _muHighlightAlbumPlayingRow() {
+    var fv = document.getElementById('mu-album-fullview');
+    if (!fv || !fv.classList.contains('is-open')) return;
+    var cur = _muAlbumFullCurrent;
+    if (!cur || !cur.album || !cur.album.tracks) return;
+    var active = (typeof QUEUE !== 'undefined' && CUR_IDX >= 0) ? QUEUE[CUR_IDX] : null;
+    var activeKey = active ? ((active.title || '').toLowerCase() + '|' + (active.artist || '').toLowerCase()) : '';
+    var rows = fv.querySelectorAll('.mu-album-track');
+    rows.forEach(function(row){
+        var idx = parseInt(row.dataset.idx, 10);
+        var t = cur.album.tracks[idx];
+        if (!t) return;
+        var k = (t.title || '').toLowerCase() + '|' + (t.artist || '').toLowerCase();
+        row.classList.toggle('is-playing', !!activeKey && k === activeKey);
     });
-    m.body.querySelector('[data-act="addPl"]').addEventListener('click', function(){
-        var album = _muAlbumViewCache[albumId];
-        if (!album) { muAlert('Aún cargando el álbum…'); return; }
-        m.close();
-        muAddAlbumToPlaylist(album);
+}
+
+/* ── Handlers del overlay del viewer: tap reproduce, long-press abre
+   menú con "Añadir al perfil + reseñar". Listener delegado a document
+   porque las filas se recrean a cada apertura. */
+(function setupAlbumViewerGestures(){
+    var lpTimer = null, lpRow = null, lpStartX = 0, lpStartY = 0, lpFired = false;
+    function viewerOpen() {
+        var fv = document.getElementById('mu-album-fullview');
+        return fv && fv.classList.contains('is-open') ? fv : null;
+    }
+    function startLp(row, x, y) {
+        lpRow = row; lpStartX = x; lpStartY = y; lpFired = false;
+        row.classList.add('long-pressing');
+        lpTimer = setTimeout(function(){
+            lpTimer = null;
+            lpFired = true;
+            row.classList.remove('long-pressing');
+            try { navigator.vibrate && navigator.vibrate(40); } catch (_) {}
+            var idx = parseInt(row.dataset.idx, 10);
+            var cur = _muAlbumFullCurrent;
+            if (cur && cur.album && cur.album.tracks[idx]) {
+                _muOpenAlbumTrackMenu(cur.album, idx);
+            }
+        }, 500);
+    }
+    function cancelLp() {
+        if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+        if (lpRow) { lpRow.classList.remove('long-pressing'); lpRow = null; }
+    }
+    document.addEventListener('touchstart', function(e){
+        var fv = viewerOpen();
+        if (!fv) return;
+        if (!e.touches || e.touches.length !== 1) return;
+        var row = e.target.closest && e.target.closest('.mu-album-track');
+        if (!row || !fv.contains(row)) return;
+        startLp(row, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    document.addEventListener('touchmove', function(e){
+        if (!lpTimer || !e.touches[0]) return;
+        if (Math.abs(e.touches[0].clientX - lpStartX) > 12 ||
+            Math.abs(e.touches[0].clientY - lpStartY) > 12) cancelLp();
+    }, { passive: true });
+    document.addEventListener('touchend',    cancelLp);
+    document.addEventListener('touchcancel', cancelLp);
+    document.addEventListener('mousedown', function(e){
+        if (e.button !== 0) return;
+        var fv = viewerOpen();
+        if (!fv) return;
+        var row = e.target.closest && e.target.closest('.mu-album-track');
+        if (!row || !fv.contains(row)) return;
+        startLp(row, e.clientX, e.clientY);
     });
+    document.addEventListener('mousemove', function(e){
+        if (!lpTimer) return;
+        if (Math.abs(e.clientX - lpStartX) > 12 || Math.abs(e.clientY - lpStartY) > 12) cancelLp();
+    });
+    document.addEventListener('mouseup', cancelLp);
+    /* Click delegado: si NO fue long-press, reproduce el track SIN
+       cerrar el viewer. */
+    document.addEventListener('click', function(e){
+        var fv = viewerOpen();
+        if (!fv) return;
+        var row = e.target.closest && e.target.closest('.mu-album-track');
+        if (!row || !fv.contains(row)) return;
+        if (lpFired) { lpFired = false; e.preventDefault(); e.stopPropagation(); return; }
+        var idx = parseInt(row.dataset.idx, 10);
+        var cur = _muAlbumFullCurrent;
+        if (cur && cur.album) _muPlayAlbumFrom(cur.album, idx);
+    });
+})();
+
+/* Menú contextual al long-press de una fila del viewer. */
+function _muOpenAlbumTrackMenu(album, idx) {
+    var t = album.tracks[idx];
+    if (!t) return;
+    var bodyHtml =
+        '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint,#666);">' +
+            esc(t.title || 'Canción') + (t.artist ? ' — ' + esc(t.artist) : '') +
+        '</p>' +
+        '<div class="mu-modal-list">' +
+            '<div class="mu-modal-list-item" data-act="play"><div class="item-main">▶ Reproducir</div></div>' +
+            '<div class="mu-modal-list-item" data-act="profile"><div class="item-main">➕ Añadir al perfil y reseñar</div></div>' +
+        '</div>' +
+        '<div class="modal-actions"><button class="button" data-act="cancel" type="button">Cerrar</button></div>';
+    var m = muOpenModal({ title: 'Opciones', body: bodyHtml });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    m.body.querySelectorAll('.mu-modal-list-item').forEach(function(el){
+        el.addEventListener('click', function(){
+            var act = el.dataset.act;
+            m.close();
+            if (act === 'play')    _muPlayAlbumFrom(album, idx);
+            if (act === 'profile') _muAddAlbumTrackToProfile(album, idx);
+        });
+    });
+}
+
+/* Añade UNA canción del álbum al perfil del usuario, resolviendo
+   primero su videoId con yt-search-batch. Tras guardar, ofrece dejar
+   una reseña reutilizando el flujo de muReviewPrompt + muOpenReviewEditor. */
+function _muAddAlbumTrackToProfile(album, idx) {
+    var t = album.tracks[idx];
+    if (!t || !t.title) return;
+    /* Necesitamos un videoId — los tracks de iTunes/Deezer/Spotify no lo
+       traen. Resolvemos UNO solo con yt-search-batch antes de añadir. */
+    apiPost('yt-search-batch', { tracks: [{ title: t.title, artist: t.artist || '', duration: t.duration || 0 }] })
+        .then(function(r){
+            if (!r.ok) { muAlert('Error buscando la canción en YouTube.'); return; }
+            var found = (r.data && r.data.tracks) || [];
+            var hit = found.find(function(x){
+                return x && x.title && x.title.toLowerCase() === (t.title || '').toLowerCase();
+            }) || found[0];
+            if (!hit || !hit.videoId) {
+                muAlert('No se encontró "' + (t.title || 'la canción') + '" en YouTube.');
+                return;
+            }
+            profileApiGet('get-lists').then(function(res){
+                if (!res.ok) { muAlert('Error obteniendo el perfil'); return; }
+                var lists = res.data || {};
+                var music = (Array.isArray(lists.music) ? lists.music : [])
+                    .filter(function(m){ return m && !m.sharedFrom; });
+                if (music.some(function(m){ return m && m.ytId && m.ytId === hit.videoId; })) {
+                    muAlert('"' + (t.title || 'Esta canción') + '" ya está en tu perfil');
+                    return;
+                }
+                music.push({
+                    id:       'music_' + Date.now(),
+                    type:     'song',
+                    title:    t.title  || hit.title,
+                    artist:   t.artist || hit.artist || '',
+                    image:    'https://i.ytimg.com/vi/' + hit.videoId + '/mqdefault.jpg',
+                    featured: false,
+                    ytId:     hit.videoId
+                });
+                saveProfileMusic(music, function(saved){
+                    var savedItem = saved.find(function(m){ return m && m.ytId === hit.videoId; });
+                    if (!savedItem) {
+                        muAlert('"' + (t.title || 'Canción') + '" añadida a tu perfil', 'Añadido');
+                        return;
+                    }
+                    muReviewPrompt('"' + (t.title || 'Canción') + '" añadida. ¿Quieres dejar una reseña?', function(){
+                        muOpenReviewEditor(savedItem.id, savedItem.title, savedItem.ytId);
+                    });
+                });
+            });
+        });
 }
 
 /* ── Menú contextual del álbum (long-press en .mu-track-album). */
