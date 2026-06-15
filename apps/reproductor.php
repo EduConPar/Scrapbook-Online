@@ -2086,31 +2086,26 @@ function _logAlbumPlay() {
 
    Si el match cae bajo el threshold de find-album (devuelve notFound),
    el span queda vacío — no mostramos información ruidosa. */
-/* ── Cola SERIAL con espaciado entre find-album ──
-   Spotify NO penaliza por concurrencia sino por TASA: 3 paralelas
-   continuas son ~150 req/s en bursts, que disparaba el
-   `Retry-After: 79080` (≈22h de ban). Una a la vez con ALBUM_GAP_MS
-   entre requests mantiene la sensación fluida (las primeras filas
-   visibles aparecen rápido) y baja el rate sostenido. Los hits del
-   cache del backend NO entran a la cola — se resuelven inmediatos. */
-const ALBUM_GAP_MS = 300;
-let _albumInFlight  = false;
-let _albumLastEndAt = 0;
-const _albumQueue   = [];
+/* ── Cola PARALELA con tope de concurrencia ──
+   Con la cascada iTunes → Deezer → Spotify, la mayoría de hits los
+   resuelve iTunes/Deezer (sin rate-limit estricto). Spotify queda como
+   fallback y está protegido por el mutex server-side (600 ms entre
+   requests, compartido entre todos los clientes). Así que en el
+   cliente PODEMOS paralelizar las requests al backend — iTunes y
+   Deezer responden en cientos de ms y nuestra única restricción real
+   ya vive del lado del servidor. */
+const ALBUM_MAX_PARALLEL = 5;
+let _albumInFlight = 0;
+const _albumQueue  = [];
 function _albumNextSlot() {
-    if (_albumInFlight || !_albumQueue.length) return;
-    const dueAt = _albumLastEndAt + ALBUM_GAP_MS;
-    const wait  = Math.max(0, dueAt - Date.now());
-    setTimeout(() => {
-        if (_albumInFlight || !_albumQueue.length) return;
-        _albumInFlight = true;
+    while (_albumInFlight < ALBUM_MAX_PARALLEL && _albumQueue.length) {
+        _albumInFlight++;
         const job = _albumQueue.shift();
         job().finally(() => {
-            _albumInFlight  = false;
-            _albumLastEndAt = Date.now();
+            _albumInFlight--;
             _albumNextSlot();
         });
-    }, wait);
+    }
 }
 function _albumQueueRun(jobFn) {
     _albumQueue.push(jobFn);

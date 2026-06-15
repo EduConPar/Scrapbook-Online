@@ -3724,25 +3724,23 @@ function _muAlbumCacheSet(vid, payload) {
     _muSaveAlbumCache();
 }
 
-/* ── Cola SERIAL con espaciado de 300ms. */
-var MU_ALBUM_GAP_MS = 300;
-var _muAlbumInFlight  = false;
-var _muAlbumLastEndAt = 0;
-var _muAlbumQueue = [];
+/* ── Cola PARALELA con tope de concurrencia ──
+   iTunes/Deezer responden rápido y sin rate-limit estricto; Spotify
+   queda protegido por el mutex server-side (600 ms entre requests).
+   Disparamos hasta MU_ALBUM_MAX_PARALLEL requests simultáneas al
+   backend para que las playlists grandes terminen en pocos segundos. */
+var MU_ALBUM_MAX_PARALLEL = 5;
+var _muAlbumInFlight = 0;
+var _muAlbumQueue    = [];
 function _muAlbumNextSlot() {
-    if (_muAlbumInFlight || !_muAlbumQueue.length) return;
-    var dueAt = _muAlbumLastEndAt + MU_ALBUM_GAP_MS;
-    var wait  = Math.max(0, dueAt - Date.now());
-    setTimeout(function(){
-        if (_muAlbumInFlight || !_muAlbumQueue.length) return;
-        _muAlbumInFlight = true;
+    while (_muAlbumInFlight < MU_ALBUM_MAX_PARALLEL && _muAlbumQueue.length) {
+        _muAlbumInFlight++;
         var job = _muAlbumQueue.shift();
         job().finally(function(){
-            _muAlbumInFlight  = false;
-            _muAlbumLastEndAt = Date.now();
+            _muAlbumInFlight--;
             _muAlbumNextSlot();
         });
-    }, wait);
+    }
 }
 function _muAlbumQueueRun(jobFn) {
     _muAlbumQueue.push(jobFn);
