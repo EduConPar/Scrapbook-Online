@@ -2602,6 +2602,29 @@ window.MuShell = (function(){
     }
     document.getElementById('mu-full-close').addEventListener('click', closeFullscreen);
     document.getElementById('mu-full-menu').addEventListener('click', closeFullscreen);
+
+    /* Tap en el título del reproductor grande → cierra el fullscreen
+       del shell y abre la app de música con un hash que le pide abrir
+       el viewer del álbum del track actual. La app vive en un iframe
+       (apps/mobile/musica-mobile.php) y procesa el hash al cargar.
+       Atamos el listener al WRAP, no al span (que solo ocupa el texto). */
+    (function(){
+        var wrap = document.getElementById('mu-full-title-wrap');
+        if (!wrap) return;
+        wrap.style.cursor = 'pointer';
+        wrap.addEventListener('click', function(e){
+            e.stopPropagation();
+            if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+            var tr = QUEUE[CUR_IDX];
+            closeFullscreen();
+            var params = new URLSearchParams({
+                videoId: tr.videoId || '',
+                title:   tr.title   || '',
+                artist:  tr.artist  || ''
+            });
+            openApp('apps/mobile/musica-mobile.php#open-album=' + params.toString(), 'Música');
+        });
+    })();
     document.getElementById('mu-full-prev').addEventListener('click', prev);
     document.getElementById('mu-full-next').addEventListener('click', next);
     document.getElementById('mu-full-toggle').addEventListener('click', togglePlay);

@@ -497,13 +497,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             box-shadow: inset 1px 1px var(--bezel-dark-1, #808080);
             -webkit-overflow-scrolling: touch;
         }
-        /* Filas como en desktop: padding 4×6, border-bottom suave,
-           hover/playing pintan con el accent. */
+        /* Filas amplias optimizadas para touch: padding generoso, tipo
+           14px, numeración y duración legibles. Mismo look base que el
+           desktop pero con hit-targets cómodos para el pulgar. */
         .mu-album-track {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 6px;
+            gap: 10px;
+            padding: 12px 12px;
+            min-height: 48px;
+            box-sizing: border-box;
             border-bottom: 1px solid var(--border, #c0c0c0);
             cursor: pointer;
             user-select: none;
@@ -523,11 +526,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             color: var(--accent-deep, var(--accent, #1db954));
         }
         .mu-album-track-num {
-            width: 18px;
+            width: 26px;
             text-align: right;
-            font-size: 10px;
+            font-size: 13px;
             color: var(--text-muted, var(--text-faint, #888));
             flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
         }
         .mu-album-track-title {
             flex: 1;
@@ -535,13 +539,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            font-size: 11px;
+            font-size: 14px;
+            line-height: 1.25;
         }
         .mu-album-track-dur {
-            width: 40px;
+            width: 48px;
             text-align: right;
             color: var(--text-muted, var(--text-faint, #888));
-            font-size: 10px;
+            font-size: 12px;
             flex-shrink: 0;
             font-variant-numeric: tabular-nums;
         }
@@ -4373,6 +4378,33 @@ loadPlaylists();
    y mostrar las estrellas en los tracks reseñados (re-renderiza solo
    si las playlists ya terminaron de cargar). */
 loadProfileMusic();
+
+/* Deep-link "abrir álbum del track" disparado por el shell al tocar el
+   título del fullscreen.
+   Hash esperado: #open-album=videoId=ABC&title=...&artist=...
+   El shell cierra su propio fullscreen ANTES de abrir esta app, así
+   que aquí solo procesamos el hash + arrancamos muOpenAlbumFromTrack
+   con el track sintético construido del URLSearchParams. */
+(function(){
+    function handleOpenAlbumHash() {
+        var m = /#open-album=(.+)$/.exec(location.hash);
+        if (!m) return;
+        try {
+            var params = new URLSearchParams(m[1]);
+            var tr = {
+                videoId: params.get('videoId') || '',
+                title:   params.get('title')   || '',
+                artist:  params.get('artist')  || ''
+            };
+            if (!tr.videoId && !tr.title) return;
+            /* Limpia el hash para que un reload no vuelva a dispararlo. */
+            try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+            muOpenAlbumFromTrack(tr);
+        } catch (_) {}
+    }
+    handleOpenAlbumHash();
+    window.addEventListener('hashchange', handleOpenAlbumHash);
+})();
 
 </script>
 
