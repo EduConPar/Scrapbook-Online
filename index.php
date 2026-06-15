@@ -13,26 +13,15 @@ require_once __DIR__ . '/assets/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 
-/* Móviles: el destino depende de si la PWA está instalada (cookie
-   `melon_installed`, seteada por mobile-landing.php cuando dispara
-   `appinstalled` o cuando se abre la PWA en modo standalone) y de si
-   hay sesión activa:
-     - Sin cookie de instalación → mobile-landing.php (pitch + guía
-                                   para instalar).
-     - Cookie + sesión activa    → mobile.php (la app).
-     - Cookie pero sin sesión    → login-manual.php (mismo form que
-                                   sale al cerrar sesión en la app).
+/* Móviles SIEMPRE entran por la landing. Es la única puerta a Melon
+   Hub — la landing decide client-side qué hacer:
+     - Standalone (la PWA está abierta) + sesión → mobile.php?pwa=1.
+     - Standalone sin sesión → renderiza el form de login propio de la
+       landing (evita el ping-pong con mobile.php).
+     - Navegador externo → muestra el pitch de instalación.
    Override con ?desktop=1 (o cookie force_desktop). */
 if (isMobileDevice()) {
-    $hasSession   = !empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']]);
-    $appInstalled = !empty($_COOKIE['melon_installed']);
-    if (!$appInstalled) {
-        header('Location: mobile-landing.php');
-    } elseif ($hasSession) {
-        header('Location: mobile.php');
-    } else {
-        header('Location: login-manual.php');
-    }
+    header('Location: mobile-landing.php');
     exit;
 }
 
