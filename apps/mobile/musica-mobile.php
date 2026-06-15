@@ -4381,11 +4381,30 @@ loadProfileMusic();
 
 /* Deep-link "abrir álbum del track" disparado por el shell al tocar el
    título del fullscreen.
-   Hash esperado: #open-album=videoId=ABC&title=...&artist=...
-   El shell cierra su propio fullscreen ANTES de abrir esta app, así
-   que aquí solo procesamos el hash + arrancamos muOpenAlbumFromTrack
-   con el track sintético construido del URLSearchParams. */
+   El shell nos avisa por DOS canales para que llegue seguro:
+     1. Hash en la URL (#open-album=videoId=...) — útil cuando la app
+        carga fresh; el bootstrap lo lee inmediatamente.
+     2. postMessage `{type:'mu:open-album', tr:{...}}` — útil cuando
+        la app ya estaba cargada (replace con solo cambio de hash a
+        veces no dispara hashchange según navegador) y como red de
+        seguridad.
+   Guardamos `_lastOpenAlbumKey` para deduplicar (que ambos canales
+   disparando no abra el viewer dos veces seguidas). */
 (function(){
+    var _lastOpenAlbumKey = '';
+    function trKey(tr) {
+        return (tr.videoId || '') + '|' + (tr.title || '') + '|' + (tr.artist || '');
+    }
+    function dispatchOpenAlbum(tr) {
+        if (!tr || (!tr.videoId && !tr.title)) return;
+        var k = trKey(tr);
+        if (k === _lastOpenAlbumKey) return;  /* dedupe */
+        _lastOpenAlbumKey = k;
+        /* Reset el "último" tras 2s para que un segundo tap legítimo
+           sobre el MISMO track funcione. */
+        setTimeout(function(){ _lastOpenAlbumKey = ''; }, 2000);
+        muOpenAlbumFromTrack(tr);
+    }
     function handleOpenAlbumHash() {
         var m = /#open-album=(.+)$/.exec(location.hash);
         if (!m) return;
@@ -4396,14 +4415,19 @@ loadProfileMusic();
                 title:   params.get('title')   || '',
                 artist:  params.get('artist')  || ''
             };
-            if (!tr.videoId && !tr.title) return;
             /* Limpia el hash para que un reload no vuelva a dispararlo. */
             try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-            muOpenAlbumFromTrack(tr);
+            dispatchOpenAlbum(tr);
         } catch (_) {}
     }
     handleOpenAlbumHash();
     window.addEventListener('hashchange', handleOpenAlbumHash);
+    /* Canal 2: postMessage del shell. */
+    window.addEventListener('message', function(e){
+        var d = (e && e.data) || {};
+        if (d.type !== 'mu:open-album' || !d.tr) return;
+        dispatchOpenAlbum(d.tr);
+    });
 })();
 
 </script>

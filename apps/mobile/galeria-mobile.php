@@ -309,6 +309,30 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 inset  2px  2px var(--bezel-dark-1, #0a0a0a),
                 inset -2px -2px var(--bezel-light-2, #dfdfdf);
         }
+        /* Estado vacío de la galería: cuando se muestra debe REEMPLAZAR
+           al grid (no apilarse debajo) y centrar el texto en el espacio
+           disponible. Sin esto el grid vacío conservaba flex:1 y empujaba
+           el aviso hasta abajo del viewport. El JS hace el toggle
+           mutuamente con #gal-grid. */
+        #gal-grid-empty {
+            flex: 1;
+            min-height: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            padding: 16px;
+            color: var(--text-faint, #666);
+            background: var(--input-bg, #fff);
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-2, grey),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+        }
+        #gal-grid-empty.is-visible { display: flex; }
+        #gal-grid-empty p { margin: 4px 0; }
         /* Cards con bezel relevado Win98. */
         #gal-grid .gal-card, #ocs-grid .gal-card,
         #gal-grid .ocs-card, #ocs-grid .ocs-card {
@@ -1587,12 +1611,19 @@ function renderGrid() {
         (files.length !== _files.length ? ' / ' + _files.length : '');
     grid.innerHTML = '';
     if (!files.length) {
-        emptyEl.style.display = '';   // → flex (CSS)
+        /* Sin archivos: ocultar el grid y enseñar SOLO el empty para
+           que ocupe el flex:1 (centrado vertical). Si dejábamos el grid
+           con su flex:1 visible, el empty caía debajo sin centrar. */
+        grid.style.display = 'none';
+        emptyEl.classList.add('is-visible');
+        emptyEl.style.display = '';   /* limpia override inline antiguo */
         emptyEl.innerHTML = _files.length
             ? '<p>Sin resultados con los filtros aplicados.</p>'
             : '<p>La galería está vacía.</p><p><small>Pulsa <strong>⬆ Subir imagen</strong> para empezar.</small></p>';
         return;
     }
+    grid.style.display = '';   /* restaura grid si veníamos del estado vacío */
+    emptyEl.classList.remove('is-visible');
     emptyEl.style.display = 'none';
     files.forEach(function(f) {
         var wipExt    = isWip(f);          // extensión no renderizable (.psd/.csp/.kra)
@@ -2134,13 +2165,23 @@ async function submitPublish() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_url: publicUrl, caption: text })
             }).then(function(r){ return r.json(); }).then(function(d){
-                if (d.error) throw new Error(d.error);
+                if (d.error) {
+                    /* Preservamos `code` en el throw para distinguir
+                       "Discord no configurado" (no es un fallo real,
+                       solo el admin no ha puesto la var) de errores de
+                       red u otros. */
+                    var err = new Error(d.error);
+                    err.code = d.code || '';
+                    throw err;
+                }
                 return d;
             }),
         ]);
 
         var perfilOk  = perfilResult.status  === 'fulfilled';
         var discordOk = discordResult.status === 'fulfilled';
+        var discordReason = discordResult.reason || {};
+        var discordDisabled = discordReason.code === 'discordNotConfigured';
 
         if (perfilOk) {
             /* Avisar al desktop (donde vive perfil.php) para que recargue
@@ -2151,9 +2192,15 @@ async function submitPublish() {
         if (perfilOk && discordOk) {
             st.style.color = ''; st.textContent = '✔ Publicado en perfil y Discord.';
             setTimeout(closePublishDialog, 1100);
+        } else if (perfilOk && discordDisabled) {
+            /* Discord no configurado por el admin: tratamos el post como
+               éxito completo y NO mostramos el alarmante "Discord falló".
+               El perfil ES el destino principal; Discord es opcional. */
+            st.style.color = ''; st.textContent = '✔ Publicado en perfil.';
+            setTimeout(closePublishDialog, 1100);
         } else if (perfilOk && !discordOk) {
             st.style.color = 'var(--warning-text)';
-            st.textContent = '✔ Publicado en perfil. ⚠ Discord falló: ' + (discordResult.reason && discordResult.reason.message || 'error');
+            st.textContent = '✔ Publicado en perfil. ⚠ Discord falló: ' + (discordReason.message || 'error');
         } else if (!perfilOk && discordOk) {
             st.style.color = 'var(--warning-text)';
             st.textContent = '✔ Publicado en Discord. ⚠ Perfil falló: ' + (perfilResult.reason && perfilResult.reason.message || 'error');

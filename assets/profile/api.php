@@ -603,7 +603,16 @@ case 'discord-publish': {
        el bot pueda darles los puntos de autismo por las reacciones. */
     $webhook = env('DISCORD_WEBHOOK_URL', '');
     if ($webhook === '') {
-        jsonError('El canal de Discord no está configurado en el servidor', 503);
+        /* Devolvemos `code:'discordNotConfigured'` para que el cliente
+           distinga este caso (admin no ha puesto la var en .env) de un
+           fallo de red genérico, y muestre un texto neutral en vez de
+           un "error" alarmante. Para activarlo el admin debe crear un
+           webhook en Discord (Server Settings > Integrations > Webhooks)
+           y poner su URL en `DISCORD_WEBHOOK_URL` del .env. */
+        jsonResponse([
+            'error' => 'Publicar en Discord está desactivado por el administrador (falta DISCORD_WEBHOOK_URL en .env).',
+            'code'  => 'discordNotConfigured'
+        ], 503);
     }
     $stmt = $pdo->prepare("SELECT discord_user_id, label FROM usuarios WHERE user_key = ?");
     $stmt->execute([$userKey]);

@@ -317,9 +317,17 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             </button>
         </div>
     </div>
-    <!-- Resize handle en la esquina inferior derecha. Drag para
-         redimensionar; min 280×220 para evitar colapso. -->
-    <div id="album-viewer-resize"></div>
+    <!-- Resize handles por los 4 lados + 4 esquinas (8 direcciones).
+         La esquina SE conserva el grip diagonal Win98; las demás son
+         invisibles pero clickables. Min 280×220 para evitar colapso. -->
+    <div class="av-resize av-resize-n"  data-edge="n"></div>
+    <div class="av-resize av-resize-s"  data-edge="s"></div>
+    <div class="av-resize av-resize-w"  data-edge="w"></div>
+    <div class="av-resize av-resize-e"  data-edge="e"></div>
+    <div class="av-resize av-resize-nw" data-edge="nw"></div>
+    <div class="av-resize av-resize-ne" data-edge="ne"></div>
+    <div class="av-resize av-resize-sw" data-edge="sw"></div>
+    <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
 <!-- ADD TRACK DIALOG -->
@@ -1850,19 +1858,26 @@ if (playerTitle) {
    replicamos aquí en JS para no depender de getComputedStyle por
    frame. */
 (function() {
-    const win    = document.getElementById('album-viewer');
-    const handle = document.getElementById('album-viewer-resize');
-    if (!win || !handle) return;
+    const win = document.getElementById('album-viewer');
+    if (!win) return;
+    const handles = win.querySelectorAll('.av-resize');
+    if (!handles.length) return;
     const MIN_W = 280, MIN_H = 220;
-    let pid = -1, startX, startY, startW, startH;
-    handle.addEventListener('pointerdown', function(e) {
+    /* Estado del drag actual: edge marca qué lados/esquinas mover. */
+    let pid = -1, activeHandle = null;
+    let edge = '', startX = 0, startY = 0;
+    let startW = 0, startH = 0, startL = 0, startT = 0;
+
+    function onDown(e) {
         e.preventDefault();
         e.stopPropagation();
-        pid = e.pointerId;
-        try { handle.setPointerCapture(pid); } catch (_) {}
+        activeHandle = e.currentTarget;
+        edge = activeHandle.dataset.edge || '';
+        pid  = e.pointerId;
+        try { activeHandle.setPointerCapture(pid); } catch (_) {}
         /* Si la ventana sigue centrada por transform, la pasamos a
-           coords absolutas para que el width/height se aplique sin que
-           el transform la re-centre. */
+           coords absolutas para que width/height/left/top se apliquen
+           sin que el transform la re-centre. */
         const rect = win.getBoundingClientRect();
         win.style.left      = rect.left + 'px';
         win.style.top       = rect.top  + 'px';
@@ -1871,23 +1886,53 @@ if (playerTitle) {
         startY = e.clientY;
         startW = win.offsetWidth;
         startH = win.offsetHeight;
-    });
-    handle.addEventListener('pointermove', function(e) {
-        if (e.pointerId !== pid) return;
-        const newW = Math.max(MIN_W, startW + (e.clientX - startX));
-        const newH = Math.max(MIN_H, startH + (e.clientY - startY));
-        /* Cap a viewport: -16px de margen para no quedar pegado al
-           borde derecho/inferior. */
-        win.style.width  = Math.min(newW, window.innerWidth  - 16) + 'px';
-        win.style.height = Math.min(newH, window.innerHeight - 16) + 'px';
-    });
-    function endResize(e) {
-        if (e && e.pointerId !== pid) return;
-        try { handle.releasePointerCapture(e ? e.pointerId : pid); } catch (_) {}
-        pid = -1;
+        startL = rect.left;
+        startT = rect.top;
     }
-    handle.addEventListener('pointerup',     endResize);
-    handle.addEventListener('pointercancel', endResize);
+    function onMove(e) {
+        if (e.pointerId !== pid) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        let newW = startW, newH = startH, newL = startL, newT = startT;
+        /* Lados W/E afectan width (y left si W). N/S afectan height
+           (y top si N). Las esquinas combinan dos lados. */
+        if (edge.indexOf('e') !== -1) {
+            newW = Math.max(MIN_W, startW + dx);
+        }
+        if (edge.indexOf('w') !== -1) {
+            newW = Math.max(MIN_W, startW - dx);
+            /* Si chocamos con MIN_W, congelamos left para no resbalar. */
+            newL = startL + (startW - newW);
+        }
+        if (edge.indexOf('s') !== -1) {
+            newH = Math.max(MIN_H, startH + dy);
+        }
+        if (edge.indexOf('n') !== -1) {
+            newH = Math.max(MIN_H, startH - dy);
+            newT = startT + (startH - newH);
+        }
+        /* Cap a viewport: -16px de margen, sin permitir que la ventana
+           se salga por arriba/izquierda. */
+        newW = Math.min(newW, window.innerWidth  - 16);
+        newH = Math.min(newH, window.innerHeight - 16);
+        newL = Math.max(8, Math.min(newL, window.innerWidth  - newW - 8));
+        newT = Math.max(8, Math.min(newT, window.innerHeight - newH - 8));
+        win.style.width  = newW + 'px';
+        win.style.height = newH + 'px';
+        win.style.left   = newL + 'px';
+        win.style.top    = newT + 'px';
+    }
+    function onUp(e) {
+        if (e && e.pointerId !== pid) return;
+        try { activeHandle && activeHandle.releasePointerCapture(e ? e.pointerId : pid); } catch (_) {}
+        pid = -1; activeHandle = null; edge = '';
+    }
+    handles.forEach(function(h){
+        h.addEventListener('pointerdown',   onDown);
+        h.addEventListener('pointermove',   onMove);
+        h.addEventListener('pointerup',     onUp);
+        h.addEventListener('pointercancel', onUp);
+    });
 })();
 
 /* ── Context menu del cover del álbum ──

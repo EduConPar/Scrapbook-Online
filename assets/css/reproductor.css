@@ -436,24 +436,36 @@
     max-height: 95vh;
     z-index: 2050;
 }
-/* Handle de resize triangular en la esquina, similar al chrome de
-   Win98 (líneas diagonales). pointer-events del padre van por encima:
-   solo este captura los pointerdown del resize. */
-#album-viewer-resize {
+/* Handles de resize por los 4 lados + 4 esquinas (8 direcciones), patrón
+   estándar de ventanas Win9x. Los handles de esquina van por encima
+   de los de lado y tienen 14×14; los de lado son tiras finas de 6px
+   pegadas al borde. touch-action: none para que el pointer NO scrolee
+   la página durante el drag. */
+.av-resize {
     position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 14px;
-    height: 14px;
-    cursor: nwse-resize;
     touch-action: none;
     z-index: 10;
+}
+.av-resize-n { top: -3px;    left: 6px;  right: 6px;  height: 6px;  cursor: ns-resize; }
+.av-resize-s { bottom: -3px; left: 6px;  right: 6px;  height: 6px;  cursor: ns-resize; }
+.av-resize-w { left: -3px;   top: 6px;   bottom: 6px; width: 6px;   cursor: ew-resize; }
+.av-resize-e { right: -3px;  top: 6px;   bottom: 6px; width: 6px;   cursor: ew-resize; }
+.av-resize-nw { left: -3px;   top: -3px;    width: 14px; height: 14px; cursor: nwse-resize; z-index: 11; }
+.av-resize-ne { right: -3px;  top: -3px;    width: 14px; height: 14px; cursor: nesw-resize; z-index: 11; }
+.av-resize-sw { left: -3px;   bottom: -3px; width: 14px; height: 14px; cursor: nesw-resize; z-index: 11; }
+.av-resize-se {
+    right: -3px; bottom: -3px;
+    width: 14px; height: 14px;
+    cursor: nwse-resize;
+    z-index: 11;
+    /* Sigue mostrando el "grip" diagonal en SE, indicador visual de
+       que la ventana es resizable (compatible con Win98). */
     background:
         linear-gradient(135deg, transparent 50%, var(--text-muted) 50%) center / 4px 4px no-repeat,
         linear-gradient(135deg, transparent 60%, var(--text-muted) 60%) right bottom / 8px 8px no-repeat;
     opacity: 0.55;
 }
-#album-viewer-resize:hover { opacity: 1; }
+.av-resize-se:hover { opacity: 1; }
 #album-viewer-body {
     flex: 1;
     min-height: 0;

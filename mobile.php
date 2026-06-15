@@ -2604,10 +2604,19 @@ window.MuShell = (function(){
     document.getElementById('mu-full-menu').addEventListener('click', closeFullscreen);
 
     /* Tap en el título del reproductor grande → cierra el fullscreen
-       del shell y abre la app de música con un hash que le pide abrir
-       el viewer del álbum del track actual. La app vive en un iframe
-       (apps/mobile/musica-mobile.php) y procesa el hash al cargar.
-       Atamos el listener al WRAP, no al span (que solo ocupa el texto). */
+       del shell y abre el viewer del álbum del track actual.
+       Como musica-mobile.php vive en un iframe, le pasamos el track
+       por DOS canales:
+         1. Hash en la URL del iframe (#open-album=videoId=...).
+            Útil si la app NO estaba cargada todavía: al arrancar lee
+            el hash y dispara muOpenAlbumFromTrack.
+         2. postMessage `{type:'mu:open-album', tr}` después del load.
+            Útil si la app YA estaba cargada (entonces location.replace
+            con solo cambio de hash a veces no dispara hashchange según
+            navegador) y como red de seguridad si el hash falla por
+            cualquier razón.
+       Atamos el listener al WRAP, no al span (el span solo ocupa el
+       ancho del texto). */
     (function(){
         var wrap = document.getElementById('mu-full-title-wrap');
         if (!wrap) return;
@@ -2617,12 +2626,46 @@ window.MuShell = (function(){
             if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
             var tr = QUEUE[CUR_IDX];
             closeFullscreen();
-            var params = new URLSearchParams({
+            var trPayload = {
                 videoId: tr.videoId || '',
                 title:   tr.title   || '',
                 artist:  tr.artist  || ''
-            });
-            openApp('apps/mobile/musica-mobile.php#open-album=' + params.toString(), 'Música');
+            };
+            var params = new URLSearchParams(trPayload);
+            var url = 'apps/mobile/musica-mobile.php#open-album=' + params.toString();
+            /* postMessage helper: enviarlo al iframe activo. Si la app
+               aún se está cargando, lo enviamos al `load` siguiente. */
+            function sendOpenAlbum() {
+                try {
+                    appFrame.contentWindow.postMessage(
+                        { type: 'mu:open-album', tr: trPayload }, '*'
+                    );
+                } catch (_) {}
+            }
+            /* Detectar si la app ya está en musica-mobile (postMessage
+               directo) o si hay que esperar al load (caso "primera vez
+               que se abre musica" o "venía de otra app"). */
+            var currentPath = '';
+            try {
+                currentPath = appFrame.contentWindow.location.pathname || '';
+            } catch (_) {}
+            var alreadyOnMusica = currentPath.indexOf('musica-mobile.php') !== -1;
+            if (alreadyOnMusica) {
+                /* Ya está cargada → reusa el iframe + postMessage. */
+                openApp(url, 'Música');
+                /* Pequeño defer para que muOpenAlbumFromTrack no choque
+                   con el hashchange handler que también dispara. */
+                setTimeout(sendOpenAlbum, 0);
+            } else {
+                /* Hay que cargar la app. Esperamos al `load` del iframe
+                   y entonces lanzamos postMessage. */
+                var onLoad = function() {
+                    appFrame.removeEventListener('load', onLoad);
+                    sendOpenAlbum();
+                };
+                appFrame.addEventListener('load', onLoad);
+                openApp(url, 'Música');
+            }
         });
     })();
     document.getElementById('mu-full-prev').addEventListener('click', prev);

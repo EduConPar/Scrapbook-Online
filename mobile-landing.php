@@ -548,23 +548,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </button>
                 </div>
 
-                <!-- Guía de instalación por navegador. -->
-                <fieldset>
-                    <legend>Añade el icono a tu pantalla</legend>
-                    <ol class="mh-install-steps" id="install-steps">
-                        <!-- Se rellena por JS según el navegador detectado -->
-                    </ol>
-                </fieldset>
-
-                <!-- Botón auto-install. Visible siempre; el click solo
-                     hace algo si beforeinstallprompt ya disparó. Si no,
-                     se queda inerte y la vía es la guía manual de arriba. -->
-                <div class="login-actions" style="margin-top:10px;">
+                <!-- Botón auto-install — vía PRINCIPAL. Se ofrece primero
+                     para que el usuario lo intente antes de la guía manual.
+                     Si el navegador no lo soporta o el evento beforeinstallprompt
+                     no disparó, el click queda inerte y entonces el usuario
+                     tiene la guía manual de abajo como respaldo. -->
+                <div class="login-actions" style="margin-top:4px;">
                     <button class="button default mh-cta-full" type="button"
                             id="install-auto-btn">
                         📲 Instalar como app
                     </button>
                 </div>
+
+                <!-- Aviso del paso intermedio + guía manual de instalación.
+                     Es el FALLBACK: solo hay que usarla si el botón de
+                     arriba no hace nada (algunos navegadores móviles
+                     —Safari iOS, Firefox móvil— no soportan el prompt
+                     automático y exigen pasos manuales). -->
+                <p style="margin:14px 0 6px;font-size:11px;color:#a07070;line-height:1.4;">
+                    <strong style="color:#ff8080;">¿El botón no hace nada?</strong>
+                    Algunos navegadores (Safari, Firefox móvil…) no permiten
+                    instalar la app con un solo toque. Sigue estos pasos
+                    desde el menú de tu navegador:
+                </p>
+                <fieldset>
+                    <legend>Instalación manual paso a paso</legend>
+                    <ol class="mh-install-steps" id="install-steps">
+                        <!-- Se rellena por JS según el navegador detectado -->
+                    </ol>
+                </fieldset>
             </div>
         </div>
 

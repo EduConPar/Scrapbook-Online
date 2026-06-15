@@ -1711,18 +1711,25 @@ async function submitPublish() {
             st.style.color = ''; st.textContent = '✔ Publicado en perfil y Discord.';
             setTimeout(closePublishDialog, 1100);
         } else if (perfilOk && !discordOk) {
-            st.style.color = 'var(--warning-text)';
             var discordErr = discordResult.reason || {};
-            st.textContent = '✔ Publicado en perfil. ⚠ Discord falló: ' + (discordErr.message || 'error');
-            /* Si la única razón es que falta el vínculo de Discord,
-               ofrecemos abrir el modal directamente. Más útil que
-               dejar al usuario adivinar dónde se vincula. */
-            if (discordErr.code === 'needsDiscordLink') {
-                setTimeout(function() {
-                    if (confirm('Para publicar a Discord necesitas vincular tu cuenta. ¿Vincular ahora?')) {
-                        openDiscordSettings();
-                    }
-                }, 200);
+            /* Discord no configurado por el admin (falta env var):
+               tratamos como éxito completo — el post SÍ está en perfil. */
+            if (discordErr.code === 'discordNotConfigured') {
+                st.style.color = ''; st.textContent = '✔ Publicado en perfil.';
+                setTimeout(closePublishDialog, 1100);
+            } else {
+                st.style.color = 'var(--warning-text)';
+                st.textContent = '✔ Publicado en perfil. ⚠ Discord falló: ' + (discordErr.message || 'error');
+                /* Si la única razón es que falta el vínculo de Discord,
+                   ofrecemos abrir el modal directamente. Más útil que
+                   dejar al usuario adivinar dónde se vincula. */
+                if (discordErr.code === 'needsDiscordLink') {
+                    setTimeout(function() {
+                        if (confirm('Para publicar a Discord necesitas vincular tu cuenta. ¿Vincular ahora?')) {
+                            openDiscordSettings();
+                        }
+                    }, 200);
+                }
             }
         } else if (!perfilOk && discordOk) {
             st.style.color = 'var(--warning-text)';
