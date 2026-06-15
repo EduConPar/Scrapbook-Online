@@ -470,7 +470,11 @@ case 'respond-partner-invite': {
         sendPushToUser($pdo, (int)$fromId, [
             'title' => 'Invitación rechazada',
             'body'  => ucfirst($respLabel) . ' ha rechazado tu invitación al calendario.',
-            'url'   => '/apps/calendario.php',
+            /* URL absoluta con el prefijo /scrapbookOnline/ y el ?pwa=1
+               para que matchee el start_url del manifest. Sin el prefijo
+               la PWA navegaba a /apps/calendario.php (404) y se salía
+               del contenedor standalone. */
+            'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=calendario',
         ]);
         jsonResponse(['ok' => true]);
     }
@@ -490,7 +494,9 @@ case 'respond-partner-invite': {
     sendPushToUser($pdo, (int)$fromId, [
         'title' => '💕 ¡Sois pareja!',
         'body'  => ucfirst($respLabel) . ' ha aceptado tu invitación. Abrid el calendario juntos.',
-        'url'   => '/apps/calendario.php',
+        /* Misma corrección que el reject — URL completa con prefijo del
+           proyecto y ?pwa=1 para PWA standalone. */
+        'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=calendario',
     ]);
 
     jsonResponse(['ok' => true]);

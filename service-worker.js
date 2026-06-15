@@ -10,7 +10,7 @@
    skipWaiting → activate. La página padre detecta el cambio vía
    `controllerchange` y se recarga sola.
    ────────────────────────────────────────────────────────────────────── */
-const SW_VERSION = 'v13';
+const SW_VERSION = 'v14';
 
 self.addEventListener('install', function() {
     self.skipWaiting();
@@ -149,21 +149,64 @@ self.addEventListener('message', function(event) {
 });
 
 /* ── Notification click ──
-   Si ya hay una pestaña abierta de la PWA la enfocamos (y navegamos si
-   se puede); si no, abrimos una nueva. */
+   Reglas:
+     1. Si hay un cliente que YA está en el shell (mobile.php) y la URL
+        de la notif solo cambia el hash, mandamos postMessage para que
+        el shell procese el deep-link in-place (más fiable que
+        Client.navigate() — algunos browsers no disparan hashchange tras
+        navigate() cuando la URL antigua y la nueva difieren solo en el
+        fragmento, y otros lo simulan inconsistentemente).
+     2. Si hay shell pero el path/query difieren, usamos navigate() para
+        ir a la URL completa.
+     3. Si no hay shell pero hay otros clientes scrapbookOnline (iframe
+        u otra app), preferimos enfocar y navigate.
+     4. Sin clientes vivos → openWindow.
+   Siempre intentamos focus() al final.
+
+   Adicional: incluso si navigate() funciona, también enviamos un
+   postMessage con el deep-link. El shell tiene un listener que re-dispara
+   el handler del hash aunque sea el mismo (evita el caso "notif del
+   mismo chat 2 veces seguidas → no abre la segunda"). */
+function urlsDifferOnlyByHash(a, b) {
+    try {
+        var ua = new URL(a, self.location.origin);
+        var ub = new URL(b, self.location.origin);
+        return ua.origin === ub.origin
+            && ua.pathname === ub.pathname
+            && ua.search   === ub.search
+            && ua.hash     !== ub.hash;
+    } catch (_) { return false; }
+}
+function isShellUrl(u) {
+    /* El shell del móvil acaba en /mobile.php (con o sin query/hash). */
+    try { return new URL(u, self.location.origin).pathname.endsWith('/mobile.php'); }
+    catch (_) { return false; }
+}
 self.addEventListener('notificationclick', function(event) {
     event.notification.close();
     var url = (event.notification.data && event.notification.data.url) || '/';
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
-            for (var i = 0; i < list.length; i++) {
-                var c = list[i];
-                if (c.url.indexOf('scrapbookOnline') !== -1) {
-                    if ('navigate' in c) c.navigate(url).catch(function(){});
-                    return c.focus();
-                }
-            }
+    event.waitUntil((async function() {
+        var list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        var scrapClients = list.filter(function(c){ return c.url.indexOf('scrapbookOnline') !== -1; });
+        if (!scrapClients.length) {
             return self.clients.openWindow(url);
-        })
-    );
+        }
+        /* Preferir el shell sobre iframes embebidos / otras apps. */
+        var shell = scrapClients.find(function(c){ return isShellUrl(c.url); });
+        var target = shell || scrapClients[0];
+        try {
+            if (shell && urlsDifferOnlyByHash(shell.url, url)) {
+                /* Solo cambia el hash: postMessage es más fiable.
+                   También intentamos navigate() por si el shell no
+                   procesa el postMessage (paranoia defensiva). */
+                try { shell.postMessage({ type: 'sw:deep-link', url: url }); } catch (_) {}
+                try { if ('navigate' in shell) shell.navigate(url).catch(function(){}); } catch (_) {}
+            } else if ('navigate' in target) {
+                await target.navigate(url).catch(function(){});
+                try { target.postMessage({ type: 'sw:deep-link', url: url }); } catch (_) {}
+            }
+        } catch (_) {}
+        try { await target.focus(); } catch (_) {}
+        return target;
+    })());
 });

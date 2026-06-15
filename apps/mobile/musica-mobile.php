@@ -367,10 +367,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-track.playing .mu-track-artist { color: var(--accent-text, #fff); }
         /* Nombre del álbum del track — separado del artista por un
            bullet sutil. Vacío hasta que find-album resuelve; tap abre
-           el viewer del álbum. */
+           el viewer del álbum.
+           El color debe ser DISTINTO del --accent (background del row
+           cuando .playing) para no confundirse visualmente con el
+           highlight de "canción sonando". Usamos un azul tipo link
+           neutro. Cuando .playing, override a --accent-text (blanco
+           sobre el fondo accent). */
         .mu-track-album {
             display: inline;
-            color: var(--accent, #1db954);
+            color: var(--mu-album-link, #6a9bd1);
             font-size: 11px;
             cursor: pointer;
             text-decoration: underline;
@@ -380,6 +385,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .mu-track-album:empty { display: none; }
         .mu-track-album:before { content: " · "; opacity: 0.5; }
+        .mu-track:active .mu-track-album,
+        .mu-track.playing .mu-track-album { color: var(--accent-text, #fff); }
         /* Mientras se resuelve el long-press del album, da feedback. */
         .mu-track-album.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
 
@@ -3671,8 +3678,13 @@ function _muResolveAllVisibleAlbums() {
 /* ── Album viewer: modal con cover + tracks. Cachea por albumId. */
 var _muAlbumViewCache = {};
 function muOpenAlbumFromTrack(tr) {
-    if (!tr || !tr.videoId) return;
-    var cached = _muAlbumCacheGet(tr.videoId);
+    /* Antes salíamos en silencio si no había videoId. Eso convertía un
+       tap en el título en un no-op invisible para tracks sin videoId
+       (importados de Spotify/Tidal sin match en YouTube). Ahora
+       intentamos resolver con title+artist igual: el backend acepta
+       fallback de búsqueda. */
+    if (!tr) return;
+    var cached = tr.videoId ? _muAlbumCacheGet(tr.videoId) : null;
     function openWithMeta(albumId, albumName) {
         if (!albumId) {
             muAlert('No se encontró un álbum para esta canción.');
@@ -3680,23 +3692,28 @@ function muOpenAlbumFromTrack(tr) {
         }
         _muOpenAlbumViewer(albumId, albumName);
     }
-    if (cached) {
+    if (cached && (cached.albumKey || cached.spotifyAlbumId)) {
         openWithMeta(cached.albumKey || cached.spotifyAlbumId, cached.albumName);
         return;
     }
-    /* Sin cache: resolvemos AHORA (saltándose la cola para feedback
-       inmediato al gesto del usuario). */
+    /* Sin cache (o cache vacía/marcada notFound): resolvemos AHORA
+       (saltándose la cola para feedback inmediato al gesto del
+       usuario). */
     var params = new URLSearchParams({
         title:   tr.title  || '',
         artist:  tr.artist || '',
-        videoId: tr.videoId
+        videoId: tr.videoId || ''
     });
+    if (!params.get('title') && !params.get('artist') && !params.get('videoId')) {
+        muAlert('No hay datos suficientes para buscar el álbum.');
+        return;
+    }
     fetch('../../assets/music/api.php?action=find-album&' + params.toString())
         .then(function(r){ return r.status === 503 ? null : (r.ok ? r.json() : null); })
         .then(function(data){
             var norm = _muNormalizeAlbumPayload(data);
-            _muAlbumCacheSet(tr.videoId, norm || null);
-            _muPaintAlbumForVid(tr.videoId, norm);
+            if (tr.videoId) _muAlbumCacheSet(tr.videoId, norm || null);
+            if (tr.videoId) _muPaintAlbumForVid(tr.videoId, norm);
             if (!norm) {
                 muAlert('No se encontró un álbum para esta canción.');
                 return;

@@ -1836,6 +1836,33 @@ if ('serviceWorker' in navigator) {
     dispatchChatHash();
     window.addEventListener('hashchange', dispatchChatHash);
 
+    /* Deep-link directo desde el SW (tap en notificación push).
+       El SW envía postMessage({type:'sw:deep-link', url:'/scrapbookOnline/mobile.php?pwa=1#chat=user1'}).
+       Lo procesamos siempre, incluso si el hash actual ya coincide:
+       evita el bug "tap en notif del mismo chat 2 veces seguidas → solo
+       abre la primera (hashchange no dispara porque el hash no cambia)".
+       Forzamos un dispatch de hashchange para que TODOS los listeners
+       (chat, #notif= de invites, etc.) reprocesen — no solo el de chat. */
+    navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', function(e){
+        var d = (e && e.data) || {};
+        if (d.type !== 'sw:deep-link' || !d.url) return;
+        try {
+            var u = new URL(d.url, location.origin);
+            if (!u.hash) return;
+            /* Si el hash actual es distinto, asignar location.hash ya
+               dispara un hashchange real. Si es el mismo, dispatcheamos
+               un event sintético para forzar reproceso. */
+            if (location.hash !== u.hash) {
+                location.hash = u.hash;
+            } else {
+                window.dispatchEvent(new HashChangeEvent('hashchange', {
+                    oldURL: location.href,
+                    newURL: location.href
+                }));
+            }
+        } catch (_) {}
+    });
+
     /* Auto-open de la app Temas si hay flag 'temas-restore-tab' en
        sessionStorage (la pone temas-mobile.php antes de un reload por
        cambio de pack de iconos). Al abrir Temas, temas-mobile leerá la
