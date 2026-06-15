@@ -1404,22 +1404,28 @@ let _forcedAlbumForVideo = null;
    llamamos DESPUÉS de updateTrackUI; el _forcedAlbumForVideo bloquea
    que el fetch en vuelo desencadenado por updateTrackUI lo deshaga. */
 window.setReproductorAlbumContext = function(albumInfo) {
-    if (!albumInfo || !albumInfo.spotifyAlbumId) return;
+    if (!albumInfo) return;
+    /* Aceptamos albumKey (itunes:/deezer:) — IGNORAMOS spotify:* y los
+       legacy spotifyAlbumId. Si no hay key útil, no seteamos contexto
+       y dejamos que resolveAndShowAlbum haga find-album fresh. */
+    var key = '';
+    if (typeof albumInfo.albumKey === 'string'
+        && albumInfo.albumKey
+        && albumInfo.albumKey.indexOf('spotify:') !== 0) {
+        key = albumInfo.albumKey;
+    }
+    if (!key) return;
     const t = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
     _forcedAlbumForVideo = (t && t.videoId) || null;
     _applyAlbumState({
-        notFound:       false,
-        spotifyAlbumId: albumInfo.spotifyAlbumId,
-        albumName:      albumInfo.albumName || '',
-        /* albumArtist es hint para el fallback iTunes/Deezer cuando el
-           viewer del álbum se carga desde una key spotify:* vieja —
-           sin esto, el server busca solo por nombre y falla con
-           nombres ambiguos (japonés, soundtracks, etc.). */
-        albumArtist:    albumInfo.albumArtist || '',
-        albumImage:     albumInfo.image     || '',
-        isSingle:       false,
-        matchTitle:     albumInfo.matchTitle || '',
-        albumUrl:       '',
+        notFound:    false,
+        albumKey:    key,
+        albumName:   albumInfo.albumName || '',
+        albumArtist: albumInfo.albumArtist || '',
+        albumImage:  albumInfo.image     || '',
+        isSingle:    false,
+        matchTitle:  albumInfo.matchTitle || '',
+        albumUrl:    '',
     });
 };
 

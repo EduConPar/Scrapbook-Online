@@ -4972,18 +4972,25 @@ var PROFILE_USERS = <?php
                partir del title del primer track). Para songs, el flow
                normal de updateTrackUI → resolveAndShowAlbum hace su
                trabajo via find-album. */
-            if (item.type === 'album' && item.spotifyAlbumId
+            /* Aceptamos el item solo si NO arrastra spotifyAlbumId ni
+               un albumKey:spotify:* — esos quedan ignorados a propósito
+               porque la API de Spotify ya no se usa y el fallback en
+               album-tracks era poco fiable con artists heredados.
+               Si tiene una key itunes:/deezer: la usamos directa. Si
+               no tiene NINGUNA key utilizable, dejamos al flow normal
+               (resolveAndShowAlbum) que find-album lo resuelva fresh
+               por title+artist de la canción primero. */
+            var hasUsableKey = item.type === 'album'
+                            && typeof item.albumKey === 'string'
+                            && item.albumKey
+                            && item.albumKey.indexOf('spotify:') !== 0;
+            if (hasUsableKey
                 && typeof window.setReproductorAlbumContext === 'function') {
                 window.setReproductorAlbumContext({
-                    spotifyAlbumId: item.spotifyAlbumId,
-                    albumName:      item.title  || '',
-                    /* albumArtist es hint crítico para que el fallback
-                       iTunes/Deezer encuentre el álbum cuando la key
-                       es spotify:* viejo. Sin esto, el server solo
-                       tiene el nombre y falla con álbumes japoneses /
-                       soundtracks donde el nombre no es único. */
-                    albumArtist:    item.artist || '',
-                    image:          item.image  || '',
+                    albumKey:    item.albumKey,
+                    albumName:   item.title  || '',
+                    albumArtist: item.artist || '',
+                    image:       item.image  || '',
                 });
             }
             if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {

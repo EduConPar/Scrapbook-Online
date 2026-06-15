@@ -58,6 +58,52 @@ if (isset($_GET['clear'])) {
     $out[] = "";
 }
 
+/* ?strip-spotify-keys=1 — LIMPIEZA MASIVA de los items del perfil.
+   Borra `spotifyAlbumId` y `albumKey:'spotify:*'` de TODOS los items
+   album guardados en `usuarios.music` (JSON). Tras esto, cualquier
+   click sobre un álbum del perfil ya NO puede pasar key=spotify:* al
+   servidor — el cliente tendrá que resolverlo fresh vía find-album
+   contra iTunes/Deezer.
+   Se ejecuta sobre TODOS los usuarios; el endpoint solo lo invoca
+   alguien con sesión iniciada (el chequeo de session_start arriba). */
+if (isset($_GET['strip-spotify-keys'])) {
+    $touchedUsers = 0;
+    $touchedItems = 0;
+    try {
+        $st = $pdo->query("SELECT id, user_key, label, music FROM usuarios WHERE music IS NOT NULL");
+        while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+            $music = json_decode((string)$row['music'], true);
+            if (!is_array($music)) continue;
+            $changed = false;
+            foreach ($music as &$it) {
+                if (!is_array($it)) continue;
+                if (($it['type'] ?? '') !== 'album') continue;
+                $hadKey = isset($it['spotifyAlbumId']) && $it['spotifyAlbumId'] !== '';
+                $isSpKey = isset($it['albumKey']) && is_string($it['albumKey']) && strpos($it['albumKey'], 'spotify:') === 0;
+                if ($hadKey || $isSpKey) {
+                    if ($hadKey) unset($it['spotifyAlbumId']);
+                    if ($isSpKey) unset($it['albumKey']);
+                    $touchedItems++;
+                    $changed = true;
+                }
+            }
+            unset($it);
+            if ($changed) {
+                $upd = $pdo->prepare("UPDATE usuarios SET music = ? WHERE id = ?");
+                $upd->execute([json_encode($music, JSON_UNESCAPED_UNICODE), $row['id']]);
+                $touchedUsers++;
+                $out[] = "[STRIP] " . $row['label'] . " (" . $row['user_key'] . "): items album limpiados.";
+            }
+        }
+        $out[] = "[STRIP] TOTAL: $touchedItems items album limpiados en $touchedUsers usuarios.";
+        $out[] = "  Los próximos clicks sobre estos álbumes van a hacer find-album fresh";
+        $out[] = "  contra iTunes/Deezer (ya no tienen key spotify:* que arrastrar).";
+    } catch (Throwable $e) {
+        $out[] = "[STRIP] Error: " . $e->getMessage();
+    }
+    $out[] = "";
+}
+
 /* ?clear-albums=1 — BORRADO COMPLETO de las caches de álbumes.
    Útil cuando Spotify devolvió álbumes "incorrectos" en su día (p.ej.
    live versions, recopilatorios) y los hits se quedaron cacheados.
@@ -123,8 +169,14 @@ if (!isset($_GET['test'])) {
     $out[] = "[TEST] omitido (añade ?test=1 para hacer 1 request real a Spotify).";
     $out[] = "";
     $out[] = "─ Acciones disponibles ─";
-    $out[] = "  ?clear=1        → borra el guard + notFound transitorios cacheados.";
-    $out[] = "  ?clear-albums=1 → BORRA TODAS las caches de álbumes server-side";
+    $out[] = "  ?clear=1               → borra el guard + notFound transitorios cacheados.";
+    $out[] = "  ?strip-spotify-keys=1  → LIMPIA spotifyAlbumId y albumKey:spotify:*";
+    $out[] = "                           de TODOS los items album del perfil de TODOS";
+    $out[] = "                           los usuarios. Tras esto, ningún click sobre";
+    $out[] = "                           un álbum del perfil arrastra key spotify:*";
+    $out[] = "                           — el cliente lo resuelve fresh con find-album";
+    $out[] = "                           contra iTunes/Deezer.";
+    $out[] = "  ?clear-albums=1        → BORRA TODAS las caches de álbumes server-side";
     $out[] = "                    (álbumes incorrectos guardados de Spotify, recopilatorios,";
     $out[] = "                    live versions, etc). Tras esto se re-resuelven frescos.";
     $out[] = "                    Recuerda limpiar también la cache CLIENTE (localStorage).";
