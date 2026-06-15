@@ -2577,7 +2577,19 @@ var PROFILE_USERS = <?php
     (function setupNotifBtn() {
         var btn  = document.getElementById('profile-notif-btn');
         var clo  = document.getElementById('profile-notifs-close');
-        if (btn) btn.addEventListener('click', openNotifsWindow);
+        if (btn) {
+            /* Toggle: si la ventana ya está visible, otro click en la
+               campana la cierra. Antes solo abría — el usuario tenía que
+               ir a la X de la ventana para cerrarla.
+               openNotifsWindow setea display:'flex'; closeNotifsWindow lo
+               vuelve a 'none'. Por eso comparamos contra el set 'flex'. */
+            btn.addEventListener('click', function() {
+                var win = document.getElementById('profile-notifs-window');
+                var open = !!(win && win.style.display === 'flex');
+                if (open) closeNotifsWindow();
+                else      openNotifsWindow();
+            });
+        }
         if (clo) clo.addEventListener('click', closeNotifsWindow);
     })();
 
