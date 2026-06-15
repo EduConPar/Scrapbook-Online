@@ -1093,12 +1093,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-lock-vinyl-wrap,
         .mu-lock-title,
         .mu-lock-artist { display: none !important; }
-        /* Ocultar TODOS los filtros LCD (scanlines) del fullscreen player
-           cuando el lock está activo. `.mu-full::after` usa mix-blend-mode:
-           screen, que rompe el aislamiento del stacking context y pinta
-           encima del lock aunque mu-full (z-index 200) esté por debajo
-           de mu-lock (z-index 250). Forzar display:none aquí garantiza
-           el fondo negro puro del lock. */
+        /* Ocultar TODOS los filtros LCD (scanlines) cuando el lock está
+           activo. Dos fuentes a apagar:
+           1. Filtro LCD GLOBAL del shell — html.lcd-filter-on body::before
+              (scanlines) y html.lcd-filter-top body::after (viñeta), con
+              z-index 2147483645 (máx). Vive en base.css, se pinta sobre
+              TODO el documento incluyendo el lock. La causa real del bug.
+           2. Filtros del fullscreen player: .mu-full::after usa
+              mix-blend-mode: screen, que rompe el aislamiento de
+              stacking context. Por si acaso, también lo apago. */
+        html.lcd-filter-on body.mu-lock-active::before,
+        html.lcd-filter-top body.mu-lock-active::after { display: none !important; }
         body.mu-lock-active .mu-full::after,
         body.mu-lock-active .mu-full-display::after,
         body.mu-lock-active .mu-full-info::after { display: none !important; }
