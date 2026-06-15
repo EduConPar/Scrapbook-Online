@@ -2242,6 +2242,100 @@ case 'play-music-item': {
     jsonError('Sin datos de reproducción');
 }
 
+case 'tenor-search': {
+    /* Proxy de búsqueda de GIFs. Soporta Tenor (Google) y GIPHY como
+       backend; usa el que esté configurado en .env (preferimos Tenor
+       si están ambos por ser el oficial del chat por defecto). Tenor
+       cerró el registro público a nuevos proyectos en Google Cloud, así
+       que GIPHY (developers.giphy.com — registro inmediato gratis) es
+       la alternativa práctica para configurar la búsqueda de GIFs.
+       Mantenemos las API keys server-side para no exponerlas al
+       cliente. Salida normalizada {id, preview, url} para que el
+       picker del chat no tenga que ramificar por proveedor. */
+    $tenorKey = trim(env('TENOR_API_KEY', ''));
+    $giphyKey = trim(env('GIPHY_API_KEY', ''));
+    if ($tenorKey === '' && $giphyKey === '') {
+        jsonResponse([
+            'error' => 'Búsqueda de GIFs desactivada. Añade TENOR_API_KEY o GIPHY_API_KEY en .env (GIPHY es el más fácil: developers.giphy.com → crea cuenta gratis → "Create an App").',
+            'code'  => 'tenorNotConfigured'
+        ], 503);
+    }
+    $q     = trim((string)($_GET['q'] ?? ''));
+    $limit = max(1, min(30, (int)($_GET['limit'] ?? 20)));
+    $out = [];
+
+    if ($tenorKey !== '') {
+        /* Tenor v2: featured (sin query) o search. */
+        $endpoint = $q === '' ? 'featured' : 'search';
+        $params = http_build_query([
+            'q'             => $q,
+            'key'           => $tenorKey,
+            'client_key'    => 'melonhub',
+            'limit'         => $limit,
+            'media_filter'  => 'tinygif,gif',
+            'contentfilter' => 'medium',
+        ]);
+        $url = "https://tenor.googleapis.com/v2/$endpoint?$params";
+    } else {
+        /* GIPHY v1: trending (sin query) o search. */
+        $endpoint = $q === '' ? 'trending' : 'search';
+        $params = http_build_query([
+            'q'       => $q,
+            'api_key' => $giphyKey,
+            'limit'   => $limit,
+            'rating'  => 'pg-13',
+        ]);
+        $url = "https://api.giphy.com/v1/gifs/$endpoint?$params";
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_FOLLOWLOCATION => true,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code < 200 || $code >= 300 || $resp === false) {
+        jsonError('Proveedor de GIFs no respondió (HTTP ' . $code . ')', 502);
+    }
+    $data = json_decode((string)$resp, true);
+
+    if ($tenorKey !== '') {
+        /* Formato Tenor: results[].media_formats.{tinygif,gif}.url */
+        $results = is_array($data) && isset($data['results']) ? $data['results'] : [];
+        foreach ($results as $r) {
+            $tiny = $r['media_formats']['tinygif']['url'] ?? '';
+            $full = $r['media_formats']['gif']['url']     ?? $tiny;
+            if ($tiny === '' || $full === '') continue;
+            $out[] = [
+                'id'      => (string)($r['id'] ?? ''),
+                'preview' => $tiny,
+                'url'     => $full,
+            ];
+        }
+    } else {
+        /* Formato GIPHY: data[].images.{fixed_height_small,original}.url */
+        $results = is_array($data) && isset($data['data']) ? $data['data'] : [];
+        foreach ($results as $r) {
+            $tiny = $r['images']['fixed_height_small']['url']
+                ?? $r['images']['fixed_height_downsampled']['url']
+                ?? '';
+            $full = $r['images']['original']['url']
+                ?? $r['images']['downsized_large']['url']
+                ?? $tiny;
+            if ($tiny === '' || $full === '') continue;
+            $out[] = [
+                'id'      => (string)($r['id'] ?? ''),
+                'preview' => $tiny,
+                'url'     => $full,
+            ];
+        }
+    }
+    jsonResponse(['gifs' => $out]);
+}
+
 default:
     jsonError('Acción no válida: ' . $action, 400);
 }

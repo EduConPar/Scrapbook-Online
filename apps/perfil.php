@@ -485,9 +485,22 @@ if ($_perfilStandalone) {
     </div>
     <div class="window-body" id="profile-chat-body">
         <div id="profile-chat-messages"></div>
-        <!-- Panel emoji (oculto por defecto). Se posiciona absoluto sobre
-             el input-row al togglear. -->
-        <div id="profile-chat-emoji-panel" style="display:none;position:absolute;bottom:48px;left:8px;right:8px;background:var(--win-bg,silver);padding:6px;z-index:5;box-shadow:inset -1px -1px var(--bezel-dark-1,#0a0a0a),inset 1px 1px var(--bezel-light-1,#fff),inset -2px -2px var(--bezel-dark-2,grey),inset 2px 2px var(--bezel-light-2,#dfdfdf);max-height:140px;overflow-y:auto;"></div>
+        <!-- Panel Emojis + GIFs (tabs). Oculto por defecto. Se
+             posiciona absoluto sobre el input-row al togglear. -->
+        <div id="profile-chat-emoji-panel" style="display:none;position:absolute;bottom:48px;left:8px;right:8px;background:var(--win-bg,silver);z-index:5;box-shadow:inset -1px -1px var(--bezel-dark-1,#0a0a0a),inset 1px 1px var(--bezel-light-1,#fff),inset -2px -2px var(--bezel-dark-2,grey),inset 2px 2px var(--bezel-light-2,#dfdfdf);max-height:240px;flex-direction:column;">
+            <div id="pf-picker-tabs" style="display:flex;border-bottom:1px solid var(--bezel-dark-1,#808080);flex-shrink:0;">
+                <button type="button" data-tab="emoji" class="pf-picker-tab is-active" style="flex:1;border:0;background:var(--win-bg,silver);padding:5px 8px;font-size:11px;cursor:pointer;border-right:1px solid var(--bezel-dark-1,#808080);">Emojis</button>
+                <button type="button" data-tab="gifs"  class="pf-picker-tab"           style="flex:1;border:0;background:var(--win-bg,silver);padding:5px 8px;font-size:11px;cursor:pointer;">GIFs</button>
+            </div>
+            <div id="pf-picker-body" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
+                <div id="pf-pane-emoji" data-pane="emoji" style="flex:1;min-height:0;overflow-y:auto;padding:6px;"></div>
+                <div id="pf-pane-gifs"  data-pane="gifs"  hidden style="flex:1;min-height:0;display:flex;flex-direction:column;gap:4px;padding:6px;">
+                    <input type="text" id="pf-gif-search" placeholder="Buscar GIFs..." style="font-size:12px;padding:3px 6px;box-sizing:border-box;width:100%;flex-shrink:0;">
+                    <div id="pf-gif-results" style="flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;"></div>
+                    <div style="font-size:9px;color:var(--text-faint,#666);text-align:right;flex-shrink:0;">Powered by Tenor</div>
+                </div>
+            </div>
+        </div>
         <div id="profile-chat-input-row">
             <input type="text" id="profile-chat-input" maxlength="2000" placeholder="Escribe un mensaje…">
             <button class="button" id="profile-chat-emoji-btn"  type="button" title="Emotes" style="padding:3px 8px;">😀</button>
@@ -4090,6 +4103,38 @@ var PROFILE_USERS = <?php
     }
     var chatLastSig = '';
 
+    /* Linkify + imagen inline para mensajes de chat. Detecta URLs
+       (http(s):// y www.) en el texto: las que apuntan a imágenes
+       (jpg/png/gif/webp/svg) se renderizan inline como <img>; el
+       resto como <a target="_blank">. El texto fuera de URLs se
+       escapa con escHtml para evitar XSS. */
+    var _CH_URL_RE = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
+    var _CH_IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s#]*)?(#.*)?$/i;
+    function chatRenderUrlToken(url) {
+        var isWww = /^www\./i.test(url);
+        var full  = isWww ? ('http://' + url) : url;
+        if (_CH_IMG_EXT_RE.test(url)) {
+            return '<a href="' + escHtml(full) + '" target="_blank" rel="noopener noreferrer">' +
+                   '<img class="chat-msg-img" src="' + escHtml(full) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
+                   '</a>';
+        }
+        return '<a class="chat-msg-link" href="' + escHtml(full) + '" target="_blank" rel="noopener noreferrer">' +
+               escHtml(url) + '</a>';
+    }
+    function chatRenderBody(text) {
+        var s = String(text == null ? '' : text);
+        if (!s) return '';
+        var out = '', last = 0, m;
+        _CH_URL_RE.lastIndex = 0;
+        while ((m = _CH_URL_RE.exec(s)) !== null) {
+            out += escHtml(s.slice(last, m.index));
+            out += chatRenderUrlToken(m[0]);
+            last = m.index + m[0].length;
+        }
+        out += escHtml(s.slice(last));
+        return out;
+    }
+
     function renderChatMessages(messages) {
         var listEl = document.getElementById('profile-chat-messages');
         if (!listEl) return;
@@ -4111,7 +4156,7 @@ var PROFILE_USERS = <?php
             if (m.deleted) {
                 bubble.innerHTML = CHAT_TRASH_ICON_HTML + 'Mensaje eliminado';
             } else {
-                bubble.textContent = m.text;
+                bubble.innerHTML = chatRenderBody(m.text);
             }
             row.appendChild(bubble);
 
@@ -4462,17 +4507,22 @@ var PROFILE_USERS = <?php
                       '🍕','🍔','🍿','🍻','🍰','🌹','🌸','🌈','☀️','🌙'];
         var panel  = document.getElementById('profile-chat-emoji-panel');
         var btn    = document.getElementById('profile-chat-emoji-btn');
+        var emojiPane = document.getElementById('pf-pane-emoji');
+        var gifsPane  = document.getElementById('pf-pane-gifs');
+        var tabsEl    = document.getElementById('pf-picker-tabs');
+        var gifInput  = document.getElementById('pf-gif-search');
+        var gifResults = document.getElementById('pf-gif-results');
         if (panel && btn && input) {
-            /* Renderiza el grid de emotes una vez. */
-            panel.innerHTML = EMOTES.map(function(e){
+            /* Render del grid de emotes (una sola vez). */
+            emojiPane.innerHTML = EMOTES.map(function(e){
                 return '<button type="button" class="pf-emote" style="background:transparent;border:0;font-size:18px;padding:2px 4px;cursor:pointer;font-family:inherit;" data-em="' + e + '">' + e + '</button>';
             }).join('');
             panel.style.display = 'none';
             btn.addEventListener('click', function(e){
                 e.stopPropagation();
-                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
             });
-            panel.addEventListener('click', function(e){
+            emojiPane.addEventListener('click', function(e){
                 var b = e.target.closest('button[data-em]');
                 if (!b) return;
                 var em = b.getAttribute('data-em');
@@ -4482,6 +4532,66 @@ var PROFILE_USERS = <?php
                 input.value = input.value.slice(0, start) + em + input.value.slice(end);
                 input.focus();
                 input.setSelectionRange(start + em.length, start + em.length);
+            });
+            /* Tabs Emoji/GIFs. */
+            tabsEl.addEventListener('click', function(e){
+                var t = e.target.closest('button[data-tab]');
+                if (!t) return;
+                var which = t.dataset.tab;
+                tabsEl.querySelectorAll('button').forEach(function(b){ b.classList.toggle('is-active', b === t); b.style.background = (b === t) ? 'var(--win-body-bg, var(--win-bg, silver))' : 'var(--win-bg, silver)'; b.style.fontWeight = (b === t) ? 'bold' : 'normal'; });
+                emojiPane.hidden = (which !== 'emoji');
+                gifsPane.hidden  = (which !== 'gifs');
+                if (which === 'gifs' && !gifsPane.dataset.loaded) {
+                    gifsPane.dataset.loaded = '1';
+                    pfSearchTenor('');
+                }
+            });
+            /* Tenor: búsqueda + render. Click en GIF → inyecta su URL en
+               el input y dispara submit del form. */
+            var _pfGifDebounce = null, _pfGifSeq = 0;
+            function pfSearchTenor(q) {
+                var seq = ++_pfGifSeq;
+                gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:11px;color:var(--text-faint,#888);">Buscando…</div>';
+                fetch('assets/profile/api.php?action=tenor-search&q=' + encodeURIComponent(q) + '&limit=24')
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){
+                        if (seq !== _pfGifSeq) return;
+                        if (d && d.code === 'tenorNotConfigured') {
+                            gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;font-size:11px;color:var(--text-faint,#888);">Búsqueda de GIFs no configurada. Añade TENOR_API_KEY en .env.</div>';
+                            return;
+                        }
+                        if (!d || !d.gifs || !d.gifs.length) {
+                            gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:11px;color:var(--text-faint,#888);">Sin resultados.</div>';
+                            return;
+                        }
+                        gifResults.innerHTML = d.gifs.map(function(g){
+                            return '<img src="' + escHtml(g.preview) + '" data-url="' + escHtml(g.url) + '" alt="" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:70px;object-fit:cover;cursor:pointer;background:rgba(0,0,0,0.08);border:1px solid var(--bezel-dark-1,#808080);">';
+                        }).join('');
+                    })
+                    .catch(function(){
+                        if (seq !== _pfGifSeq) return;
+                        gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:11px;color:var(--error-text,#c00);">Error de red.</div>';
+                    });
+            }
+            gifInput.addEventListener('input', function(){
+                clearTimeout(_pfGifDebounce);
+                _pfGifDebounce = setTimeout(function(){ pfSearchTenor(gifInput.value.trim()); }, 280);
+            });
+            gifResults.addEventListener('click', function(e){
+                var img = e.target.closest('img[data-url]');
+                if (!img) return;
+                var url = img.dataset.url;
+                panel.style.display = 'none';
+                input.value = url;
+                /* Disparar submit del form que contiene el input. */
+                var form = input.closest('form');
+                if (form) {
+                    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                } else {
+                    /* Fallback si no hay form: simular Enter en el input. */
+                    var ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+                    input.dispatchEvent(ev);
+                }
             });
             /* Click fuera del panel cierra. */
             document.addEventListener('click', function(e){

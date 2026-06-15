@@ -370,6 +370,29 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         font-style: italic;
         opacity: 0.6;
     }
+    /* Hipervínculos detectados dentro de un mensaje: subrayado claro,
+       hereda color del bubble para mantener contraste con accent o
+       fondo Win98. */
+    .ch-msg-link {
+        color: inherit;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+        word-break: break-all;
+    }
+    .ch-msg.is-mine .ch-msg-link { color: var(--accent-text); }
+    /* Imagen embebida (link a jpg/png/gif/webp o GIF de Tenor): ocupa
+       el ancho disponible del bubble, sin desbordar. Cuadrado máximo
+       240px para que GIFs grandes no rompan la conversación. */
+    .ch-msg-img {
+        display: block;
+        max-width: 100%;
+        max-height: 240px;
+        margin: 2px 0;
+        border: 1px solid var(--bezel-dark-1, #808080);
+        object-fit: contain;
+        background: rgba(0,0,0,0.05);
+    }
     .ch-msg.is-mine.is-deleted {
         background: var(--win-bg);
         color: var(--text-faint);
@@ -478,19 +501,60 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
        emoji para que destaque como botón principal de acción. */
     .ch-composer .button.ch-send-btn { font-size: 20px; font-weight: bold; }
 
-    /* ── Emoji picker panel ── */
+    /* ── Picker panel (Emojis + GIFs en tabs) ──
+       El panel exterior ya no es la grid de emojis; ahora contiene
+       una fila de tabs y un body con paneles intercambiables. */
     .ch-emoji-panel {
         display: none;
-        flex-wrap: wrap;
-        gap: 2px;
-        padding: 6px;
+        flex-direction: column;
+        padding: 0;
         background: var(--win-body-bg, var(--win-bg));
         box-shadow: inset 0 1px 0 var(--bezel-dark-1);
-        max-height: 160px;
-        overflow-y: auto;
+        max-height: 230px;
         flex-shrink: 0;
     }
     .ch-emoji-panel.is-open { display: flex; }
+    .ch-picker-tabs {
+        display: flex;
+        gap: 0;
+        background: var(--win-bg);
+        border-bottom: 1px solid var(--bezel-dark-1);
+        flex-shrink: 0;
+    }
+    .ch-picker-tabs button {
+        flex: 1;
+        background: var(--win-bg);
+        border: 0;
+        border-right: 1px solid var(--bezel-dark-1);
+        padding: 6px 8px;
+        font-size: 12px;
+        cursor: pointer;
+        color: var(--text);
+    }
+    .ch-picker-tabs button:last-child { border-right: 0; }
+    .ch-picker-tabs button.is-active {
+        background: var(--win-body-bg, var(--win-bg));
+        font-weight: bold;
+    }
+    .ch-picker-body {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .ch-picker-pane {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 6px;
+    }
+    .ch-picker-pane[hidden] { display: none; }
+    .ch-picker-pane.ch-pane-emoji {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+    }
     .ch-emoji {
         font-size: 22px;
         padding: 4px 6px;
@@ -498,6 +562,52 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         line-height: 1;
         background: none;
         border: 1px solid transparent;
+    }
+    /* GIF picker: input de búsqueda fijo arriba, grid de previews
+       2 columnas en mobile. */
+    .ch-picker-pane.ch-pane-gifs {
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px;
+    }
+    .ch-picker-pane.ch-pane-gifs.is-active { display: flex; }
+    .ch-gif-search {
+        width: 100%;
+        box-sizing: border-box;
+        font-size: 13px;
+        padding: 4px 6px;
+        flex-shrink: 0;
+    }
+    .ch-gif-results {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+    }
+    .ch-gif-results img {
+        width: 100%;
+        height: 90px;
+        object-fit: cover;
+        cursor: pointer;
+        background: rgba(0,0,0,0.08);
+        border: 1px solid var(--bezel-dark-1, #808080);
+    }
+    .ch-gif-results img:active { opacity: 0.75; }
+    .ch-gif-status {
+        font-size: 11px;
+        color: var(--text-faint);
+        text-align: center;
+        padding: 12px;
+    }
+    .ch-gif-attribution {
+        font-size: 9px;
+        color: var(--text-faint);
+        text-align: right;
+        padding: 2px 4px;
+        flex-shrink: 0;
     }
     .ch-emoji:active {
         background: var(--accent);
@@ -646,7 +756,20 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
             </div>
             <div class="ch-feed" id="ch-feed"></div>
             <!-- Panel de emojis (toggle) -->
-            <div class="ch-emoji-panel" id="ch-emoji-panel"></div>
+            <div class="ch-emoji-panel" id="ch-emoji-panel">
+                <div class="ch-picker-tabs" id="ch-picker-tabs">
+                    <button type="button" data-tab="emoji" class="is-active">Emojis</button>
+                    <button type="button" data-tab="gifs">GIFs</button>
+                </div>
+                <div class="ch-picker-body">
+                    <div class="ch-picker-pane ch-pane-emoji" data-pane="emoji" id="ch-pane-emoji"></div>
+                    <div class="ch-picker-pane ch-pane-gifs" data-pane="gifs" id="ch-pane-gifs" hidden>
+                        <input type="text" class="ch-gif-search" id="ch-gif-search" placeholder="Buscar GIFs...">
+                        <div class="ch-gif-results" id="ch-gif-results"></div>
+                        <div class="ch-gif-attribution">Powered by Tenor</div>
+                    </div>
+                </div>
+            </div>
             <div class="ch-composer">
                 <button class="button ch-emoji-btn" id="ch-emoji-btn" type="button" aria-label="Emoji">☺</button>
                 <textarea id="ch-input" placeholder="Mensaje…" maxlength="2000"></textarea>

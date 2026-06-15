@@ -615,6 +615,26 @@
     opacity: 0.7;
     font-size: 9px;
 }
+/* Hipervínculos dentro de un mensaje. Heredan el color del bubble
+   para que sigan contrastando con accent/win-bg. */
+.chat-msg-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    word-break: break-all;
+}
+/* Imagen embebida (link a jpg/png/gif/webp/svg o GIF de Tenor).
+   Cuadrado máximo razonable; abre el original en nueva pestaña al click. */
+.chat-msg-img {
+    display: block;
+    max-width: 100%;
+    max-height: 260px;
+    margin: 2px 0;
+    border: 1px solid var(--bezel-dark-1, #808080);
+    object-fit: contain;
+    background: rgba(0,0,0,0.05);
+}
 /* Mensaje soft-deleted: italicized, faded, sin context menu posible. */
 .chat-bubble.is-deleted {
     font-style: italic;

@@ -54,6 +54,47 @@ function esc(s) {
         .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+/* Render del body de un mensaje:
+   - Detecta URLs (http(s)://… y www.…) y las convierte en hipervínculos
+     que abren en nueva pestaña.
+   - Si la URL apunta a una imagen (jpg/png/gif/webp), la pinta inline
+     como <img>. Discord/Tenor URLs típicas terminan en .gif y caen aquí.
+   - El texto SIN URLs se escapa con esc() para evitar XSS.
+   - Una URL "sola" sin texto alrededor también puede ser una imagen
+     embebida (la regex es greedy hasta whitespace o tag).
+*/
+const _URL_RE = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
+const _IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s#]*)?(#.*)?$/i;
+function _renderUrlToken(url) {
+    /* Normaliza www.… a http://www.… para que href sea válido. */
+    const isWww   = /^www\./i.test(url);
+    const fullUrl = isWww ? ('http://' + url) : url;
+    /* Detecta imagen por extensión (acepta query strings y fragmentos
+       — Discord/Drive sirven imágenes con ?ex=… y similares). */
+    if (_IMG_EXT_RE.test(url)) {
+        return '<a href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer">' +
+               '<img class="ch-msg-img" src="' + esc(fullUrl) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
+               '</a>';
+    }
+    return '<a class="ch-msg-link" href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer">' +
+           esc(url) + '</a>';
+}
+function renderMessageBody(text) {
+    const s = String(text == null ? '' : text);
+    if (!s) return '';
+    let out = '';
+    let lastIdx = 0;
+    let m;
+    _URL_RE.lastIndex = 0;
+    while ((m = _URL_RE.exec(s)) !== null) {
+        out += esc(s.slice(lastIdx, m.index));
+        out += _renderUrlToken(m[0]);
+        lastIdx = m.index + m[0].length;
+    }
+    out += esc(s.slice(lastIdx));
+    return out;
+}
+
 /* ── Win98 Alert / Confirm modales ──
    Reemplazos de alert()/confirm() nativos. Usan el mismo bezel Win98
    que el resto de modales del chat. chAlert resuelve cuando el usuario
@@ -399,7 +440,7 @@ function renderFeed(messages) {
         const time = formatTime(m.sentAt);
         const body = isDel
             ? '<span class="ch-msg-text">' + TRASH_ICON_HTML + 'Mensaje eliminado</span>'
-            : '<span class="ch-msg-text">' + esc(m.text) + '</span>';
+            : '<span class="ch-msg-text">' + renderMessageBody(m.text) + '</span>';
         const editedTag = (m.edited && !isDel)
             ? '<span class="ch-msg-edited">(editado)</span>'
             : '';
@@ -580,13 +621,18 @@ document.getElementById('ch-lp-nick-clear').addEventListener('click', async () =
 });
 
 /* ─────────────────────────────────────────────────────────
-   EMOJI PICKER
+   PICKER PANEL — Emojis + GIFs (Tenor)
    ───────────────────────────────────────────────────────── */
 const emojiPanel = document.getElementById('ch-emoji-panel');
-emojiPanel.innerHTML = EMOJI_SET.map(e =>
+const emojiPane  = document.getElementById('ch-pane-emoji');
+const gifsPane   = document.getElementById('ch-pane-gifs');
+const pickerTabs = document.getElementById('ch-picker-tabs');
+
+/* Rellena el pane de emojis con la lista pre-definida. */
+emojiPane.innerHTML = EMOJI_SET.map(e =>
     '<button class="ch-emoji" type="button" tabindex="-1">' + e + '</button>'
 ).join('');
-emojiPanel.addEventListener('click', (e) => {
+emojiPane.addEventListener('click', (e) => {
     const btn = e.target.closest('.ch-emoji');
     if (!btn) return;
     const inp = document.getElementById('ch-input');
@@ -597,6 +643,73 @@ emojiPanel.addEventListener('click', (e) => {
     inp.focus();
     inp.selectionStart = inp.selectionEnd = start + txt.length;
 });
+
+/* Tabs Emoji / GIF: cambia el pane visible. */
+pickerTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-tab]');
+    if (!btn) return;
+    const tab = btn.dataset.tab;
+    pickerTabs.querySelectorAll('button').forEach(b => b.classList.toggle('is-active', b === btn));
+    emojiPane.hidden = (tab !== 'emoji');
+    gifsPane.hidden  = (tab !== 'gifs');
+    /* Al abrir GIFs por primera vez, mostramos trending sin necesidad
+       de escribir nada. */
+    if (tab === 'gifs' && !gifsPane.dataset.loaded) {
+        gifsPane.dataset.loaded = '1';
+        searchTenor('');
+    }
+});
+
+/* Tenor: búsqueda + render del grid. Click en un GIF → envía un mensaje
+   con SU URL (el receptor la renderiza inline como imagen, gracias a
+   renderMessageBody). */
+const gifResults = document.getElementById('ch-gif-results');
+const gifSearch  = document.getElementById('ch-gif-search');
+let _gifDebounce = null;
+let _gifSeq = 0;
+async function searchTenor(q) {
+    const seq = ++_gifSeq;
+    gifResults.innerHTML = '<div class="ch-gif-status">Buscando…</div>';
+    try {
+        const r = await fetch('../../assets/profile/api.php?action=tenor-search&q=' + encodeURIComponent(q) + '&limit=24');
+        const d = await r.json();
+        /* Si el usuario tipeó algo nuevo mientras esto cargaba, lo
+           descartamos para no pisar resultados más recientes. */
+        if (seq !== _gifSeq) return;
+        if (d && d.code === 'tenorNotConfigured') {
+            gifResults.innerHTML = '<div class="ch-gif-status">Búsqueda de GIFs no configurada. Añade TENOR_API_KEY en .env.</div>';
+            return;
+        }
+        if (!d || !d.gifs || !d.gifs.length) {
+            gifResults.innerHTML = '<div class="ch-gif-status">Sin resultados.</div>';
+            return;
+        }
+        gifResults.innerHTML = d.gifs.map(g =>
+            '<img src="' + esc(g.preview) + '" data-url="' + esc(g.url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">'
+        ).join('');
+    } catch (e) {
+        if (seq !== _gifSeq) return;
+        gifResults.innerHTML = '<div class="ch-gif-status">Error de red.</div>';
+    }
+}
+gifSearch.addEventListener('input', () => {
+    clearTimeout(_gifDebounce);
+    _gifDebounce = setTimeout(() => searchTenor(gifSearch.value.trim()), 280);
+});
+gifResults.addEventListener('click', async (e) => {
+    const img = e.target.closest('img[data-url]');
+    if (!img) return;
+    const url = img.dataset.url;
+    closeEmojiPanel();
+    /* Inyecta la URL en el input + dispara submit del form para que
+       siga el mismo flujo que un mensaje normal (incluyendo optimistic
+       UI, ticks, etc.). */
+    const inp = document.getElementById('ch-input');
+    inp.value = url;
+    const form = inp.closest('form');
+    if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+});
+
 function toggleEmojiPanel() { emojiPanel.classList.toggle('is-open'); }
 function closeEmojiPanel()  { emojiPanel.classList.remove('is-open'); }
 document.getElementById('ch-emoji-btn').addEventListener('click', toggleEmojiPanel);
