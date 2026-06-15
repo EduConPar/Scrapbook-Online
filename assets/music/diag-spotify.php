@@ -86,7 +86,22 @@ if (!$token) {
 $out[] = "[TOKEN] obtenido (" . substr($token, 0, 8) . "…). ✔";
 $out[] = "";
 
-/* 3) Test de búsqueda contra Spotify. */
+/* 3) Test de búsqueda contra Spotify — OPT-IN con ?test=1.
+   Antes corría siempre, así que CADA visita al diagnóstico hacía 1
+   request real a Spotify y renovaba el ban cuando estaba activo. */
+if (!isset($_GET['test'])) {
+    $out[] = "[TEST] omitido (añade ?test=1 para hacer 1 request real a Spotify).";
+    $out[] = "";
+    $out[] = "─ Acciones disponibles ─";
+    $out[] = "  ?clear=1        → borra el guard + notFound transitorios cacheados.";
+    $out[] = "  ?set-guard=N    → re-arma el guard por N horas (1-48). Úsalo cuando";
+    $out[] = "                    Spotify devuelve 429 para parar de pegarle y dejar";
+    $out[] = "                    que el ban (por IP) expire solo.";
+    $out[] = "  ?test=1         → ejecuta UNA búsqueda real a Spotify (renueva el ban si está banneado).";
+    $out[] = "  ?q=TEXTO        → cambia la query del test (combina con ?test=1).";
+    echo implode("\n", $out), "\n";
+    exit;
+}
 $q = $_GET['q'] ?? 'never gonna give you up rick astley';
 $out[] = "[TEST] Búsqueda: " . $q;
 
@@ -138,17 +153,5 @@ if ($raw === false) {
         $out[] = "  ? Respuesta inesperada (200 chars): " . substr($raw, 0, 200);
     }
 }
-
-$out[] = "";
-$out[] = "─ Acciones disponibles ─";
-$out[] = "  ?clear=1        → borra el guard + notFound transitorios cacheados.";
-$out[] = "  ?set-guard=N    → re-arma el guard por N horas (1-48). Úsalo cuando";
-$out[] = "                    Spotify devuelve 429 para parar de pegarle y dejar";
-$out[] = "                    que el ban (por IP) expire solo.";
-$out[] = "  ?q=TEXTO        → cambia la query de prueba.";
-$out[] = "";
-$out[] = "⚠ Cada vez que abres este endpoint sin set-guard activo, se HACE 1 request";
-$out[] = "  a Spotify (el test de búsqueda). Si Spotify devuelve 429, renovás su contador.";
-$out[] = "  → NO lo recargues mientras esté banneado.";
 
 echo implode("\n", $out), "\n";
