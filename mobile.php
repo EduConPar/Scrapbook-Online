@@ -668,15 +668,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         body.mu-hidden .mu-vinyl-label {
             animation-play-state: paused !important;
         }
-        /* Cuando el lock screen está visible, ralentizamos el vinyl
-           drásticamente (6s → 30s por vuelta). El usuario lo está mirando
-           justo antes de bloquear el móvil — 5× menos work compositor
-           por segundo, el ojo no nota la lentitud sutil. La rotación
-           sigue siendo continua, no es estática. */
-        .mu-lock.visible #mu-lock-vinyl,
-        .mu-lock.visible .mu-vinyl-label {
-            animation-duration: 30s !important;
-        }
+        /* Lock screen minimalista: el vinyl está display:none, así que no
+           hay nada que ralentizar. Regla legacy eliminada. */
         .mu-vinyl::after {
             content: '';
             position: absolute; inset: 6px;
@@ -1074,81 +1067,43 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .shell-modal-actions .button { min-height: 28px; min-width: 70px; }
 
-        /* ── LOCK SCREEN ── */
+        /* ── LOCK SCREEN MINIMALISTA ──
+           Optimizada para batería en AMOLED:
+             - Fondo NEGRO puro (#000) → píxeles apagados en AMOLED.
+             - Sin filtro CRT (scanlines), sin viñeta, sin sombras.
+             - Sin animación de fade, sin blink del hint, sin transiciones.
+             - Vinilo, título y artista OCULTOS (display:none) — los
+               elementos siguen en el DOM para que el JS no rompa al
+               actualizarlos, pero no se pintan.
+             - Solo se ve el hint "↑ Desliza para desbloquear" en gris
+               medio #999 (AMOLED-friendly: ~50% menos consumo por píxel
+               que blanco puro).
+             - contain:strict aísla el subtree del compositor. */
         .mu-lock {
             position: fixed; inset: 0;
             z-index: 250;
-            background: #0a0a0a;
-            color: #22cc66;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 1.2s ease, visibility 0s linear 1.2s;
+            display: none;
+            background: #000;
+            color: #999;
+            -webkit-tap-highlight-color: transparent;
+            contain: strict;
         }
-        .mu-lock.visible {
-            opacity: 1;
-            visibility: visible;
-            transition: opacity 1.2s ease, visibility 0s linear 0s;
-        }
-        .mu-lock::after {
-            content: '';
-            position: absolute; inset: 0;
-            background: repeating-linear-gradient(to bottom,
-                rgba(255,255,255,0.04) 0,
-                rgba(255,255,255,0.04) 1px,
-                transparent 1px, transparent 3px);
-            mix-blend-mode: screen;
-            pointer-events: none;
-        }
-        .mu-lock-stage {
-            position: relative; z-index: 2;
-            height: 100%;
-            display: flex; flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 24px;
-            gap: 18px;
-        }
-        .mu-lock-vinyl-wrap {
-            width: min(72vw, 300px);
-            aspect-ratio: 1;
-            position: relative;
-            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.6));
-        }
-        .mu-lock-title {
-            font-family: 'VT323', monospace;
-            font-size: 22px;
-            color: #22cc66;
-            text-shadow: 0 0 6px rgba(34, 204, 102, 0.65);
-            text-align: center;
-            max-width: 90%;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .mu-lock-artist {
-            font-family: 'VT323', monospace;
-            font-size: 16px;
-            color: rgba(34, 204, 102, 0.7);
-            text-shadow: 0 0 5px rgba(34, 204, 102, 0.55);
-            text-align: center;
-        }
+        .mu-lock.visible { display: block; }
+        .mu-lock-stage,
+        .mu-lock-vinyl-wrap,
+        .mu-lock-title,
+        .mu-lock-artist { display: none !important; }
         .mu-lock-hint {
             position: absolute;
-            left: 50%; bottom: max(40px, env(safe-area-inset-bottom) + 40px);
-            transform: translateX(-50%);
+            left: 0; right: 0;
+            bottom: max(28px, env(safe-area-inset-bottom) + 28px);
+            text-align: center;
             font-family: 'VT323', monospace;
-            font-size: 14px;
-            color: #22cc66;
-            text-shadow: 0 0 6px rgba(34, 204, 102, 0.65);
+            font-size: 12px;
             letter-spacing: 1.5px;
-            opacity: 0.8;
-            animation: mu-lock-blink 2s ease-in-out infinite;
-            white-space: nowrap;
+            color: #999;
             pointer-events: none;
-            z-index: 5;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-        }
-        @keyframes mu-lock-blink {
-            from { opacity: 1; }
-            to   { opacity: 0.25; }
+            white-space: nowrap;
         }
 
         /* iframe del YT — invisible al usuario, solo lo necesitamos
