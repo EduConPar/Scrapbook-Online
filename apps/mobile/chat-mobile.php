@@ -381,9 +381,9 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         word-break: break-all;
     }
     .ch-msg.is-mine .ch-msg-link { color: var(--accent-text); }
-    /* Imagen embebida (link a jpg/png/gif/webp o GIF de Tenor): ocupa
-       el ancho disponible del bubble, sin desbordar. Cuadrado máximo
-       240px para que GIFs grandes no rompan la conversación. */
+    /* Imagen embebida (link a jpg/png/gif/webp o GIF). Ocupa el ancho
+       disponible del bubble, sin desbordar. Cuadrado máximo 240px para
+       que GIFs grandes no rompan la conversación. Click abre lightbox. */
     .ch-msg-img {
         display: block;
         max-width: 100%;
@@ -392,6 +392,43 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         border: 1px solid var(--bezel-dark-1, #808080);
         object-fit: contain;
         background: rgba(0,0,0,0.05);
+        cursor: zoom-in;
+    }
+    /* Lightbox compartido del chat: overlay full-screen con la imagen
+       al máximo tamaño, click fuera o en la X → cierra. */
+    .ch-lightbox {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.92);
+        z-index: 99999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        cursor: zoom-out;
+        touch-action: none;
+    }
+    .ch-lightbox.is-open { display: flex; }
+    .ch-lightbox img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        cursor: default;
+    }
+    .ch-lightbox-close {
+        position: absolute;
+        top: max(12px, env(safe-area-inset-top));
+        right: 12px;
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.15);
+        border: 0;
+        border-radius: 50%;
+        color: #fff;
+        font-size: 22px;
+        font-weight: bold;
+        line-height: 1;
+        cursor: pointer;
     }
     .ch-msg.is-mine.is-deleted {
         background: var(--win-bg);
@@ -543,16 +580,20 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         display: flex;
         flex-direction: column;
     }
+    /* Base: solo control de tamaño en el flex parent. Cada pane define
+       su propio layout, padding y scroll internamente — meter overflow
+       y padding aquí rompía el flex column del pane GIFs (input
+       quedaba debajo de un wrapper scrollable mal dimensionado). */
     .ch-picker-pane {
         flex: 1;
         min-height: 0;
-        overflow-y: auto;
-        padding: 6px;
     }
     .ch-picker-pane.ch-pane-emoji {
         display: flex;
         flex-wrap: wrap;
         gap: 2px;
+        padding: 6px;
+        overflow-y: auto;
     }
     .ch-emoji {
         font-size: 22px;
@@ -563,11 +604,12 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         border: 1px solid transparent;
     }
     /* GIF picker: input de búsqueda fijo arriba, grid de previews
-       2 columnas en mobile. */
+       2 columnas en mobile. Padding propio (no heredado del base). */
     .ch-picker-pane.ch-pane-gifs {
         display: flex;
         flex-direction: column;
         gap: 6px;
+        padding: 6px;
     }
     /* `[hidden]` debe ir AL FINAL con !important para que gane al
        `display:flex` de cada pane específico cuando se cambia de tab.

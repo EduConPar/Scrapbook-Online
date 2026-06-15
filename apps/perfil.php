@@ -4130,9 +4130,11 @@ var PROFILE_USERS = <?php
         var isWww = /^www\./i.test(url);
         var full  = isWww ? ('http://' + url) : url;
         if (_CH_IMG_EXT_RE.test(url)) {
-            return '<a href="' + escHtml(full) + '" target="_blank" rel="noopener noreferrer">' +
-                   '<img class="chat-msg-img" src="' + escHtml(full) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
-                   '</a>';
+            /* Imagen embebida: click abre lightbox in-page; sin
+               envolver en <a> porque eso navegaría al link en lugar
+               de mostrar preview. El handler delegado más abajo
+               escucha clicks en .chat-msg-img. */
+            return '<img class="chat-msg-img" src="' + escHtml(full) + '" data-fullsrc="' + escHtml(full) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
         }
         return '<a class="chat-msg-link" href="' + escHtml(full) + '" target="_blank" rel="noopener noreferrer">' +
                escHtml(url) + '</a>';
@@ -4149,6 +4151,45 @@ var PROFILE_USERS = <?php
         }
         out += escHtml(s.slice(last));
         return out;
+    }
+
+    /* Lightbox del chat: preview grande al click en cualquier imagen
+       embebida. Setup una sola vez via flag global; el listener vive
+       en document para que capture clicks de cualquier mensaje futuro. */
+    if (!window.__chatLightboxReady) {
+        window.__chatLightboxReady = true;
+        document.addEventListener('click', function(e){
+            var img = e.target && e.target.closest && e.target.closest('.chat-msg-img');
+            if (!img) return;
+            e.preventDefault();
+            e.stopPropagation();
+            var src = img.dataset.fullsrc || img.src;
+            if (!src) return;
+            var lb = document.getElementById('chat-lightbox');
+            if (!lb) {
+                lb = document.createElement('div');
+                lb.id = 'chat-lightbox';
+                lb.className = 'chat-lightbox';
+                lb.innerHTML = '<img alt=""><button class="chat-lightbox-close" type="button" aria-label="Cerrar">×</button>';
+                lb.addEventListener('click', function(ev){
+                    if (ev.target === lb || ev.target.classList.contains('chat-lightbox-close')) {
+                        lb.classList.remove('is-open');
+                        lb.querySelector('img').src = '';
+                    }
+                });
+                document.body.appendChild(lb);
+            }
+            lb.querySelector('img').src = src;
+            lb.classList.add('is-open');
+        });
+        document.addEventListener('keydown', function(e){
+            if (e.key !== 'Escape') return;
+            var lb = document.getElementById('chat-lightbox');
+            if (lb && lb.classList.contains('is-open')) {
+                lb.classList.remove('is-open');
+                lb.querySelector('img').src = '';
+            }
+        });
     }
 
     function renderChatMessages(messages) {

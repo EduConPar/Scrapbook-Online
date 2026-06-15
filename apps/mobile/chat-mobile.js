@@ -70,11 +70,12 @@ function _renderUrlToken(url) {
     const isWww   = /^www\./i.test(url);
     const fullUrl = isWww ? ('http://' + url) : url;
     /* Detecta imagen por extensión (acepta query strings y fragmentos
-       — Discord/Drive sirven imágenes con ?ex=… y similares). */
+       — Discord/Drive sirven imágenes con ?ex=… y similares).
+       Click en la imagen abre el lightbox (handler delegado en el
+       feed); sin envolver en <a> porque eso navegaba al link
+       en lugar de mostrar preview. */
     if (_IMG_EXT_RE.test(url)) {
-        return '<a href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer">' +
-               '<img class="ch-msg-img" src="' + esc(fullUrl) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
-               '</a>';
+        return '<img class="ch-msg-img" src="' + esc(fullUrl) + '" data-fullsrc="' + esc(fullUrl) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
     }
     return '<a class="ch-msg-link" href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer">' +
            esc(url) + '</a>';
@@ -875,6 +876,60 @@ window.addEventListener('hashchange', handleHash);
         openChat(STATE._pendingOpenKey);
         STATE._pendingOpenKey = null;
     }
+})();
+
+/* ─────────────────────────────────────────────────────────
+   LIGHTBOX — preview de imagen/GIF en grande
+   Click en cualquier `.ch-msg-img` (imagen embebida o GIF de GIPHY
+   dentro de un mensaje) abre un overlay full-screen con la imagen
+   al máximo. Click fuera, en la X, o tecla Escape → cierra.
+   ───────────────────────────────────────────────────────── */
+(function setupLightbox(){
+    function ensureLightbox() {
+        let lb = document.getElementById('ch-lightbox');
+        if (lb) return lb;
+        lb = document.createElement('div');
+        lb.id = 'ch-lightbox';
+        lb.className = 'ch-lightbox';
+        lb.innerHTML = '<img alt=""><button class="ch-lightbox-close" type="button" aria-label="Cerrar">×</button>';
+        lb.addEventListener('click', function(e){
+            /* Solo cerramos si el click fue en el backdrop o en la X,
+               no si fue en la imagen (queremos que se pueda hacer
+               long-press para guardar, etc). */
+            if (e.target === lb || e.target.classList.contains('ch-lightbox-close')) {
+                closeLightbox();
+            }
+        });
+        document.body.appendChild(lb);
+        return lb;
+    }
+    function openLightbox(src) {
+        const lb = ensureLightbox();
+        lb.querySelector('img').src = src;
+        lb.classList.add('is-open');
+    }
+    function closeLightbox() {
+        const lb = document.getElementById('ch-lightbox');
+        if (!lb) return;
+        lb.classList.remove('is-open');
+        /* Libera el src para que la próxima apertura no flashe la
+           imagen anterior. */
+        lb.querySelector('img').src = '';
+    }
+    /* Listener delegado en TODO el feed del chat (no en cada msg). */
+    document.addEventListener('click', function(e){
+        const img = e.target.closest && e.target.closest('.ch-msg-img');
+        if (!img) return;
+        const src = img.dataset.fullsrc || img.src;
+        if (!src) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openLightbox(src);
+    });
+    /* Escape para cerrar (solo aplica con teclado físico). */
+    document.addEventListener('keydown', function(e){
+        if (e.key === 'Escape') closeLightbox();
+    });
 })();
 
 })();

@@ -624,8 +624,8 @@
     text-underline-offset: 2px;
     word-break: break-all;
 }
-/* Imagen embebida (link a jpg/png/gif/webp/svg o GIF de Tenor).
-   Cuadrado máximo razonable; abre el original en nueva pestaña al click. */
+/* Imagen embebida (link a jpg/png/gif/webp/svg o GIF de GIPHY).
+   Cuadrado máximo razonable. Click abre lightbox in-page. */
 .chat-msg-img {
     display: block;
     max-width: 100%;
@@ -634,6 +634,42 @@
     border: 1px solid var(--bezel-dark-1, #808080);
     object-fit: contain;
     background: rgba(0,0,0,0.05);
+    cursor: zoom-in;
+}
+/* Lightbox del chat: overlay full-screen con la imagen al máximo.
+   Click fuera o en la X cierra. */
+.chat-lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+    cursor: zoom-out;
+}
+.chat-lightbox.is-open { display: flex; }
+.chat-lightbox img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    cursor: default;
+}
+.chat-lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.15);
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
 }
 /* Mensaje soft-deleted: italicized, faded, sin context menu posible. */
 .chat-bubble.is-deleted {
