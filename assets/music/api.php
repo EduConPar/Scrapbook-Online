@@ -1203,45 +1203,85 @@ function _albumTracksFallbackByName(string $name, string $artist, string $origCa
     require_once __DIR__ . '/itunes-helpers.php';
     require_once __DIR__ . '/deezer-helpers.php';
 
-    /* iTunes search por álbum. entity=album devuelve collectionId. */
-    $q = $artist !== '' ? ($name . ' ' . $artist) : $name;
-    $url = 'https://itunes.apple.com/search?term=' . rawurlencode($q)
-         . '&entity=album&limit=5&country=US';
+    /* Normaliza para matching tolerante: lowercase, strip puntuación,
+       diacritics y colapsa whitespace. Sin esto "Ultrakill: Chaos /
+       Order" vs "Ultrakill Chaos Order" no matcheaban. */
+    $norm = function(string $s): string {
+        $s = mb_strtolower($s);
+        if (class_exists('Transliterator')) {
+            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+            if ($tr) { $r = $tr->transliterate($s); if ($r !== null) $s = $r; }
+        }
+        /* Mantiene unicode (japonés, etc.) pero quita puntuación ASCII. */
+        $s = preg_replace('/[\(\)\[\]\{\}\:\;\,\.\?\!\-\_\/\\\\&\|]/u', ' ', (string)$s);
+        $s = preg_replace('/\s+/u', ' ', (string)$s);
+        return trim((string)$s);
+    };
+    /* Variantes del nombre: original, sin texto entre paréntesis, y
+       palabras clave principales — para que "Ultrakill: Chaos / Order
+       (Original Game Soundtrack)" matchee "Ultrakill: Chaos / Order". */
+    $nameVariants = array_values(array_unique(array_filter([
+        $norm($name),
+        $norm((string)preg_replace('/\s*[\(\[][^\)\]]*[\)\]]/u', '', $name)),
+    ])));
+    /* Match tolerante: substring entre nombre normalizado y collectionName
+       normalizado en CUALQUIER dirección. */
+    $matches = function(string $candidate) use ($nameVariants, $norm): bool {
+        $cN = $norm($candidate);
+        if ($cN === '') return false;
+        foreach ($nameVariants as $nv) {
+            if ($nv === '') continue;
+            if ($nv === $cN) return true;
+            if (mb_strpos($cN, $nv) !== false) return true;
+            if (mb_strpos($nv, $cN) !== false) return true;
+        }
+        return false;
+    };
+
+    /* Genera queries: name+artist, name solo (por si artist confunde), y
+       variante sin paréntesis. Probamos cada una hasta encontrar match. */
+    $queries = array_values(array_unique(array_filter([
+        $artist !== '' ? ($name . ' ' . $artist) : $name,
+        $name,
+        (string)preg_replace('/\s*[\(\[][^\)\]]*[\)\]]/u', '', $name),
+    ])));
+
     $ctx = stream_context_create(['http' => [
         'timeout' => 6, 'ignore_errors' => true,
         'header'  => "User-Agent: MelonHub/1.0\r\n",
     ]]);
-    $raw  = @file_get_contents($url, false, $ctx);
-    $data = $raw ? json_decode($raw, true) : null;
-    if (is_array($data) && !empty($data['results'])) {
-        $nameN = mb_strtolower($name);
-        foreach ($data['results'] as $r) {
-            $collId = (string)($r['collectionId'] ?? '');
-            if ($collId === '') continue;
-            $collName = mb_strtolower((string)($r['collectionName'] ?? ''));
-            if ($collName === '' || (strpos($collName, $nameN) === false && strpos($nameN, $collName) === false)) continue;
-            $tracks = itunesGetAlbumTracks($collId);
-            if ($tracks) {
-                cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
-                return $tracks;
+
+    foreach ($queries as $q) {
+        if (trim($q) === '') continue;
+        /* iTunes search por álbum. entity=album devuelve collectionId. */
+        $url = 'https://itunes.apple.com/search?term=' . rawurlencode($q)
+             . '&entity=album&limit=10&country=US';
+        $raw  = @file_get_contents($url, false, $ctx);
+        $data = $raw ? json_decode($raw, true) : null;
+        if (is_array($data) && !empty($data['results'])) {
+            foreach ($data['results'] as $r) {
+                $collId = (string)($r['collectionId'] ?? '');
+                if ($collId === '' || !$matches((string)($r['collectionName'] ?? ''))) continue;
+                $tracks = itunesGetAlbumTracks($collId);
+                if ($tracks) {
+                    cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+                    return $tracks;
+                }
             }
         }
-    }
-    /* Deezer search por álbum. */
-    $dUrl = 'https://api.deezer.com/search/album?q=' . rawurlencode($q) . '&limit=5';
-    $dRaw = @file_get_contents($dUrl, false, $ctx);
-    $dData = $dRaw ? json_decode($dRaw, true) : null;
-    if (is_array($dData) && !empty($dData['data'])) {
-        $nameN = mb_strtolower($name);
-        foreach ($dData['data'] as $a) {
-            $aid   = (string)($a['id'] ?? '');
-            if ($aid === '') continue;
-            $aName = mb_strtolower((string)($a['title'] ?? ''));
-            if ($aName === '' || (strpos($aName, $nameN) === false && strpos($nameN, $aName) === false)) continue;
-            $tracks = deezerGetAlbumTracks($aid);
-            if ($tracks) {
-                cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
-                return $tracks;
+        /* Deezer search por álbum. */
+        $dUrl = 'https://api.deezer.com/search/album?q=' . rawurlencode($q) . '&limit=10';
+        $dRaw = @file_get_contents($dUrl, false, $ctx);
+        $dData = $dRaw ? json_decode($dRaw, true) : null;
+        if (is_array($dData) && !empty($dData['data'])) {
+            foreach ($dData['data'] as $a) {
+                $aid = (string)($a['id'] ?? '');
+                if ($aid === '' || !$matches((string)($a['title'] ?? ''))) continue;
+                $tracks = deezerGetAlbumTracks($aid);
+                if ($tracks) {
+                    cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+                    return $tracks;
+                }
             }
         }
     }

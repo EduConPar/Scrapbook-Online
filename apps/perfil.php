@@ -4977,6 +4977,12 @@ var PROFILE_USERS = <?php
                 window.setReproductorAlbumContext({
                     spotifyAlbumId: item.spotifyAlbumId,
                     albumName:      item.title  || '',
+                    /* albumArtist es hint crítico para que el fallback
+                       iTunes/Deezer encuentre el álbum cuando la key
+                       es spotify:* viejo. Sin esto, el server solo
+                       tiene el nombre y falla con álbumes japoneses /
+                       soundtracks donde el nombre no es único. */
+                    albumArtist:    item.artist || '',
                     image:          item.image  || '',
                 });
             }

@@ -1411,6 +1411,11 @@ window.setReproductorAlbumContext = function(albumInfo) {
         notFound:       false,
         spotifyAlbumId: albumInfo.spotifyAlbumId,
         albumName:      albumInfo.albumName || '',
+        /* albumArtist es hint para el fallback iTunes/Deezer cuando el
+           viewer del álbum se carga desde una key spotify:* vieja —
+           sin esto, el server busca solo por nombre y falla con
+           nombres ambiguos (japonés, soundtracks, etc.). */
+        albumArtist:    albumInfo.albumArtist || '',
         albumImage:     albumInfo.image     || '',
         isSingle:       false,
         matchTitle:     albumInfo.matchTitle || '',
@@ -1433,6 +1438,7 @@ function _applyAlbumState(payload) {
             albumKey:       albKey,
             spotifyAlbumId: payload.spotifyAlbumId || '',
             albumName:      payload.albumName || '',
+            albumArtist:    payload.albumArtist || payload.matchArtist || '',
             image:          payload.albumImage || '',
             isSingle:       !!payload.isSingle,
             /* Título del track que matcheó dentro del álbum — usado por
@@ -1571,9 +1577,21 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
             const param = (typeof albumId === 'string' && albumId.indexOf(':') !== -1)
                 ? 'key=' + encodeURIComponent(albumId)
                 : 'id='  + encodeURIComponent(albumId);
+            /* Si el caller no nos pasó hints, los tomamos del contexto
+               actual (_currentAlbum.albumName/albumArtist o playlist
+               track activo) — sin esto, álbumes spotify: del perfil
+               sin artist daban 404 (el name solo no es discriminante
+               en japonés, soundtracks, etc.). */
+            const effName   = albumName
+                            || (_currentAlbum && _currentAlbum.albumName)
+                            || '';
+            const effArtist = albumArtist
+                            || (_currentAlbum && _currentAlbum.albumArtist)
+                            || ((typeof playlist !== 'undefined' && playlist[currentTrack]) ? playlist[currentTrack].artist : '')
+                            || '';
             let trackUrl = 'assets/music/api.php?action=album-tracks&' + param;
-            if (albumName)   trackUrl += '&name='   + encodeURIComponent(albumName);
-            if (albumArtist) trackUrl += '&artist=' + encodeURIComponent(albumArtist);
+            if (effName)   trackUrl += '&name='   + encodeURIComponent(effName);
+            if (effArtist) trackUrl += '&artist=' + encodeURIComponent(effArtist);
             const metaRes = await fetch(trackUrl);
             if (myToken !== _albumViewerToken) return; /* obsoleto */
             if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
