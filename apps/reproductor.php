@@ -1495,7 +1495,7 @@ function closeAlbumViewer() {
     _albumViewerToken++;
 }
 
-async function openAlbumViewer(albumId, albumName) {
+async function openAlbumViewer(albumId, albumName, albumArtist) {
     if (!albumId) return;
     const win = _albumViewerEl('album-viewer');
     if (!win) return;
@@ -1564,11 +1564,17 @@ async function openAlbumViewer(albumId, albumName) {
             /* `albumId` puede venir como 'itunes:123' / 'deezer:456' /
                'spotify:abc' (formato albumKey) o como un id Spotify
                desnudo (legacy). El backend acepta ?key= para el primer
-               formato y ?id= para el legacy, lo detectamos por el ':'. */
+               formato y ?id= para el legacy, lo detectamos por el ':'.
+               name + artist son HINTS para el fallback: si la key es
+               spotify:* y Spotify está banneado, el server intenta
+               resolver el mismo álbum en iTunes/Deezer por nombre. */
             const param = (typeof albumId === 'string' && albumId.indexOf(':') !== -1)
                 ? 'key=' + encodeURIComponent(albumId)
                 : 'id='  + encodeURIComponent(albumId);
-            const metaRes = await fetch('assets/music/api.php?action=album-tracks&' + param);
+            let trackUrl = 'assets/music/api.php?action=album-tracks&' + param;
+            if (albumName)   trackUrl += '&name='   + encodeURIComponent(albumName);
+            if (albumArtist) trackUrl += '&artist=' + encodeURIComponent(albumArtist);
+            const metaRes = await fetch(trackUrl);
             if (myToken !== _albumViewerToken) return; /* obsoleto */
             if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
             meta = await metaRes.json();

@@ -799,12 +799,32 @@ case 'find-album': {
         jsonResponse($result);
     };
 
+    /* PRE-LIMPIEZA aplicada a iTunes/Deezer (no solo a Spotify como
+       antes). Sin esto, títulos típicos de YouTube tipo "(Official
+       Audio)", "[HD]", "feat. X", "- 2012 Remaster", caían fuera de
+       los matches por similitud y la cascada terminaba en Spotify
+       (que está banneado → 503).
+       Artist con `;` (múltiples artistas separados) → tomamos solo
+       el primero: las APIs buscan mejor con un único nombre y los
+       restantes están casi siempre como "feat." dentro del título. */
+    $cleanTitleCascade = preg_replace(
+        '/[\[\(](?:official|music|video|audio|hd|hq|lyrics?|mv|m\/v|live|live performance|visualizer|extended|remaster(ed)?(\s+\d+)?)[\]\)\s\-]*/i',
+        ' ', $title
+    );
+    $cleanTitleCascade = preg_replace('/\s*(?:feat\.?|ft\.?)\s+[^\(\[\-]+/i', ' ', (string)$cleanTitleCascade);
+    /* Quita guiones flotantes que quedan tras quitar "- 2012 Remaster". */
+    $cleanTitleCascade = preg_replace('/\s*-\s*$/', '', (string)$cleanTitleCascade);
+    $cleanTitleCascade = trim(preg_replace('/\s{2,}/', ' ', (string)$cleanTitleCascade));
+    if ($cleanTitleCascade === '') $cleanTitleCascade = $title;   /* fallback */
+    $primaryArtist = trim((string)preg_replace('/[;,&].*$/', '', $artist));
+    if ($primaryArtist === '') $primaryArtist = $artist;
+
     /* iTunes — cobertura altísima en repertorio occidental. */
-    $itunes = itunesSearchAlbumForTrack($title, $artist);
+    $itunes = itunesSearchAlbumForTrack($cleanTitleCascade, $primaryArtist);
     if ($itunes !== null) $persistAndReturn($itunes);
 
     /* Deezer — cubre los gaps de iTunes (electrónica, francés, etc.). */
-    $deezer = deezerSearchAlbumForTrack($title, $artist);
+    $deezer = deezerSearchAlbumForTrack($cleanTitleCascade, $primaryArtist);
     if ($deezer !== null) $persistAndReturn($deezer);
 
     /* ── Último recurso: Spotify ──
@@ -1170,9 +1190,21 @@ case 'album-tracks': {
         jsonResponse($r);
     }
 
-    /* Spotify: respeta el guard de rate-limit. */
+    /* Spotify: respeta el guard de rate-limit. Si está activo Y el
+       cliente nos pasó hints (name + artist), intentamos resolver el
+       mismo álbum vía iTunes/Deezer por nombre — sirve para "migrar"
+       los items antiguos del perfil que tenían albumKey spotify:* sin
+       que el usuario tenga que borrarlos y re-añadirlos.
+       Si NO hay hints, devolvemos 503 como antes. */
     $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
     if ($rateLimitedUntil > time()) {
+        $hintName   = trim((string)($_GET['name']   ?? ''));
+        $hintArtist = trim((string)($_GET['artist'] ?? ''));
+        if ($hintName !== '') {
+            /* iTunes search por álbum (entity=album) y devuelve sus tracks. */
+            $fallback = _albumTracksFallbackByName($hintName, $hintArtist, $cacheKey);
+            if ($fallback !== null) jsonResponse($fallback);
+        }
         jsonResponse(['error' => 'Spotify rate-limited', 'code' => 'rateLimited'], 503);
     }
     $token = getSpotifyToken();
@@ -1493,4 +1525,60 @@ case 'get-now-playing': {
 
 default:
     jsonError('Acción no válida: ' . $action, 400);
+}
+
+/* Fallback de album-tracks cuando el albumKey original es spotify:* y
+   Spotify está banneado. Busca el álbum por NOMBRE + artista en iTunes
+   primero, luego Deezer; si encuentra, devuelve su tracklist usando la
+   misma estructura que el case principal. Cachea el resultado bajo la
+   key original (`album_tracks_spotify_<id>`) para que la próxima petición
+   se sirva desde cache sin re-resolver. Devuelve null si nada matchea. */
+function _albumTracksFallbackByName(string $name, string $artist, string $origCacheKey): ?array {
+    require_once __DIR__ . '/cache-helpers.php';
+    require_once __DIR__ . '/itunes-helpers.php';
+    require_once __DIR__ . '/deezer-helpers.php';
+
+    /* iTunes search por álbum. entity=album devuelve collectionId. */
+    $q = $artist !== '' ? ($name . ' ' . $artist) : $name;
+    $url = 'https://itunes.apple.com/search?term=' . rawurlencode($q)
+         . '&entity=album&limit=5&country=US';
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 6, 'ignore_errors' => true,
+        'header'  => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+    $raw  = @file_get_contents($url, false, $ctx);
+    $data = $raw ? json_decode($raw, true) : null;
+    if (is_array($data) && !empty($data['results'])) {
+        $nameN = mb_strtolower($name);
+        foreach ($data['results'] as $r) {
+            $collId = (string)($r['collectionId'] ?? '');
+            if ($collId === '') continue;
+            $collName = mb_strtolower((string)($r['collectionName'] ?? ''));
+            if ($collName === '' || (strpos($collName, $nameN) === false && strpos($nameN, $collName) === false)) continue;
+            $tracks = itunesGetAlbumTracks($collId);
+            if ($tracks) {
+                cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+                return $tracks;
+            }
+        }
+    }
+    /* Deezer search por álbum. */
+    $dUrl = 'https://api.deezer.com/search/album?q=' . rawurlencode($q) . '&limit=5';
+    $dRaw = @file_get_contents($dUrl, false, $ctx);
+    $dData = $dRaw ? json_decode($dRaw, true) : null;
+    if (is_array($dData) && !empty($dData['data'])) {
+        $nameN = mb_strtolower($name);
+        foreach ($dData['data'] as $a) {
+            $aid   = (string)($a['id'] ?? '');
+            if ($aid === '') continue;
+            $aName = mb_strtolower((string)($a['title'] ?? ''));
+            if ($aName === '' || (strpos($aName, $nameN) === false && strpos($nameN, $aName) === false)) continue;
+            $tracks = deezerGetAlbumTracks($aid);
+            if ($tracks) {
+                cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+                return $tracks;
+            }
+        }
+    }
+    return null;
 }

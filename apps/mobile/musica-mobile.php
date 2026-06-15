@@ -3833,7 +3833,7 @@ function muOpenAlbumFromTrack(tr) {
    activo y para que reproducir un track NO cierre la ventana). */
 var _muAlbumFullCurrent = null; /* { albumId, album } o null */
 
-function _muOpenAlbumViewer(albumId, albumName) {
+function _muOpenAlbumViewer(albumId, albumName, albumArtist) {
     var fv = document.getElementById('mu-album-fullview');
     if (!fv) {
         /* Crea el overlay la primera vez. Reusable entre aperturas. */
@@ -3943,7 +3943,14 @@ function _muOpenAlbumViewer(albumId, albumName) {
     if (_muAlbumViewCache[albumId]) {
         applyAlbum(_muAlbumViewCache[albumId]);
     } else {
-        fetch('../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId))
+        /* Hints para el fallback de album-tracks cuando es spotify:* y
+           Spotify está banneado — el server intenta encontrar el mismo
+           álbum por nombre + artista en iTunes/Deezer. Sin esto, los
+           álbumes spotify: guardados antes del ban quedan "rotos". */
+        var trackUrl = '../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId);
+        if (albumName)   trackUrl += '&name='   + encodeURIComponent(albumName);
+        if (albumArtist) trackUrl += '&artist=' + encodeURIComponent(albumArtist);
+        fetch(trackUrl)
             .then(function(r){ return r.ok ? r.json() : null; })
             .then(function(data){
                 if (!data || data.error) {
@@ -4134,7 +4141,7 @@ function _muAddAlbumTrackToProfile(album, idx) {
 }
 
 /* ── Menú contextual del álbum (long-press en .mu-track-album). */
-function muOpenAlbumMenu(albumId, albumName) {
+function muOpenAlbumMenu(albumId, albumName, albumArtist) {
     var items = [
         { act: 'open',       label: '👁 Ver álbum' },
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
@@ -4157,7 +4164,7 @@ function muOpenAlbumMenu(albumId, albumName) {
         el.addEventListener('click', function(){
             var act = el.dataset.act;
             m.close();
-            if (act === 'open')       _muOpenAlbumViewer(albumId, albumName);
+            if (act === 'open')       _muOpenAlbumViewer(albumId, albumName, albumArtist);
             if (act === 'addProfile') _muLoadAndAddAlbumToProfile(albumId, albumName);
             if (act === 'addPl')      _muLoadAndAddAlbumToPlaylist(albumId, albumName);
         });
