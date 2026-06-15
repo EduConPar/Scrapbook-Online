@@ -631,10 +631,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 /* Si la foto se subió pero getUserImage no la encuentra,
                    el backend devuelve photoWarning con el diagnóstico.
-                   Lo mostramos en consola para diagnosticar pero
-                   seguimos al login: la cuenta sí está creada. */
+                   Lo mostramos COMO TEXTO en el status para que el
+                   usuario lo vea sin abrir DevTools, y NO hacemos el
+                   autologin → así pueden enviar el mensaje completo
+                   para diagnosticar. La cuenta sí queda creada; el
+                   usuario puede subir la foto desde Ajustes. */
                 if (d.photoWarning) {
-                    try { console.warn('[register] photo:', d.photoWarning); } catch (_) {}
+                    try { console.warn('[register] photo:', d.photoWarning, d.photoDebug || ''); } catch (_) {}
+                    status.style.color = 'var(--mh-error, #ffcc66)';
+                    status.textContent = '⚠ Cuenta creada, pero la foto NO se ha podido aplicar: '
+                        + d.photoWarning + ' — Inicia sesión normalmente y sube la foto desde Ajustes.';
+                    status.style.display = '';
+                    /* Botón para continuar al login manualmente. */
+                    var cont = document.createElement('button');
+                    cont.type = 'button';
+                    cont.className = 'button mh-cta-full';
+                    cont.style.marginTop = '8px';
+                    cont.textContent = 'Continuar al login';
+                    cont.addEventListener('click', function(){
+                        var loginForm2 = document.querySelector('.mh-tabpanel[data-panel="login"] form');
+                        if (loginForm2) {
+                            document.getElementById('usr').value = document.getElementById('registerUsername').value;
+                            document.getElementById('pwd').value = document.getElementById('registerPassword').value;
+                            loginForm2.submit();
+                        } else {
+                            window.location.href = 'mobile-landing.php';
+                        }
+                    });
+                    status.parentNode.insertBefore(cont, status.nextSibling);
+                    return;
                 }
                 /* Cuenta creada → auto-login con las credenciales que el
                    usuario acaba de escribir. Inyectamos los valores en el
@@ -767,22 +792,30 @@ if ('serviceWorker' in navigator) {
         deferredPrompt = e;
     });
 
+    /* Muestra el OK debajo del botón. Evita redirects al menú
+       principal — el usuario querrá abrir la PWA desde el icono
+       recién creado, no quedarse en la web. */
+    function showInstalled(){
+        if (btn.dataset.installed === '1') return;
+        btn.dataset.installed = '1';
+        btn.textContent = '✓ Instalada — ábrela desde el icono';
+        btn.disabled = true;
+    }
     btn.addEventListener('click', function() {
         if (!deferredPrompt) return;
         deferredPrompt.prompt();
         deferredPrompt.userChoice.then(function(choice){
             deferredPrompt = null;
             if (choice && choice.outcome === 'accepted') {
-                /* PWA instalada → al siguiente arranque desde el icono,
-                   mobile.php hará autologin con el token de la URL. */
-                window.location.href = 'mobile.php';
+                showInstalled();
             }
         });
     });
-
-    window.addEventListener('appinstalled', function() {
-        window.location.href = 'mobile.php';
-    });
+    /* Disparado por el navegador cuando termina el flujo de instalación
+       (independiente del botón — puede venir desde el "Añadir a inicio"
+       del menú del browser). NO redirige; deja la web visible y el
+       usuario decide cuándo abrir el icono. */
+    window.addEventListener('appinstalled', showInstalled);
 })();
 
 /* ── Switch a HTTPS desde el banner amarillo ───────────────────── */

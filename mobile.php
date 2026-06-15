@@ -52,8 +52,13 @@ if (isset($_GET['pwa']) || isset($_GET['t'])) {
 }
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
-    /* Móvil sin sesión → al pitch/login de la PWA. */
-    header('Location: mobile-landing.php');
+    /* Móvil sin sesión → al login manual. La landing PWA (pitch +
+       guía de instalación + register) sigue disponible vía el link
+       "¿No tienes cuenta? Crear una nueva" del propio login-manual,
+       o yendo a mobile-landing.php directo. Esto evita que cada vez
+       que se abre la app deslogueado se tenga que ver la guía de
+       instalación. */
+    header('Location: login-manual.php');
     exit;
 }
 

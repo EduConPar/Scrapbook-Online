@@ -183,30 +183,41 @@ if ($photoBlob !== null && $photoExt !== null) {
     }
 }
 
-/* Verificación final: que getUserImage() encuentre la foto que acabamos
-   de subir. Si NO la encuentra, ha habido un desajuste de paths/permisos
-   y avisamos al cliente con info de debug para no devolver "ok: true"
-   silenciando un fallo. La cuenta queda creada igual — el usuario puede
-   subir la foto desde Ajustes después. */
-$photoUrl = '';
-if ($hasPhoto) {
-    /* Forzamos un re-fetch limpio: ensureLoginUsers ya cargó la lista
-       antes del INSERT, así que el label del nuevo user no está en
-       memoria todavía. Pasamos $username directamente a getUserImage. */
-    $photoUrl = getUserImage($username);
-}
+/* Verificación final + diagnóstico detallado.
+   Tras meses de bugs intermitentes con la foto del registro, devolvemos
+   al cliente TODA la info necesaria para identificar el problema en
+   producción sin tener que abrir DevTools ni meterse en SSH:
+     - photoSaved: ¿getUserImage la ve?
+     - photoUrl: si sí, su URL relativa.
+     - photoDebug: paths, tamaños, permisos, sanitización del label. */
 $response = ['ok' => true, 'userKey' => $newKey, 'label' => $username];
 if ($hasPhoto) {
-    $response['photoUrl']    = $photoUrl;
-    $response['photoSaved']  = ($photoUrl !== '');
+    $photoUrl = getUserImage($username);
+    $response['photoUrl']   = $photoUrl;
+    $response['photoSaved'] = ($photoUrl !== '');
+
+    /* Diagnóstico detallado: solo si algo va mal (photoSaved=false). */
     if ($photoUrl === '') {
-        /* La foto se subió (move_uploaded_file OK), pero getUserImage
-           no la ve. Probable bug de path o de permisos de lectura — lo
-           reportamos para diagnosticar sin romper el registro. */
-        $expected = isset($dest) ? $dest : '?';
-        $response['photoWarning'] = 'La foto se guardó en ' . $expected
-            . ' pero getUserImage("' . $username . '") no la encuentra.'
-            . ' Revisa permisos del directorio o el sanitizado del label.';
+        $expected = isset($dest) ? $dest : '';
+        $debug = [
+            'expected_path'     => $expected,
+            'file_exists'       => $expected !== '' ? file_exists($expected) : null,
+            'file_size'         => ($expected !== '' && file_exists($expected)) ? filesize($expected) : null,
+            'file_readable'     => $expected !== '' && file_exists($expected) ? is_readable($expected) : null,
+            'username_input'    => $username,
+            'sanitized_label'   => preg_replace('/[^A-Za-z0-9_-]/', '', $username),
+            'upload_dir'        => $uploadDir ?? '',
+            'upload_dir_exists' => isset($uploadDir) ? is_dir($uploadDir) : null,
+            'upload_dir_writable' => isset($uploadDir) ? is_writable($uploadDir) : null,
+            'photo_ext'         => $photoExt,
+            'blob_persisted'    => $photoBlob !== null,
+        ];
+        $response['photoDebug']   = $debug;
+        $response['photoWarning'] = 'getUserImage("' . $username . '") devolvió vacío. '
+            . 'Path esperado: ' . $expected . '. '
+            . 'file_exists=' . ($debug['file_exists'] ? 'sí' : 'NO')
+            . ', readable=' . ($debug['file_readable'] ? 'sí' : 'NO')
+            . ', size=' . ($debug['file_size'] ?? 'n/a');
     }
 }
 echo json_encode($response);
