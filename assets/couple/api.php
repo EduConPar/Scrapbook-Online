@@ -400,7 +400,7 @@ case 'upcoming-reminders': {
                 'title' => '🔔 Recordatorio',
                 'body'  => $m['titulo'] . ' ' . $whenStr,
                 'tag'   => 'reminder-' . $m['id'] . '-' . $m['threshold'],
-                'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=reminder',
+                'url'   => pushNotifBaseUrl() . 'mobile.php?pwa=1#notif=reminder',
             ]);
         }
     }
@@ -470,11 +470,11 @@ case 'respond-partner-invite': {
         sendPushToUser($pdo, (int)$fromId, [
             'title' => 'Invitación rechazada',
             'body'  => ucfirst($respLabel) . ' ha rechazado tu invitación al calendario.',
-            /* URL absoluta con el prefijo /scrapbookOnline/ y el ?pwa=1
-               para que matchee el start_url del manifest. Sin el prefijo
-               la PWA navegaba a /apps/calendario.php (404) y se salía
-               del contenedor standalone. */
-            'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=calendario',
+            /* URL portable construida con pushNotifBaseUrl() — usa la
+               base correcta del proyecto (localhost: `/scrapbookOnline/`,
+               producción: `/`). Sin esto la PWA navegaba a una ruta
+               inexistente y se salía del contenedor standalone. */
+            'url'   => pushNotifBaseUrl() . 'mobile.php?pwa=1#notif=calendario',
         ]);
         jsonResponse(['ok' => true]);
     }
@@ -494,9 +494,9 @@ case 'respond-partner-invite': {
     sendPushToUser($pdo, (int)$fromId, [
         'title' => '💕 ¡Sois pareja!',
         'body'  => ucfirst($respLabel) . ' ha aceptado tu invitación. Abrid el calendario juntos.',
-        /* Misma corrección que el reject — URL completa con prefijo del
-           proyecto y ?pwa=1 para PWA standalone. */
-        'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=calendario',
+        /* Misma corrección que el reject — URL portable con
+           pushNotifBaseUrl() para que funcione en local y producción. */
+        'url'   => pushNotifBaseUrl() . 'mobile.php?pwa=1#notif=calendario',
     ]);
 
     jsonResponse(['ok' => true]);

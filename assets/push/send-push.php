@@ -17,6 +17,25 @@
    - WebPush lib debe estar en assets/push/webpush.php.
 ═══════════════════════════════════════════════════════════════════ */
 
+/* Devuelve la URL base ABSOLUTA del proyecto a partir de SCRIPT_NAME,
+   con barra final. En XAMPP local típico: `/scrapbookOnline/`. En
+   Hostinger u otros hosts donde el sitio vive en la raíz: `/`. Evita
+   hardcodear `/scrapbookOnline/` en los payloads de push — eso rompía
+   las notifs en producción (URL → 404). */
+if (!function_exists('pushNotifBaseUrl')) {
+    function pushNotifBaseUrl(): string {
+        $s = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+        /* Los endpoints push siempre cuelgan de /assets/<X>/api.php o
+           similar. Cortar antes del primer /assets/ da exactamente la
+           base del proyecto. */
+        $pos = strpos($s, '/assets/');
+        if ($pos !== false) return substr($s, 0, $pos) . '/';
+        /* Fallback genérico: dirname de SCRIPT_NAME + '/'. */
+        $d = rtrim(str_replace('\\', '/', dirname($s)), '/');
+        return ($d === '' ? '/' : $d . '/');
+    }
+}
+
 if (!function_exists('sendPushToUser')) {
     function sendPushToUser(PDO $pdo, int $toUid, array $payload): void {
         $libPath = __DIR__ . '/webpush.php';
@@ -85,8 +104,10 @@ if (!function_exists('buildInvitePushPayload')) {
             'icon'  => $iconUrl,
             'tag'   => 'invite-' . $source,
             /* Deep-link: el shell móvil parsea #notif=<source> al cargar y
-               abre el sheet de invites pendientes. */
-            'url'   => '/scrapbookOnline/mobile.php?pwa=1#notif=' . $source,
+               abre el sheet de invites pendientes. Usamos la base
+               calculada dinámicamente — antes era `/scrapbookOnline/`
+               hardcodeado y rompía las notifs en producción. */
+            'url'   => pushNotifBaseUrl() . 'mobile.php?pwa=1#notif=' . $source,
         ];
     }
 }

@@ -437,13 +437,17 @@ function pf_tryWebPush(PDO $pdo, int $toUid, string $fromKey, string $text): voi
     if (!$subs) return;
 
     require_once $libPath;
+    /* Helper pushNotifBaseUrl() para construir URLs portables (localhost
+       y producción usan bases distintas). Vive en send-push.php. */
+    require_once dirname(__DIR__) . '/push/send-push.php';
     try { $wp = new WebPush(); } catch (Throwable $e) { return; }
 
     $fromLabel = $loginUsers[$fromKey]['label'] ?? $fromKey;
     /* Avatar del remitente como icono de la notificación. Si no hay
        avatar resoluble cae al notification-icon.png del SW (la sandía). */
     $fromAvatarRel = getUserImage($fromLabel);
-    $iconUrl = $fromAvatarRel !== '' ? ('/scrapbookOnline/' . $fromAvatarRel) : null;
+    $base = pushNotifBaseUrl();
+    $iconUrl = $fromAvatarRel !== '' ? ($base . $fromAvatarRel) : null;
     $payload = json_encode([
         'type'  => 'chat',
         'title' => '💬 ' . $fromLabel,
@@ -456,8 +460,8 @@ function pf_tryWebPush(PDO $pdo, int $toUid, string $fromKey, string $text): voi
            manifest (./mobile.php?pwa=1) — sin esto Chrome a veces no
            reconoce la URL como "perteneciente" a la PWA instalada y
            openWindow() abre una pestaña del navegador en vez del
-           contenedor standalone. */
-        'url'   => '/scrapbookOnline/mobile.php?pwa=1#chat=' . $fromKey,
+           contenedor standalone. La base es dinámica (localhost vs prod). */
+        'url'   => $base . 'mobile.php?pwa=1#chat=' . $fromKey,
     ], JSON_UNESCAPED_UNICODE);
 
     foreach ($subs as $s) {
