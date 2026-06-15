@@ -777,11 +777,42 @@ case 'find-album': {
         }
     }
 
-    /* GUARD GLOBAL DE RATE-LIMIT: Spotify devuelve Retry-After de
-       hasta 22 horas cuando saturamos el endpoint. Cada request que
-       hagamos durante ese plazo RENUEVA el contador. Si sabemos que
-       estamos en ban, devolvemos 503 inmediatamente sin tocar
-       Spotify — así el ban expira por sí solo. */
+    /* ══════════════════════════════════════════════════════════════
+       CASCADA DE FUENTES (iTunes → Deezer → Spotify)
+       ──────────────────────────────────────────────────────────────
+       Spotify queda como ÚLTIMO recurso para reducir al máximo nuestra
+       presión sobre su API (causa de bans persistentes). iTunes y
+       Deezer son endpoints públicos sin auth ni rate-limit estricto.
+
+       Cada hit se cachea bajo el mismo cacheKey/videoId, así que la
+       siguiente consulta se sirve del cache directamente — el orden de
+       la cascada solo aplica al PRIMER lookup de cada track. */
+    require_once __DIR__ . '/itunes-helpers.php';
+    require_once __DIR__ . '/deezer-helpers.php';
+
+    $persistAndReturn = function(array $result) use ($cacheKey, $videoId) {
+        $payload = json_encode($result, JSON_UNESCAPED_UNICODE);
+        cacheSet($cacheKey, $payload, 30 * 24 * 3600); /* 30 días */
+        if ($videoId !== '') {
+            cacheSet('album_track_v1_' . $videoId, $payload, 30 * 24 * 3600);
+        }
+        jsonResponse($result);
+    };
+
+    /* iTunes — cobertura altísima en repertorio occidental. */
+    $itunes = itunesSearchAlbumForTrack($title, $artist);
+    if ($itunes !== null) $persistAndReturn($itunes);
+
+    /* Deezer — cubre los gaps de iTunes (electrónica, francés, etc.). */
+    $deezer = deezerSearchAlbumForTrack($title, $artist);
+    if ($deezer !== null) $persistAndReturn($deezer);
+
+    /* ── Último recurso: Spotify ──
+       Si llegamos aquí, ni iTunes ni Deezer encontraron el track. Solo
+       casos raros (releases muy nuevos, k-pop poco conocido, etc.).
+       GUARD GLOBAL DE RATE-LIMIT: si el guard está activo, devolvemos
+       503 inmediato y dejamos que su ban (que cuenta por IP) expire.
+       Cada request que hagamos durante el plazo RENOVARÍA el contador. */
     $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
     if ($rateLimitedUntil > time()) {
         jsonResponse([
@@ -810,8 +841,42 @@ case 'find-album': {
        Devuelve [items, rateLimited]. rateLimited=true cuando Spotify
        responde 429 — el caller usa esto para NO cachear notFound
        (sería una decisión basada en un fallo temporal). */
-    $tryQuery = function(string $q) use ($token) {
+    $tryQuery = function(string $q) use ($token, $pdo) {
         if ($q === '') return [[], false];
+        /* ── THROTTLE SERVER-SIDE ──
+           Serializa entre TODOS los clientes simultáneos. Cada request
+           espera a que pase MIN_INTERVAL_MS desde la anterior (de
+           cualquier cliente). Implementado con MySQL GET_LOCK +
+           timestamp en app_cache.
+           Sin esto, N clientes concurrentes = N veces el rate del
+           cliente individual → ban garantizado por mucho que la cola
+           client-side espacie 300 ms. */
+        $MIN_INTERVAL_MS = 600;  /* ~1.6 req/s sostenido global */
+        $CAP_PER_DAY     = 8000; /* tope diario por si algo se desboca */
+        $dayKey = 'spotify_calls_' . date('Y-m-d');
+        $count = (int)cacheGet($dayKey);
+        if ($count >= $CAP_PER_DAY) return [[], true]; /* tope diario → rate-limited soft */
+
+        $gotLock = false;
+        try {
+            $st = $pdo->query("SELECT GET_LOCK('spotify_throttle', 8)");
+            $gotLock = ((int)$st->fetchColumn()) === 1;
+        } catch (Throwable $_) {}
+        if ($gotLock) {
+            try {
+                $lastUs = (float)cacheGet('spotify_last_call_us');
+                $nowUs  = microtime(true);
+                $deltaMs = ($nowUs - $lastUs) * 1000;
+                if ($deltaMs < $MIN_INTERVAL_MS) {
+                    usleep((int)(($MIN_INTERVAL_MS - $deltaMs) * 1000));
+                }
+                cacheSet('spotify_last_call_us', (string)microtime(true), 120);
+                cacheSet($dayKey, (string)($count + 1), 86400);
+            } finally {
+                try { $pdo->query("SELECT RELEASE_LOCK('spotify_throttle')"); } catch (Throwable $_) {}
+            }
+        }
+
         $url = 'https://api.spotify.com/v1/search?type=track&limit=10&market=US&q=' . rawurlencode($q);
         $ctx = stream_context_create(['http' => [
             'timeout' => 8, 'ignore_errors' => true,
@@ -830,12 +895,16 @@ case 'find-album': {
         if (is_array($data) && isset($data['error']['status']) && (int)$data['error']['status'] === 429) {
             $isRateLimited = true;
         }
-        /* Si Spotify nos da Retry-After largo (>10s), NO reintentamos
-           — significa que estamos en un ban serio (puede llegar a 22h).
-           Guardamos un guard global y devolvemos rate-limit; el caller
-           del próximo find-album entera ya saldrá temprano sin tocar
-           Spotify, así el ban expira sin renovarse. Para retry-after
-           pequeños (<=10s) sí intentamos UNA vez tras esperar. */
+        /* CUALQUIER 429 → guard global. NO reintentamos.
+           Bug histórico: si Retry-After era 0 o <=10s, el código antes
+           reintentaba en el sitio (doblando los requests fallidos) y NO
+           armaba el guard cuando Spotify devolvía 429 "Too many requests"
+           sin header (que es lo más común en bans agresivos). Eso
+           mantenía a Spotify renovándonos el ban indefinidamente: cada
+           find-album hacía 2-4 requests, todas 429, sin que el guard
+           se armara → el siguiente find-album repetía → spam.
+           Ahora: 429 detectado → mínimo 1h de guard (cap 24h con el
+           Retry-After si viene), return inmediato sin reintentar. */
         if ($isRateLimited) {
             $retryAfter = 0;
             foreach ($http_response_header ?? [] as $h) {
@@ -844,25 +913,10 @@ case 'find-album': {
                     break;
                 }
             }
-            if ($retryAfter > 10) {
-                /* Ban serio — persistimos hasta cuándo dura y no
-                   tocamos Spotify mientras tanto. Cap a 24h por
-                   seguridad. */
-                $until = time() + min($retryAfter, 24 * 3600);
-                cacheSet('spotify_rate_limited_until', (string)$until, min($retryAfter, 24 * 3600));
-                return [[], true];
-            }
-            usleep(($retryAfter ?: 1) * 1000000);
-            $raw2 = @file_get_contents($url, false, $ctx);
-            if ($raw2) {
-                $data2 = json_decode((string)$raw2, true);
-                $items2 = $data2['tracks']['items'] ?? null;
-                if ($items2 !== null) return [$items2, false];
-                if (stripos((string)$raw2, 'too many requests') !== false ||
-                    (is_array($data2) && isset($data2['error']['status']) && (int)$data2['error']['status'] === 429)) {
-                    return [[], true];
-                }
-            }
+            /* Mínimo 1h de guard incluso sin Retry-After. Cap a 24h. */
+            $duration = max(3600, min($retryAfter ?: 3600, 24 * 3600));
+            $until    = time() + $duration;
+            cacheSet('spotify_rate_limited_until', (string)$until, $duration);
             return [[], true];
         }
         return [$data['tracks']['items'] ?? [], false];
@@ -938,7 +992,10 @@ case 'find-album': {
         $candidates = array_merge($candidates, $items);
         $wasRateLimited = $wasRateLimited || $rl;
     }
-    if (count($candidates) < 3) {
+    /* Si la primera sub-query ya topó con 429, NO hacemos la segunda:
+       Spotify nos está rate-limitando, otra request solo renueva el ban.
+       Devolvemos rateLimited a la cascada que termina en 503 + no cache. */
+    if (!$wasRateLimited && count($candidates) < 3) {
         [$items, $rl] = $tryQuery(trim($cleanTitle . ' ' . $artist));
         $candidates = array_merge($candidates, $items);
         $wasRateLimited = $wasRateLimited || $rl;
@@ -999,11 +1056,14 @@ case 'find-album': {
         if (!empty($alb['images'])) {
             $img = $alb['images'][1]['url'] ?? $alb['images'][0]['url'] ?? '';
         }
+        $albId = (string)($alb['id'] ?? '');
         $result = [
             'notFound'       => false,
+            'source'         => 'spotify',
+            'albumKey'       => $albId !== '' ? ('spotify:' . $albId) : '',
             'albumName'      => $alb['name'] ?? '',
             'albumImage'     => $img,
-            'spotifyAlbumId' => $alb['id'] ?? '',
+            'spotifyAlbumId' => $albId, /* legacy field — el cliente legacy lo sigue mirando */
             'albumUrl'       => $alb['external_urls']['spotify'] ?? '',
             'isSingle'       => ($alb['album_type'] ?? '') === 'single',
             'releaseDate'    => $alb['release_date'] ?? '',
@@ -1058,16 +1118,63 @@ case 'find-album': {
    Devuelve: { name, artist, image, tracks: [{title, artist, duration}] } */
 case 'album-tracks': {
     require_once __DIR__ . '/spotify-helpers.php';
-    $albumId = preg_replace('/[^A-Za-z0-9]/', '', $_GET['id'] ?? '');
-    if (!$albumId) jsonError('id requerido');
+    require_once __DIR__ . '/itunes-helpers.php';
+    require_once __DIR__ . '/deezer-helpers.php';
 
-    $cacheKey = 'album_tracks_' . $albumId;
+    /* Acepta dos formas:
+         ?key=itunes:1440834378  / ?key=deezer:6975097  / ?key=spotify:abc
+         ?id=abc                 (legacy, asume Spotify)
+       Esto permite que el viewer del álbum se sirva desde iTunes o
+       Deezer sin tocar nunca a Spotify para los hits que vinieron de
+       esas fuentes — exactamente lo que reduce nuestra presión a la
+       API de Spotify al mínimo. */
+    $key   = (string)($_GET['key'] ?? '');
+    $idRaw = (string)($_GET['id']  ?? '');
+    $source = ''; $albumId = '';
+    if ($key !== '' && str_contains($key, ':')) {
+        [$src, $rest] = explode(':', $key, 2);
+        $source = strtolower(preg_replace('/[^a-z]/i', '', $src));
+        $albumId = $rest;
+    } elseif ($idRaw !== '') {
+        /* Legacy: cliente viejo manda ?id=spotify_id. */
+        $source = 'spotify';
+        $albumId = $idRaw;
+    }
+    if ($albumId === '' || !in_array($source, ['spotify', 'itunes', 'deezer'], true)) {
+        jsonError('key o id requeridos');
+    }
+    /* Sanitizamos según fuente — Spotify es alfanumérico, iTunes/Deezer
+       son numéricos. */
+    if ($source === 'spotify') $albumId = preg_replace('/[^A-Za-z0-9]/', '', $albumId);
+    else                       $albumId = preg_replace('/[^0-9]/', '', $albumId);
+    if ($albumId === '') jsonError('id inválido');
+
+    $cacheKey = 'album_tracks_' . $source . '_' . $albumId;
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
         if (is_array($decoded)) { jsonResponse($decoded); }
     }
 
+    /* iTunes / Deezer: sin auth ni rate-limit estricto, fetch directo. */
+    if ($source === 'itunes') {
+        $r = itunesGetAlbumTracks($albumId);
+        if (!$r) jsonError('No se pudo leer el álbum de iTunes', 502);
+        cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+        jsonResponse($r);
+    }
+    if ($source === 'deezer') {
+        $r = deezerGetAlbumTracks($albumId);
+        if (!$r) jsonError('No se pudo leer el álbum de Deezer', 502);
+        cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+        jsonResponse($r);
+    }
+
+    /* Spotify: respeta el guard de rate-limit. */
+    $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
+    if ($rateLimitedUntil > time()) {
+        jsonResponse(['error' => 'Spotify rate-limited', 'code' => 'rateLimited'], 503);
+    }
     $token = getSpotifyToken();
     if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
 

@@ -1414,9 +1414,16 @@ function _applyAlbumState(payload) {
     /* Reset por defecto: sin álbum, título no clickable. */
     _currentAlbum = null;
     if (playerTitle) playerTitle.classList.remove('has-album');
-    if (payload && !payload.notFound && payload.spotifyAlbumId) {
+    /* Aceptamos payloads del nuevo formato (albumKey con prefijo) y los
+       legacy (solo spotifyAlbumId). _normalizeAlbumPayload ya sintetiza
+       albumKey si falta, pero por defensa lo replicamos aquí. */
+    const albKey = (payload && (payload.albumKey
+                                || (payload.spotifyAlbumId ? ('spotify:' + payload.spotifyAlbumId) : '')))
+                   || '';
+    if (payload && !payload.notFound && albKey) {
         _currentAlbum = {
-            spotifyAlbumId: payload.spotifyAlbumId,
+            albumKey:       albKey,
+            spotifyAlbumId: payload.spotifyAlbumId || '',
             albumName:      payload.albumName || '',
             image:          payload.albumImage || '',
             isSingle:       !!payload.isSingle,
@@ -1546,7 +1553,14 @@ async function openAlbumViewer(albumId, albumName) {
             };
             if (myToken !== _albumViewerToken) return;
         } else {
-            const metaRes = await fetch('assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId));
+            /* `albumId` puede venir como 'itunes:123' / 'deezer:456' /
+               'spotify:abc' (formato albumKey) o como un id Spotify
+               desnudo (legacy). El backend acepta ?key= para el primer
+               formato y ?id= para el legacy, lo detectamos por el ':'. */
+            const param = (typeof albumId === 'string' && albumId.indexOf(':') !== -1)
+                ? 'key=' + encodeURIComponent(albumId)
+                : 'id='  + encodeURIComponent(albumId);
+            const metaRes = await fetch('assets/music/api.php?action=album-tracks&' + param);
             if (myToken !== _albumViewerToken) return; /* obsoleto */
             if (!metaRes.ok) throw new Error('No se pudo leer el álbum');
             meta = await metaRes.json();
@@ -1786,7 +1800,7 @@ if (playerTitle) {
     playerTitle.addEventListener('click', () => {
         if (!playerTitle.classList.contains('has-album')) return;
         if (!_currentAlbum) return;
-        openAlbumViewer(_currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+        openAlbumViewer(_currentAlbum.albumKey || _currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
     });
 }
 
@@ -2120,7 +2134,10 @@ function _resolveAlbumForRow(track, albumSpan) {
            border-left + padding del CSS (.pl-item-album-text). */
         albumSpan.textContent = norm.albumName;
         albumSpan.title = 'Ver álbum: ' + norm.albumName;
-        albumSpan.dataset.albumId = norm.spotifyAlbumId || '';
+        /* dataset.albumId guarda el albumKey prefijado (itunes:/deezer:/
+           spotify:) — lo aceptan tanto el openAlbumViewer como el viewer
+           del endpoint album-tracks. */
+        albumSpan.dataset.albumId   = norm.albumKey || norm.spotifyAlbumId || '';
         albumSpan.dataset.albumName = norm.albumName || '';
         albumSpan.style.display = '';
         /* Click → abre el viewer. Stop propagation para que no se cuente
@@ -2169,9 +2186,17 @@ function _resolveAlbumForRow(track, albumSpan) {
    usuario más de lo que ayudaba. */
 function _normalizeAlbumPayload(data /*, track */) {
     if (!data || data.notFound) return null;
-    if (!data.spotifyAlbumId) return null;
-    /* IDs sintéticos legacy (de un cache anterior) los descartamos
-       para no pintar el álbum fake. */
+    /* Una respuesta válida puede venir con `albumKey` (formato nuevo:
+       'itunes:ID' / 'deezer:ID' / 'spotify:ID') o solo con
+       `spotifyAlbumId` (formato legacy, equivalente a 'spotify:<id>').
+       Sintetizamos el `albumKey` si no viene, para que el resto del
+       código solo tenga que mirar un campo. */
+    if (!data.albumKey && data.spotifyAlbumId) {
+        data.albumKey = 'spotify:' + data.spotifyAlbumId;
+    }
+    if (!data.albumKey) return null;
+    /* IDs sintéticos legacy (de un cache anterior) → descartamos. */
+    if (data.albumKey.startsWith('synthetic:')) return null;
     if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
     return data;
 }

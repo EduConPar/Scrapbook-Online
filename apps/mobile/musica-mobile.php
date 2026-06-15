@@ -3753,10 +3753,17 @@ function _muAlbumQueueRun(jobFn) {
    álbum REAL (notFound / synthetic legacy / sin spotifyAlbumId). */
 function _muNormalizeAlbumPayload(data) {
     if (!data || data.notFound) return null;
-    if (!data.spotifyAlbumId) return null;
+    /* Nuevo: aceptamos `albumKey` (formato 'itunes:ID' / 'deezer:ID' /
+       'spotify:ID') o solo `spotifyAlbumId` legacy. Sintetizamos
+       albumKey si falta para que el resto del código solo lea uno. */
+    var key = data.albumKey
+           || (data.spotifyAlbumId ? ('spotify:' + data.spotifyAlbumId) : '');
+    if (!key) return null;
+    if (key.startsWith('synthetic:')) return null;
     if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
     return {
-        spotifyAlbumId: data.spotifyAlbumId,
+        albumKey:       key,
+        spotifyAlbumId: data.spotifyAlbumId || '',
         albumName:      data.albumName || '',
         albumImage:     data.albumImage || '',
         albumUrl:       data.albumUrl  || '',
@@ -3777,7 +3784,7 @@ function _muPaintAlbumForVid(vid, norm) {
             sp.dataset.albumName = '';
         } else {
             sp.textContent       = norm.albumName;
-            sp.dataset.albumId   = norm.spotifyAlbumId;
+            sp.dataset.albumId   = norm.albumKey || norm.spotifyAlbumId;
             sp.dataset.albumName = norm.albumName;
         }
     }
@@ -3848,7 +3855,7 @@ function muOpenAlbumFromTrack(tr) {
         _muOpenAlbumViewer(albumId, albumName);
     }
     if (cached) {
-        openWithMeta(cached.spotifyAlbumId, cached.albumName);
+        openWithMeta(cached.albumKey || cached.spotifyAlbumId, cached.albumName);
         return;
     }
     /* Sin cache: resolvemos AHORA (saltándose la cola para feedback
@@ -3868,7 +3875,7 @@ function muOpenAlbumFromTrack(tr) {
                 muAlert('No se encontró un álbum para esta canción.');
                 return;
             }
-            openWithMeta(norm.spotifyAlbumId, norm.albumName);
+            openWithMeta(norm.albumKey || norm.spotifyAlbumId, norm.albumName);
         })
         .catch(function(){ muAlert('Error de red al buscar el álbum.'); });
 }
@@ -3921,7 +3928,7 @@ function _muOpenAlbumViewer(albumId, albumName) {
     if (_muAlbumViewCache[albumId]) {
         paintTracks(_muAlbumViewCache[albumId]);
     } else {
-        fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+        fetch('../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId))
             .then(function(r){ return r.ok ? r.json() : null; })
             .then(function(data){
                 if (!data || data.error) {
@@ -3986,7 +3993,7 @@ function _muLoadAndAddAlbumToProfile(albumId, albumName) {
         muAddAlbumToProfile(albumId, _muAlbumViewCache[albumId]);
         return;
     }
-    fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+    fetch('../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId))
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(data){
             if (!data || data.error) { muAlert('No se pudo cargar el álbum.'); return; }
@@ -4000,7 +4007,7 @@ function _muLoadAndAddAlbumToPlaylist(albumId, albumName) {
         muAddAlbumToPlaylist(_muAlbumViewCache[albumId]);
         return;
     }
-    fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+    fetch('../../assets/music/api.php?action=album-tracks&' + ((typeof albumId === 'string' && albumId.indexOf(':') !== -1) ? 'key=' : 'id=') + encodeURIComponent(albumId))
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(data){
             if (!data || data.error) { muAlert('No se pudo cargar el álbum.'); return; }
@@ -4060,13 +4067,26 @@ function muAddAlbumToProfile(albumId, album) {
         var music = (Array.isArray(lists.music) ? lists.music : [])
             .filter(function(m){ return m && !m.sharedFrom; });
         /* Evita duplicar por spotifyAlbumId. */
+        /* dedupe por albumKey nuevo (acepta itunes:/deezer:/spotify:);
+           si el item legacy solo tiene spotifyAlbumId, lo comparamos
+           contra el id desnudo extraído del key. */
+        var bareId = (typeof albumId === 'string' && albumId.indexOf(':') !== -1)
+            ? albumId.split(':')[1] : albumId;
         var dup = music.some(function(m){
-            return m && m.type === 'album' && m.spotifyAlbumId === albumId;
+            if (!m || m.type !== 'album') return false;
+            if (m.albumKey && m.albumKey === albumId) return true;
+            if (m.spotifyAlbumId && m.spotifyAlbumId === bareId && albumId.indexOf('spotify:') === 0) return true;
+            return false;
         });
         if (dup) {
             muAlert('"' + (album.name || 'Álbum') + '" ya está en tu perfil');
             return;
         }
+        /* Guardamos albumKey (con prefijo) como fuente moderna.
+           spotifyAlbumId sigue solo cuando el origen era Spotify, para
+           que el código legacy de perfil que mira ese campo no se rompa. */
+        var spotifyId = (typeof albumId === 'string' && albumId.indexOf('spotify:') === 0)
+            ? albumId.slice(8) : '';
         music.push({
             id:             'music_' + Date.now(),
             type:           'album',
@@ -4074,7 +4094,8 @@ function muAddAlbumToProfile(albumId, album) {
             artist:         album.artist || '',
             image:          album.image  || '',
             featured:       false,
-            spotifyAlbumId: albumId
+            albumKey:       albumId,
+            spotifyAlbumId: spotifyId
         });
         saveProfileMusic(music, function(){
             muAlert('"' + (album.name || 'Álbum') + '" añadido a tu perfil', 'Añadido');
