@@ -71,7 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $deviceToken = mtCreateToken($pdo, $uid, $_SERVER['HTTP_USER_AGENT'] ?? null);
             $_SESSION['device_token'] = $deviceToken;
         }
-        $step = 2;
+        /* Login exitoso → entrar a la app directamente. Sin esto el flujo
+           caía en step=2 (guía de instalación PWA) y el usuario veía la
+           sesión "activa" sin enlace claro a la app: parecía un login
+           bloqueado. mobile.php es responsive y funciona en navegador
+           sin PWA, así que el login resuelve el caso navegador externo
+           sin obligar a pasar por la PWA. */
+        header('Location: mobile.php');
+        exit;
     }
 }
 ?>
