@@ -134,6 +134,16 @@ $apps = [
 ];
 usort($apps, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 
+/* db.php DEBE cargarse al scope de archivo ANTES de llamar a
+   getUserImage(). Razón: getUserImage cae en _restorePhotoFromDb()
+   cuando no encuentra la foto en uploads/profile-photos/, y esa función
+   hace `require_once db.php` DENTRO de la función. Si la primera carga
+   de db.php es desde dentro de una función, `$pdo = new PDO(...)` queda
+   en scope local; el `require_once` posterior a scope de archivo es
+   no-op (require_once ya cumplido), así que $pdo global nunca se
+   asigna → fatal null en todos los queries posteriores. */
+require_once __DIR__ . '/db.php';
+
 /* Avatar del usuario para mostrar en la cabecera.
    Usamos getUserImage() (helper canónico en assets/config.php) para
    que la cascada sea correcta:
