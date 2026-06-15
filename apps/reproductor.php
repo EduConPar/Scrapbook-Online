@@ -2256,18 +2256,17 @@ function _resolveAlbumForRow(track, albumSpan) {
    usuario más de lo que ayudaba. */
 function _normalizeAlbumPayload(data /*, track */) {
     if (!data || data.notFound) return null;
-    /* Una respuesta válida puede venir con `albumKey` (formato nuevo:
-       'itunes:ID' / 'deezer:ID' / 'spotify:ID') o solo con
-       `spotifyAlbumId` (formato legacy, equivalente a 'spotify:<id>').
-       Sintetizamos el `albumKey` si no viene, para que el resto del
-       código solo tenga que mirar un campo. */
-    if (!data.albumKey && data.spotifyAlbumId) {
-        data.albumKey = 'spotify:' + data.spotifyAlbumId;
-    }
-    if (!data.albumKey) return null;
-    /* IDs sintéticos legacy (de un cache anterior) → descartamos. */
-    if (data.albumKey.startsWith('synthetic:')) return null;
-    if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
+    /* SOLO aceptamos albumKey con prefijo itunes: o deezer:.
+       Las keys spotify:* y los legacy spotifyAlbumId quedan descartados:
+       devolvemos null para forzar un find-album fresh contra iTunes/Deezer.
+       Antes sintetizábamos `spotify:` + spotifyAlbumId y eso arrastraba
+       viewers rotos sobre álbumes que ya no se pueden cargar. */
+    if (!data.albumKey || typeof data.albumKey !== 'string') return null;
+    if (data.albumKey.indexOf('spotify:')   === 0) return null;
+    if (data.albumKey.indexOf('synthetic:') === 0) return null;
+    /* Limpiamos también el campo legacy para no contaminar el resto del
+       código que aún lo mira de forma defensiva. */
+    data.spotifyAlbumId = '';
     return data;
 }
 

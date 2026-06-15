@@ -3660,17 +3660,18 @@ function _muAlbumQueueRun(jobFn) {
    álbum REAL (notFound / synthetic legacy / sin spotifyAlbumId). */
 function _muNormalizeAlbumPayload(data) {
     if (!data || data.notFound) return null;
-    /* Nuevo: aceptamos `albumKey` (formato 'itunes:ID' / 'deezer:ID' /
-       'spotify:ID') o solo `spotifyAlbumId` legacy. Sintetizamos
-       albumKey si falta para que el resto del código solo lea uno. */
-    var key = data.albumKey
-           || (data.spotifyAlbumId ? ('spotify:' + data.spotifyAlbumId) : '');
+    /* Aceptamos albumKey con prefijo itunes:/deezer: ÚNICAMENTE.
+       Las keys spotify:* y los legacy spotifyAlbumId quedan descartados
+       (devolvemos null para que el caller dispare un find-album fresh
+       contra iTunes/Deezer). Antes sintetizábamos 'spotify:' + id y se
+       arrastraban viewers rotos. */
+    var key = data.albumKey || '';
     if (!key) return null;
-    if (key.startsWith('synthetic:')) return null;
-    if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
+    if (key.indexOf('spotify:') === 0) return null;     /* IGNORA spotify */
+    if (key.indexOf('synthetic:') === 0) return null;
     return {
         albumKey:       key,
-        spotifyAlbumId: data.spotifyAlbumId || '',
+        spotifyAlbumId: '',
         albumName:      data.albumName || '',
         albumImage:     data.albumImage || '',
         albumUrl:       data.albumUrl  || '',
