@@ -1988,7 +1988,12 @@ function _addAlbumToProfile() {
     window.profileAddAlbum({
         name:           meta.name,
         artist:         meta.artist || '',
-        image:          (_currentAlbum && _currentAlbum.image) || meta.image || '',
+        /* La portada SIEMPRE es la del álbum que el usuario tiene en el
+           viewer (meta.image). El fallback anterior a `_currentAlbum.image`
+           era un bug: ese es el álbum del track SONANDO, no el que se
+           está añadiendo. Si meta.image viene vacío, preferimos no foto
+           a una foto equivocada. */
+        image:          meta.image || '',
         spotifyAlbumId: albumId,
     });
 }
@@ -2005,7 +2010,9 @@ function _logAlbumPlay() {
         artist:         meta.artist || '',
         actionType:     'play',
         spotifyAlbumId: albumId,
-        coverUrl:       (_currentAlbum && _currentAlbum.image) || meta.image || '',
+        /* Portada del álbum del viewer, no del track sonando — mismo
+           bug que tenía `_addAlbumToProfile`. */
+        coverUrl:       meta.image || '',
     });
     try {
         if (navigator.sendBeacon) {
@@ -2030,23 +2037,31 @@ function _logAlbumPlay() {
 
    Si el match cae bajo el threshold de find-album (devuelve notFound),
    el span queda vacío — no mostramos información ruidosa. */
-/* ── Semáforo de concurrencia para find-album ──
-   El editor de playlist puede renderizar 20+ tracks, cada uno
-   disparando una request a find-album. Lanzarlas todas en paralelo
-   satura el rate-limit de Spotify (429), después de lo cual todas
-   devuelven "sin álbum". Limitamos a 3 simultáneas; el resto entra a
-   una cola y se ejecuta cuando se libera un slot. */
-const _ALBUM_CONCURRENCY = 3;
-let _albumInFlight = 0;
-const _albumQueue = [];
+/* ── Cola SERIAL con espaciado entre find-album ──
+   Spotify NO penaliza por concurrencia sino por TASA: 3 paralelas
+   continuas son ~150 req/s en bursts, que disparaba el
+   `Retry-After: 79080` (≈22h de ban). Una a la vez con ALBUM_GAP_MS
+   entre requests mantiene la sensación fluida (las primeras filas
+   visibles aparecen rápido) y baja el rate sostenido. Los hits del
+   cache del backend NO entran a la cola — se resuelven inmediatos. */
+const ALBUM_GAP_MS = 300;
+let _albumInFlight  = false;
+let _albumLastEndAt = 0;
+const _albumQueue   = [];
 function _albumNextSlot() {
-    if (_albumInFlight >= _ALBUM_CONCURRENCY || !_albumQueue.length) return;
-    _albumInFlight++;
-    const job = _albumQueue.shift();
-    job().finally(() => {
-        _albumInFlight--;
-        _albumNextSlot();
-    });
+    if (_albumInFlight || !_albumQueue.length) return;
+    const dueAt = _albumLastEndAt + ALBUM_GAP_MS;
+    const wait  = Math.max(0, dueAt - Date.now());
+    setTimeout(() => {
+        if (_albumInFlight || !_albumQueue.length) return;
+        _albumInFlight = true;
+        const job = _albumQueue.shift();
+        job().finally(() => {
+            _albumInFlight  = false;
+            _albumLastEndAt = Date.now();
+            _albumNextSlot();
+        });
+    }, wait);
 }
 function _albumQueueRun(jobFn) {
     _albumQueue.push(jobFn);
@@ -2087,12 +2102,16 @@ function _resolveAlbumForRow(track, albumSpan) {
     if (cached !== undefined) { paint(cached); return; }
 
     const params = new URLSearchParams({
-        title:  track.title || '',
-        artist: track.artist || '',
+        title:   track.title || '',
+        artist:  track.artist || '',
+        /* videoId habilita el cache compartido por video del backend
+           (#5): si otro usuario YA resolvió este mismo video, el
+           backend devuelve hit sin tocar Spotify. */
+        videoId: track.videoId || '',
     });
-    /* La request va a la cola del semáforo. Si la queja del backend es
-       "rate-limited" (HTTP 503 con code:rateLimited), no cacheamos
-       nada — la próxima visita al editor la reintenta. */
+    /* La request va a la cola serial con espaciado. Si la queja del
+       backend es "rate-limited" (HTTP 503 con code:rateLimited), no
+       cacheamos nada — la próxima visita al editor la reintenta. */
     _albumQueueRun(() => fetch('assets/music/api.php?action=find-album&' + params.toString())
         .then(r => {
             if (r.status === 503) return null; /* rate-limit transitorio: skip silente */
@@ -2147,8 +2166,9 @@ function resolveAndShowAlbum(track) {
        volver para no pintar el álbum de un track que ya no está. */
     const requestedFor = vId;
     const params = new URLSearchParams({
-        title:  track.title,
-        artist: track.artist || '',
+        title:   track.title,
+        artist:  track.artist || '',
+        videoId: vId,
     });
     fetch('assets/music/api.php?action=find-album&' + params.toString())
         .then(r => {

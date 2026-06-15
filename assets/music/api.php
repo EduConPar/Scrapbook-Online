@@ -676,15 +676,63 @@ case 'spotify-track': {
    ("Single" en vez del nombre del álbum). */
 case 'find-album': {
     require_once __DIR__ . '/spotify-helpers.php';
-    $title  = trim((string)($_GET['title']  ?? ''));
-    $artist = trim((string)($_GET['artist'] ?? ''));
+    $title   = trim((string)($_GET['title']  ?? ''));
+    $artist  = trim((string)($_GET['artist'] ?? ''));
+    $videoId = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($_GET['videoId'] ?? ''));
+    if (strlen($videoId) !== 11) $videoId = '';
     if ($title === '') jsonError('title requerido');
 
-    /* v4 — bumpeamos otra vez para invalidar los notFound:true que
-       quedaron cacheados durante 7 días al quitar la rama sintética en
-       el turn anterior. Esos cache hits hacían que el cliente recibiera
-       siempre notFound y "ninguna canción tuviera álbum". */
-    $cacheKey = 'album_lookup_v4_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    /* ── Cache key NORMALIZADA agresiva ──
+       Antes era `md5(lower(title) . '|' . lower(artist))` — variantes
+       triviales del mismo track ("Song (Official Audio)" vs "Song",
+       "Song feat. X" vs "Song", "Song - Remastered 2011" vs "Song")
+       hashaban distinto y disparaban requests duplicadas a Spotify
+       para el MISMO resultado. Strip ese ruido aquí dispara más hits
+       sin tocar el ranking del backend (que sigue usando el title
+       original para scoring). */
+    $normalizeForKey = function (string $s): string {
+        $s = mb_strtolower($s);
+        if (class_exists('Transliterator')) {
+            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+            if ($tr) $s = $tr->transliterate($s);
+        }
+        /* Strip "(Official ...)", "[HD]", "(Audio)", "(Lyric Video)",
+           "(Live)", "(Remastered YYYY)", "(Single Version)", etc. */
+        $s = preg_replace('/[\[\(](?:official|music|video|audio|hd|hq|lyric[s]?(?:\s+video)?|mv|m\/v|live(?:\s+performance)?|visualizer|extended|remaster(?:ed)?(?:\s+\d+)?|single(?:\s+version)?|radio(?:\s+edit)?|explicit|clean|stereo|mono)[\]\)\s\-\d]*/i', ' ', $s);
+        /* Strip "feat. X" / "ft. X" hasta el siguiente paréntesis o final. */
+        $s = preg_replace('/\s*(?:feat\.?|ft\.?|featuring)\s+[^\(\[\-]+/i', ' ', $s);
+        /* Strip puntuación + collapse whitespace. */
+        $s = preg_replace('/[^a-z0-9\s]/u', ' ', $s);
+        $s = preg_replace('/\s+/', ' ', $s);
+        return trim($s);
+    };
+
+    /* ── Lookup por VIDEO ID primero (#5) ──
+       Si el cliente nos da el videoId del track de YouTube, buscamos
+       primero un hit cacheado para ese videoId. Esto sobrevive a
+       cambios del título (re-uploads, ediciones del playlist, etc.)
+       y comparte cache entre usuarios distintos. Si hit → return
+       inmediato sin tocar Spotify. */
+    if ($videoId !== '') {
+        $vidKey = 'album_track_v1_' . $videoId;
+        $cachedVid = cacheGet($vidKey);
+        if ($cachedVid !== null) {
+            $decoded = json_decode($cachedVid, true);
+            if (is_array($decoded)
+                && empty($decoded['notFound'])
+                && !empty($decoded['spotifyAlbumId'])
+                && strpos((string)$decoded['spotifyAlbumId'], 'synthetic:') !== 0) {
+                jsonResponse($decoded);
+            }
+        }
+    }
+
+    /* v5 — bumpeamos para invalidar los notFound:true cacheados con la
+       key v4 (que no normalizaba el título — entradas tipo "Song
+       (Official Audio)" no se reusaban para "Song"). */
+    $titleN  = $normalizeForKey($title);
+    $artistN = $normalizeForKey($artist);
+    $cacheKey = 'album_lookup_v5_' . md5($titleN . '|' . $artistN);
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
@@ -695,6 +743,10 @@ case 'find-album': {
             && strpos((string)$decoded['spotifyAlbumId'], 'synthetic:') !== 0) {
             /* Solo aceptamos cache hit si tiene álbum REAL — un
                notFound o sintético legacy se reprocesa con la cascada. */
+            /* Replica al cache por videoId para futuras consultas. */
+            if ($videoId !== '') {
+                cacheSet('album_track_v1_' . $videoId, $cached, 7 * 24 * 3600);
+            }
             jsonResponse($decoded);
         }
     }
@@ -960,7 +1012,14 @@ case 'find-album': {
         $result = ['notFound' => true];
         cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 5 * 60);
     } else {
-        cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
+        $payload = json_encode($result, JSON_UNESCAPED_UNICODE);
+        cacheSet($cacheKey, $payload, 7 * 24 * 3600);
+        /* Doble-cacheamos también por videoId si el cliente lo envió,
+           para que el #5 (lookup por videoId) tenga hit en futuras
+           consultas — incluso si cambia el título exacto de YouTube. */
+        if ($videoId !== '') {
+            cacheSet('album_track_v1_' . $videoId, $payload, 7 * 24 * 3600);
+        }
     }
     jsonResponse($result);
 }
