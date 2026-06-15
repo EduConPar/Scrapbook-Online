@@ -58,6 +58,24 @@ if (isset($_GET['clear'])) {
     $out[] = "";
 }
 
+/* ?set-guard=HORAS — re-arma el guard para parar de pegar a Spotify y
+   dejar que su ban (que cuenta por IP) expire solo. Sin esto, cada
+   find-album dispara 429 → renueva contador en el lado de Spotify. */
+if (isset($_GET['set-guard'])) {
+    $hours = max(1, min(48, (int)$_GET['set-guard']));
+    $secs  = $hours * 3600;
+    $until = time() + $secs;
+    try {
+        cacheSet('spotify_rate_limited_until', (string)$until, $secs);
+        $out[] = "[SET-GUARD] Guard puesto por {$hours}h (hasta " . date('Y-m-d H:i:s', $until) . ").";
+        $out[] = "  Durante este tiempo find-album devuelve 503 sin tocar Spotify.";
+        $out[] = "  Eso permite que el ban de Spotify (que cuenta por IP) expire por sí solo.";
+    } catch (Throwable $e) {
+        $out[] = "[SET-GUARD] Error: " . $e->getMessage();
+    }
+    $out[] = "";
+}
+
 /* 2) Token de Spotify. */
 $token = getSpotifyToken();
 if (!$token) {
@@ -123,7 +141,14 @@ if ($raw === false) {
 
 $out[] = "";
 $out[] = "─ Acciones disponibles ─";
-$out[] = "  ?clear=1  → borra el guard + notFound transitorios cacheados.";
-$out[] = "  ?q=TEXTO  → cambia la query de prueba.";
+$out[] = "  ?clear=1        → borra el guard + notFound transitorios cacheados.";
+$out[] = "  ?set-guard=N    → re-arma el guard por N horas (1-48). Úsalo cuando";
+$out[] = "                    Spotify devuelve 429 para parar de pegarle y dejar";
+$out[] = "                    que el ban (por IP) expire solo.";
+$out[] = "  ?q=TEXTO        → cambia la query de prueba.";
+$out[] = "";
+$out[] = "⚠ Cada vez que abres este endpoint sin set-guard activo, se HACE 1 request";
+$out[] = "  a Spotify (el test de búsqueda). Si Spotify devuelve 429, renovás su contador.";
+$out[] = "  → NO lo recargues mientras esté banneado.";
 
 echo implode("\n", $out), "\n";
