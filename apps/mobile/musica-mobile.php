@@ -406,8 +406,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
 
         /* ─ Album viewer ─ ventana ENTERA fullscreen (no modal).
-           Cubre todo el viewport con su propia title-bar Win98 + body
-           scrolleable. Se pliega por encima del shell de mu-list. */
+           Cubre todo el viewport. El look se reaproxima al desktop:
+           body con padding 8px + gap 6px, lista de tracks en panel
+           hundido con fondo input-bg + bezel inset, header con cover
+           80×80 + título 13px bold + artista en text-muted. */
         #mu-album-fullview {
             position: fixed; inset: 0;
             z-index: 70;
@@ -419,71 +421,146 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             padding-bottom: env(safe-area-inset-bottom);
         }
         #mu-album-fullview.is-open { display: flex; }
-        .ma-titlebar {
-            flex-shrink: 0;
+        .ma-titlebar { flex-shrink: 0; }
+        /* Body interno con padding 8px + gap 6px (mismo que desktop). */
+        .mu-album-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            gap: 6px;
+            box-sizing: border-box;
         }
+        /* Header: cover + texto a la derecha, mismo layout que el
+           #album-viewer-header del desktop. */
         .mu-album-header {
-            display: flex; gap: 10px; align-items: center;
-            padding: 10px 12px 8px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
             flex-shrink: 0;
         }
         .mu-album-cover {
-            width: 90px; height: 90px;
+            width: 80px; height: 80px;
             object-fit: cover;
-            image-rendering: pixelated;
+            background: var(--surface-deep, var(--inset-bg, #000));
+            border: 1px solid var(--border, #808080);
             flex-shrink: 0;
-            background: var(--inset-bg, #000);
+            cursor: pointer;
         }
-        .mu-album-info { flex: 1; min-width: 0; }
-        .mu-album-name { font-size: 15px; font-weight: bold; line-height: 1.2; }
-        .mu-album-artist { font-size: 12px; color: var(--text-faint, #666); margin-top: 3px; }
-        .mu-album-actions {
-            display: flex; gap: 6px;
-            padding: 0 12px 10px;
-            flex-wrap: wrap;
-            flex-shrink: 0;
+        .mu-album-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
         }
-        .mu-album-actions .button { flex: 1 1 auto; min-width: 90px; font-size: 12px; }
-        .mu-album-actions .button.play-album {
-            flex-basis: 100%;
-            background: var(--accent, #1db954);
-            color: var(--accent-text, #fff);
+        .mu-album-name {
+            font-size: 13px;
+            color: var(--text, #000);
             font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
+        .mu-album-artist {
+            font-size: 11px;
+            color: var(--text-muted, var(--text-faint, #666));
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        /* Botones de acción: una fila después del header, antes del
+           panel de tracks. En desktop estos viven en el click-derecho
+           del cover; en móvil los dejamos visibles como botones porque
+           el long-press tiene otro propósito. */
+        .mu-album-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+        .mu-album-actions .button {
+            flex: 1 1 0;
+            min-width: 0;
+            font-size: 11px;
+            min-height: 26px;
+        }
+        /* Panel de tracks: idéntico al #album-viewer-tracks del desktop
+           — input-bg + border + sombra inset Win98. */
         .mu-album-tracks {
-            flex: 1; min-height: 0;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
-            border-top: 1px solid var(--border, #c0c0c0);
+            background: var(--input-bg, #fff);
+            border: 1px solid var(--border, #808080);
+            box-shadow: inset 1px 1px var(--bezel-dark-1, #808080);
             -webkit-overflow-scrolling: touch;
         }
-        /* Footer sticky con botón Volver — pulgar fácil sin tener que
-           ir a la X de arriba. Coincide con UX desktop. */
-        .mu-album-footer {
-            flex-shrink: 0;
-            padding: 8px 12px max(8px, env(safe-area-inset-bottom)) 12px;
-            border-top: 1px solid var(--border, #c0c0c0);
-            background: var(--win-bg, silver);
-        }
-        .mu-album-footer .button {
-            width: 100%;
-            min-height: 36px;
-            font-size: 13px;
-        }
+        /* Filas como en desktop: padding 4×6, border-bottom suave,
+           hover/playing pintan con el accent. */
         .mu-album-track {
-            display: flex; gap: 6px; align-items: center;
-            padding: 8px 12px;
-            border-bottom: 1px solid color-mix(in srgb, var(--border, #c0c0c0) 30%, transparent);
-            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 6px;
+            border-bottom: 1px solid var(--border, #c0c0c0);
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
+            color: var(--text, #000);
         }
+        .mu-album-track:last-child { border-bottom: none; }
         .mu-album-track:active,
-        .mu-album-track.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
-        .mu-album-track.is-playing { background: color-mix(in srgb, var(--accent, #1db954) 25%, transparent); font-weight: bold; }
-        .mu-album-track-num { width: 24px; flex-shrink: 0; color: var(--text-faint, #888); text-align: right; }
-        .mu-album-track-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mu-album-track-dur { color: var(--text-faint, #888); font-size: 11px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+        .mu-album-track.long-pressing {
+            background: color-mix(in srgb, var(--accent, #1db954) 22%, transparent);
+        }
+        .mu-album-track.is-playing {
+            background: color-mix(in srgb, var(--accent, #1db954) 22%, transparent);
+        }
+        .mu-album-track.is-playing .mu-album-track-title {
+            font-weight: bold;
+            color: var(--accent-deep, var(--accent, #1db954));
+        }
+        .mu-album-track-num {
+            width: 18px;
+            text-align: right;
+            font-size: 10px;
+            color: var(--text-muted, var(--text-faint, #888));
+            flex-shrink: 0;
+        }
+        .mu-album-track-title {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 11px;
+        }
+        .mu-album-track-dur {
+            width: 40px;
+            text-align: right;
+            color: var(--text-muted, var(--text-faint, #888));
+            font-size: 10px;
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+        /* Footer: botón Play álbum (principal) + botón Volver al lado.
+           El play queda primero por affordance; volver es defensivo. */
+        .mu-album-footer {
+            flex-shrink: 0;
+            display: flex;
+            gap: 6px;
+            padding: 0 0 max(0px, env(safe-area-inset-bottom)) 0;
+        }
+        .mu-album-footer .button { min-height: 30px; font-size: 12px; }
+        .mu-album-footer .button.play-album {
+            flex: 1;
+        }
+        .mu-album-footer .button.back-btn {
+            flex: 0 0 auto;
+            min-width: 86px;
+        }
         .mu-track-dur {
             color: var(--text-faint, #888);
             font-size: 11px;
@@ -2107,17 +2184,18 @@ document.getElementById('mu-player').addEventListener('click', function(e){
 });
 
 /* Tap en el título del reproductor GRANDE → cierra el fullscreen y
-   abre el viewer del álbum. Si el track aún no tiene álbum resuelto
-   en cache, muOpenAlbumFromTrack hace el find-album on-demand (igual
-   que tap en el título de un track de la lista). Antes exigía
-   `is-album-clickable` + dataset.albumKey y si no estaban no hacía
-   nada — UX confusa.
-   El style `cursor: pointer` se mantiene en el CSS para que se vea
-   pulsable; cerramos el fullscreen ANTES del open para que el viewer
-   aparezca solo (no encima del fullscreen). */
+   abre el viewer del álbum.
+   El handler antes estaba atado al span `#mu-full-title`, pero ese
+   span solo ocupa el ancho del texto (display:inline-block) — si el
+   título era corto, tocar a su lado caía fuera y no disparaba nada.
+   Ahora lo atamos al WRAP del título (zona completa de 1 línea con
+   ancho del LCD). Si el usuario toca en la zona del LCD pero fuera
+   del título, igual abrimos el álbum del track actual: el LCD entero
+   funciona como "info de la canción" y tocar ahí es intuitivo. */
 (function(){
-    var ft = document.getElementById('mu-full-title');
+    var ft = document.getElementById('mu-full-title-wrap');
     if (!ft) return;
+    ft.style.cursor = 'pointer';
     ft.addEventListener('click', function(e){
         e.stopPropagation();
         if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
@@ -3759,32 +3837,42 @@ function _muOpenAlbumViewer(albumId, albumName) {
         fv.innerHTML =
             '<div class="window ma-titlebar">' +
                 '<div class="title-bar">' +
-                    '<div class="title-bar-text" id="mu-album-view-titlebar-text">Álbum</div>' +
+                    '<div class="title-bar-text" id="mu-album-view-titlebar-text">' +
+                        '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">' +
+                        'Álbum' +
+                    '</div>' +
                     '<div class="title-bar-controls">' +
                         '<button aria-label="Close" id="mu-album-view-close" type="button"></button>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
-            '<div class="mu-album-header">' +
-                '<img class="mu-album-cover" id="mu-album-view-cover" alt="">' +
-                '<div class="mu-album-info">' +
-                    '<div class="mu-album-name" id="mu-album-view-name">Álbum</div>' +
-                    '<div class="mu-album-artist" id="mu-album-view-artist"></div>' +
+            /* Body interno que reproduce el layout del desktop:
+               header + actions + tracks (panel hundido) + footer. */
+            '<div class="mu-album-body">' +
+                '<div class="mu-album-header">' +
+                    '<img class="mu-album-cover" id="mu-album-view-cover" alt="">' +
+                    '<div class="mu-album-info">' +
+                        '<div class="mu-album-name" id="mu-album-view-name">Álbum</div>' +
+                        '<div class="mu-album-artist" id="mu-album-view-artist"></div>' +
+                    '</div>' +
                 '</div>' +
-            '</div>' +
-            '<div class="mu-album-actions">' +
-                '<button class="button play-album" type="button" data-act="playAlbum">▶ Reproducir álbum</button>' +
-                '<button class="button" type="button" data-act="addProfile">➕ Añadir a perfil</button>' +
-                '<button class="button" type="button" data-act="addPl">📋 Añadir a playlist</button>' +
-            '</div>' +
-            '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
-                '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>' +
-            '</div>' +
-            /* Footer con botón "← Volver" duplicado de la X de la
-               title-bar — el usuario móvil llega al final de la lista
-               y tiene el botón al alcance del pulgar sin scroll-up. */
-            '<div class="mu-album-footer">' +
-                '<button class="button" type="button" data-act="back">‹ Volver</button>' +
+                /* Acciones secundarias (las que en desktop viven en el
+                   click-derecho del cover). En móvil las dejo visibles
+                   porque el long-press tiene otra semántica. */
+                '<div class="mu-album-actions">' +
+                    '<button class="button" type="button" data-act="addProfile">+ Perfil</button>' +
+                    '<button class="button" type="button" data-act="addPl">+ Playlist</button>' +
+                '</div>' +
+                '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
+                    '<div class="album-viewer-msg" style="padding:14px;text-align:center;color:var(--text-muted,#888);">Cargando…</div>' +
+                '</div>' +
+                /* Footer: principal "Reproducir álbum" + secundario "Volver". */
+                '<div class="mu-album-footer">' +
+                    '<button class="button default play-album" type="button" data-act="playAlbum">' +
+                        '<span style="font-family:\'Lucida Console\',monospace;font-size:9px;margin-right:3px;">▶</span> Reproducir álbum' +
+                    '</button>' +
+                    '<button class="button back-btn" type="button" data-act="back">‹ Volver</button>' +
+                '</div>' +
             '</div>';
         document.body.appendChild(fv);
 
