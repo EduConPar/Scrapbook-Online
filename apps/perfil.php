@@ -494,10 +494,14 @@ if ($_perfilStandalone) {
             </div>
             <div id="pf-picker-body" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;">
                 <div id="pf-pane-emoji" data-pane="emoji" style="flex:1;min-height:0;overflow-y:auto;padding:6px;"></div>
-                <div id="pf-pane-gifs"  data-pane="gifs"  hidden style="flex:1;min-height:0;display:flex;flex-direction:column;gap:4px;padding:6px;">
+                <!-- `display:flex` lo aplica el tab handler (JS) cuando se
+                     selecciona la pestaña. Si va inline aquí, sobreescribe
+                     al atributo `hidden` y el panel queda visible siempre,
+                     pegado al fondo del panel de emojis. -->
+                <div id="pf-pane-gifs"  data-pane="gifs"  hidden style="flex:1;min-height:0;flex-direction:column;gap:4px;padding:6px;">
                     <input type="text" id="pf-gif-search" placeholder="Buscar GIFs..." style="font-size:12px;padding:3px 6px;box-sizing:border-box;width:100%;flex-shrink:0;">
                     <div id="pf-gif-results" style="flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;"></div>
-                    <div style="font-size:9px;color:var(--text-faint,#666);text-align:right;flex-shrink:0;">Powered by Tenor</div>
+                    <div style="font-size:9px;color:var(--text-faint,#666);text-align:right;flex-shrink:0;">Powered by GIPHY</div>
                 </div>
             </div>
         </div>
@@ -4197,7 +4201,20 @@ var PROFILE_USERS = <?php
             }
             listEl.appendChild(row);
         });
-        if (atBottom) listEl.scrollTop = listEl.scrollHeight;
+        if (atBottom) {
+            listEl.scrollTop = listEl.scrollHeight;
+            /* Las imágenes/GIFs del mensaje cargan asíncronamente y
+               expanden el feed después de este scroll. Si estábamos al
+               fondo, mantenemos el fondo cuando cada una termina de
+               cargar — antes los mensajes con imagen dejaban el chat
+               enganchado arriba del último msg de texto. */
+            listEl.querySelectorAll('img').forEach(function(img){
+                if (img.complete) return;
+                var pin = function(){ listEl.scrollTop = listEl.scrollHeight; };
+                img.addEventListener('load',  pin, { once: true });
+                img.addEventListener('error', pin, { once: true });
+            });
+        }
     }
 
     /* ──────────────────────────────────────────────
@@ -4545,7 +4562,11 @@ var PROFILE_USERS = <?php
                 input.focus();
                 input.setSelectionRange(start + em.length, start + em.length);
             });
-            /* Tabs Emoji/GIFs. */
+            /* Tabs Emoji/GIFs. Hidden + display explícito porque
+               cuando un pane usa flex internamente (el de GIFs), el
+               atributo `hidden` se rompe si el style inline declara
+               display:flex. Aquí controlamos display por JS para no
+               depender del orden de cascade. */
             tabsEl.addEventListener('click', function(e){
                 var t = e.target.closest('button[data-tab]');
                 if (!t) return;
@@ -4553,15 +4574,17 @@ var PROFILE_USERS = <?php
                 tabsEl.querySelectorAll('button').forEach(function(b){ b.classList.toggle('is-active', b === t); b.style.background = (b === t) ? 'var(--win-body-bg, var(--win-bg, silver))' : 'var(--win-bg, silver)'; b.style.fontWeight = (b === t) ? 'bold' : 'normal'; });
                 emojiPane.hidden = (which !== 'emoji');
                 gifsPane.hidden  = (which !== 'gifs');
+                emojiPane.style.display = (which === 'emoji') ? 'block' : 'none';
+                gifsPane.style.display  = (which === 'gifs')  ? 'flex'  : 'none';
                 if (which === 'gifs' && !gifsPane.dataset.loaded) {
                     gifsPane.dataset.loaded = '1';
-                    pfSearchTenor('');
+                    pfSearchGifs('');
                 }
             });
-            /* Tenor: búsqueda + render. Click en GIF → inyecta su URL en
+            /* GIPHY: búsqueda + render. Click en GIF → inyecta su URL en
                el input y dispara submit del form. */
             var _pfGifDebounce = null, _pfGifSeq = 0;
-            function pfSearchTenor(q) {
+            function pfSearchGifs(q) {
                 var seq = ++_pfGifSeq;
                 gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:11px;color:var(--text-faint,#888);">Buscando…</div>';
                 fetch('assets/profile/api.php?action=tenor-search&q=' + encodeURIComponent(q) + '&limit=24')
@@ -4569,7 +4592,7 @@ var PROFILE_USERS = <?php
                     .then(function(d){
                         if (seq !== _pfGifSeq) return;
                         if (d && d.code === 'tenorNotConfigured') {
-                            gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;font-size:11px;color:var(--text-faint,#888);">Búsqueda de GIFs no configurada. Añade TENOR_API_KEY en .env.</div>';
+                            gifResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;font-size:11px;color:var(--text-faint,#888);">Búsqueda de GIFs no configurada. Añade GIPHY_API_KEY en .env.</div>';
                             return;
                         }
                         if (!d || !d.gifs || !d.gifs.length) {
@@ -4587,7 +4610,7 @@ var PROFILE_USERS = <?php
             }
             gifInput.addEventListener('input', function(){
                 clearTimeout(_pfGifDebounce);
-                _pfGifDebounce = setTimeout(function(){ pfSearchTenor(gifInput.value.trim()); }, 280);
+                _pfGifDebounce = setTimeout(function(){ pfSearchGifs(gifInput.value.trim()); }, 280);
             });
             gifResults.addEventListener('click', function(e){
                 var img = e.target.closest('img[data-url]');

@@ -463,7 +463,20 @@ function renderFeed(messages) {
     }).join('');
     /* Long-press en MIS mensajes no eliminados → menú edit/delete. */
     feed.querySelectorAll('.ch-msg.is-mine:not(.is-deleted)').forEach(el => attachMsgLongPress(el));
-    if (wasAtBottom) feed.scrollTop = feed.scrollHeight;
+    if (wasAtBottom) {
+        feed.scrollTop = feed.scrollHeight;
+        /* Las imágenes/GIFs cargan asíncronamente y expanden el feed
+           DESPUÉS de este scroll. Si estábamos al fondo antes del
+           render, mantenemos el fondo a medida que cada imagen termina
+           de cargar — sin esto, los mensajes con imágenes dejaban la
+           vista enganchada arriba del último msg de texto. */
+        feed.querySelectorAll('img').forEach(function(img){
+            if (img.complete) return;
+            var pin = function(){ feed.scrollTop = feed.scrollHeight; };
+            img.addEventListener('load',  pin, { once: true });
+            img.addEventListener('error', pin, { once: true });
+        });
+    }
 }
 
 /* ── Long-press en mensaje → menu edit/delete ── */
@@ -656,18 +669,18 @@ pickerTabs.addEventListener('click', (e) => {
        de escribir nada. */
     if (tab === 'gifs' && !gifsPane.dataset.loaded) {
         gifsPane.dataset.loaded = '1';
-        searchTenor('');
+        searchGifs('');
     }
 });
 
-/* Tenor: búsqueda + render del grid. Click en un GIF → envía un mensaje
+/* GIPHY: búsqueda + render del grid. Click en un GIF → envía un mensaje
    con SU URL (el receptor la renderiza inline como imagen, gracias a
    renderMessageBody). */
 const gifResults = document.getElementById('ch-gif-results');
 const gifSearch  = document.getElementById('ch-gif-search');
 let _gifDebounce = null;
 let _gifSeq = 0;
-async function searchTenor(q) {
+async function searchGifs(q) {
     const seq = ++_gifSeq;
     gifResults.innerHTML = '<div class="ch-gif-status">Buscando…</div>';
     try {
@@ -677,7 +690,7 @@ async function searchTenor(q) {
            descartamos para no pisar resultados más recientes. */
         if (seq !== _gifSeq) return;
         if (d && d.code === 'tenorNotConfigured') {
-            gifResults.innerHTML = '<div class="ch-gif-status">Búsqueda de GIFs no configurada. Añade TENOR_API_KEY en .env.</div>';
+            gifResults.innerHTML = '<div class="ch-gif-status">Búsqueda de GIFs no configurada. Añade GIPHY_API_KEY en .env.</div>';
             return;
         }
         if (!d || !d.gifs || !d.gifs.length) {
@@ -694,7 +707,7 @@ async function searchTenor(q) {
 }
 gifSearch.addEventListener('input', () => {
     clearTimeout(_gifDebounce);
-    _gifDebounce = setTimeout(() => searchTenor(gifSearch.value.trim()), 280);
+    _gifDebounce = setTimeout(() => searchGifs(gifSearch.value.trim()), 280);
 });
 gifResults.addEventListener('click', async (e) => {
     const img = e.target.closest('img[data-url]');

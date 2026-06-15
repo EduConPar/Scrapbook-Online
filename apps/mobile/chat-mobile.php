@@ -549,7 +549,6 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         overflow-y: auto;
         padding: 6px;
     }
-    .ch-picker-pane[hidden] { display: none; }
     .ch-picker-pane.ch-pane-emoji {
         display: flex;
         flex-wrap: wrap;
@@ -566,12 +565,17 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
     /* GIF picker: input de búsqueda fijo arriba, grid de previews
        2 columnas en mobile. */
     .ch-picker-pane.ch-pane-gifs {
-        display: none;
+        display: flex;
         flex-direction: column;
         gap: 6px;
-        padding: 6px;
     }
-    .ch-picker-pane.ch-pane-gifs.is-active { display: flex; }
+    /* `[hidden]` debe ir AL FINAL con !important para que gane al
+       `display:flex` de cada pane específico cuando se cambia de tab.
+       Antes el orden de cascade dejaba siempre visible el emoji
+       (display:flex declarado después de [hidden]) y siempre oculto
+       el GIFs (display:none por defecto), causando que la barra de
+       búsqueda y el grid de emojis se vieran a la vez al fondo. */
+    .ch-picker-pane[hidden] { display: none !important; }
     .ch-gif-search {
         width: 100%;
         box-sizing: border-box;
@@ -766,7 +770,7 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
                     <div class="ch-picker-pane ch-pane-gifs" data-pane="gifs" id="ch-pane-gifs" hidden>
                         <input type="text" class="ch-gif-search" id="ch-gif-search" placeholder="Buscar GIFs...">
                         <div class="ch-gif-results" id="ch-gif-results"></div>
-                        <div class="ch-gif-attribution">Powered by Tenor</div>
+                        <div class="ch-gif-attribution">Powered by GIPHY</div>
                     </div>
                 </div>
             </div>
