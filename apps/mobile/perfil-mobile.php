@@ -39,15 +39,16 @@ try {
     if ($pareja) $parejaId = (int)$pareja['id'];
 } catch (Throwable $e) { /* sin pareja → momento sin asociar */ }
 
-/* Avatar del usuario logueado */
-$userImg = '';
-$safe = preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel);
-foreach (['png','jpg','jpeg','gif'] as $ext) {
-    if (file_exists(dirname(__DIR__, 2) . "/assets/img/{$safe}.{$ext}")) {
-        $userImg = "../../assets/img/{$safe}.{$ext}";
-        break;
-    }
-}
+/* Avatar del usuario logueado.
+   Usamos getUserImage() (helper canónico en assets/config.php) en lugar
+   de mirar a mano solo /assets/img/. La cascada correcta es:
+     1. uploads/profile-photos/{label}.{ext}  ← foto del registro
+     2. Restaurar desde BD usuarios.photo_data si filesystem se purgó
+     3. assets/img/{label}.{ext}              ← seeds shipped
+   getUserImage devuelve la ruta relativa a la raíz del proyecto, y
+   este archivo vive en /apps/mobile/, así que prefijamos `../../`. */
+$_userImgRel = getUserImage($userLabel);
+$userImg = $_userImgRel !== '' ? '../../' . $_userImgRel : '';
 
 /* ── VIEWING OTHER USER (?as=USERKEY) ──
    Si la query lleva ?as=USERKEY, estamos visitando el perfil de OTRA

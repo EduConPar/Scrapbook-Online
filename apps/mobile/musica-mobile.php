@@ -21,15 +21,13 @@ if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
 $userKey   = $_SESSION['user'];
 $userLabel = $loginUsers[$userKey]['label'];
 
-/* Helper para resolver el avatar de un usuario por label. */
+/* Helper para resolver el avatar de un usuario por label.
+   Delegamos en getUserImage() (assets/config.php) para que cubra
+   uploads/profile-photos/, restore desde BD y seed del repo. Este
+   archivo vive en /apps/mobile/ → prefijamos `../../`. */
 $resolveAvatar = function($label) {
-    $safe = preg_replace('/[^A-Za-z0-9_-]/', '', (string)$label);
-    foreach (['png','jpg','jpeg','gif'] as $ext) {
-        if (file_exists(dirname(__DIR__, 2) . "/assets/img/{$safe}.{$ext}")) {
-            return "../../assets/img/{$safe}.{$ext}";
-        }
-    }
-    return '';
+    $rel = getUserImage((string)$label);
+    return $rel !== '' ? '../../' . $rel : '';
 };
 $userImg = $resolveAvatar($userLabel);
 

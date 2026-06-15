@@ -13,16 +13,22 @@ require_once __DIR__ . '/assets/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 
-/* Móviles: dependiendo del estado de sesión, mandamos al destino más
-   directo posible (sin pasar por la landing PWA llena de pitch e
-   instrucciones de instalación):
-     - Con sesión activa → mobile.php (la app).
-     - Sin sesión        → login-manual.php (form de login simple).
-       Desde el login-manual hay un link "Crear cuenta nueva" que sí
-       va a mobile-landing.php para registro + guía de instalación.
+/* Móviles: el destino depende de si la PWA está instalada (cookie
+   `melon_installed`, seteada por mobile-landing.php cuando dispara
+   `appinstalled` o cuando se abre la PWA en modo standalone) y de si
+   hay sesión activa:
+     - Sin cookie de instalación → mobile-landing.php (pitch + guía
+                                   para instalar).
+     - Cookie + sesión activa    → mobile.php (la app).
+     - Cookie pero sin sesión    → login-manual.php (mismo form que
+                                   sale al cerrar sesión en la app).
    Override con ?desktop=1 (o cookie force_desktop). */
 if (isMobileDevice()) {
-    if (!empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']])) {
+    $hasSession   = !empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']]);
+    $appInstalled = !empty($_COOKIE['melon_installed']);
+    if (!$appInstalled) {
+        header('Location: mobile-landing.php');
+    } elseif ($hasSession) {
         header('Location: mobile.php');
     } else {
         header('Location: login-manual.php');

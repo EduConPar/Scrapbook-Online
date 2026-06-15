@@ -84,18 +84,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          el marcador pwa=1 para que el servidor establezca la sesión
          como PWA y permita el acceso. -->
     <script>
-    /* Solo saltamos a la app si ESTAMOS en standalone Y tenemos sesión.
-       Antes saltábamos sin checkear sesión, y como mobile.php redirige
-       a esta landing cuando no hay sesión, el ping-pong era infinito
-       (landing → mobile.php?pwa=1 → no session → landing → ...).
-       Si no hay sesión, dejamos que la landing renderice el form de
-       login normalmente, incluso si la PWA está abierta. */
+    /* Decisión temprana de destino. La landing es el pitch de instalación;
+       solo tiene sentido mostrarla cuando la PWA NO está instalada.
+         - Standalone (estamos dentro de la PWA): marcar instalación
+           persistente y saltar a la app (con sesión) o al login (sin sesión).
+         - Navegador con cookie `melon_installed=1` (instalada en pasado):
+           saltar a la app / login según sesión — sin pasar por el pitch.
+         - Navegador SIN cookie: mostrar la landing tal cual. */
     window.MELON_HAS_SESSION = <?= json_encode(!empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']])) ?>;
     (function(){
+        function setInstalled(){
+            /* Marca de instalación visible al server (no HttpOnly). 2 años
+               de vida — equivalente a la sesión larga. Se borra si el
+               usuario desinstala la PWA Y limpia cookies del navegador. */
+            try { document.cookie = 'melon_installed=1; max-age=63072000; path=/; SameSite=Lax'; } catch (_) {}
+        }
+        function hasInstalled(){
+            return /(?:^|;\s*)melon_installed=1(?:;|$)/.test(document.cookie || '');
+        }
         var sa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
               || window.navigator.standalone === true;
-        if (sa && window.MELON_HAS_SESSION) {
-            window.location.replace('mobile.php?pwa=1');
+        if (sa) {
+            setInstalled();
+            window.location.replace(window.MELON_HAS_SESSION ? 'mobile.php?pwa=1' : 'login-manual.php');
+            return;
+        }
+        /* Navegador externo. Si ya consta como instalada, no enseñamos
+           el pitch: vamos directo al destino útil. */
+        if (hasInstalled()) {
+            window.location.replace(window.MELON_HAS_SESSION ? 'mobile.php' : 'login-manual.php');
         }
     })();
     </script>
@@ -700,8 +717,10 @@ if ('serviceWorker' in navigator) {
     var isStandalone = window.matchMedia('(display-mode: standalone)').matches
                     || window.navigator.standalone === true;
     if (isStandalone) {
-        /* Ya estamos dentro de la PWA — la guía no aplica. */
-        window.location.replace('mobile.php');
+        /* Ya estamos dentro de la PWA — la guía no aplica. Red de seguridad
+           por si el script temprano del <head> no se ejecutó (defensivo). */
+        try { document.cookie = 'melon_installed=1; max-age=63072000; path=/; SameSite=Lax'; } catch (_) {}
+        window.location.replace(window.MELON_HAS_SESSION ? 'mobile.php' : 'login-manual.php');
         return;
     }
 
@@ -796,6 +815,10 @@ if ('serviceWorker' in navigator) {
        principal — el usuario querrá abrir la PWA desde el icono
        recién creado, no quedarse en la web. */
     function showInstalled(){
+        /* Persistir la marca de "PWA instalada" en cookie. index.php y
+           la propia landing la leen para saltarse el pitch en visitas
+           futuras desde el navegador externo. */
+        try { document.cookie = 'melon_installed=1; max-age=63072000; path=/; SameSite=Lax'; } catch (_) {}
         if (btn.dataset.installed === '1') return;
         btn.dataset.installed = '1';
         btn.textContent = '✓ Instalada — ábrela desde el icono';
