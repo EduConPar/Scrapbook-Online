@@ -597,20 +597,23 @@ case 'discord-publish': {
     if (!preg_match('#^https?://[^\s<>"\']+$#i', $img) || mb_strlen($img) > 2000) {
         jsonError('URL de imagen no válida');
     }
-    /* El webhook es UNO solo para toda la Melon Hub — vive en el .env
-       como DISCORD_WEBHOOK_URL. No se le pide a cada usuario, sino que
-       se exige que tengan Discord VINCULADO (discord_user_id) para que
-       el bot pueda darles los puntos de autismo por las reacciones. */
-    $webhook = env('DISCORD_WEBHOOK_URL', '');
-    if ($webhook === '') {
-        /* Devolvemos `code:'discordNotConfigured'` para que el cliente
-           distinga este caso (admin no ha puesto la var en .env) de un
-           fallo de red genérico, y muestre un texto neutral en vez de
-           un "error" alarmante. Para activarlo el admin debe crear un
-           webhook en Discord (Server Settings > Integrations > Webhooks)
-           y poner su URL en `DISCORD_WEBHOOK_URL` del .env. */
+    /* Publicación via BOT TOKEN al canal MELON_HUB_CHANNEL_ID.
+       Antes usábamos un webhook (DISCORD_WEBHOOK_URL) — más simple pero
+       requería crearlo a mano. Ahora reusamos el bot que ya está en el
+       servidor para dar puntos por reacciones: con
+         - DISCORD_BOT_TOKEN
+         - MELON_HUB_CHANNEL_ID
+       el bot postea directamente en ese canal. Si falta cualquiera de
+       las dos, devolvemos `code:'discordNotConfigured'` para que el
+       cliente muestre un texto neutral en vez de un error alarmante. */
+    $channelId = trim(env('MELON_HUB_CHANNEL_ID', ''));
+    $botToken  = trim(env('DISCORD_BOT_TOKEN', ''));
+    if ($channelId === '' || $botToken === '') {
+        $missing = [];
+        if ($channelId === '') $missing[] = 'MELON_HUB_CHANNEL_ID';
+        if ($botToken  === '') $missing[] = 'DISCORD_BOT_TOKEN';
         jsonResponse([
-            'error' => 'Publicar en Discord está desactivado por el administrador (falta DISCORD_WEBHOOK_URL en .env).',
+            'error' => 'Publicar en Discord está desactivado por el administrador (falta ' . implode(' + ', $missing) . ' en .env).',
             'code'  => 'discordNotConfigured'
         ], 503);
     }
@@ -680,22 +683,27 @@ case 'discord-publish': {
         'allowed_mentions' => ['parse' => []],
     ];
 
-    /* `?wait=true` para que Discord devuelva el JSON del mensaje
-       (incluyendo el id) en lugar de un 204 silencioso — necesario para
-       mapearlo a webhook_posts y dejar que el bot premie con autismo cada
-       reacción de corazón. */
-    $publishUrl = $webhook . (strpos($webhook, '?') === false ? '?' : '&') . 'wait=true';
+    /* Endpoint del bot: POST a /channels/{id}/messages. La respuesta YA
+       incluye el message_id (no hace falta ?wait=true como con webhooks). */
+    $publishUrl  = 'https://discord.com/api/v10/channels/' . rawurlencode($channelId) . '/messages';
+    $authHeader  = 'Authorization: Bot ' . $botToken;
+    /* Identificador "User-Agent" requerido por Discord para apps API.
+       Sin esto la API a veces rechaza con 400 BAD REQUEST. */
+    $uaHeader    = 'User-Agent: MelonHub (https://github.com, 1.0)';
 
     $ch = curl_init($publishUrl);
     if ($avatarFsPath) {
-        /* multipart/form-data: payload_json + files[0] (el avatar) */
+        /* multipart/form-data: payload_json + files[0] (el avatar).
+           NO añadimos Content-Type aquí — cURL lo construye con el boundary
+           correcto cuando POSTFIELDS es un array. */
         $postFields = [
             'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'files[0]'     => new CURLFile($avatarFsPath, $avatarMime, 'avatar.' . $avatarExt),
         ];
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $postFields,   // array → cURL hace multipart
+            CURLOPT_POSTFIELDS     => $postFields,
+            CURLOPT_HTTPHEADER     => [$authHeader, $uaHeader],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 20,
             CURLOPT_FOLLOWLOCATION => true,
@@ -704,7 +712,7 @@ case 'discord-publish': {
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_HTTPHEADER     => [$authHeader, $uaHeader, 'Content-Type: application/json'],
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 12,
             CURLOPT_FOLLOWLOCATION => true,

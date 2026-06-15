@@ -6,14 +6,34 @@
 @ini_set('display_errors', '0');
 error_reporting(E_ALL);
 
-if (!isset($desktopLabel)) { header('Location: index.php'); exit; }
+/* Base ABSOLUTA del proyecto (con barra final).
+   Este archivo se incluye desde stubs en /desktops/<user>-desktop.php.
+   Si hacemos `header('Location: index.php')` desde aquí, el navegador
+   lo interpreta como relativo al recurso pedido (el stub), no a la
+   raíz del proyecto → acaba navegando a `/desktops/index.php` (404).
+   Calculamos la base recortando `/desktops/` de `$_SERVER['SCRIPT_NAME']`:
+     - XAMPP local: SCRIPT_NAME=/scrapbookOnline/desktops/x-desktop.php → `/scrapbookOnline/`.
+     - Hostinger:   SCRIPT_NAME=/desktops/x-desktop.php → `/`.
+   El reabrir el navegador después de cerrar la pestaña dejaba al
+   usuario en una URL inexistente; con la base absoluta el redirect
+   apunta siempre al index.php correcto. */
+$_dbScript = (string)($_SERVER['SCRIPT_NAME'] ?? '');
+$_dbPos    = strpos($_dbScript, '/desktops/');
+if ($_dbPos !== false) {
+    $DESKTOP_BASE_URL = substr($_dbScript, 0, $_dbPos) . '/';
+} else {
+    $_dbDir = rtrim(str_replace('\\', '/', dirname($_dbScript)), '/');
+    $DESKTOP_BASE_URL = ($_dbDir === '' ? '/' : $_dbDir . '/');
+}
+
+if (!isset($desktopLabel)) { header('Location: ' . $DESKTOP_BASE_URL . 'index.php'); exit; }
 
 /* Móviles SIEMPRE entran por la landing (mobile-landing.php) — el
    escritorio Win98 no es accesible desde móvil. La landing decide si
    pintar el pitch de instalación o rebotar al home (cuando ya está
    dentro de la PWA). Override con ?desktop=1 o cookie force_desktop. */
 require_once __DIR__ . '/assets/mobile-detect.php';
-if (isMobileDevice()) { header('Location: mobile-landing.php'); exit; }
+if (isMobileDevice()) { header('Location: ' . $DESKTOP_BASE_URL . 'mobile-landing.php'); exit; }
 
 setLongSessionCookie();
 header('Content-Type: text/html; charset=UTF-8');
@@ -27,7 +47,7 @@ foreach ($loginUsers as $key => $user) {
 }
 
 if (!isset($_SESSION['user']) || $_SESSION['user'] !== $desktopUserKey) {
-    header('Location: index.php');
+    header('Location: ' . $DESKTOP_BASE_URL . 'index.php');
     exit;
 }
 
