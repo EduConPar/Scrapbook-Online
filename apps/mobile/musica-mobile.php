@@ -354,6 +354,53 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .mu-track:active .mu-track-artist,
         .mu-track.playing .mu-track-artist { color: var(--accent-text, #fff); }
+        /* Nombre del álbum del track — separado del artista por un
+           bullet sutil. Vacío hasta que find-album resuelve; tap abre
+           el viewer del álbum. */
+        .mu-track-album {
+            display: inline;
+            color: var(--accent, #1db954);
+            font-size: 11px;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+        }
+        .mu-track-album:empty { display: none; }
+        .mu-track-album:before { content: " · "; opacity: 0.5; }
+        /* Mientras se resuelve el long-press del album, da feedback. */
+        .mu-track-album.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+
+        /* ─ Album viewer ─ ventana modal con cover + lista de tracks. */
+        .mu-album-header {
+            display: flex; gap: 10px; align-items: center;
+            padding: 8px 10px 12px;
+        }
+        .mu-album-cover {
+            width: 80px; height: 80px;
+            object-fit: cover;
+            image-rendering: pixelated;
+            flex-shrink: 0;
+            background: var(--inset-bg, #000);
+        }
+        .mu-album-info { flex: 1; min-width: 0; }
+        .mu-album-name { font-size: 14px; font-weight: bold; }
+        .mu-album-artist { font-size: 12px; color: var(--text-faint, #666); margin-top: 2px; }
+        .mu-album-actions { display: flex; gap: 6px; padding: 0 10px 8px; flex-wrap: wrap; }
+        .mu-album-actions .button { flex: 1 1 auto; min-width: 100px; }
+        .mu-album-tracks { max-height: 50vh; overflow-y: auto; border-top: 1px solid var(--border, #c0c0c0); }
+        .mu-album-track {
+            display: flex; gap: 6px; align-items: center;
+            padding: 6px 10px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border, #c0c0c0) 30%, transparent);
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .mu-album-track:active { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+        .mu-album-track-num { width: 22px; flex-shrink: 0; color: var(--text-faint, #888); text-align: right; }
+        .mu-album-track-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mu-album-track-dur { color: var(--text-faint, #888); font-size: 11px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
         .mu-track-dur {
             color: var(--text-faint, #888);
             font-size: 11px;
@@ -1946,14 +1993,21 @@ function renderPlaylists() {
             /* Las estrellas de reseña NO se muestran en la app de música
                (la calificación vive en el perfil). Sigue el editor de
                reseña al añadir al perfil, pero los tracks no las pintan. */
+            /* mu-track-title-clickable: zona del título que abre el
+               album viewer. mu-track-album: aparece tras find-album
+               (vacío hasta entonces; data-vid identifica el track
+               para el resolver loop). */
             html += '<div class="mu-track" data-pl-idx="' + i + '" data-tr-idx="' + ti + '">' +
                       '<div class="mu-track-num">' + (ti + 1) + '</div>' +
                       (thumbUrl
                         ? '<img class="mu-track-thumb" src="' + thumbUrl + '" alt="" loading="lazy">'
                         : '<div class="mu-track-thumb mu-track-thumb-ph"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>') +
                       '<div class="mu-track-info">' +
-                        '<div class="mu-track-title">' + esc(tr.title || tr.videoId) + '</div>' +
-                        (tr.artist ? '<div class="mu-track-artist">' + esc(tr.artist) + '</div>' : '') +
+                        '<div class="mu-track-title mu-track-title-clickable" data-vid="' + esc(tr.videoId || '') + '">' + esc(tr.title || tr.videoId) + '</div>' +
+                        '<div class="mu-track-artist">' +
+                          (tr.artist ? esc(tr.artist) : '') +
+                          '<span class="mu-track-album" data-vid="' + esc(tr.videoId || '') + '"></span>' +
+                        '</div>' +
                       '</div>' +
                       addedByHtml +
                       '<div class="mu-track-dur">' + (tr.duration ? fmtDur(tr.duration) : '—') + '</div>' +
@@ -2000,6 +2054,17 @@ function _lpResolve(target) {
         var pl = headEl.parentElement;
         var idx = parseInt(pl.dataset.plIdx, 10);
         return { el: headEl, cb: function(){ muOpenPlaylistMenu(idx); } };
+    }
+    /* Long-press sobre el nombre del álbum → menú con acciones del
+       ÁLBUM (añadir el álbum entero a perfil / playlist). Va antes de
+       `.mu-track` para que tenga prioridad. */
+    var albumEl = target.closest('.mu-track-album');
+    if (albumEl && albumEl.textContent.trim()) {
+        var albumId   = albumEl.dataset.albumId || '';
+        var albumName = albumEl.dataset.albumName || albumEl.textContent.trim();
+        if (albumId) {
+            return { el: albumEl, cb: function(){ muOpenAlbumMenu(albumId, albumName); } };
+        }
     }
     var trackEl = target.closest('.mu-track');
     if (trackEl) {
@@ -2066,6 +2131,21 @@ listEl.addEventListener('click', function(e){
     if (headEl) {
         var pl = headEl.parentElement;
         pl.classList.toggle('open');
+        return;
+    }
+    /* Tap en el título O en el nombre del álbum → abre album viewer
+       (NO reproduce). Buscamos ambos antes que el genérico de track. */
+    var titleEl = e.target.closest('.mu-track-title-clickable');
+    var albumEl = e.target.closest('.mu-track-album');
+    if (titleEl || albumEl) {
+        e.preventDefault();
+        e.stopPropagation();
+        var trEl = (titleEl || albumEl).closest('.mu-track');
+        if (!trEl) return;
+        var _pi = parseInt(trEl.dataset.plIdx, 10);
+        var _ti = parseInt(trEl.dataset.trIdx, 10);
+        var _tr = (PLAYLISTS[_pi] && PLAYLISTS[_pi].tracks || [])[_ti];
+        if (_tr) muOpenAlbumFromTrack(_tr);
         return;
     }
     var trackEl = e.target.closest('.mu-track');
@@ -3606,6 +3686,468 @@ function muLeavePlaylist(idx) {
     apiPost('leave-playlist', { id: pl.id, sharedFrom: pl.sharedFrom }).then(function(r){
         if (!r.ok) { muAlert((r.data && r.data.error) || 'Error al abandonar'); return; }
         loadPlaylists();
+    });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ÁLBUMES (paridad con desktop)
+   ────────────────────────────────────────────────────────────────
+   - Cache local por videoId.
+   - Cola SERIAL con espaciado (300ms) para find-album: protege a
+     Spotify del burst que provocaba Retry-After de 22h.
+   - Resolver loop: tras render, resuelve el álbum de cada track
+     visible y rellena `.mu-track-album` con su nombre.
+   - Click en el título o en el nombre del álbum → abre album viewer.
+   - Long-press sobre el nombre del álbum → menú con "Añadir álbum
+     a mi perfil" / "Añadir álbum a otra playlist".
+   - Viewer: cover, nombre, artista, lista de tracks. Click en un
+     track del álbum lo reproduce en una QUEUE temporal.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Cache local de álbumes por videoId. */
+var MU_ALBUM_CACHE_KEY = 'mu:album-cache:v1';
+var _muAlbumCache = null;
+function _muLoadAlbumCache() {
+    if (_muAlbumCache) return _muAlbumCache;
+    try { _muAlbumCache = JSON.parse(localStorage.getItem(MU_ALBUM_CACHE_KEY) || '{}'); }
+    catch (_) { _muAlbumCache = {}; }
+    return _muAlbumCache;
+}
+function _muSaveAlbumCache() {
+    try { localStorage.setItem(MU_ALBUM_CACHE_KEY, JSON.stringify(_muAlbumCache)); }
+    catch (_) {}
+}
+function _muAlbumCacheGet(vid) { return vid ? _muLoadAlbumCache()[vid] : undefined; }
+function _muAlbumCacheSet(vid, payload) {
+    if (!vid) return;
+    _muLoadAlbumCache()[vid] = payload;
+    _muSaveAlbumCache();
+}
+
+/* ── Cola SERIAL con espaciado de 300ms. */
+var MU_ALBUM_GAP_MS = 300;
+var _muAlbumInFlight  = false;
+var _muAlbumLastEndAt = 0;
+var _muAlbumQueue = [];
+function _muAlbumNextSlot() {
+    if (_muAlbumInFlight || !_muAlbumQueue.length) return;
+    var dueAt = _muAlbumLastEndAt + MU_ALBUM_GAP_MS;
+    var wait  = Math.max(0, dueAt - Date.now());
+    setTimeout(function(){
+        if (_muAlbumInFlight || !_muAlbumQueue.length) return;
+        _muAlbumInFlight = true;
+        var job = _muAlbumQueue.shift();
+        job().finally(function(){
+            _muAlbumInFlight  = false;
+            _muAlbumLastEndAt = Date.now();
+            _muAlbumNextSlot();
+        });
+    }, wait);
+}
+function _muAlbumQueueRun(jobFn) {
+    _muAlbumQueue.push(jobFn);
+    _muAlbumNextSlot();
+}
+
+/* ── Normaliza el payload del backend: devuelve null para tracks sin
+   álbum REAL (notFound / synthetic legacy / sin spotifyAlbumId). */
+function _muNormalizeAlbumPayload(data) {
+    if (!data || data.notFound) return null;
+    if (!data.spotifyAlbumId) return null;
+    if (typeof data.spotifyAlbumId === 'string' && data.spotifyAlbumId.startsWith('synthetic:')) return null;
+    return {
+        spotifyAlbumId: data.spotifyAlbumId,
+        albumName:      data.albumName || '',
+        albumImage:     data.albumImage || '',
+        albumUrl:       data.albumUrl  || '',
+        matchTitle:     data.matchTitle  || '',
+        matchArtist:    data.matchArtist || ''
+    };
+}
+
+/* ── Pinta el nombre del álbum en TODOS los spans .mu-track-album
+   con el mismo data-vid. */
+function _muPaintAlbumForVid(vid, norm) {
+    var spans = document.querySelectorAll('.mu-track-album[data-vid="' + vid + '"]');
+    for (var i = 0; i < spans.length; i++) {
+        var sp = spans[i];
+        if (!norm || !norm.albumName) {
+            sp.textContent = '';
+            sp.dataset.albumId   = '';
+            sp.dataset.albumName = '';
+        } else {
+            sp.textContent       = norm.albumName;
+            sp.dataset.albumId   = norm.spotifyAlbumId;
+            sp.dataset.albumName = norm.albumName;
+        }
+    }
+}
+
+/* ── Resuelve el álbum de UN track: cache primero, fetch (en cola) si
+   no hay cache, y pinta en TODOS los spans del DOM con ese videoId. */
+function _muResolveAlbumForTrack(tr) {
+    if (!tr || !tr.videoId) return;
+    var vid = tr.videoId;
+    var cached = _muAlbumCacheGet(vid);
+    if (cached !== undefined) { _muPaintAlbumForVid(vid, cached); return; }
+    var params = new URLSearchParams({
+        title:   tr.title  || '',
+        artist:  tr.artist || '',
+        videoId: vid
+    });
+    _muAlbumQueueRun(function(){
+        return fetch('../../assets/music/api.php?action=find-album&' + params.toString())
+            .then(function(r){
+                if (r.status === 503) return null;
+                return r.ok ? r.json() : null;
+            })
+            .then(function(data){
+                if (!data) return;
+                var norm = _muNormalizeAlbumPayload(data);
+                _muAlbumCacheSet(vid, norm || null);
+                _muPaintAlbumForVid(vid, norm);
+            })
+            .catch(function(){});
+    });
+}
+
+/* ── Bucle: tras cada render de playlists, resuelve los álbumes que
+   aún no tienen cache. Throttled vía la cola serial. */
+function _muResolveAllVisibleAlbums() {
+    if (!PLAYLISTS || !PLAYLISTS.length) return;
+    var seen = {};
+    PLAYLISTS.forEach(function(pl){
+        (pl.tracks || []).forEach(function(tr){
+            if (!tr.videoId || seen[tr.videoId]) return;
+            seen[tr.videoId] = true;
+            _muResolveAlbumForTrack(tr);
+        });
+    });
+}
+
+/* Hook: piggyback en renderPlaylists si existe. */
+(function hookRender(){
+    if (typeof renderPlaylists !== 'function') return;
+    var orig = renderPlaylists;
+    renderPlaylists = function(){
+        orig.apply(this, arguments);
+        setTimeout(_muResolveAllVisibleAlbums, 0);
+    };
+})();
+
+/* ── Album viewer: modal con cover + tracks. Cachea por albumId. */
+var _muAlbumViewCache = {};
+function muOpenAlbumFromTrack(tr) {
+    if (!tr || !tr.videoId) return;
+    var cached = _muAlbumCacheGet(tr.videoId);
+    function openWithMeta(albumId, albumName) {
+        if (!albumId) {
+            muAlert('No se encontró un álbum para esta canción.');
+            return;
+        }
+        _muOpenAlbumViewer(albumId, albumName);
+    }
+    if (cached) {
+        openWithMeta(cached.spotifyAlbumId, cached.albumName);
+        return;
+    }
+    /* Sin cache: resolvemos AHORA (saltándose la cola para feedback
+       inmediato al gesto del usuario). */
+    var params = new URLSearchParams({
+        title:   tr.title  || '',
+        artist:  tr.artist || '',
+        videoId: tr.videoId
+    });
+    fetch('../../assets/music/api.php?action=find-album&' + params.toString())
+        .then(function(r){ return r.status === 503 ? null : (r.ok ? r.json() : null); })
+        .then(function(data){
+            var norm = _muNormalizeAlbumPayload(data);
+            _muAlbumCacheSet(tr.videoId, norm || null);
+            _muPaintAlbumForVid(tr.videoId, norm);
+            if (!norm) {
+                muAlert('No se encontró un álbum para esta canción.');
+                return;
+            }
+            openWithMeta(norm.spotifyAlbumId, norm.albumName);
+        })
+        .catch(function(){ muAlert('Error de red al buscar el álbum.'); });
+}
+
+function _muOpenAlbumViewer(albumId, albumName) {
+    var bodyHtml =
+        '<div class="mu-album-header">' +
+            '<img class="mu-album-cover" id="mu-album-view-cover" alt="">' +
+            '<div class="mu-album-info">' +
+                '<div class="mu-album-name" id="mu-album-view-name">' + esc(albumName || 'Álbum') + '</div>' +
+                '<div class="mu-album-artist" id="mu-album-view-artist"></div>' +
+            '</div>' +
+        '</div>' +
+        '<div class="mu-album-actions">' +
+            '<button class="button" type="button" data-act="addProfile">➕ Añadir a perfil</button>' +
+            '<button class="button" type="button" data-act="addPl">📋 Añadir a playlist</button>' +
+        '</div>' +
+        '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
+            '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>' +
+        '</div>';
+    var m = muOpenModal({ title: 'Álbum', body: bodyHtml });
+
+    /* Carga tracks del álbum (cache por albumId). */
+    function paintTracks(album) {
+        document.getElementById('mu-album-view-cover').src = album.image || '';
+        document.getElementById('mu-album-view-name').textContent = album.name || albumName || 'Álbum';
+        document.getElementById('mu-album-view-artist').textContent = album.artist || '';
+        var tracksEl = document.getElementById('mu-album-view-tracks');
+        tracksEl.innerHTML = '';
+        if (!album.tracks || !album.tracks.length) {
+            tracksEl.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Álbum sin canciones.</div>';
+            return;
+        }
+        album.tracks.forEach(function(t, idx){
+            var row = document.createElement('div');
+            row.className = 'mu-album-track';
+            row.innerHTML =
+                '<div class="mu-album-track-num">' + (idx + 1) + '</div>' +
+                '<div class="mu-album-track-title">' + esc(t.title || '') +
+                    (t.artist ? ' <span style="color:var(--text-faint,#888);">— ' + esc(t.artist) + '</span>' : '') +
+                '</div>' +
+                '<div class="mu-album-track-dur">' + (t.duration ? fmtDur(t.duration) : '—') + '</div>';
+            row.addEventListener('click', function(){
+                m.close();
+                _muPlayAlbumFrom(album, idx);
+            });
+            tracksEl.appendChild(row);
+        });
+    }
+    if (_muAlbumViewCache[albumId]) {
+        paintTracks(_muAlbumViewCache[albumId]);
+    } else {
+        fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(data){
+                if (!data || data.error) {
+                    document.getElementById('mu-album-view-tracks').innerHTML =
+                        '<div style="padding:14px;text-align:center;color:var(--error-text,#c00);">No se pudo cargar el álbum.</div>';
+                    return;
+                }
+                _muAlbumViewCache[albumId] = data;
+                paintTracks(data);
+            })
+            .catch(function(){
+                document.getElementById('mu-album-view-tracks').innerHTML =
+                    '<div style="padding:14px;text-align:center;color:var(--error-text,#c00);">Error de red.</div>';
+            });
+    }
+    m.body.querySelector('[data-act="addProfile"]').addEventListener('click', function(){
+        var album = _muAlbumViewCache[albumId];
+        if (!album) { muAlert('Aún cargando el álbum…'); return; }
+        m.close();
+        muAddAlbumToProfile(albumId, album);
+    });
+    m.body.querySelector('[data-act="addPl"]').addEventListener('click', function(){
+        var album = _muAlbumViewCache[albumId];
+        if (!album) { muAlert('Aún cargando el álbum…'); return; }
+        m.close();
+        muAddAlbumToPlaylist(album);
+    });
+}
+
+/* ── Menú contextual del álbum (long-press en .mu-track-album). */
+function muOpenAlbumMenu(albumId, albumName) {
+    var items = [
+        { act: 'open',       label: '👁 Ver álbum' },
+        { act: 'addProfile', label: '➕ Añadir a mi perfil' },
+        { act: 'addPl',      label: '📋 Añadir a playlist' }
+    ];
+    var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint,#666);">' +
+                     esc(albumName || 'Álbum') +
+                   '</p>' +
+                   '<div class="mu-modal-list">';
+    items.forEach(function(it){
+        bodyHtml += '<div class="mu-modal-list-item" data-act="' + it.act + '">' +
+                      '<div class="item-main">' + it.label + '</div>' +
+                    '</div>';
+    });
+    bodyHtml += '</div>' +
+                '<div class="modal-actions"><button class="button" data-act="cancel" type="button">Cerrar</button></div>';
+    var m = muOpenModal({ title: 'Álbum', body: bodyHtml });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    m.body.querySelectorAll('.mu-modal-list-item').forEach(function(el){
+        el.addEventListener('click', function(){
+            var act = el.dataset.act;
+            m.close();
+            if (act === 'open')       _muOpenAlbumViewer(albumId, albumName);
+            if (act === 'addProfile') _muLoadAndAddAlbumToProfile(albumId, albumName);
+            if (act === 'addPl')      _muLoadAndAddAlbumToPlaylist(albumId, albumName);
+        });
+    });
+}
+function _muLoadAndAddAlbumToProfile(albumId, albumName) {
+    if (_muAlbumViewCache[albumId]) {
+        muAddAlbumToProfile(albumId, _muAlbumViewCache[albumId]);
+        return;
+    }
+    fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(data){
+            if (!data || data.error) { muAlert('No se pudo cargar el álbum.'); return; }
+            _muAlbumViewCache[albumId] = data;
+            muAddAlbumToProfile(albumId, data);
+        })
+        .catch(function(){ muAlert('Error de red.'); });
+}
+function _muLoadAndAddAlbumToPlaylist(albumId, albumName) {
+    if (_muAlbumViewCache[albumId]) {
+        muAddAlbumToPlaylist(_muAlbumViewCache[albumId]);
+        return;
+    }
+    fetch('../../assets/music/api.php?action=album-tracks&id=' + encodeURIComponent(albumId))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(data){
+            if (!data || data.error) { muAlert('No se pudo cargar el álbum.'); return; }
+            _muAlbumViewCache[albumId] = data;
+            muAddAlbumToPlaylist(data);
+        })
+        .catch(function(){ muAlert('Error de red.'); });
+}
+
+/* ── Reproducir un álbum desde el track `startIdx` */
+function _muPlayAlbumFrom(album, startIdx) {
+    /* Convierte los tracks del álbum a QUEUE format. Necesitamos
+       videoIds — primero resolverlos en batch contra YouTube. */
+    var tracks = (album.tracks || []).map(function(t){
+        return { title: t.title || '', artist: t.artist || '', duration: t.duration || 0 };
+    });
+    if (!tracks.length) { muAlert('El álbum no tiene canciones.'); return; }
+    /* Si todos ya tienen videoId (raro pero), play directo. */
+    var needSearch = tracks.some(function(t){ return !t.videoId; });
+    function startQueue(resolved) {
+        QUEUE = resolved.filter(function(t){ return t.videoId; });
+        if (!QUEUE.length) { muAlert('No se encontraron las canciones en YouTube.'); return; }
+        CUR_IDX = Math.max(0, Math.min(startIdx || 0, QUEUE.length - 1));
+        CUR_PL_IDX = -1;   /* no pertenece a ninguna playlist guardada */
+        var plName = album.name || 'Álbum';
+        if (SHELL && typeof SHELL.loadQueue === 'function') {
+            SHELL.loadQueue(QUEUE, CUR_IDX, plName);
+        } else if (typeof playCurrent === 'function') {
+            playCurrent();
+        }
+    }
+    if (!needSearch) { startQueue(tracks); return; }
+    /* yt-search-batch para resolver videoIds. */
+    apiPost('yt-search-batch', { tracks: tracks }).then(function(r){
+        if (!r.ok) { muAlert('Error buscando en YouTube.'); return; }
+        var found = (r.data && r.data.tracks) || [];
+        /* yt-search-batch puede devolver menos items; los mapeamos por
+           título+artista para no perder orden. */
+        var byKey = {};
+        found.forEach(function(t){
+            byKey[((t.title||'') + '|' + (t.artist||'')).toLowerCase()] = t;
+        });
+        var resolved = tracks.map(function(t){
+            var key = ((t.title||'') + '|' + (t.artist||'')).toLowerCase();
+            var hit = byKey[key];
+            return hit ? Object.assign({}, t, { videoId: hit.videoId, duration: hit.duration || t.duration }) : t;
+        });
+        startQueue(resolved);
+    });
+}
+
+/* ── Añadir álbum al perfil (type: 'album'). */
+function muAddAlbumToProfile(albumId, album) {
+    profileApiGet('get-lists').then(function(res){
+        if (!res.ok) { muAlert('Error obteniendo el perfil'); return; }
+        var lists = res.data || {};
+        var music = (Array.isArray(lists.music) ? lists.music : [])
+            .filter(function(m){ return m && !m.sharedFrom; });
+        /* Evita duplicar por spotifyAlbumId. */
+        var dup = music.some(function(m){
+            return m && m.type === 'album' && m.spotifyAlbumId === albumId;
+        });
+        if (dup) {
+            muAlert('"' + (album.name || 'Álbum') + '" ya está en tu perfil');
+            return;
+        }
+        music.push({
+            id:             'music_' + Date.now(),
+            type:           'album',
+            title:          album.name   || 'Álbum',
+            artist:         album.artist || '',
+            image:          album.image  || '',
+            featured:       false,
+            spotifyAlbumId: albumId
+        });
+        saveProfileMusic(music, function(){
+            muAlert('"' + (album.name || 'Álbum') + '" añadido a tu perfil', 'Añadido');
+        });
+    });
+}
+
+/* ── Añadir álbum a una playlist: picker idéntico al de track. */
+function muAddAlbumToPlaylist(album) {
+    if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+    var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;">' +
+                     'Añadir "' + esc(album.name || 'álbum') + '" a:' +
+                   '</p>' +
+                   '<div class="mu-modal-list">';
+    PLAYLISTS.forEach(function(pl, pi){
+        var nTracks = (pl.tracks || []).length;
+        var sharedTag = pl.sharedLabel
+            ? '<span style="font-size:10px;color:var(--text-faint,#666);margin-left:6px;">de ' + esc(pl.sharedLabel) + '</span>'
+            : '';
+        bodyHtml += '<div class="mu-modal-list-item" data-pl-idx="' + pi + '">' +
+                      '<div class="item-main">' +
+                        '<div style="font-weight:bold;">' + esc(pl.name) + sharedTag + '</div>' +
+                        '<div style="font-size:11px;color:var(--text-faint,#666);">' +
+                            nTracks + ' canción' + (nTracks === 1 ? '' : 'es') +
+                        '</div>' +
+                      '</div>' +
+                    '</div>';
+    });
+    bodyHtml += '</div>' +
+                '<div class="modal-actions"><button class="button" data-act="cancel" type="button">Cancelar</button></div>';
+    var m = muOpenModal({ title: 'Añadir álbum a playlist', body: bodyHtml });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    m.body.querySelectorAll('.mu-modal-list-item').forEach(function(el){
+        el.addEventListener('click', function(){
+            var pi = parseInt(el.dataset.plIdx, 10);
+            var pl = PLAYLISTS[pi];
+            if (!pl) return;
+            m.close();
+            _muAddAlbumToPlaylistConfirmed(pl, album);
+        });
+    });
+}
+function _muAddAlbumToPlaylistConfirmed(pl, album) {
+    /* Resolver videoIds de los tracks del álbum vía yt-search-batch
+       (los tracks de Spotify no traen videoId). */
+    var rawTracks = (album.tracks || []).map(function(t){
+        return { title: t.title || '', artist: t.artist || '', duration: t.duration || 0 };
+    });
+    if (!rawTracks.length) { muAlert('El álbum no tiene canciones.'); return; }
+    apiPost('yt-search-batch', { tracks: rawTracks }).then(function(r){
+        if (!r.ok) { muAlert('Error buscando en YouTube.'); return; }
+        var found = (r.data && r.data.tracks) || [];
+        if (!found.length) { muAlert('No se encontró ninguna canción del álbum en YouTube.'); return; }
+        /* Mergea omitiendo videoIds ya en la playlist. */
+        var existing = {};
+        (pl.tracks || []).forEach(function(t){ if (t.videoId) existing[t.videoId] = true; });
+        var fresh = found.filter(function(t){ return t.videoId && !existing[t.videoId]; })
+                         .map(function(t){
+                             return { title: t.title, artist: t.artist, videoId: t.videoId,
+                                      duration: t.duration || 0, addedBy: ME_LABEL };
+                         });
+        if (!fresh.length) {
+            muAlert('Todas las canciones del álbum ya estaban en "' + pl.name + '".');
+            return;
+        }
+        var merged = (pl.tracks || []).concat(fresh);
+        var payload = { id: pl.id, name: pl.name, tracks: merged };
+        if (pl.sharedFrom) payload.sharedFrom = pl.sharedFrom;
+        apiPost('save-playlist-item', payload).then(function(res){
+            if (!res.ok) { muAlert((res.data && res.data.error) || 'Error al guardar'); return; }
+            loadPlaylists();
+            muAlert('✔ ' + fresh.length + ' canción(es) de "' + (album.name || 'álbum') + '" añadidas a "' + pl.name + '"', 'Añadidas');
+        });
     });
 }
 

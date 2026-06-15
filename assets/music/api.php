@@ -751,6 +751,32 @@ case 'find-album': {
         }
     }
 
+    /* ── Fallback al cache v4 ──
+       El bump v4→v5 invalidó TODOS los hits previos. Si el cliente
+       enviaba un track ya resuelto con v4, ahora cae aquí miss → fetch
+       a Spotify. Cuando Spotify está rate-limited, eso devuelve 503 y
+       no se ven los álbumes que SÍ se vieron antes. Para evitar la
+       degradación: leemos el cache v4 (que sigue ahí 7 días), y si
+       tiene un HIT REAL (no notFound, no synthetic) lo aceptamos y lo
+       promovemos a v5 + por videoId. Los notFound de v4 NO se aceptan
+       (la normalización de v5 puede convertirlos en hit). */
+    $cacheKeyV4 = 'album_lookup_v4_' . md5(mb_strtolower($title) . '|' . mb_strtolower($artist));
+    $cachedV4 = cacheGet($cacheKeyV4);
+    if ($cachedV4 !== null) {
+        $decodedV4 = json_decode($cachedV4, true);
+        if (is_array($decodedV4)
+            && empty($decodedV4['notFound'])
+            && empty($decodedV4['isSynthetic'])
+            && !empty($decodedV4['spotifyAlbumId'])
+            && strpos((string)$decodedV4['spotifyAlbumId'], 'synthetic:') !== 0) {
+            cacheSet($cacheKey, $cachedV4, 7 * 24 * 3600);
+            if ($videoId !== '') {
+                cacheSet('album_track_v1_' . $videoId, $cachedV4, 7 * 24 * 3600);
+            }
+            jsonResponse($decodedV4);
+        }
+    }
+
     /* GUARD GLOBAL DE RATE-LIMIT: Spotify devuelve Retry-After de
        hasta 22 horas cuando saturamos el endpoint. Cada request que
        hagamos durante ese plazo RENUEVA el contador. Si sabemos que
