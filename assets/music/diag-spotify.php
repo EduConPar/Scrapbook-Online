@@ -58,6 +58,36 @@ if (isset($_GET['clear'])) {
     $out[] = "";
 }
 
+/* ?clear-albums=1 — BORRADO COMPLETO de las caches de álbumes.
+   Útil cuando Spotify devolvió álbumes "incorrectos" en su día (p.ej.
+   live versions, recopilatorios) y los hits se quedaron cacheados.
+   Tras esto, la próxima find-album hace una resolución fresca por la
+   cascada iTunes → Deezer → Spotify y guarda el resultado actualizado. */
+if (isset($_GET['clear-albums'])) {
+    try {
+        $totalDeleted = 0;
+        $prefixes = [
+            'album_track_v%',    /* cache por videoId (v1+) */
+            'album_lookup_v%',   /* cache por query (v1..v5+) */
+        ];
+        foreach ($prefixes as $pat) {
+            $st = $pdo->prepare("DELETE FROM app_cache WHERE cache_key LIKE ?");
+            $st->execute([$pat]);
+            $deleted = $st->rowCount();
+            $totalDeleted += $deleted;
+            $out[] = "[CLEAR-ALBUMS] $deleted entradas borradas con prefijo '$pat'.";
+        }
+        $out[] = "[CLEAR-ALBUMS] TOTAL: $totalDeleted entradas borradas.";
+        $out[] = "  Recuerda también limpiar la cache CLIENTE para que el navegador";
+        $out[] = "  no use sus propias copias en localStorage:";
+        $out[] = "    Móvil:    localStorage.removeItem('mu:album-cache:v1'); location.reload();";
+        $out[] = "    Desktop:  localStorage.removeItem('reproductor:album-cache:v5'); location.reload();";
+    } catch (Throwable $e) {
+        $out[] = "[CLEAR-ALBUMS] Error: " . $e->getMessage();
+    }
+    $out[] = "";
+}
+
 /* ?set-guard=HORAS — re-arma el guard para parar de pegar a Spotify y
    dejar que su ban (que cuenta por IP) expire solo. Sin esto, cada
    find-album dispara 429 → renueva contador en el lado de Spotify. */
@@ -94,6 +124,10 @@ if (!isset($_GET['test'])) {
     $out[] = "";
     $out[] = "─ Acciones disponibles ─";
     $out[] = "  ?clear=1        → borra el guard + notFound transitorios cacheados.";
+    $out[] = "  ?clear-albums=1 → BORRA TODAS las caches de álbumes server-side";
+    $out[] = "                    (álbumes incorrectos guardados de Spotify, recopilatorios,";
+    $out[] = "                    live versions, etc). Tras esto se re-resuelven frescos.";
+    $out[] = "                    Recuerda limpiar también la cache CLIENTE (localStorage).";
     $out[] = "  ?set-guard=N    → re-arma el guard por N horas (1-48). Úsalo cuando";
     $out[] = "                    Spotify devuelve 429 para parar de pegarle y dejar";
     $out[] = "                    que el ban (por IP) expire solo.";
