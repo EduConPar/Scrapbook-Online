@@ -67,37 +67,31 @@ if (isset($_GET['clear'])) {
    Se ejecuta sobre TODOS los usuarios; el endpoint solo lo invoca
    alguien con sesión iniciada (el chequeo de session_start arriba). */
 if (isset($_GET['strip-spotify-keys'])) {
-    $touchedUsers = 0;
-    $touchedItems = 0;
     try {
-        $st = $pdo->query("SELECT id, user_key, label, music FROM usuarios WHERE music IS NOT NULL");
-        while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
-            $music = json_decode((string)$row['music'], true);
-            if (!is_array($music)) continue;
-            $changed = false;
-            foreach ($music as &$it) {
-                if (!is_array($it)) continue;
-                if (($it['type'] ?? '') !== 'album') continue;
-                $hadKey = isset($it['spotifyAlbumId']) && $it['spotifyAlbumId'] !== '';
-                $isSpKey = isset($it['albumKey']) && is_string($it['albumKey']) && strpos($it['albumKey'], 'spotify:') === 0;
-                if ($hadKey || $isSpKey) {
-                    if ($hadKey) unset($it['spotifyAlbumId']);
-                    if ($isSpKey) unset($it['albumKey']);
-                    $touchedItems++;
-                    $changed = true;
-                }
-            }
-            unset($it);
-            if ($changed) {
-                $upd = $pdo->prepare("UPDATE usuarios SET music = ? WHERE id = ?");
-                $upd->execute([json_encode($music, JSON_UNESCAPED_UNICODE), $row['id']]);
-                $touchedUsers++;
-                $out[] = "[STRIP] " . $row['label'] . " (" . $row['user_key'] . "): items album limpiados.";
-            }
-        }
-        $out[] = "[STRIP] TOTAL: $touchedItems items album limpiados en $touchedUsers usuarios.";
-        $out[] = "  Los próximos clicks sobre estos álbumes van a hacer find-album fresh";
-        $out[] = "  contra iTunes/Deezer (ya no tienen key spotify:* que arrastrar).";
+        /* Los items album viven en la tabla `list_items` con
+           `category='music'` y `music_type='album'`. El campo que
+           arrastra el spotify_id del álbum es `spotify_album_id`.
+           Lo ponemos a NULL para que el cliente no pueda sintetizar
+           un albumKey:'spotify:*' al pintar el item. */
+        $cntBefore = (int)$pdo->query("SELECT COUNT(*) FROM list_items
+                                       WHERE category = 'music'
+                                         AND music_type = 'album'
+                                         AND spotify_album_id IS NOT NULL
+                                         AND spotify_album_id <> ''")
+                              ->fetchColumn();
+        $st = $pdo->prepare("UPDATE list_items
+                             SET spotify_album_id = NULL
+                             WHERE category = 'music'
+                               AND music_type = 'album'
+                               AND spotify_album_id IS NOT NULL
+                               AND spotify_album_id <> ''");
+        $st->execute();
+        $affected = $st->rowCount();
+        $out[] = "[STRIP] $cntBefore items album con spotify_album_id antes del limpiado.";
+        $out[] = "[STRIP] UPDATE afectó $affected filas (spotify_album_id → NULL).";
+        $out[] = "  Los próximos clicks sobre estos álbumes ya no tienen un";
+        $out[] = "  spotify_album_id que sintetizar como key. El cliente resuelve";
+        $out[] = "  fresh por title+artist contra iTunes/Deezer en find-album.";
     } catch (Throwable $e) {
         $out[] = "[STRIP] Error: " . $e->getMessage();
     }
