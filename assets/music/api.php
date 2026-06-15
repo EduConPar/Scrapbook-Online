@@ -827,307 +827,21 @@ case 'find-album': {
     $deezer = deezerSearchAlbumForTrack($cleanTitleCascade, $primaryArtist);
     if ($deezer !== null) $persistAndReturn($deezer);
 
-    /* ── Último recurso: Spotify ──
-       Si llegamos aquí, ni iTunes ni Deezer encontraron el track. Solo
-       casos raros (releases muy nuevos, k-pop poco conocido, etc.).
-       GUARD GLOBAL DE RATE-LIMIT: si el guard está activo, devolvemos
-       503 inmediato y dejamos que su ban (que cuenta por IP) expire.
-       Cada request que hagamos durante el plazo RENOVARÍA el contador. */
-    $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
-    if ($rateLimitedUntil > time()) {
-        jsonResponse([
-            'error'      => 'Spotify rate-limited',
-            'code'       => 'rateLimited',
-            'retryAfter' => $rateLimitedUntil - time(),
-        ], 503);
+    /* ── Spotify ELIMINADO ──
+       Antes este case caía a Spotify cuando iTunes/Deezer no encontraban
+       el track. Spotify Web API está banneada permanentemente para esta
+       cuenta — todo lo que hacíamos era pegarle a una API que no
+       respondía y devolver 503 al cliente. Lo quitamos. Si ninguna
+       fuente publica encuentra el álbum, cacheamos notFound (TTL corto:
+       3h, por si el álbum aparece en iTunes/Deezer más tarde) y
+       devolvemos 200 con el flag — el cliente trata notFound como
+       "no se encontró" sin error, no como un fallo de red. */
+    $notFound = ['notFound' => true];
+    cacheSet($cacheKey, json_encode($notFound), 3 * 3600);
+    if ($videoId !== '') {
+        cacheSet('album_track_v1_' . $videoId, json_encode($notFound), 3 * 3600);
     }
-
-    $token = getSpotifyToken();
-    if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
-
-    /* Limpia ruido típico de títulos de YouTube que confunde la
-       búsqueda de Spotify ("(Official Music Video)", "[HD]", "(Audio)",
-       "feat. X", etc.). Conservativo: lo aplicamos en el query, NO
-       cambiamos el title original (la cache key lo usa para dedupe). */
-    $cleanTitle = preg_replace('/[\[\(](?:official|music|video|audio|hd|hq|lyrics?|mv|m\/v|live|live performance|visualizer|extended|remaster(ed)?(\s+\d+)?)[\]\)\s\-]*/i', ' ', $title);
-    $cleanTitle = preg_replace('/\s*(?:feat\.?|ft\.?)\s+[^\(\[\-]+/i', ' ', $cleanTitle);
-    $cleanTitle = trim(preg_replace('/\s{2,}/', ' ', $cleanTitle));
-
-    /* Trae múltiples candidatos para poder rankear. Spotify ordena por
-       su propia relevancia pero a veces el TOP-1 es un cover o remix
-       que tiene nombre parecido pero NO es la canción del usuario; con
-       limit=10 podemos descartar esos.
-
-       Devuelve [items, rateLimited]. rateLimited=true cuando Spotify
-       responde 429 — el caller usa esto para NO cachear notFound
-       (sería una decisión basada en un fallo temporal). */
-    $tryQuery = function(string $q) use ($token, $pdo) {
-        if ($q === '') return [[], false];
-        /* ── THROTTLE SERVER-SIDE ──
-           Serializa entre TODOS los clientes simultáneos. Cada request
-           espera a que pase MIN_INTERVAL_MS desde la anterior (de
-           cualquier cliente). Implementado con MySQL GET_LOCK +
-           timestamp en app_cache.
-           Sin esto, N clientes concurrentes = N veces el rate del
-           cliente individual → ban garantizado por mucho que la cola
-           client-side espacie 300 ms. */
-        $MIN_INTERVAL_MS = 600;  /* ~1.6 req/s sostenido global */
-        $CAP_PER_DAY     = 8000; /* tope diario por si algo se desboca */
-        $dayKey = 'spotify_calls_' . date('Y-m-d');
-        $count = (int)cacheGet($dayKey);
-        if ($count >= $CAP_PER_DAY) return [[], true]; /* tope diario → rate-limited soft */
-
-        $gotLock = false;
-        try {
-            $st = $pdo->query("SELECT GET_LOCK('spotify_throttle', 8)");
-            $gotLock = ((int)$st->fetchColumn()) === 1;
-        } catch (Throwable $_) {}
-        if ($gotLock) {
-            try {
-                $lastUs = (float)cacheGet('spotify_last_call_us');
-                $nowUs  = microtime(true);
-                $deltaMs = ($nowUs - $lastUs) * 1000;
-                if ($deltaMs < $MIN_INTERVAL_MS) {
-                    usleep((int)(($MIN_INTERVAL_MS - $deltaMs) * 1000));
-                }
-                cacheSet('spotify_last_call_us', (string)microtime(true), 120);
-                cacheSet($dayKey, (string)($count + 1), 86400);
-            } finally {
-                try { $pdo->query("SELECT RELEASE_LOCK('spotify_throttle')"); } catch (Throwable $_) {}
-            }
-        }
-
-        $url = 'https://api.spotify.com/v1/search?type=track&limit=10&market=US&q=' . rawurlencode($q);
-        $ctx = stream_context_create(['http' => [
-            'timeout' => 8, 'ignore_errors' => true,
-            'header'  => 'Authorization: Bearer ' . $token,
-        ]]);
-        $raw = @file_get_contents($url, false, $ctx);
-        if (!$raw) return [[], false];
-        /* Detección de 429: el body es "Too many requests" en texto plano
-           o JSON {"error":{"status":429}}. Spotify a veces incluye el
-           header Retry-After con segundos para esperar. */
-        $isRateLimited = false;
-        if (stripos((string)$raw, 'too many requests') !== false) {
-            $isRateLimited = true;
-        }
-        $data = json_decode((string)$raw, true);
-        if (is_array($data) && isset($data['error']['status']) && (int)$data['error']['status'] === 429) {
-            $isRateLimited = true;
-        }
-        /* CUALQUIER 429 → guard global. NO reintentamos.
-           Bug histórico: si Retry-After era 0 o <=10s, el código antes
-           reintentaba en el sitio (doblando los requests fallidos) y NO
-           armaba el guard cuando Spotify devolvía 429 "Too many requests"
-           sin header (que es lo más común en bans agresivos). Eso
-           mantenía a Spotify renovándonos el ban indefinidamente: cada
-           find-album hacía 2-4 requests, todas 429, sin que el guard
-           se armara → el siguiente find-album repetía → spam.
-           Ahora: 429 detectado → mínimo 1h de guard (cap 24h con el
-           Retry-After si viene), return inmediato sin reintentar. */
-        if ($isRateLimited) {
-            $retryAfter = 0;
-            foreach ($http_response_header ?? [] as $h) {
-                if (stripos($h, 'retry-after:') === 0) {
-                    $retryAfter = max(0, (int)trim(substr($h, 12)));
-                    break;
-                }
-            }
-            /* Mínimo 1h de guard incluso sin Retry-After. Cap a 24h. */
-            $duration = max(3600, min($retryAfter ?: 3600, 24 * 3600));
-            $until    = time() + $duration;
-            cacheSet('spotify_rate_limited_until', (string)$until, $duration);
-            return [[], true];
-        }
-        return [$data['tracks']['items'] ?? [], false];
-    };
-
-    /* Normalización para comparar strings: lowercase, strip diacritics,
-       collapse whitespace y elimina puntuación común. Tolerante a
-       variaciones tipo "feat.", apóstrofes curvos, etc. */
-    $norm = function(string $s): string {
-        $s = mb_strtolower($s);
-        if (class_exists('Transliterator')) {
-            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
-            if ($tr) $s = $tr->transliterate($s);
-        }
-        $s = preg_replace('/[^a-z0-9\s]/u', ' ', $s);
-        $s = preg_replace('/\s+/', ' ', $s);
-        return trim($s);
-    };
-
-    $cleanTitleN = $norm($cleanTitle);
-    $artistN     = $norm($artist);
-
-    /* Devuelve la MEJOR similitud entre el artista buscado y cualquiera
-       de los artistas del candidato (Spotify suele devolver varios:
-       ["A", "B", "C"] para "A feat. B feat. C"). Si cualquiera matchea,
-       el candidato es válido — los feats arruinaban el match antes. */
-    $bestArtistSim = function(array $cand) use ($norm, $artistN) {
-        if ($artistN === '') return 100.0;
-        $best = 0.0;
-        foreach (($cand['artists'] ?? []) as $a) {
-            $candArtistN = $norm((string)($a['name'] ?? ''));
-            if ($candArtistN === '') continue;
-            /* Match exacto = 100. Substring (tolera "A" vs "A & B") = 80. */
-            if ($candArtistN === $artistN) return 100.0;
-            if (str_contains($candArtistN, $artistN) || str_contains($artistN, $candArtistN)) {
-                $best = max($best, 80.0);
-                continue;
-            }
-            $s = 0.0; similar_text($artistN, $candArtistN, $s);
-            if ($s > $best) $best = $s;
-        }
-        return $best;
-    };
-
-    /* Score por candidato — combina similitud de título (peso alto) y
-       mejor similitud de artista del listado. */
-    $scoreCandidate = function(array $cand) use ($norm, $cleanTitleN, $bestArtistSim) {
-        $cTitleN  = $norm((string)($cand['name'] ?? ''));
-        if ($cTitleN === '') return 0.0;
-        $ts = 0.0; similar_text($cleanTitleN, $cTitleN, $ts);
-        $as = $bestArtistSim($cand);
-        /* Bonus extra si el título normalizado es exactamente igual o
-           si uno está contenido en el otro (cubre "Song" vs "Song -
-           Remastered"). */
-        $bonus = 0.0;
-        if ($cTitleN === $cleanTitleN) $bonus += 20;
-        elseif (str_contains($cTitleN, $cleanTitleN) || str_contains($cleanTitleN, $cTitleN)) $bonus += 10;
-        if ($as >= 100) $bonus += 10;
-        return min(100.0, $ts * 0.7 + $as * 0.3 + $bonus);
-    };
-
-    /* Recolecta candidatos de varias queries — más opciones para
-       rankear. La primera (filtrada con track:/artist:) suele dar el
-       mejor; la libre cubre casos donde la estructurada no halló nada.
-
-       wasRateLimited rastrea si alguna sub-query topó con 429. Si todas
-       las que devolvieron 0 items fueron por rate-limit, no cacheamos
-       el resultado — la próxima vez puede encontrar el álbum. */
-    $candidates = [];
-    $wasRateLimited = false;
-    if ($artist !== '') {
-        [$items, $rl] = $tryQuery('track:"' . $cleanTitle . '" artist:"' . $artist . '"');
-        $candidates = array_merge($candidates, $items);
-        $wasRateLimited = $wasRateLimited || $rl;
-    }
-    /* Si la primera sub-query ya topó con 429, NO hacemos la segunda:
-       Spotify nos está rate-limitando, otra request solo renueva el ban.
-       Devolvemos rateLimited a la cascada que termina en 503 + no cache. */
-    if (!$wasRateLimited && count($candidates) < 3) {
-        [$items, $rl] = $tryQuery(trim($cleanTitle . ' ' . $artist));
-        $candidates = array_merge($candidates, $items);
-        $wasRateLimited = $wasRateLimited || $rl;
-    }
-
-    /* Dedupe por id de track. */
-    $seen = []; $uniq = [];
-    foreach ($candidates as $c) {
-        $cid = $c['id'] ?? '';
-        if ($cid === '' || isset($seen[$cid])) continue;
-        $seen[$cid] = true;
-        $uniq[] = $c;
-    }
-
-    /* CASCADA DE FALLBACKS para garantizar que TODAS las canciones
-       reciban un álbum cuando Spotify devuelve resultados. Empezamos
-       estrictos (artista debe coincidir + score alto) y relajamos
-       progresivamente hasta agarrar algo razonable. Si Spotify no
-       devolvió nada de nada, caemos al álbum sintético del final. */
-    $pickBest = function(array $list, float $minScore) use ($scoreCandidate) {
-        $best = null; $bestScore = 0.0;
-        foreach ($list as $c) {
-            $sc = $scoreCandidate($c);
-            if ($sc > $bestScore) { $best = $c; $bestScore = $sc; }
-        }
-        return ($best && $bestScore >= $minScore) ? $best : null;
-    };
-
-    $best = null;
-    /* Nivel 1: artista coincide (≥50%) Y score combinado ≥50. */
-    if ($artistN !== '') {
-        $filtered = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
-            return $bestArtistSim($c) >= 50.0;
-        }));
-        $best = $pickBest($filtered, 50.0);
-    }
-    /* Nivel 2: artista coincide pero score muy bajo aún acepta (≥35). */
-    if (!$best && $artistN !== '') {
-        $filtered = array_values(array_filter($uniq, function($c) use ($bestArtistSim) {
-            return $bestArtistSim($c) >= 35.0;
-        }));
-        $best = $pickBest($filtered, 35.0);
-    }
-    /* Nivel 3: olvida el filtro de artista, pero score decente (≥40). */
-    if (!$best) {
-        $best = $pickBest($uniq, 40.0);
-    }
-    /* Nivel 4: el TOP-1 absoluto, sin importar score. Si Spotify lo
-       puso primero, probablemente es lo más cercano que hay. */
-    if (!$best && !empty($uniq)) {
-        $best = $uniq[0];
-    }
-
-    $result = null;
-    if ($best && isset($best['album'])) {
-        $alb = $best['album'];
-        $img = '';
-        if (!empty($alb['images'])) {
-            $img = $alb['images'][1]['url'] ?? $alb['images'][0]['url'] ?? '';
-        }
-        $albId = (string)($alb['id'] ?? '');
-        $result = [
-            'notFound'       => false,
-            'source'         => 'spotify',
-            'albumKey'       => $albId !== '' ? ('spotify:' . $albId) : '',
-            'albumName'      => $alb['name'] ?? '',
-            'albumImage'     => $img,
-            'spotifyAlbumId' => $albId, /* legacy field — el cliente legacy lo sigue mirando */
-            'albumUrl'       => $alb['external_urls']['spotify'] ?? '',
-            'isSingle'       => ($alb['album_type'] ?? '') === 'single',
-            'releaseDate'    => $alb['release_date'] ?? '',
-            'matchTitle'     => $best['name']   ?? '',
-            'matchArtist'    => $best['artists'][0]['name'] ?? '',
-            /* matchTrackId: el ID de la canción dentro del álbum que
-               coincide con la búsqueda. El cliente lo usa para destacar
-               la fila correspondiente en el viewer, garantizando que
-               "la canción desde la que se busca está en el álbum". */
-            'matchTrackId'   => $best['id']     ?? '',
-            'isSynthetic'    => false,
-        ];
-    }
-
-    /* Si nada superó ninguno de los niveles de la cascada (Spotify no
-       devolvió candidatos o todos eran muy malos), gestionamos dos
-       casos:
-         - Rate limit (429): NO cacheamos y devolvemos un error con
-           status 503 + code rateLimited. El cliente sabe que es
-           transitorio y NO lo cacheará localmente, así la próxima vez
-           reintenta.
-         - notFound real: cacheamos por sólo 5 min para que un fallo
-           transitorio no quede pegado 7 días, pero un álbum real
-           encontrado sí se cachea 7 días (no caduca). */
-    if ($result === null) {
-        if ($wasRateLimited) {
-            jsonResponse([
-                'error' => 'Spotify rate-limited (try again in a few seconds)',
-                'code'  => 'rateLimited',
-            ], 503);
-        }
-        $result = ['notFound' => true];
-        cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 5 * 60);
-    } else {
-        $payload = json_encode($result, JSON_UNESCAPED_UNICODE);
-        cacheSet($cacheKey, $payload, 7 * 24 * 3600);
-        /* Doble-cacheamos también por videoId si el cliente lo envió,
-           para que el #5 (lookup por videoId) tenga hit en futuras
-           consultas — incluso si cambia el título exacto de YouTube. */
-        if ($videoId !== '') {
-            cacheSet('album_track_v1_' . $videoId, $payload, 7 * 24 * 3600);
-        }
-    }
-    jsonResponse($result);
+    jsonResponse($notFound);
 }
 
 /* Lista las canciones de un álbum de Spotify dado su ID. NO resuelve
@@ -1190,74 +904,25 @@ case 'album-tracks': {
         jsonResponse($r);
     }
 
-    /* Spotify: respeta el guard de rate-limit. Si está activo Y el
-       cliente nos pasó hints (name + artist), intentamos resolver el
-       mismo álbum vía iTunes/Deezer por nombre — sirve para "migrar"
-       los items antiguos del perfil que tenían albumKey spotify:* sin
-       que el usuario tenga que borrarlos y re-añadirlos.
-       Si NO hay hints, devolvemos 503 como antes. */
-    $rateLimitedUntil = (int)cacheGet('spotify_rate_limited_until');
-    if ($rateLimitedUntil > time()) {
-        $hintName   = trim((string)($_GET['name']   ?? ''));
-        $hintArtist = trim((string)($_GET['artist'] ?? ''));
-        if ($hintName !== '') {
-            /* iTunes search por álbum (entity=album) y devuelve sus tracks. */
+    /* ── Spotify ELIMINADO ──
+       Antes intentábamos resolver el álbum directamente contra Spotify
+       cuando la key era `spotify:*`. Ahora Spotify está fuera del
+       proyecto: si el cliente nos da name + artist como hints,
+       resolvemos el mismo álbum en iTunes/Deezer. Si no, devolvemos
+       404 con un mensaje claro para que el cliente le pida al usuario
+       que re-añada el álbum (los nuevos vendrán con itunes:/deezer:
+       keys nativas). */
+    $hintName   = trim((string)($_GET['name']   ?? ''));
+    $hintArtist = trim((string)($_GET['artist'] ?? ''));
+    if ($hintName !== '') {
+        try {
             $fallback = _albumTracksFallbackByName($hintName, $hintArtist, $cacheKey);
             if ($fallback !== null) jsonResponse($fallback);
+        } catch (Throwable $e) {
+            /* No matar la respuesta con 500: caemos al jsonError de abajo. */
         }
-        jsonResponse(['error' => 'Spotify rate-limited', 'code' => 'rateLimited'], 503);
     }
-    $token = getSpotifyToken();
-    if (!$token) jsonError('No se pudo autenticar con Spotify', 502);
-
-    /* Metadata del álbum (nombre, artista principal, cover). Una sola
-       request — Spotify ya devuelve los tracks embebidos. */
-    $ctx = stream_context_create(['http' => [
-        'timeout' => 10, 'ignore_errors' => true,
-        'header'  => 'Authorization: Bearer ' . $token,
-    ]]);
-    $raw = @file_get_contents('https://api.spotify.com/v1/albums/' . $albumId . '?market=US', false, $ctx);
-    if (!$raw) jsonError('No se pudo leer el álbum', 502);
-    $album = json_decode($raw, true);
-    if (!isset($album['name'])) jsonError('Álbum no encontrado', 404);
-
-    $items = $album['tracks']['items'] ?? [];
-    /* Si el álbum tiene más de 50 tracks, Spotify pagina. Seguimos el
-       cursor 'next' hasta agotar (paranoid loop con tope para no entrar
-       en bucle infinito si la API rompe). */
-    $next = $album['tracks']['next'] ?? null;
-    $safety = 5;
-    while ($next && $safety-- > 0) {
-        $more = @file_get_contents($next, false, $ctx);
-        if (!$more) break;
-        $page = json_decode($more, true);
-        if (!isset($page['items'])) break;
-        $items = array_merge($items, $page['items']);
-        $next = $page['next'] ?? null;
-    }
-
-    $tracks = [];
-    foreach ($items as $t) {
-        if (empty($t['name'])) continue;
-        $tracks[] = [
-            'title'    => (string)$t['name'],
-            'artist'   => (string)($t['artists'][0]['name'] ?? ($album['artists'][0]['name'] ?? '')),
-            'duration' => isset($t['duration_ms']) ? (int)round($t['duration_ms'] / 1000) : 0,
-        ];
-    }
-
-    $image = '';
-    if (!empty($album['images'])) {
-        $image = $album['images'][1]['url'] ?? $album['images'][0]['url'] ?? '';
-    }
-    $result = [
-        'name'   => (string)$album['name'],
-        'artist' => (string)($album['artists'][0]['name'] ?? ''),
-        'image'  => $image,
-        'tracks' => $tracks,
-    ];
-    cacheSet($cacheKey, json_encode($result, JSON_UNESCAPED_UNICODE), 7 * 24 * 3600);
-    jsonResponse($result);
+    jsonError('Este álbum era de Spotify y ya no se puede cargar. Vuelve a añadirlo desde una canción para que se enlace con iTunes/Deezer.', 404);
 }
 
 /* ─── Tidal ───────────────────────────────────────────────── */
