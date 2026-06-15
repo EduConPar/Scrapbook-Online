@@ -922,7 +922,23 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             margin-bottom: 8px;
         }
         .pf-profile-actions .button { min-height: 28px; font-size: 11px; flex: 1; }
-        .pf-posts-list { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
+        /* Posts list scrollable INTERNAMENTE: el header (userbar),
+           actions y el form de nuevo post se quedan fijos arriba, y
+           solo la lista de posts hace scroll. `flex: 1` la hace ocupar
+           el espacio que queda en la vista (que ya es flex column con
+           min-height: 0); `min-height: 0` permite que un hijo flex
+           sobredimensionado pueda recortarse y activar overflow.
+           `overscroll-behavior: contain` evita que el scroll se
+           propague al padre cuando llega a los extremos. */
+        .pf-posts-list {
+            display: flex; flex-direction: column; gap: 8px;
+            padding: 0 4px 8px 0;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+        }
         .pf-post {
             background: var(--input-bg, #fff);
             padding: 8px 10px;
@@ -3753,31 +3769,48 @@ function deletePost(postId) {
     .catch(function(){});
 }
 
-document.getElementById('pf-post-publish').addEventListener('click', function(){
-    var textEl = document.getElementById('pf-post-text');
-    var imgEl  = document.getElementById('pf-post-img');
-    var text = (textEl.value || '').trim();
-    var img  = (imgEl.value || '').trim();
-    if (!text && !img) return;
-    fetch(API + '?action=add-post', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text, image_url: img })
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-        if (d && d.ok && d.post) {
-            STATE.profile = STATE.profile || {};
-            STATE.profile.posts = STATE.profile.posts || [];
-            STATE.profile.posts.unshift(d.post);
-            renderPosts(STATE.profile.posts);
-            textEl.value = ''; imgEl.value = '';
-        } else if (d && d.error) {
-            pfAlert(d.error);
-        }
-    })
-    .catch(function(){});
-});
+(function(){
+    var btn = document.getElementById('pf-post-publish');
+    if (!btn) return;
+    /* Guard contra doble-submit: con lag de red el usuario puede pulsar
+       el botón varias veces antes de que la primera request acabe, y
+       cada click insertaba un post duplicado. Mientras `_inFlight=true`
+       ignoramos clicks adicionales y deshabilitamos el botón
+       visualmente. */
+    var _inFlight = false;
+    btn.addEventListener('click', function(){
+        if (_inFlight) return;
+        var textEl = document.getElementById('pf-post-text');
+        var imgEl  = document.getElementById('pf-post-img');
+        var text = (textEl.value || '').trim();
+        var img  = (imgEl.value || '').trim();
+        if (!text && !img) return;
+        _inFlight = true;
+        btn.disabled = true;
+        fetch(API + '?action=add-post', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, image_url: img })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            if (d && d.ok && d.post) {
+                STATE.profile = STATE.profile || {};
+                STATE.profile.posts = STATE.profile.posts || [];
+                STATE.profile.posts.unshift(d.post);
+                renderPosts(STATE.profile.posts);
+                textEl.value = ''; imgEl.value = '';
+            } else if (d && d.error) {
+                pfAlert(d.error);
+            }
+        })
+        .catch(function(){})
+        .finally(function(){
+            _inFlight = false;
+            btn.disabled = false;
+        });
+    });
+})();
 
 /* Botón "Seguir" — solo aparece viendo otro perfil. Toggle. */
 document.getElementById('pf-follow-btn').addEventListener('click', function(){

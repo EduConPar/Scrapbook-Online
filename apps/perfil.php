@@ -3098,9 +3098,17 @@ var PROFILE_USERS = <?php
     var postInput = document.getElementById('profile-post-input');
     var postBtn   = document.getElementById('profile-post-btn');
     if (postBtn) {
+        /* Guard contra doble-submit: con lag el usuario podía pulsar
+           varias veces antes de que la primera request acabase y se
+           insertaban posts duplicados. Mientras _postInFlight=true los
+           clicks subsiguientes se ignoran y el botón queda desactivado. */
+        var _postInFlight = false;
         postBtn.addEventListener('click', function() {
+            if (_postInFlight) return;
             var text = postInput ? postInput.value.trim() : '';
             if (!text) return;
+            _postInFlight = true;
+            postBtn.disabled = true;
             fetch('assets/profile/api.php?action=add-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3110,7 +3118,11 @@ var PROFILE_USERS = <?php
             .then(function(data) {
                 if (data.ok) { if (postInput) postInput.value = ''; loadProfile(); }
             })
-            .catch(function() {});
+            .catch(function() {})
+            .finally(function() {
+                _postInFlight = false;
+                postBtn.disabled = false;
+            });
         });
     }
     if (postInput) {

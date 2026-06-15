@@ -390,10 +390,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         /* Mientras se resuelve el long-press del album, da feedback. */
         .mu-track-album.long-pressing { background: var(--accent, #1db954); color: var(--accent-text, #fff); }
 
-        /* Título del track activo cuando ya se resolvió su álbum:
-           subrayado punteado + cursor pointer para sugerir que es
-           clickable. Sin la clase queda neutro. Aplica tanto al
-           mini-player como al fullscreen. */
+        /* Título del fullscreen: SIEMPRE pulsable (resuelve el álbum
+           on-demand si hace falta). Cursor pointer da el feedback. */
+        .mu-full-title { cursor: pointer; }
+        /* Cuando el álbum YA está cacheado, además subrayado punteado
+           para que se VEA que es link. Sin la clase queda neutro pero
+           sigue siendo clickable. */
         .mu-player-title.is-album-clickable,
         .mu-full-title.is-album-clickable {
             cursor: pointer;
@@ -453,6 +455,19 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             overflow-y: auto;
             border-top: 1px solid var(--border, #c0c0c0);
             -webkit-overflow-scrolling: touch;
+        }
+        /* Footer sticky con botón Volver — pulgar fácil sin tener que
+           ir a la X de arriba. Coincide con UX desktop. */
+        .mu-album-footer {
+            flex-shrink: 0;
+            padding: 8px 12px max(8px, env(safe-area-inset-bottom)) 12px;
+            border-top: 1px solid var(--border, #c0c0c0);
+            background: var(--win-bg, silver);
+        }
+        .mu-album-footer .button {
+            width: 100%;
+            min-height: 36px;
+            font-size: 13px;
         }
         .mu-album-track {
             display: flex; gap: 6px; align-items: center;
@@ -2091,16 +2106,24 @@ document.getElementById('mu-player').addEventListener('click', function(e){
     muFullOpen();
 });
 
-/* Mismo gesto en el fullscreen: tap en el título con álbum resuelto
-   abre el viewer del álbum. */
+/* Tap en el título del reproductor GRANDE → cierra el fullscreen y
+   abre el viewer del álbum. Si el track aún no tiene álbum resuelto
+   en cache, muOpenAlbumFromTrack hace el find-album on-demand (igual
+   que tap en el título de un track de la lista). Antes exigía
+   `is-album-clickable` + dataset.albumKey y si no estaban no hacía
+   nada — UX confusa.
+   El style `cursor: pointer` se mantiene en el CSS para que se vea
+   pulsable; cerramos el fullscreen ANTES del open para que el viewer
+   aparezca solo (no encima del fullscreen). */
 (function(){
     var ft = document.getElementById('mu-full-title');
     if (!ft) return;
     ft.addEventListener('click', function(e){
-        if (!ft.classList.contains('is-album-clickable')) return;
-        if (!ft.dataset.albumKey) return;
         e.stopPropagation();
-        _muOpenAlbumViewer(ft.dataset.albumKey, ft.dataset.albumName || '');
+        if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+        var tr = QUEUE[CUR_IDX];
+        muFullClose();
+        muOpenAlbumFromTrack(tr);
     });
 })();
 document.getElementById('mu-full-close').addEventListener('click', muFullClose);
@@ -3756,10 +3779,17 @@ function _muOpenAlbumViewer(albumId, albumName) {
             '</div>' +
             '<div class="mu-album-tracks" id="mu-album-view-tracks">' +
                 '<div style="padding:14px;text-align:center;color:var(--text-faint,#888);">Cargando…</div>' +
+            '</div>' +
+            /* Footer con botón "← Volver" duplicado de la X de la
+               title-bar — el usuario móvil llega al final de la lista
+               y tiene el botón al alcance del pulgar sin scroll-up. */
+            '<div class="mu-album-footer">' +
+                '<button class="button" type="button" data-act="back">‹ Volver</button>' +
             '</div>';
         document.body.appendChild(fv);
 
         document.getElementById('mu-album-view-close').addEventListener('click', _muCloseAlbumViewer);
+        fv.querySelector('[data-act="back"]').addEventListener('click', _muCloseAlbumViewer);
         fv.querySelector('[data-act="playAlbum"]').addEventListener('click', function(){
             var cur = _muAlbumFullCurrent;
             if (!cur || !cur.album || !cur.album.tracks || !cur.album.tracks.length) {
@@ -4139,7 +4169,7 @@ function muAddAlbumToProfile(albumId, album) {
            que el código legacy de perfil que mira ese campo no se rompa. */
         var spotifyId = (typeof albumId === 'string' && albumId.indexOf('spotify:') === 0)
             ? albumId.slice(8) : '';
-        music.push({
+        var newItem = {
             id:             'music_' + Date.now(),
             type:           'album',
             title:          album.name   || 'Álbum',
@@ -4148,9 +4178,18 @@ function muAddAlbumToProfile(albumId, album) {
             featured:       false,
             albumKey:       albumId,
             spotifyAlbumId: spotifyId
-        });
+        };
+        music.push(newItem);
         saveProfileMusic(music, function(){
-            muAlert('"' + (album.name || 'Álbum') + '" añadido a tu perfil', 'Añadido');
+            /* Tras guardar: ofrece reseña inmediata, igual que se hace
+               para canciones. Si dice Sí abre muOpenReviewEditor con
+               este álbum. ytId vacío — el editor está hecho para que un
+               item sin ytId funcione (mira MY_REVIEWS_BY_YTID[''] que
+               devuelve undefined, así que arranca limpio). */
+            muReviewPrompt(
+                '"' + (newItem.title) + '" añadido a tu perfil. ¿Quieres dejar una reseña?',
+                function(){ muOpenReviewEditor(newItem.id, newItem.title, ''); }
+            );
         });
     });
 }
