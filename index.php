@@ -13,12 +13,20 @@ require_once __DIR__ . '/assets/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 
-/* Móviles SIEMPRE entran por la landing. Es la única puerta a Melon
-   Hub — la landing decide si pintar el pitch de instalación o rebotar
-   al usuario al home (cuando ya está dentro de la PWA). Override con
-   ?desktop=1 (o cookie force_desktop). */
+/* Móviles: dependiendo del estado de sesión, mandamos al destino más
+   directo posible (sin pasar por la landing PWA llena de pitch e
+   instrucciones de instalación):
+     - Con sesión activa → mobile.php (la app).
+     - Sin sesión        → login-manual.php (form de login simple).
+       Desde el login-manual hay un link "Crear cuenta nueva" que sí
+       va a mobile-landing.php para registro + guía de instalación.
+   Override con ?desktop=1 (o cookie force_desktop). */
 if (isMobileDevice()) {
-    header('Location: mobile-landing.php');
+    if (!empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']])) {
+        header('Location: mobile.php');
+    } else {
+        header('Location: login-manual.php');
+    }
     exit;
 }
 

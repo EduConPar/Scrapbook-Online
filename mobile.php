@@ -134,15 +134,15 @@ $apps = [
 ];
 usort($apps, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 
-/* Avatar del usuario para mostrar en la cabecera. */
-$userImg = '';
-$safe = preg_replace('/[^A-Za-z0-9_-]/', '', $userLabel);
-foreach (['png','jpg','jpeg','gif'] as $ext) {
-    if (file_exists(__DIR__ . "/assets/img/{$safe}.{$ext}")) {
-        $userImg = "assets/img/{$safe}.{$ext}";
-        break;
-    }
-}
+/* Avatar del usuario para mostrar en la cabecera.
+   Usamos getUserImage() (helper canónico en assets/config.php) para
+   que la cascada sea correcta:
+     1. uploads/profile-photos/{label}.{ext}  ← foto subida en registro
+     2. Restaurar desde BD usuarios.photo_data si filesystem se purgó
+     3. assets/img/{label}.{ext}              ← seeds shipped (Capi, Angie)
+   Antes la cabecera solo miraba la opción 3, así que ningún usuario
+   creado vía mobile-landing.php veía su avatar. */
+$userImg = getUserImage($userLabel);
 
 /* ── TEMA ACTIVO DEL USUARIO ──
    Misma lógica que desktop-base.php: cargamos el tema del usuario para
