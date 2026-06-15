@@ -1093,6 +1093,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-lock-vinyl-wrap,
         .mu-lock-title,
         .mu-lock-artist { display: none !important; }
+        /* Ocultar TODOS los filtros LCD (scanlines) del fullscreen player
+           cuando el lock está activo. `.mu-full::after` usa mix-blend-mode:
+           screen, que rompe el aislamiento del stacking context y pinta
+           encima del lock aunque mu-full (z-index 200) esté por debajo
+           de mu-lock (z-index 250). Forzar display:none aquí garantiza
+           el fondo negro puro del lock. */
+        body.mu-lock-active .mu-full::after,
+        body.mu-lock-active .mu-full-display::after,
+        body.mu-lock-active .mu-full-info::after { display: none !important; }
         .mu-lock-hint {
             position: absolute;
             left: 0; right: 0;
@@ -2573,6 +2582,8 @@ window.MuShell = (function(){
         if (hint) { hint.style.transform = ''; hint.style.opacity = ''; }
         lock.classList.add('visible');
         lock.setAttribute('aria-hidden', 'false');
+        /* Apaga los filtros LCD del fullscreen subyacente vía CSS. */
+        document.body.classList.add('mu-lock-active');
         muRequestFs();
     }
     function closeLock() {
@@ -2580,6 +2591,7 @@ window.MuShell = (function(){
         var hint = document.getElementById('mu-lock-hint');
         lock.classList.remove('visible');
         lock.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('mu-lock-active');
         setTimeout(function(){ if (hint) { hint.style.transform = ''; hint.style.opacity = ''; } }, 1200);
         muExitFs();
     }
@@ -2723,7 +2735,10 @@ window.MuShell = (function(){
             if (sy === null || !e.touches[0]) return;
             var dy = sy - e.touches[0].clientY;
             if (dy > 0) {
-                hint.style.transform = 'translateX(-50%) translateY(' + (-dy * 1.8) + 'px)';
+                /* Solo translateY: el CSS centra el hint con left:0;right:0;
+                   text-align:center (no por translateX). Aplicar translateX
+                   aquí lo descentraba hacia la izquierda durante el swipe. */
+                hint.style.transform = 'translateY(' + (-dy * 1.8) + 'px)';
                 hint.style.opacity = String(0.8 - Math.min(1, dy/thr()) * 0.6);
             }
         }, { passive: true });
