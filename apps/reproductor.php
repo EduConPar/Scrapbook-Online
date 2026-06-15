@@ -1942,36 +1942,71 @@ async function _addAlbumToPlaylistFlow() {
         alert('No tienes playlists. Crea una primero.');
         return;
     }
-    /* Picker simple inline — un prompt con índices. Para UX más
-       elaborada se podría reusar #add-to-picker, pero el picker actual
-       está atado al ctx de un track concreto. */
-    let msg = 'Añadir el álbum a:\n';
-    playlists.forEach((p, i) => { msg += (i + 1) + '. ' + p.name + '\n'; });
-    const ans = prompt(msg + '\nNúmero de playlist:');
-    const idx = parseInt(ans, 10) - 1;
-    if (isNaN(idx) || idx < 0 || idx >= playlists.length) return;
-    const pl = playlists[idx];
 
-    /* Fusiona los tracks (skip los que ya están). */
-    const existing = new Set(pl.tracks.map(t => t.videoId));
-    const toAdd = _albumViewerCurrent.resolved
-        .filter(t => t.videoId && !existing.has(t.videoId))
+    /* Misma UI que el picker de "Añadir a otra playlist" para tracks
+       individuales: ventana Win98 con lista de playlists clickables.
+       Crea (o reusa) un picker dedicado al álbum, anclado al centro
+       del viewer. */
+    const albumName = (_albumViewerCurrent.meta && _albumViewerCurrent.meta.name) || 'álbum';
+    const tracksToAdd = _albumViewerCurrent.resolved
+        .filter(t => t.videoId)
         .map(t => ({ title: t.title, artist: t.artist, videoId: t.videoId, duration: t.duration || 0 }));
-    if (!toAdd.length) { alert('Todas las canciones ya están en esa playlist.'); return; }
-    const merged = pl.tracks.concat(toAdd);
+    if (!tracksToAdd.length) { alert('El álbum no tiene canciones resueltas.'); return; }
 
-    try {
-        const r = await fetch('assets/music/api.php?action=save-playlist-item', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: pl.id, name: pl.name, tracks: merged }),
+    let picker = document.getElementById('add-album-picker');
+    if (!picker) {
+        picker = document.createElement('div');
+        picker.className = 'window';
+        picker.id = 'add-album-picker';
+        picker.setAttribute('data-no-auto-z', '');
+        picker.style.cssText = 'display:none;position:fixed;z-index:10000;min-width:200px;';
+        picker.innerHTML =
+            '<div class="title-bar"><div class="title-bar-text">Añadir álbum a playlist</div>' +
+            '<div class="title-bar-controls"><button aria-label="Close" id="add-album-picker-close"></button></div></div>' +
+            '<div class="window-body" style="padding:4px;max-height:240px;overflow-y:auto;" id="add-album-picker-list"></div>';
+        document.body.appendChild(picker);
+        document.getElementById('add-album-picker-close').addEventListener('click', () => {
+            picker.style.display = 'none';
         });
-        const data = await r.json();
-        if (data && data.error) throw new Error(data.error);
-        alert('✔ ' + toAdd.length + ' canción(es) añadidas a "' + pl.name + '".');
-    } catch (e) {
-        alert('Error al guardar: ' + (e.message || e));
     }
+    const list = document.getElementById('add-album-picker-list');
+    list.innerHTML = '';
+    playlists.forEach((pl) => {
+        const item = document.createElement('div');
+        item.className = 'pl-menu-item';
+        item.textContent = pl.name;
+        item.addEventListener('click', async () => {
+            picker.style.display = 'none';
+            /* Fusiona los tracks del álbum con los de la playlist
+               destino, omitiendo los videoIds ya presentes. */
+            const existing = new Set((pl.tracks || []).map(t => t.videoId));
+            const fresh = tracksToAdd.filter(t => !existing.has(t.videoId));
+            if (!fresh.length) {
+                alert('Todas las canciones del álbum ya estaban en "' + pl.name + '".');
+                return;
+            }
+            const merged = (pl.tracks || []).concat(fresh);
+            try {
+                const r = await fetch('assets/music/api.php?action=save-playlist-item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: pl.id, name: pl.name, tracks: merged }),
+                });
+                const data = await r.json();
+                if (data && data.error) throw new Error(data.error);
+                alert('✔ ' + fresh.length + ' canción(es) de "' + albumName + '" añadidas a "' + pl.name + '".');
+            } catch (e) {
+                alert('Error al guardar: ' + (e.message || e));
+            }
+        });
+        list.appendChild(item);
+    });
+
+    /* Centra el picker en el viewport. */
+    picker.style.display = 'block';
+    const pw = picker.offsetWidth, ph = picker.offsetHeight;
+    picker.style.left = Math.max(8, Math.round((window.innerWidth  - pw) / 2)) + 'px';
+    picker.style.top  = Math.max(8, Math.round((window.innerHeight - ph) / 2)) + 'px';
 }
 
 /* Registra el álbum en el perfil del usuario. Delegamos a
