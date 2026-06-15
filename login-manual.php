@@ -109,35 +109,190 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
     <?php if ($baseWallpaper): ?>
     <style>body::before{ background-image:url('<?php echo htmlspecialchars($baseWallpaper); ?>'); opacity:1; }</style>
     <?php endif; ?>
+    <!-- Paleta "consola roja" idéntica a mobile-landing.php para que el
+         look sea uniforme al volver de cerrar sesión. Reusamos el id
+         #installWindow porque mobile-landing ya define los estilos para
+         ese selector — aquí solo los duplicamos para que login-manual
+         sea autosuficiente (no hay shared partial CSS). -->
+    <style>
+        .login-window {
+            width: calc(100% - 24px);
+            max-width: 380px;
+            height: auto;
+            position: static;
+        }
+        body {
+            padding: 16px 0;
+            overflow-y: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        body::before { opacity: 1 !important; }
+
+        #installWindow {
+            min-width: 200px;
+            background: #120808;
+            border-color: #3a0000 #0a0000 #0a0000 #3a0000;
+            box-shadow:
+                1px 1px 0 #000,
+                -1px -1px 0 #5a1010,
+                0 8px 32px rgba(0,0,0,0.8),
+                0 0 12px rgba(180,0,0,0.15);
+        }
+        #installWindow .title-bar {
+            background: linear-gradient(to right, #6a0000, #b02020);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+            border-bottom: 1px solid #3a0000;
+        }
+        #installWindow .window-body {
+            background: #120808;
+            padding: 10px;
+            color: #d4a0a0;
+        }
+        #installWindow label {
+            color: #d4a0a0;
+            font-size: 11px;
+        }
+        #installWindow input[type="text"],
+        #installWindow input[type="password"] {
+            background: #1e0c0c;
+            color: #d4a0a0;
+            border: 1px solid #0a0000;
+            border-top-color: #0a0000;
+            border-left-color: #0a0000;
+            border-right-color: #4a1010;
+            border-bottom-color: #4a1010;
+            padding: 6px 8px;
+            margin-top: 4px;
+            font-size: 16px; /* iOS NO hace auto-zoom si font-size >=16px. */
+            box-shadow:
+                inset 1px 1px 0 #000,
+                inset -1px -1px 0 #3a0000,
+                inset 2px 2px 4px rgba(0,0,0,0.6);
+            border-radius: 0;
+        }
+        #installWindow input[type="text"]:focus,
+        #installWindow input[type="password"]:focus {
+            outline: none;
+            background: #2a0c0c;
+            color: #fff;
+            box-shadow:
+                inset 1px 1px 0 #000,
+                inset -1px -1px 0 #5a1010,
+                inset 2px 2px 4px rgba(0,0,0,0.7),
+                0 0 4px rgba(180,0,0,0.4);
+        }
+        #installWindow .login-actions .button {
+            background: #1e0c0c !important;
+            color: #d4a0a0 !important;
+            border: 1px solid #3a1515 !important;
+            text-shadow: none !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,100,100,0.08),
+                0 1px 3px rgba(0,0,0,0.5) !important;
+        }
+        #installWindow .login-actions .button:hover {
+            background: #5a0000 !important;
+            color: #fff !important;
+            border-color: #a03030 !important;
+        }
+        #installWindow .login-actions .button:active {
+            background: #3a0000 !important;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+        }
+        /* Hero: icono Melon + título VT323, igual que mobile-landing. */
+        .mh-hero {
+            text-align: center;
+            margin: 4px 0 12px;
+        }
+        .mh-hero img {
+            width: 72px; height: 72px;
+            display: block;
+            margin: 0 auto 6px;
+            image-rendering: pixelated;
+            filter: drop-shadow(0 2px 8px rgba(180,0,0,0.5));
+        }
+        .mh-hero .mh-title {
+            font-family: 'VT323', monospace;
+            font-size: 26px;
+            color: #ff6060;
+            letter-spacing: 2px;
+            line-height: 1;
+            text-shadow: 0 0 8px rgba(255,60,60,0.4);
+        }
+        .mh-hero .mh-sub {
+            font-size: 10px;
+            color: #a06060;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        .mh-error {
+            color: #ff8080;
+            background: #2a0c0c;
+            border: 1px solid #5a0000;
+            padding: 4px 8px;
+            font-size: 11px;
+            margin: 8px 0;
+        }
+        .mh-cta-full { width: 100%; margin-top: 10px; min-height: 32px; font-size: 13px; }
+        /* Link "Crear cuenta nueva" abajo del form, pequeño, en rojo
+           tenue para no competir con el CTA principal. */
+        .mh-altlink {
+            display: block;
+            text-align: center;
+            margin-top: 12px;
+            font-size: 11px;
+            color: #d4a0a0;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 3px;
+        }
+        .mh-altlink:visited { color: #d4a0a0; }
+        .mh-altlink:hover { color: #fff; }
+    </style>
 </head>
 
 <body>
 
 <div class="login-window">
 
-    <!-- LOGIN MANUAL — username + password -->
-    <div class="window visible" id="loginWindow">
+    <!-- LOGIN MANUAL — username + password.
+         id="installWindow" hereda toda la paleta "consola roja" de
+         mobile-landing.php para que el look sea idéntico al volver de
+         cerrar sesión. -->
+    <div class="window" id="installWindow">
         <div class="title-bar">
             <div class="title-bar-text">Iniciar sesión</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" onclick="return false;"></button>
+            </div>
         </div>
         <div class="window-body">
+            <div class="mh-hero">
+                <img src="assets/img/mobile/icon.png" alt="Melon Hub">
+                <div class="mh-title">Melon Hub</div>
+                <div class="mh-sub">para móviles</div>
+            </div>
             <form method="POST" autocomplete="on">
                 <div class="field-row-stacked">
                     <label>Usuario</label>
                     <input type="text" name="username" autocomplete="username"
                            value="<?php echo htmlspecialchars($enteredUsername); ?>" autofocus required>
                 </div>
-                <div class="field-row-stacked">
+                <div class="field-row-stacked" style="margin-top:8px;">
                     <label>Contraseña</label>
                     <input type="password" name="password" autocomplete="current-password" required>
-                    <?php if ($error): ?>
-                    <p class="error-text">Usuario o contraseña incorrectos.</p>
-                    <?php endif; ?>
                 </div>
-                <div class="login-actions">
-                    <button class="button default" type="submit">Ingresar</button>
+                <?php if ($error): ?>
+                <p class="mh-error">Usuario o contraseña incorrectos.</p>
+                <?php endif; ?>
+                <div class="login-actions" style="margin-top:12px;">
+                    <button class="button default mh-cta-full" type="submit">Ingresar</button>
                 </div>
             </form>
+            <a class="mh-altlink" href="mobile-landing.php">¿No tienes cuenta? Crear una nueva</a>
         </div>
     </div>
 

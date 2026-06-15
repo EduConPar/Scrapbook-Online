@@ -57,15 +57,13 @@ if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
     exit;
 }
 
-/* CIERRE ESTRICTO
-   El usuario tiene sesión, pero ¿está dentro de la PWA? Si no, lo
-   sacamos a la landing — la única forma de entrar a Melon Hub es por
-   el icono. (Server-side best-effort; el doble check JS de abajo
-   captura el caso Android donde las cookies son compartidas.) */
-if (empty($_SESSION['is_pwa'])) {
-    header('Location: mobile-landing.php');
-    exit;
-}
+/* PWA hint — informativo, no estricto. Antes redirigíamos a la
+   landing si is_pwa no estaba seteado, pero eso provocaba un bucle
+   infinito cuando la PWA se abría sin sesión válida (mobile.php → no
+   session → redirect landing → JS detecta standalone → redirect
+   mobile.php?pwa=1 → no session → loop) y también impedía abrir la
+   URL en navegador normal. Si tienen sesión, los dejamos pasar; el
+   JS de abajo decide qué viewport meta usar según el modo display. */
 $userKey   = $_SESSION['user'];
 $userLabel = $loginUsers[$userKey]['label'];
 
@@ -229,17 +227,24 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <!-- PWA GUARD: double-check client-side. En Android la PWA y el
-         navegador comparten cookies, así que el chequeo server-side
-         (is_pwa en sesión) puede colarse. Aquí miramos el display-mode
-         REAL: si la página no se está renderizando como standalone
-         (icono de la home), redirigimos a la landing antes de pintar
-         nada. Inline + síncrono para evitar flash. -->
+    <!-- Antes redirigíamos a la landing si NO estábamos en standalone
+         (PWA instalada). Eso causaba dos problemas:
+           - Bucle infinito al abrir la PWA sin sesión (las cookies se
+             comparten en Android entre PWA y navegador y el ping-pong
+             entre mobile.php y mobile-landing.php no terminaba).
+           - Bloqueaba abrir la URL en navegador normal después de
+             instalar la PWA.
+         Política nueva: si tienes sesión, entras. La barra del
+         navegador solo desaparecerá si abres desde el icono de la PWA
+         (eso es una decisión del SO, no nuestra). -->
     <script>
     (function(){
+        /* Marca cosmética: añade `is-standalone` al <html> para que el
+           CSS pueda esconder elementos redundantes cuando estamos en
+           PWA (por ejemplo, el banner "instala la app"). Sin redirect. */
         var sa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
               || window.navigator.standalone === true;
-        if (!sa) window.location.replace('mobile-landing.php');
+        if (sa) document.documentElement.classList.add('is-standalone');
     })();
     /* --mh-vh: viewport height en px sincronizado con window.innerHeight.
        Sobrevive al bfcache (al volver de otra app, refrescamos en
@@ -4138,24 +4143,58 @@ window.MuShell = (function(){
     });
 })();
 
+/* Tier 2 #5 — Idle broadcast desde los iframes de apps.
+   El reproductor móvil emite postMessage `{type:'melon:idle', on:true/false}`
+   cuando se entra/sale del lock screen. Lo traducimos a un evento DOM
+   local `melon:idle:on` / `melon:idle:off` para que cada poller del
+   shell pueda pausarse y reanudar sin depender de globals. */
+(function mIdleBridge(){
+    window.addEventListener('message', function(ev){
+        var d = ev && ev.data;
+        if (!d || d.type !== 'melon:idle') return;
+        try {
+            window.dispatchEvent(new Event(d.on ? 'melon:idle:on' : 'melon:idle:off'));
+        } catch (_) {}
+    });
+    /* También respondemos a visibilitychange del propio shell por
+       redundancia: si el SO pone el documento en background, también
+       paramos los polls (el iframe del reproductor también lo hace en
+       su lado). */
+    document.addEventListener('visibilitychange', function(){
+        try {
+            window.dispatchEvent(new Event(document.hidden ? 'melon:idle:on' : 'melon:idle:off'));
+        } catch (_) {}
+    });
+})();
+
 /* Heartbeat de presencia — móvil, mismo endpoint que desktop.
    30s visible / 90s hidden. La presencia no es time-sensitive en
    background; basta con avisar cada minuto y medio. */
 (function mPresenceHeartbeat(){
     var PING_T = null;
+    var idleOff = false;
     function ping(){
+        if (idleOff) return;
         fetch('assets/profile/api.php?action=heartbeat', {
             method: 'POST', credentials: 'same-origin'
         }).catch(function(){});
     }
     function startPing(){
         if (PING_T) clearInterval(PING_T);
+        if (idleOff) return; /* no rearrancar mientras lock activo */
         var iv = (document.visibilityState === 'hidden') ? 90000 : 30000;
         PING_T = setInterval(ping, iv);
+    }
+    function stopPing(){
+        if (PING_T) { clearInterval(PING_T); PING_T = null; }
     }
     ping();
     startPing();
     document.addEventListener('visibilitychange', startPing);
+    /* Tier 2 #5: el reproductor avisa con `melon:idle` cuando se
+       bloquea — paramos el heartbeat hasta que vuelva. */
+    window.addEventListener('melon:idle:on',  function(){ idleOff = true;  stopPing(); });
+    window.addEventListener('melon:idle:off', function(){ idleOff = false; startPing(); ping(); });
 })();
 
 /* ════════════════════════════════════════════════════════════════
@@ -4493,12 +4532,25 @@ window.MuShell = (function(){
             })
             .catch(function(){});
     }
+    var pollT = null;
+    var idleOff = false;
+    function startPoll(){
+        if (pollT) clearInterval(pollT);
+        if (idleOff) return;
+        pollT = setInterval(poll, 10000);
+    }
+    function stopPoll(){
+        if (pollT) { clearInterval(pollT); pollT = null; }
+    }
     poll();
-    setInterval(poll, 10000);
+    startPoll();
     /* Refresca al volver a la pestaña — bfcache deja el contador stale. */
     document.addEventListener('visibilitychange', function(){
-        if (document.visibilityState === 'visible') poll();
+        if (document.visibilityState === 'visible' && !idleOff) poll();
     });
+    /* Tier 2 #5: pausar mientras el reproductor está en lock screen. */
+    window.addEventListener('melon:idle:on',  function(){ idleOff = true;  stopPoll(); });
+    window.addEventListener('melon:idle:off', function(){ idleOff = false; startPoll(); poll(); });
 })();
 
 /* Polling de recordatorios próximos (7/2/1 días). Mismo endpoint que

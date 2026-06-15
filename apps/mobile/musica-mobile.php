@@ -1073,78 +1073,35 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
            todo el overlay (su contenido aparece al mismo tiempo que
            el fondo negro tapa el fullscreen subyacente).
            ════════════════════════════════════════════════════════════ */
+        /* ── Lock screen MINIMALISTA ── (optimizado para batería)
+           Fondo negro puro, sin filtros, sin animaciones, sin
+           sombras, sin transitions. Solo el texto del swipe. */
         .mu-lock {
             position: fixed;
             inset: 0;
             z-index: 350;
-            overflow: hidden;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            /* Paleta tipo terminal — fondo negro + verde fosforescente
-               fijo. NO usa el acento del tema porque el modo reposo
-               siempre tiene look CRT-monocromo. Los tokens LCD locales
-               sobrescriben los del fullscreen (que sí siguen al tema). */
-            --lock-bg:        #0a0a0a;
-            --lock-surface:   #050505;
-            --lock-bezel-hi:  #2a2a2a;     /* gris neutro para los bezels claros */
-            --lock-bezel-lo:  #1a1a1a;
-            --lock-bezel-dk:  #000;
-            /* Override LCD tokens: verde terminal más apagado. Menos
-               saturación que el #00ff88 anterior — se sigue leyendo
-               como fósforo CRT pero descansa más la vista. */
-            --lcd:      #22cc66;
-            --lcd-soft: rgba(34, 204, 102, 0.65);
-            --lcd-dim:  rgba(34, 204, 102, 0.35);
-            --lcd-veil: rgba(34, 204, 102, 0.06);
-            --accent:      #22cc66;
-            --accent-deep: #117740;
-            --accent-text: #0d1f12;
-            background: var(--lock-bg);
-            color: var(--lcd);
-            transition: opacity 1.2s ease, visibility 0s linear 1.2s;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            color: #999;
             -webkit-tap-highlight-color: transparent;
+            contain: strict;
         }
-        .mu-lock.visible {
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
-            transition: opacity 1.2s ease, visibility 0s linear 0s;
+        .mu-lock.visible { display: flex; }
+
+        /* Tier 1 #1 — content-visibility: skip de render del resto de
+           la UI mientras el lock cubre todo. El browser puede saltar
+           layout/paint/composite del subtree. Solo aplica a partes
+           que SI O SI están tapadas por el lock. */
+        body.lock-active #mu-list,
+        body.lock-active #mu-player,
+        body.lock-active #mu-widget,
+        body.lock-active #mu-full {
+            content-visibility: hidden;
         }
 
-        /* Filtro LCD del lock: solo CRT scanlines en blanco grisáceo,
-           sin tinte verde sobre el fondo. El verde queda RESERVADO
-           para el texto/HUD; el background se mantiene gris-negro
-           neutro. La viñeta también en gris para reforzar la
-           sensación de "tubo de rayos catódicos" sin colorear. */
-        .mu-lock::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(ellipse at center,
-                rgba(0, 0, 0, 0) 50%,
-                rgba(0, 0, 0, 0.35) 100%);
-            pointer-events: none;
-            z-index: 1;
-        }
-        .mu-lock::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: repeating-linear-gradient(to bottom,
-                rgba(255, 255, 255, 0.04) 0,
-                rgba(255, 255, 255, 0.04) 1px,
-                transparent 1px,
-                transparent 3px);
-            mix-blend-mode: screen;
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        /* Ahorro batería: cuando el lock está visible, las animaciones
-           del fullscreen subyacente se pausan. Como el lock es opaco y
-           lo tapa por completo, no se ve nada → es absurdo gastar GPU
-           rotando un vinilo invisible. */
+        /* Ahorro batería: animaciones del fullscreen subyacente pausadas. */
         .mu-full.behind-lock,
         .mu-full.behind-lock *,
         .mu-full.behind-lock *::before,
@@ -1152,247 +1109,22 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             animation-play-state: paused !important;
         }
 
-        /* Layout EXACTO al .mu-full-window: title-bar arriba, body
-           con padding y gap idénticos, footer abajo. La diferencia
-           es que aquí los huecos del header, controles, extras y
-           footer son divs vacíos que reservan el espacio para que
-           vinilo/info/progress queden en la misma posición vertical
-           que en el fullscreen. */
-        .mu-lock {
-            display: flex;
-            flex-direction: column;
-            /* Replica el padding interno del .mu-full-window (3px en
-               cada lado) para que el title-bar/body/footer empiecen
-               en las MISMAS coordenadas que en el fullscreen. Sin
-               este padding la HUD quedaba 3px más arriba. */
-            padding: 3px;
-            box-sizing: border-box;
-        }
-
-        /* Hueco del title-bar: misma altura mínima (22px). Fondo
-           transparente para que el filtro LCD (::before/::after) se
-           vea a través — si fuera opaco quedaría como una franja
-           negra sin tintar mientras el resto sí tiene el tinte. */
-        .mu-lock-titlebar {
-            flex-shrink: 0;
-            min-height: 22px;
-            background: transparent;
-            position: relative;
-            z-index: 2;
-        }
-
-        /* Body con misma estructura interna que .mu-full-body. */
-        .mu-lock-body {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            padding: 10px 12px;
-            gap: 10px;
-            background: transparent;
-            overflow: hidden;
-            position: relative;
-            z-index: 2;
-        }
-        /* Huecos vacíos donde estaban los controles y los extras.
-           min-height EXACTO del fullscreen: controls primary 60px +
-           padding (4+2); extras button 36px + padding (2+2). Sin
-           padding propio en el hole → el min-height define la altura. */
-        .mu-lock-controls-hole {
-            flex-shrink: 0;
-            min-height: 66px;
-        }
-        .mu-lock-extras-hole {
-            flex-shrink: 0;
-            min-height: 40px;
-        }
-        /* Hueco del footer: misma altura que .mu-full-footer-btn
-           (min-height 32px) + safe-area + margen del .mu-full-footer.
-           Transparente para que el LCD también tinte aquí. */
-        .mu-lock-footer-hole {
-            flex-shrink: 0;
-            min-height: 32px;
-            margin: 0 1px 1px;
-            padding-bottom: env(safe-area-inset-bottom);
-            background: transparent;
-            position: relative;
-            z-index: 2;
-        }
-
-        /* Display sunken con vinilo — replica EXACTA de .mu-full-display
-           pero con la paleta dark. Incluye el radial gradient CRT y
-           las scanlines. */
-        .mu-lock-display {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 12px;
-            min-height: 0;
-            background: var(--lock-surface);
-            background-image:
-                radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.35) 100%);
-            box-shadow:
-                inset -1px -1px var(--lock-bezel-hi),
-                inset  1px  1px var(--lock-bezel-dk),
-                inset -2px -2px var(--lock-bezel-lo),
-                inset  2px  2px var(--lock-bezel-dk);
-            position: relative;
-            overflow: hidden;
-        }
-        .mu-lock-display::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: repeating-linear-gradient(to bottom,
-                rgba(255,255,255,0.025) 0,
-                rgba(255,255,255,0.025) 1px,
-                transparent 1px,
-                transparent 3px);
-            pointer-events: none;
-        }
-        /* Vinilo wrap: spec IDÉNTICO al .mu-vinyl-wrap del fullscreen. */
-        .mu-lock-vinyl-wrap {
-            width: min(72vw, 300px);
-            max-height: 100%;
-            aspect-ratio: 1;
-            position: relative;
-            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.65));
-        }
-
-        /* Info LCD — clon del .mu-full-info, mismos glow + scanlines
-           pero sobre tokens dark. */
-        .mu-lock-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 12px;
-            background: var(--lock-surface);
-            color: var(--lcd);
-            box-shadow:
-                inset -1px -1px var(--lock-bezel-hi),
-                inset  1px  1px var(--lock-bezel-dk),
-                inset -2px -2px var(--lock-bezel-lo),
-                inset  2px  2px var(--lock-bezel-dk);
-            box-sizing: border-box;
-            flex-shrink: 0;
-            min-height: 50px;
-            position: relative;
-            overflow: hidden;
-        }
-        .mu-lock-info-marker {
-            font-family: 'VT323', monospace;
-            font-size: 24px;
-            color: var(--lcd);
-            text-shadow: 0 0 8px var(--lcd-soft);
-            line-height: 1;
-            flex-shrink: 0;
-            animation: mu-blink 1s steps(2) infinite;
-        }
-        .mu-lock-info-text {
-            flex: 1;
-            min-width: 0;
-            text-align: left;
-        }
-
-        /* Title/artist con misma estructura wrap+track+span para
-           reusar el sistema de marquee. */
-        .mu-lock-title-wrap {
-            font-size: clamp(18px, 5.5vw, 24px);
-            line-height: 1.15;
-            height: 1.15em;
-            overflow: hidden;
-            white-space: nowrap;
-            margin: 0 0 2px;
-        }
-        .mu-lock-artist-wrap {
-            font-size: clamp(13px, 3.8vw, 16px);
-            line-height: 1.3;
-            height: 1.3em;
-            overflow: hidden;
-            white-space: nowrap;
-        }
-        .mu-lock-title-track,
-        .mu-lock-artist-track {
-            display: inline-block;
-            will-change: transform;
-        }
-        .mu-lock-title,
-        .mu-lock-artist {
-            display: inline-block;
-            font-family: 'VT323', monospace;
-            letter-spacing: 1px;
-            text-shadow: 0 0 6px var(--lcd-soft);
-            line-height: inherit;
-        }
-        .mu-lock-title  { color: var(--lcd); }
-        .mu-lock-artist { color: var(--lcd-soft); }
-        .mu-lock-title-wrap.marquee .mu-lock-title-track,
-        .mu-lock-artist-wrap.marquee .mu-lock-artist-track {
-            display: inline-flex;
-            gap: 3em;
-            animation: mu-marquee var(--mu-marquee-duration, 12s) linear infinite;
-        }
-
-        /* Progress + tiempos — réplica del fullscreen con tokens dark. */
-        .mu-lock-progress-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 0 4px;
-            flex-shrink: 0;
-        }
-        .mu-lock-time {
-            font-family: 'VT323', monospace;
-            font-size: 14px;
-            color: var(--lcd);
-            text-shadow: 0 0 5px var(--lcd-soft);
-            font-variant-numeric: tabular-nums;
-            min-width: 38px;
-            text-align: center;
-        }
-        .mu-lock-progress {
-            flex: 1;
-            height: 14px;
-            background: var(--lock-surface);
-            box-shadow:
-                inset -1px -1px var(--lock-bezel-hi),
-                inset  1px  1px var(--lock-bezel-dk),
-                inset -2px -2px var(--lock-bezel-lo),
-                inset  2px  2px var(--lock-bezel-dk);
-            position: relative;
-            overflow: hidden;
-            padding: 2px;
-            box-sizing: border-box;
-        }
-        .mu-lock-progress-fill {
-            height: 100%;
-            width: 0;
-            /* Gradiente verde terminal apagado para casar con --lcd. */
-            background: linear-gradient(90deg, #0d5530 0%, #22cc66 100%);
-            box-shadow: 0 0 8px rgba(34, 204, 102, 0.4);
-            transition: width 0.25s linear;
-        }
-
-        /* Hint deslizable abajo — el ÚNICO elemento que se mueve con
-           el dedo durante el swipe. */
+        /* Hint del swipe: AMOLED-friendly.
+           - color: gris medio #999 → en AMOLED consume ~50% menos por
+             píxel iluminado que blanco puro. Sigue legible sobre fondo
+             negro.
+           - font-size 12px → menos píxeles encendidos en total. */
         .mu-lock-hint {
             position: absolute;
-            left: 50%;
+            left: 0; right: 0;
             bottom: max(28px, env(safe-area-inset-bottom) + 28px);
-            transform: translateX(-50%);
+            text-align: center;
             font-family: 'VT323', monospace;
-            font-size: 14px;
+            font-size: 12px;
             letter-spacing: 1.5px;
-            color: var(--lcd);
-            text-shadow: 0 0 6px var(--lcd-soft);
-            opacity: 0.8;
-            animation: mu-blink 2s ease-in-out infinite;
+            color: #999;
             pointer-events: none;
             white-space: nowrap;
-            z-index: 2;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            will-change: transform, opacity;
         }
 
         .mu-modal-backdrop {
@@ -1729,57 +1461,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
      Diferencia: los huecos del title-bar, controls, extras y footer
      son DIVS VACÍOS — reservan el espacio pero no muestran botones.
      Los colores se sustituyen por la paleta dark/LCD. -->
+<!-- Lock screen MINIMALISTA: solo fondo negro + texto del swipe.
+     Quitamos vinyl, info LCD, progress bar, filtro CRT (scanlines +
+     viñeta) y todas las animaciones (rotación vinyl, mu-blink, mu-
+     marquee). Objetivo: máximo ahorro de batería — el browser entra
+     en idle mode (sin repaint, sin compositor activo) hasta que el
+     usuario hace swipe. La música del YouTube iframe sigue sonando
+     porque vive en su propio contexto. -->
 <div class="mu-lock" id="mu-lock" aria-hidden="true">
-    <!-- Hueco del title-bar (vacío, misma altura). -->
-    <div class="mu-lock-titlebar"></div>
-
-    <div class="mu-lock-body">
-        <!-- Display sunken con vinilo (flex: 1, igual que .mu-full-display). -->
-        <div class="mu-lock-display">
-            <div class="mu-lock-vinyl-wrap">
-                <div class="mu-vinyl mu-lock-vinyl" id="mu-lock-vinyl">
-                    <div class="mu-vinyl-label empty" id="mu-lock-vinyl-label"><img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
-                    <div class="mu-vinyl-hole"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Info LCD: marker + title/artist con marquee. -->
-        <div class="mu-lock-info">
-            <div class="mu-lock-info-marker"><img src="../../assets/img/appIcons/songIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"></div>
-            <div class="mu-lock-info-text">
-                <div class="mu-lock-title-wrap" id="mu-lock-title-wrap">
-                    <span class="mu-lock-title-track" id="mu-lock-title-track">
-                        <span class="mu-lock-title" id="mu-lock-title">—</span>
-                    </span>
-                </div>
-                <div class="mu-lock-artist-wrap" id="mu-lock-artist-wrap">
-                    <span class="mu-lock-artist-track" id="mu-lock-artist-track">
-                        <span class="mu-lock-artist" id="mu-lock-artist">—</span>
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Progress + tiempos. -->
-        <div class="mu-lock-progress-row">
-            <span class="mu-lock-time" id="mu-lock-time-cur">0:00</span>
-            <div class="mu-lock-progress">
-                <div class="mu-lock-progress-fill" id="mu-lock-progress-fill"></div>
-            </div>
-            <span class="mu-lock-time" id="mu-lock-time-tot">0:00</span>
-        </div>
-
-        <!-- Hueco de los controles (vacío, misma altura que prev/play/next). -->
-        <div class="mu-lock-controls-hole"></div>
-        <!-- Hueco de la fila extras (vacío). -->
-        <div class="mu-lock-extras-hole"></div>
-    </div>
-
-    <!-- Hueco del footer (vacío, misma altura que el chevron de cerrar). -->
-    <div class="mu-lock-footer-hole"></div>
-
-    <!-- Hint flotante para el swipe (no rompe el layout). -->
     <div class="mu-lock-hint" id="mu-lock-hint">↑  Desliza para desbloquear</div>
 </div>
 
@@ -2237,10 +1926,14 @@ function muFullClose() {
     muProgressTimerSync();
 }
 function muProgressTimerSync() {
-    var fullVis = document.getElementById('mu-full').classList.contains('visible');
+    /* Lock activo → STOP del timer aunque el fullscreen esté detrás.
+       En el modo bloqueo no se muestra progress UI, así que es absurdo
+       wake-upear cada 500ms para nada. Ahorro batería directo. */
     var lockVis = document.getElementById('mu-lock').classList.contains('visible');
-    if (fullVis || lockVis) muStartProgressTimer();
-    else                    muStopProgressTimer();
+    if (lockVis) { muStopProgressTimer(); return; }
+    var fullVis = document.getElementById('mu-full').classList.contains('visible');
+    if (fullVis) muStartProgressTimer();
+    else         muStopProgressTimer();
 }
 function muStartProgressTimer() {
     if (MU_PROGRESS_T) return;
@@ -2411,25 +2104,48 @@ function muSetThemeColor(color) {
     if (meta) meta.setAttribute('content', color);
 }
 
+/* Broadcast "estoy en modo idle" al shell padre (mobile.php) y a
+   cualquier listener interno. mobile.php usa esto para pausar sus
+   heartbeats / LT polls / etc. */
+function muBroadcastIdle(on) {
+    var msg = { type: 'melon:idle', on: !!on };
+    try { window.dispatchEvent(new CustomEvent('melon:idle', { detail: msg })); } catch (_) {}
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage(msg, '*');
+        }
+        if (window.top && window.top !== window && window.top !== window.parent) {
+            window.top.postMessage(msg, '*');
+        }
+    } catch (_) {}
+}
+
 function muLockOpen() {
     if (CUR_IDX < 0) return;                 /* nada sonando: nada que bloquear */
     var lock = document.getElementById('mu-lock');
     var hint = document.getElementById('mu-lock-hint');
     var full = document.getElementById('mu-full');
-    if (hint) { hint.style.transform = ''; hint.style.opacity = ''; }
-    muLockSync();                            /* pinta vinilo/info/progress antes del fade */
+    if (hint) { hint.style.transform = ''; }
+    /* Versión minimalista: NO pintamos vinilo/título/progress. */
     lock.classList.add('visible');
     lock.setAttribute('aria-hidden', 'false');
     if (full) full.classList.add('behind-lock');
+    /* Tier 1 #1: clase en body activa el content-visibility:hidden
+       de la UI subyacente. */
+    document.body.classList.add('lock-active');
     muSetThemeColor('#000000');
-    /* Fullscreen API: oculta la barra de navegación del SO (los
-       3 botones inferiores en Android, gesture bar en iOS) y la
-       status bar. Solo funciona dentro de un gesto del usuario
-       — el click en el padlock cuenta como tal. iOS Safari tiene
-       soporte limitado; en PWA standalone con display:fullscreen
-       en el manifest funciona mejor. */
+    /* YouTube: bajamos la calidad al mínimo para ahorrar descodificación. */
+    try {
+        if (YT_PLAYER && YT_PLAYER.setPlaybackQuality) {
+            YT_PLAYER.setPlaybackQuality('tiny');
+        }
+    } catch (_) {}
+    /* Tier 2 #6: pausa la cola de resolver álbumes. */
+    _muAlbumQueuePaused = true;
     muRequestFullscreen();
-    muProgressTimerSync();
+    muProgressTimerSync();   /* para el timer al detectar lock visible */
+    /* Tier 2 #5: avisa al shell que entre en idle mode. */
+    muBroadcastIdle(true);
 }
 function muLockClose() {
     var lock = document.getElementById('mu-lock');
@@ -2438,12 +2154,21 @@ function muLockClose() {
     lock.classList.remove('visible');
     lock.setAttribute('aria-hidden', 'true');
     if (full) full.classList.remove('behind-lock');
+    document.body.classList.remove('lock-active');
     muSetThemeColor(THEME_COLOR_DEFAULT);
+    /* Restaurar calidad del player. */
+    try {
+        if (YT_PLAYER && YT_PLAYER.setPlaybackQuality) {
+            YT_PLAYER.setPlaybackQuality('default');
+        }
+    } catch (_) {}
+    /* Reanuda la cola de álbumes y dispara los pendientes. */
+    _muAlbumQueuePaused = false;
+    if (typeof _muAlbumNextSlot === 'function') _muAlbumNextSlot();
     muExitFullscreen();
-    setTimeout(function(){
-        if (hint) { hint.style.transform = ''; hint.style.opacity = ''; }
-    }, 1200);
+    if (hint) hint.style.transform = '';
     muProgressTimerSync();
+    muBroadcastIdle(false);
 }
 /* Helpers Fullscreen API con prefijos webkit por compatibilidad. */
 function muRequestFullscreen() {
@@ -2462,34 +2187,9 @@ function muExitFullscreen() {
 
 /* Sincroniza el lock con el track actual: vinilo (label + paused),
    título, artista, marquee. El progreso lo refresca el timer común. */
-function muLockSync() {
-    if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
-    var tr = QUEUE[CUR_IDX];
-    var thumbUrl = tr.videoId ? 'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg' : '';
-    var label = document.getElementById('mu-lock-vinyl-label');
-    var vinyl = document.getElementById('mu-lock-vinyl');
-    var titleEl  = document.getElementById('mu-lock-title');
-    var artistEl = document.getElementById('mu-lock-artist');
-    if (label) {
-        if (thumbUrl) {
-            label.style.backgroundImage = "url('" + thumbUrl + "')";
-            label.classList.remove('empty');
-            label.textContent = '';
-        } else {
-            label.style.backgroundImage = '';
-            label.classList.add('empty');
-            label.innerHTML = '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">';
-        }
-    }
-    if (titleEl)  titleEl.textContent  = tr.title  || tr.videoId || '—';
-    if (artistEl) artistEl.textContent = tr.artist || '';
-    muSetupMarquee('mu-lock-title-wrap',  'mu-lock-title-track',  'mu-lock-title');
-    muSetupMarquee('mu-lock-artist-wrap', 'mu-lock-artist-track', 'mu-lock-artist');
-    if (vinyl) {
-        var playing = !!(YT_PLAYER && YT_PLAYER.getPlayerState && YT_PLAYER.getPlayerState() === 1);
-        vinyl.classList.toggle('paused', !playing);
-    }
-}
+/* Lock minimalista — sin HUD que sincronizar. muLockSync queda como
+   no-op para no romper los call-sites (muFullRefresh la llama). */
+function muLockSync() { /* intentionally empty */ }
 
 document.getElementById('mu-full-lock').addEventListener('click', muLockOpen);
 
@@ -2517,12 +2217,11 @@ document.getElementById('mu-full-lock').addEventListener('click', muLockOpen);
         if (!dragging || startY === null || !e.touches[0]) return;
         var dy = startY - e.touches[0].clientY;
         if (dy > 0) {
-            /* Amplificación visual x1.8 — el hint "vuela" con el
-               dedo. translateX(-50%) lo conserva centrado horizontal. */
-            hint.style.transform = 'translateX(-50%) translateY(' + (-dy * 1.8) + 'px)';
-            /* Fade gradual del hint conforme se acerca al threshold. */
-            var pct = Math.min(1, dy / getThreshold());
-            hint.style.opacity = String(0.8 - pct * 0.6);
+            /* El hint nuevo ya está centrado con left:0 + right:0 +
+               text-align:center, así que solo aplicamos translateY.
+               Sin opacity fade (no la necesitamos: cuesta repaint y
+               el feedback de movimiento ya es claro). */
+            hint.style.transform = 'translateY(' + (-dy * 1.8) + 'px)';
         }
     }, { passive: true });
     function endDrag(e) {
@@ -2535,9 +2234,8 @@ document.getElementById('mu-full-lock').addEventListener('click', muLockOpen);
         if (dy >= getThreshold()) {
             muLockClose();
         } else {
-            /* Snap back: el hint vuelve a su sitio. */
+            /* Snap back inmediato (sin transición CSS para no animar). */
             hint.style.transform = '';
-            hint.style.opacity = '';
         }
     }
     lock.addEventListener('touchend',    endDrag);
@@ -3814,7 +3512,12 @@ function _muAlbumCacheSet(vid, payload) {
 var MU_ALBUM_MAX_PARALLEL = 5;
 var _muAlbumInFlight = 0;
 var _muAlbumQueue    = [];
+var _muAlbumQueuePaused = false; /* lock screen lo pone en true */
 function _muAlbumNextSlot() {
+    /* Tier 2 #6: si la cola está pausada (lock activo), no
+       arrancamos nuevos jobs. Los pendientes esperan a que
+       muLockClose() llame _muAlbumNextSlot() de nuevo. */
+    if (_muAlbumQueuePaused) return;
     while (_muAlbumInFlight < MU_ALBUM_MAX_PARALLEL && _muAlbumQueue.length) {
         _muAlbumInFlight++;
         var job = _muAlbumQueue.shift();
@@ -4492,6 +4195,22 @@ function _muAddAlbumToPlaylistConfirmed(pl, album) {
         });
     });
 }
+
+/* Tier 1 #2: pausa todo lo no-esencial cuando el documento queda
+   invisible (cambias de app, minimizas la PWA). El audio sigue
+   gracias a Media Session — solo paramos UI de la app. */
+document.addEventListener('visibilitychange', function(){
+    if (document.hidden) {
+        if (typeof muStopProgressTimer === 'function') muStopProgressTimer();
+        _muAlbumQueuePaused = true;
+        muBroadcastIdle(true);
+    } else {
+        _muAlbumQueuePaused = false;
+        if (typeof _muAlbumNextSlot === 'function') _muAlbumNextSlot();
+        if (typeof muProgressTimerSync === 'function') muProgressTimerSync();
+        muBroadcastIdle(false);
+    }
+});
 
 /* ─── Bootstrap ─────────────────────────────────────────────────── */
 loadPlaylists();

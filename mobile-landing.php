@@ -84,10 +84,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
          el marcador pwa=1 para que el servidor establezca la sesión
          como PWA y permita el acceso. -->
     <script>
+    /* Solo saltamos a la app si ESTAMOS en standalone Y tenemos sesión.
+       Antes saltábamos sin checkear sesión, y como mobile.php redirige
+       a esta landing cuando no hay sesión, el ping-pong era infinito
+       (landing → mobile.php?pwa=1 → no session → landing → ...).
+       Si no hay sesión, dejamos que la landing renderice el form de
+       login normalmente, incluso si la PWA está abierta. */
+    window.MELON_HAS_SESSION = <?= json_encode(!empty($_SESSION['user']) && isset($loginUsers[$_SESSION['user']])) ?>;
     (function(){
         var sa = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
               || window.navigator.standalone === true;
-        if (sa) window.location.replace('mobile.php?pwa=1');
+        if (sa && window.MELON_HAS_SESSION) {
+            window.location.replace('mobile.php?pwa=1');
+        }
     })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
