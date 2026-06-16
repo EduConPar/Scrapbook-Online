@@ -309,6 +309,18 @@ body.user-selected::before { opacity: 1; }
 .login-text { margin-bottom: 14px; }
 .field-row-stacked { margin-top: 12px; }
 
+/* Campos de texto/contraseña del login ocupan el ancho de la ventana. */
+#loginWindow input[type="text"],
+#loginWindow input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 6px;
+}
+
+/* Fila del botón "Crear usuario" debajo del formulario. */
+.login-register-row { margin-top: 10px; }
+.login-register-row .button { width: 100%; }
+
 .login-actions {
     display: flex;
     justify-content: flex-end;

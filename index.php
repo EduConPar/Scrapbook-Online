@@ -372,62 +372,28 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
         </div>
     </div>
 
-    <!-- SELECCION -->
-    <div class="window <?php echo $showLogin ? 'hidden' : ''; ?>" id="selectWindow">
+    <!-- LOGIN (usuario + contraseña) -->
+    <div class="window visible" id="loginWindow">
         <div class="title-bar">
-            <div class="title-bar-text"><span id="error-icon">✕</span> !ERROR</div>
+            <div class="title-bar-text"><span id="error-icon">✕</span> Iniciar sesión</div>
         </div>
         <div class="window-body">
-            <div class="user-list">
-                <?php if (empty($users) && !empty($GLOBALS['_loginUsersError'])): ?>
-                    <p style="font-size:11px;color:#c00;margin:0 0 8px;padding:6px;background:#fee;border:1px solid #fcc;">
-                        <strong>No hay usuarios para mostrar.</strong><br>
-                        <span style="font-size:10px;"><?php echo htmlspecialchars($GLOBALS['_loginUsersError']); ?></span>
-                    </p>
-                <?php endif; ?>
-                <?php foreach ($users as $key => $user):
-                    $_theme = getUserActiveTheme($key, $user['label']);
-                    /* Slug de la interfaz del user — string vacío si no
-                       tiene preferencia o si su interfaz no tiene
-                       login.css (en cuyo caso no aplicamos nada). */
-                    $_userIface = getUserActiveInterfaceSlug($key);
-                    $_userIfaceLoginCss = '';
-                    if ($_userIface !== '') {
-                        $_loginCssAbs = __DIR__ . '/assets/interfaces/' . $_userIface . '/login.css';
-                        if (is_file($_loginCssAbs)) {
-                            $_userIfaceLoginCss = 'assets/interfaces/' . $_userIface . '/login.css?v=' . filemtime($_loginCssAbs);
-                        }
-                    }
-                ?>
-                    <button
-                        class="button user-button select-user"
-                        data-user="<?php echo $key; ?>"
-                        data-label="<?php echo htmlspecialchars($user['label']); ?>"
-                        data-img="<?php echo htmlspecialchars(getUserImage($user['label'])); ?>"
-                        data-wallpaper="<?php echo htmlspecialchars(getUserEffectiveWallpaper($key, $user['label'])); ?>"
-                        data-theme-class="<?php echo htmlspecialchars($_theme['class'] ?? ''); ?>"
-                        data-theme-css="<?php echo htmlspecialchars($_theme['css'] ?? ''); ?>"
-                        data-interface-login-css="<?php echo htmlspecialchars($_userIfaceLoginCss); ?>"
-                        type="button"
-                    ><?php echo htmlspecialchars($user['label']); ?></button>
-                <?php endforeach; ?>
-                <button class="button user-button" id="openRegister" type="button">+ Crear usuario</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- LOGIN -->
-    <div class="window <?php echo $showLogin ? 'visible' : 'hidden'; ?>" id="loginWindow">
-        <div class="title-bar">
-            <div class="title-bar-text">Iniciar sesión</div>
-        </div>
-        <div class="window-body">
-            <form method="POST">
+            <?php if (empty($users) && !empty($GLOBALS['_loginUsersError'])): ?>
+                <p style="font-size:11px;color:#c00;margin:0 0 8px;padding:6px;background:#fee;border:1px solid #fcc;">
+                    <strong>No hay usuarios para mostrar.</strong><br>
+                    <span style="font-size:10px;"><?php echo htmlspecialchars($GLOBALS['_loginUsersError']); ?></span>
+                </p>
+            <?php endif; ?>
+            <form method="POST" id="loginForm">
                 <input type="hidden" name="user" id="selectedUser" value="<?php echo htmlspecialchars($selectedUser); ?>">
-                <p class="login-text">Accediendo como <strong id="selectedLabel"></strong></p>
+                <div class="field-row-stacked">
+                    <label>Usuario</label>
+                    <input type="text" name="username" id="usernameInput" autocomplete="off" maxlength="30" value="<?php echo htmlspecialchars($selectedLabel); ?>"<?php echo $showLogin ? '' : ' autofocus'; ?>>
+                    <p class="error-text" id="userNotFound" style="display:none;">Usuario no encontrado.</p>
+                </div>
                 <div class="field-row-stacked">
                     <label>Contraseña</label>
-                    <input type="password" name="password" autofocus>
+                    <input type="password" name="password"<?php echo $showLogin ? ' autofocus' : ''; ?>>
                     <?php if ($loginError): ?>
                     <p class="error-text">Contraseña incorrecta.</p>
                     <?php endif; ?>
@@ -439,6 +405,9 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                     <button class="button default" type="submit">Ingresar</button>
                 </div>
             </form>
+            <div class="login-register-row">
+                <button class="button" id="openRegister" type="button">+ Crear usuario</button>
+            </div>
         </div>
     </div>
 
@@ -492,16 +461,56 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
 </div>
 <?php endif; ?>
 
+<?php
+/* Mapa de usuarios para la detección por nombre en el login (JS). Mismos
+   datos que antes alimentaban los botones data-* del selector. */
+$jsUsers = [];
+foreach ($users as $key => $user) {
+    $_theme = getUserActiveTheme($key, $user['label']);
+    $_userIface = getUserActiveInterfaceSlug($key);
+    $_userIfaceLoginCss = '';
+    if ($_userIface !== '') {
+        $_loginCssAbs = __DIR__ . '/assets/interfaces/' . $_userIface . '/login.css';
+        if (is_file($_loginCssAbs)) {
+            $_userIfaceLoginCss = 'assets/interfaces/' . $_userIface . '/login.css?v=' . filemtime($_loginCssAbs);
+        }
+    }
+    $jsUsers[] = [
+        'key'               => $key,
+        'label'             => $user['label'],
+        'img'               => getUserImage($user['label']),
+        'wallpaper'         => getUserEffectiveWallpaper($key, $user['label']),
+        'themeClass'        => $_theme['class'] ?? '',
+        'themeCss'          => $_theme['css'] ?? '',
+        'interfaceLoginCss' => $_userIfaceLoginCss,
+        'isDefault'         => ($key === 'user1' || $key === 'user2'),
+    ];
+}
+?>
+
 <script>
 const body = document.body;
-const selectWindow = document.getElementById('selectWindow');
 const loginWindow = document.getElementById('loginWindow');
 const selectedUserInput = document.getElementById('selectedUser');
-const selectedLabel = document.getElementById('selectedLabel');
+const usernameInput = document.getElementById('usernameInput');
+const userNotFound = document.getElementById('userNotFound');
 const userPreview = document.getElementById('userPreview');
 const previewImage = document.getElementById('previewImage');
 const previewPlaceholder = document.getElementById('previewPlaceholder');
 const introOverlay = document.getElementById('intro-overlay');
+
+/* Mapa de usuarios disponibles para la detección por nombre. Incluye
+   todo lo necesario para pintar el preview del usuario al escribir su
+   nombre: imagen, fondo, tema e interfaz (login.css scoped). */
+const USERS = <?php echo json_encode($jsUsers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+const USERS_BY_LABEL = (function(){
+    var m = {};
+    USERS.forEach(function(u){ m[(u.label || '').trim().toLowerCase()] = u; });
+    return m;
+})();
+function findUserByName(name){
+    return USERS_BY_LABEL[(name || '').trim().toLowerCase()] || null;
+}
 
 /* =========================
    INTRO
@@ -611,52 +620,82 @@ function pixelateImg(img, factor) {
 previewImage.addEventListener('load', function() { pixelateImg(previewImage, 0.1); });
 if (previewImage.complete && previewImage.naturalWidth) pixelateImg(previewImage, 0.1);
 
-const userKeys = [...document.querySelectorAll('.select-user')].map(b => b.dataset.user);
+const userKeys = USERS.map(u => u.key);
 
-function setUser(userKey, label, imgSrc, wallpaperSrc, themeClass, themeCss)
+/* Estado de la detección por nombre: el usuario actualmente reconocido
+   (o null si lo escrito no coincide con ninguno). Los wraps de los
+   popups (ad / fatal errors) se enganchan a applyDetectedUser. */
+let detectedUser = null;
+
+/* Pinta el preview (imagen + fondo + tema + interfaz) del usuario `u`.
+   Si `u` es null, limpia todo y vuelve al estado "sin usuario". */
+function applyDetectedUser(u)
 {
-    selectedUserInput.value = userKey;
-    selectedLabel.textContent = label;
-    setWallpaper(wallpaperSrc);
+    detectedUser = u || null;
+    selectedUserInput.value = u ? u.key : '';
+    setWallpaper(u ? u.wallpaper : '');
     /* No añadir la clase userKey: dispara la paleta capi/angie de themes.css.
        Solo 'user-selected' que controla la transición del avatar/wallpaper. */
     body.classList.remove(...userKeys);
-    body.classList.add('user-selected');
-    applyUserTheme(themeClass, themeCss);
-    if (imgSrc) {
-        previewImage.src = imgSrc;
+    if (u) body.classList.add('user-selected'); else body.classList.remove('user-selected');
+    applyUserTheme(u ? u.themeClass : '', u ? u.themeCss : '');
+    /* login.css de la interfaz del user — scoped, no afecta al resto. */
+    applyUserInterfaceLogin(u ? (u.interfaceLoginCss || '') : '');
+    if (u && u.img) {
+        previewImage.src = u.img;
         previewImage.style.display = '';
         if (previewPlaceholder) previewPlaceholder.style.display = 'none';
     } else {
         previewImage.style.display = 'none';
         if (previewPlaceholder) previewPlaceholder.style.display = '';
     }
-    /* Botón "Eliminar" sólo para usuarios que no sean Capi (user1) ni Angie (user2) */
+    /* Botón "Eliminar" sólo para usuarios que no sean Capi/Angie (defaults). */
     var delBtn = document.getElementById('deleteUser');
-    if (delBtn) delBtn.style.display = (userKey === 'user1' || userKey === 'user2') ? 'none' : '';
-    selectWindow.classList.add('hidden');
-    loginWindow.classList.add('visible');
-    userPreview.classList.add('visible');
+    if (delBtn) delBtn.style.display = (u && !u.isDefault) ? 'inline-block' : 'none';
+    /* Preview visible solo cuando hay usuario reconocido. */
+    userPreview.classList.toggle('visible', !!u);
+    if (userNotFound) userNotFound.style.display = 'none';
 }
 
 /* =========================
-   BOTONES USUARIO
+   DETECCIÓN POR NOMBRE
 ========================= */
 
-document.querySelectorAll('.select-user').forEach(button => {
-    button.addEventListener('click', function(){
-        setUser(
-            this.dataset.user,
-            this.dataset.label,
-            this.dataset.img,
-            this.dataset.wallpaper,
-            this.dataset.themeClass,
-            this.dataset.themeCss
-        );
-        /* Aplica el login.css de la interfaz del user — scoped a
-           #userPreview, NO afecta al resto del index.php. */
-        applyUserInterfaceLogin(this.dataset.interfaceLoginCss || '');
-    });
+let _lastDetectedKey = null;
+function handleUsernameInput()
+{
+    var u = findUserByName(usernameInput.value);
+    var key = u ? u.key : null;
+    if (key === _lastDetectedKey) {
+        /* Sin cambio real de usuario reconocido: solo limpia el aviso de
+           "no encontrado" si ahora hay match. */
+        if (u && userNotFound) userNotFound.style.display = 'none';
+        return;
+    }
+    _lastDetectedKey = key;
+    applyDetectedUser(u);
+}
+usernameInput.addEventListener('input', handleUsernameInput);
+/* Estado inicial: si el server precargó un usuario (reload tras password
+   incorrecta), sincroniza la detección con el nombre ya escrito. */
+if (usernameInput.value.trim()) {
+    _lastDetectedKey = (findUserByName(usernameInput.value) || {}).key || null;
+    detectedUser = findUserByName(usernameInput.value);
+}
+
+/* Guard de envío: no enviar si el usuario escrito no coincide con ninguno
+   (evita un POST que el servidor descartaría y reiniciaría la pantalla). */
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+    var u = findUserByName(usernameInput.value);
+    if (!u) {
+        e.preventDefault();
+        if (userNotFound) userNotFound.style.display = '';
+        usernameInput.focus();
+        return;
+    }
+    /* Asegura que el user_key viaje correcto aunque el input cambiara
+       sin disparar 'input' (autocompletado del navegador, etc.). */
+    selectedUserInput.value = u.key;
 });
 
 /* ─── INTERFAZ DEL USUARIO (login.css scoped) ────────────────────────
@@ -685,16 +724,15 @@ function applyUserInterfaceLogin(cssUrl) {
 ========================= */
 
 document.getElementById('changeUser').addEventListener('click', function(){
-    loginWindow.classList.remove('visible');
-    userPreview.classList.remove('visible');
-    body.classList.remove('user-selected', ...userKeys);
-    applyUserTheme('', '');
-    applyUserInterfaceLogin('');   /* quita el login.css de la interfaz */
-    setWallpaper('');
+    /* Vacía el formulario y vuelve al estado "sin usuario" — el preview,
+       tema y fondo desaparecen y el foco vuelve al campo Usuario. */
+    usernameInput.value = '';
+    var pwd = document.querySelector('input[name="password"]');
+    if (pwd) pwd.value = '';
+    _lastDetectedKey = null;
+    applyDetectedUser(null);
     if (adPopup) adPopup.style.display = 'none';
-    setTimeout(() => {
-        selectWindow.classList.remove('hidden');
-    }, 350);
+    usernameInput.focus();
 });
 
 /* =========================
@@ -702,7 +740,7 @@ document.getElementById('changeUser').addEventListener('click', function(){
 ========================= */
 document.getElementById('deleteUser').addEventListener('click', function() {
     var userKey = selectedUserInput.value;
-    var label   = selectedLabel.textContent;
+    var label   = (detectedUser && detectedUser.label) || usernameInput.value;
     if (!userKey || userKey === 'user1' || userKey === 'user2') return;
     var pwdInput = document.querySelector('input[name="password"]');
     var pwd = pwdInput ? pwdInput.value : '';
@@ -735,7 +773,7 @@ const registerStatus = document.getElementById('registerStatus');
 const registerSubmit = document.getElementById('registerSubmit');
 
 document.getElementById('openRegister').addEventListener('click', function() {
-    selectWindow.classList.add('hidden');
+    loginWindow.classList.remove('visible');
     registerWindow.classList.remove('hidden');
     registerWindow.classList.add('visible');
     registerStatus.style.display = 'none';
@@ -752,7 +790,7 @@ document.getElementById('registerPhoto').addEventListener('change', function() {
 document.getElementById('registerCancel').addEventListener('click', function() {
     registerWindow.classList.remove('visible');
     registerWindow.classList.add('hidden');
-    selectWindow.classList.remove('hidden');
+    loginWindow.classList.add('visible');
     registerForm.reset();
 });
 
@@ -888,11 +926,14 @@ if (adPopup) {
         document.addEventListener('mouseup', () => { dragging = false; });
     })();
 
-    /* Mostrar al seleccionar usuario */
-    const _origSetUser = setUser;
-    setUser = function(...args) {
-        _origSetUser.apply(this, args);
-        setTimeout(showAd, 400);
+    /* Mostrar el ad al reconocer un usuario (transición sin-usuario →
+       usuario). No re-dispara mientras se sigue editando el mismo. */
+    const _origApplyDetected = applyDetectedUser;
+    applyDetectedUser = function(u) {
+        var had = !!detectedUser;
+        _origApplyDetected(u);
+        if (u && !had) setTimeout(showAd, 400);
+        else if (!u) adPopup.style.display = 'none';
     };
 
     <?php if ($showLogin): ?>
@@ -977,12 +1018,14 @@ if (adPopup) {
 
 <?php if (!$showLogin): ?>startErrorPopups();<?php endif; ?>
 
-const _origSetUser2 = setUser;
-setUser = function(...args) { _origSetUser2.apply(this, args); stopErrorPopups(); };
-
-document.getElementById('changeUser').addEventListener('click', function() {
-    setTimeout(startErrorPopups, 400);
-}, true);
+/* Los fatal-error popups suenan mientras no hay usuario reconocido; se
+   paran al detectar uno y se reanudan al limpiar el formulario. */
+const _origApplyDetected2 = applyDetectedUser;
+applyDetectedUser = function(u) {
+    _origApplyDetected2(u);
+    if (u) stopErrorPopups();
+    else   setTimeout(startErrorPopups, 400);
+};
 </script>
 
 </body>
