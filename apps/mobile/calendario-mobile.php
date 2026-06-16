@@ -873,6 +873,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <button class="button" id="cm-add-rec-btn" type="button">
             <img src="../../assets/img/appIcons/bellIcon.png" alt="">Recordatorio
         </button>
+        <button class="button" id="cm-events-btn" type="button">📅 Eventos</button>
     </div>
 
     <!-- Lista próximos recordatorios -->
@@ -1045,6 +1046,92 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
 </div>
 
+<!-- ═══════════ EVENTOS — sheet fullscreen Win98 estilo móvil ═══════════ -->
+<div id="ev-mobile-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9500;"></div>
+<div class="window mh-window" id="ev-mobile-window"
+     style="display:none; position:fixed; inset:8px; z-index:9510; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text">Eventos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="ev-mobile-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="flex:1; min-height:0; display:flex; flex-direction:column; padding:6px 8px; overflow:hidden;">
+        <div style="display:flex; gap:4px; margin-bottom:6px;">
+            <button class="button" id="ev-m-tab-list" type="button" style="flex:1;">Lista</button>
+            <button class="button" id="ev-m-tab-create" type="button" style="flex:1;">Crear</button>
+        </div>
+        <div id="ev-m-list-pane" style="flex:1; min-height:0; overflow-y:auto; border:1px inset; padding:4px; background:var(--win-body-bg, var(--win-bg));">
+            <div id="ev-m-list" style="font-size:12px;"></div>
+        </div>
+        <div id="ev-m-create-pane" style="display:none; flex:1; min-height:0; overflow-y:auto; padding:4px;">
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; display:block;">Título *</label>
+                <input type="text" id="ev-m-title" maxlength="120" style="width:100%;">
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; display:block;">Descripción</label>
+                <textarea id="ev-m-desc" rows="3" maxlength="2000" style="width:100%; resize:vertical;"></textarea>
+            </div>
+            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                <div style="flex:1;">
+                    <label style="font-size:11px; display:block;">Fecha y hora *</label>
+                    <input type="datetime-local" id="ev-m-date" style="width:100%;">
+                </div>
+                <div style="flex:0 0 90px;">
+                    <label style="font-size:11px; display:block;">Min</label>
+                    <input type="number" id="ev-m-duration" value="60" min="15" style="width:100%;">
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                <div style="flex:1;">
+                    <label style="font-size:11px; display:block;">Mín participantes</label>
+                    <input type="number" id="ev-m-min" value="1" min="1" style="width:100%;">
+                </div>
+                <div style="flex:1;">
+                    <label style="font-size:11px; display:block;">Máx (0=∞)</label>
+                    <input type="number" id="ev-m-max" value="0" min="0" style="width:100%;">
+                </div>
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; display:block;">Visibilidad</label>
+                <label style="font-size:11px; display:block; padding:2px 0;">
+                    <input type="radio" name="ev-m-vis" value="public" checked> Público
+                </label>
+                <label style="font-size:11px; display:block; padding:2px 0;">
+                    <input type="radio" name="ev-m-vis" value="private"> Privado (solo invitados)
+                </label>
+            </div>
+            <div style="margin-bottom:8px;">
+                <label style="font-size:11px; display:block; margin-bottom:2px;">Invitar amigos</label>
+                <div id="ev-m-friends" style="max-height:140px; overflow-y:auto; border:1px inset; padding:4px; background:var(--win-body-bg, var(--win-bg));">
+                    <p style="font-size:10px; color:var(--text-faint, #666); margin:4px;">Cargando…</p>
+                </div>
+            </div>
+            <div style="display:flex; gap:4px; justify-content:flex-end; margin-top:8px;">
+                <button class="button" id="ev-m-create-cancel" type="button">Cancelar</button>
+                <button class="button default" id="ev-m-create-submit" type="button">Crear</button>
+            </div>
+            <p id="ev-m-create-status" style="font-size:11px; margin:6px 0 0;"></p>
+        </div>
+    </div>
+</div>
+
+<!-- DETALLE MÓVIL -->
+<div id="ev-m-detail-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9520;"></div>
+<div class="window mh-window" id="ev-m-detail-window"
+     style="display:none; position:fixed; inset:8px; z-index:9530; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="ev-m-detail-title">Detalle</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="ev-m-detail-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="flex:1; min-height:0; overflow-y:auto; padding:8px;">
+        <div id="ev-m-detail-body"></div>
+    </div>
+</div>
+
 <?php
 $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER['SCRIPT_NAME'])))), '/');
 ?>
@@ -1056,8 +1143,230 @@ window.__CM_CFG = {
     userLabel: <?= json_encode($userLabel) ?>,
     hasPareja: <?= $pareja ? 'true' : 'false' ?>
 };
+window.__EV_CFG = {
+    API: <?= json_encode($projectBaseUrl . '/assets/events/api.php') ?>
+};
 </script>
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="calendario-mobile.js?v=<?= filemtime(__DIR__ . '/calendario-mobile.js') ?>"></script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   EVENTOS MÓVIL — lista, creación, detalle, join/leave, invitaciones.
+   Patron paralelo al desktop calendario.php. Notif haro NO se dispara
+   aquí porque el shell móvil tiene su propio sistema de notifs (lo
+   maneja mobile.php). Esta app se enfoca en CRUD + render.
+   ══════════════════════════════════════════════════════════════════ */
+(function evMobileModule(){
+    'use strict';
+    var API = (window.__EV_CFG && window.__EV_CFG.API) || '../../assets/events/api.php';
+
+    var winEl    = document.getElementById('ev-mobile-window');
+    var backEl   = document.getElementById('ev-mobile-backdrop');
+    var detailEl = document.getElementById('ev-m-detail-window');
+    var detailBack = document.getElementById('ev-m-detail-backdrop');
+    var openBtn  = document.getElementById('cm-events-btn');
+    if (!winEl || !openBtn) return;
+
+    var STATE = { events: [], friends: [], selectedInvitees: {} };
+
+    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    }); }
+    function fmtDate(iso){
+        if (!iso) return '';
+        var d = new Date(iso.replace(' ', 'T'));
+        if (isNaN(d.getTime())) return iso;
+        var pad = function(n){ return String(n).padStart(2,'0'); };
+        return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+    }
+    function api(action, body, method){
+        var opts = { credentials: 'same-origin' };
+        if (method === 'POST') {
+            opts.method = 'POST';
+            opts.headers = { 'Content-Type': 'application/json' };
+            opts.body = JSON.stringify(body || {});
+        }
+        return fetch(API + '?action=' + encodeURIComponent(action), opts).then(function(r){ return r.json(); });
+    }
+
+    /* ── Open / close ── */
+    function openWindow(){ winEl.style.display = ''; backEl.style.display = ''; showTab('list'); loadEvents(); loadFriends(); }
+    function closeWindow(){ winEl.style.display = 'none'; backEl.style.display = 'none'; closeDetail(); }
+    function showTab(name){
+        document.getElementById('ev-m-list-pane').style.display   = (name === 'list')   ? '' : 'none';
+        document.getElementById('ev-m-create-pane').style.display = (name === 'create') ? '' : 'none';
+    }
+    openBtn.addEventListener('click', openWindow);
+    document.getElementById('ev-mobile-close').addEventListener('click', closeWindow);
+    backEl.addEventListener('click', closeWindow);
+    document.getElementById('ev-m-tab-list').addEventListener('click', function(){ showTab('list'); });
+    document.getElementById('ev-m-tab-create').addEventListener('click', function(){ showTab('create'); renderFriends(); });
+
+    /* ── List ── */
+    function loadEvents(){
+        var l = document.getElementById('ev-m-list');
+        l.innerHTML = '<p style="font-size:11px; color:var(--text-faint,#666); padding:8px;">Cargando…</p>';
+        api('list-events').then(function(d){
+            if (!d || !d.ok) { l.innerHTML = '<p style="font-size:11px;color:#a33;">Error.</p>'; return; }
+            STATE.events = d.events || [];
+            renderList();
+        }).catch(function(){ l.innerHTML = '<p style="font-size:11px;color:#a33;">Error de red.</p>'; });
+    }
+    function renderList(){
+        var l = document.getElementById('ev-m-list');
+        if (!STATE.events.length) {
+            l.innerHTML = '<p style="font-size:11px;color:var(--text-faint,#666); text-align:center; padding:20px;">No hay eventos. ¡Crea el primero!</p>';
+            return;
+        }
+        l.innerHTML = STATE.events.map(function(ev){
+            var badge = '';
+            if (ev.myStatus === 'joined') badge = '<span style="background:#2e8b57;color:#fff;padding:1px 4px;font-size:9px;border-radius:2px;">UNIDO</span>';
+            else if (ev.myStatus === 'waitlist') badge = '<span style="background:#d4a017;color:#000;padding:1px 4px;font-size:9px;border-radius:2px;">ESPERA</span>';
+            else if (ev.myStatus === 'invited') badge = '<span style="background:#4a90d9;color:#fff;padding:1px 4px;font-size:9px;border-radius:2px;">INVITADO</span>';
+            var cap = ev.maxParticipants > 0 ? (ev.joinedCount+'/'+ev.maxParticipants) : (ev.joinedCount+' unidos');
+            return '<div class="ev-m-card" data-id="' + ev.id + '" style="padding:6px 8px; margin-bottom:5px; background:var(--win-bg); border:1px outset;">' +
+                '<div style="display:flex; gap:4px; align-items:baseline; margin-bottom:2px;">' +
+                    '<strong style="font-size:12px; flex:1;">' + esc(ev.title) + '</strong>' + badge +
+                '</div>' +
+                '<div style="font-size:10px; color:var(--text-faint, #666);">' +
+                    esc(fmtDate(ev.eventDate)) + ' · ' + ev.durationMin + 'min · ' + esc(cap) +
+                '</div>' +
+            '</div>';
+        }).join('');
+        l.querySelectorAll('.ev-m-card').forEach(function(c){
+            c.addEventListener('click', function(){ openDetail(parseInt(c.dataset.id, 10)); });
+        });
+    }
+
+    /* ── Friends ── */
+    function loadFriends(){
+        api('list-mutual-friends').then(function(d){
+            if (d && d.ok) STATE.friends = d.friends || [];
+            renderFriends();
+        }).catch(function(){});
+    }
+    function renderFriends(){
+        var box = document.getElementById('ev-m-friends');
+        if (!box) return;
+        if (!STATE.friends.length) { box.innerHTML = '<p style="font-size:10px;color:var(--text-faint, #666); margin:4px;">No tienes amigos mutuos.</p>'; return; }
+        box.innerHTML = STATE.friends.map(function(f){
+            var ck = STATE.selectedInvitees[f.key] ? 'checked' : '';
+            return '<label style="display:block; font-size:11px; padding:3px 4px;">' +
+                '<input type="checkbox" class="ev-m-cb" value="' + esc(f.key) + '" ' + ck + '> ' + esc(f.label) + '</label>';
+        }).join('');
+        box.querySelectorAll('.ev-m-cb').forEach(function(cb){
+            cb.addEventListener('change', function(){
+                if (cb.checked) STATE.selectedInvitees[cb.value] = true;
+                else delete STATE.selectedInvitees[cb.value];
+            });
+        });
+    }
+
+    /* ── Create ── */
+    document.getElementById('ev-m-create-cancel').addEventListener('click', function(){ showTab('list'); });
+    document.getElementById('ev-m-create-submit').addEventListener('click', function(){
+        var status = document.getElementById('ev-m-create-status');
+        status.style.color = 'var(--text-faint, #666)';
+        status.textContent = 'Creando…';
+        var title = document.getElementById('ev-m-title').value.trim();
+        var desc  = document.getElementById('ev-m-desc').value.trim();
+        var dateRaw = document.getElementById('ev-m-date').value;
+        var durMin = parseInt(document.getElementById('ev-m-duration').value, 10) || 60;
+        var minP   = parseInt(document.getElementById('ev-m-min').value, 10) || 1;
+        var maxP   = parseInt(document.getElementById('ev-m-max').value, 10) || 0;
+        var visEl = document.querySelector('input[name="ev-m-vis"]:checked');
+        var vis = visEl ? visEl.value : 'public';
+        if (!title) { status.style.color='#a33'; status.textContent='Título obligatorio.'; return; }
+        if (!dateRaw) { status.style.color='#a33'; status.textContent='Fecha obligatoria.'; return; }
+        if (maxP > 0 && maxP < minP) { status.style.color='#a33'; status.textContent='Máx no puede ser menor que mín.'; return; }
+        api('create-event', {
+            title: title, description: desc,
+            eventDate: dateRaw.replace('T', ' ') + ':00',
+            durationMin: durMin, minParticipants: minP, maxParticipants: maxP,
+            visibility: vis, invitees: Object.keys(STATE.selectedInvitees),
+        }, 'POST').then(function(d){
+            if (!d || !d.ok) { status.style.color='#a33'; status.textContent = (d && d.error) || 'Error.'; return; }
+            status.style.color = 'green'; status.textContent = '✓ Evento creado.';
+            document.getElementById('ev-m-title').value = '';
+            document.getElementById('ev-m-desc').value = '';
+            document.getElementById('ev-m-date').value = '';
+            STATE.selectedInvitees = {};
+            renderFriends();
+            loadEvents();
+            /* Refrescar grid del calendario si está accesible. */
+            if (typeof window.cargarTodo === 'function') window.cargarTodo();
+            setTimeout(function(){ showTab('list'); }, 700);
+        }).catch(function(){ status.style.color='#a33'; status.textContent='Error de red.'; });
+    });
+
+    /* ── Detail ── */
+    function openDetail(id){
+        detailEl.style.display = ''; detailBack.style.display = '';
+        var b = document.getElementById('ev-m-detail-body');
+        b.innerHTML = '<p style="font-size:11px;color:var(--text-faint,#666);">Cargando…</p>';
+        api('get-event&id=' + id).then(function(d){
+            if (!d || !d.ok) { b.innerHTML = '<p style="font-size:11px;color:#a33;">' + esc((d && d.error) || 'Error') + '</p>'; return; }
+            renderDetail(d.event);
+        });
+    }
+    function closeDetail(){ detailEl.style.display = 'none'; detailBack.style.display = 'none'; }
+    document.getElementById('ev-m-detail-close').addEventListener('click', closeDetail);
+    detailBack.addEventListener('click', closeDetail);
+
+    function renderDetail(ev){
+        document.getElementById('ev-m-detail-title').textContent = ev.title;
+        var b = document.getElementById('ev-m-detail-body');
+        var cap = ev.maxParticipants > 0 ? (ev.joinedCount+' / '+ev.maxParticipants) : (ev.joinedCount+' (sin límite)');
+        var partList = (ev.participants || []).map(function(p){
+            var sl = p.status === 'waitlist' ? ' <span style="color:#d4a017;">(espera)</span>' : '';
+            return '<li style="font-size:11px;">' + esc(p.label) + sl + '</li>';
+        }).join('');
+        var actions = '';
+        if (ev.isFinished) actions = '<p style="font-size:11px;color:var(--text-faint,#666);">Evento finalizado.</p>';
+        else if (ev.myStatus === 'joined' || ev.myStatus === 'waitlist') actions = '<button class="button" id="ev-m-leave" type="button">Salir</button>';
+        else if (ev.myStatus === 'invited') actions = '<button class="button" id="ev-m-decline" type="button">Rechazar</button> <button class="button default" id="ev-m-accept" type="button">Aceptar</button>';
+        else {
+            var lbl = (ev.maxParticipants > 0 && ev.joinedCount >= ev.maxParticipants) ? 'Unirme (espera)' : 'Unirme';
+            actions = '<button class="button default" id="ev-m-join" type="button">' + lbl + '</button>';
+        }
+        var delBtn = ev.isCreator ? '<button class="button" id="ev-m-del" type="button" style="color:#a33;">Eliminar</button>' : '';
+        b.innerHTML =
+            '<div style="margin-bottom:8px; font-size:11px;">' +
+                '<div><strong>Fecha:</strong> ' + esc(fmtDate(ev.eventDate)) + '</div>' +
+                '<div><strong>Duración:</strong> ' + ev.durationMin + ' min</div>' +
+                '<div><strong>Visibilidad:</strong> ' + (ev.visibility === 'private' ? 'Privado' : 'Público') + '</div>' +
+                '<div><strong>Participantes:</strong> ' + esc(cap) + (ev.waitlistCount ? ' (+'+ev.waitlistCount+' espera)' : '') + '</div>' +
+            '</div>' +
+            (ev.description ? '<div style="font-size:11px;white-space:pre-wrap; padding:6px; background:var(--win-body-bg, var(--win-bg)); border:1px inset; margin-bottom:8px;">' + esc(ev.description) + '</div>' : '') +
+            '<div style="margin-bottom:8px;"><strong style="font-size:11px;">Participantes:</strong>' +
+                (partList ? '<ul style="margin:4px 0 0 18px; padding:0;">' + partList + '</ul>' : '<p style="font-size:11px;color:var(--text-faint,#666);">Nadie todavía.</p>') +
+            '</div>' +
+            '<div style="display:flex; gap:4px; flex-wrap:wrap;">' + actions + ' ' + delBtn + '</div>';
+        wireDetail(ev);
+    }
+    function wireDetail(ev){
+        function post(act, body){ return api(act, body, 'POST'); }
+        function refresh(){
+            openDetail(ev.id);
+            loadEvents();
+            if (typeof window.cargarTodo === 'function') window.cargarTodo();
+        }
+        var j = document.getElementById('ev-m-join');
+        var l = document.getElementById('ev-m-leave');
+        var a = document.getElementById('ev-m-accept');
+        var d = document.getElementById('ev-m-decline');
+        var del = document.getElementById('ev-m-del');
+        if (j) j.addEventListener('click', function(){ post('join-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) refresh(); }); });
+        if (l) l.addEventListener('click', function(){ post('leave-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) refresh(); }); });
+        if (a) a.addEventListener('click', function(){ post('respond-event-invite', { inviteId: ev.myInviteId, action: 'accept' }).then(function(r){ if (r && r.ok) refresh(); }); });
+        if (d) d.addEventListener('click', function(){ post('respond-event-invite', { inviteId: ev.myInviteId, action: 'decline' }).then(function(r){ if (r && r.ok) { closeDetail(); loadEvents(); } }); });
+        if (del) del.addEventListener('click', function(){
+            if (!confirm('¿Eliminar este evento?')) return;
+            post('delete-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) { closeDetail(); loadEvents(); if (typeof window.cargarTodo === 'function') window.cargarTodo(); } });
+        });
+    }
+})();
+</script>
 </body>
 </html>

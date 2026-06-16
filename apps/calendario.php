@@ -75,6 +75,102 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     <?php if (!$pareja): ?>
     <button class="button" id="btn-invitar">Invitar</button>
     <?php endif; ?>
+    <button class="button" id="btn-eventos">Eventos</button>
+</div>
+
+<!-- VENTANA EVENTOS (lista de eventos disponibles) -->
+<div class="window" id="events-window"
+     style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+            width:min(560px,94vw); height:min(560px,86vh); z-index:9500; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text">Eventos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="events-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="flex:1; min-height:0; display:flex; flex-direction:column; padding:8px 10px;">
+        <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <button class="button" id="events-tab-list">Lista</button>
+            <button class="button" id="events-tab-create">Crear evento</button>
+            <span style="flex:1;"></span>
+            <button class="button" id="events-refresh" title="Refrescar lista">↻</button>
+        </div>
+        <!-- TAB LISTA -->
+        <div id="events-pane-list" style="flex:1; min-height:0; overflow:auto; border:1px inset; padding:6px; background:var(--win-body-bg, var(--win-bg));">
+            <div id="events-list-empty" style="display:none; text-align:center; font-size:11px; padding:20px; color:var(--text-faint,#666);">
+                No hay eventos disponibles. ¡Crea el primero!
+            </div>
+            <div id="events-list-items"></div>
+        </div>
+        <!-- TAB CREAR -->
+        <div id="events-pane-create" style="display:none; flex:1; min-height:0; overflow:auto; padding:4px;">
+            <div class="field-row-stacked" style="margin-bottom:8px;">
+                <label for="ev-create-title" style="font-size:11px;">Título *</label>
+                <input type="text" id="ev-create-title" maxlength="120" style="width:100%;">
+            </div>
+            <div class="field-row-stacked" style="margin-bottom:8px;">
+                <label for="ev-create-desc" style="font-size:11px;">Descripción</label>
+                <textarea id="ev-create-desc" rows="3" maxlength="2000" style="width:100%; resize:vertical;"></textarea>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                <div class="field-row-stacked" style="flex:1; min-width:140px;">
+                    <label for="ev-create-date" style="font-size:11px;">Fecha y hora *</label>
+                    <input type="datetime-local" id="ev-create-date" style="width:100%;">
+                </div>
+                <div class="field-row-stacked" style="flex:1; min-width:120px;">
+                    <label for="ev-create-duration" style="font-size:11px;">Duración (min) *</label>
+                    <input type="number" id="ev-create-duration" value="60" min="15" max="10080" style="width:100%;">
+                </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+                <div class="field-row-stacked" style="flex:1; min-width:120px;">
+                    <label for="ev-create-min" style="font-size:11px;">Mínimo participantes</label>
+                    <input type="number" id="ev-create-min" value="1" min="1" style="width:100%;">
+                </div>
+                <div class="field-row-stacked" style="flex:1; min-width:120px;">
+                    <label for="ev-create-max" style="font-size:11px;">Máximo (0 = sin límite)</label>
+                    <input type="number" id="ev-create-max" value="0" min="0" style="width:100%;">
+                </div>
+            </div>
+            <div class="field-row-stacked" style="margin-bottom:8px;">
+                <label style="font-size:11px;">Visibilidad</label>
+                <div style="display:flex; gap:10px; margin-top:2px;">
+                    <label style="font-size:11px; display:flex; align-items:center; gap:4px;">
+                        <input type="radio" name="ev-visibility" value="public" checked> Público (cualquiera puede unirse)
+                    </label>
+                    <label style="font-size:11px; display:flex; align-items:center; gap:4px;">
+                        <input type="radio" name="ev-visibility" value="private"> Privado (solo invitados)
+                    </label>
+                </div>
+            </div>
+            <div class="field-row-stacked" style="margin-bottom:8px;">
+                <label style="font-size:11px;">Invitar amigos (opcional)</label>
+                <div id="ev-create-friends" style="max-height:130px; overflow:auto; border:1px inset; padding:4px; background:var(--win-body-bg, var(--win-bg));">
+                    <p style="font-size:10px; color:var(--text-faint, #666); margin:4px;">Cargando amigos…</p>
+                </div>
+            </div>
+            <div class="field-row" style="justify-content:flex-end; gap:4px; margin-top:10px;">
+                <button class="button" id="ev-create-cancel">Cancelar</button>
+                <button class="button default" id="ev-create-submit">Crear</button>
+            </div>
+            <p id="ev-create-status" style="font-size:11px; margin:6px 0 0; color:var(--text-faint, #666);"></p>
+        </div>
+    </div>
+</div>
+
+<!-- DETALLE DE UN EVENTO (overlay encima del modal de eventos) -->
+<div class="window" id="event-detail-window"
+     style="display:none; position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+            width:min(480px,92vw); max-height:86vh; z-index:9550; flex-direction:column;">
+    <div class="title-bar">
+        <div class="title-bar-text" id="event-detail-title">Detalle del evento</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="event-detail-close"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:10px; overflow:auto;">
+        <div id="event-detail-body"></div>
+    </div>
 </div>
 
 <!-- VENTANA DE INVITACIÓN -->
@@ -2126,6 +2222,435 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
     } else {
         init();
     }
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EVENTOS — lista, creación, detalle, join/leave, invitaciones haro.
+     ══════════════════════════════════════════════════════════════════ -->
+<script>
+(function eventsModule(){
+    'use strict';
+    var API = '../assets/events/api.php';
+
+    /* ── Estado UI ── */
+    var winEl    = document.getElementById('events-window');
+    var detailEl = document.getElementById('event-detail-window');
+    var btnOpen  = document.getElementById('btn-eventos');
+    if (!winEl || !btnOpen) return;
+
+    var listPane    = document.getElementById('events-pane-list');
+    var createPane  = document.getElementById('events-pane-create');
+    var listItemsEl = document.getElementById('events-list-items');
+    var listEmptyEl = document.getElementById('events-list-empty');
+
+    var STATE = {
+        events: [],
+        friends: [],
+        selectedInvitees: {},   // userKey → true
+        currentDetailId: null,
+    };
+
+    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    }); }
+
+    function fmtDate(iso) {
+        if (!iso) return '';
+        var d = new Date(iso.replace(' ', 'T'));
+        if (isNaN(d.getTime())) return iso;
+        var days = ['dom','lun','mar','mié','jue','vie','sáb'];
+        var pad = function(n){ return String(n).padStart(2,'0'); };
+        return days[d.getDay()] + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
+               ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    function api(action, body, method) {
+        var opts = { credentials: 'same-origin' };
+        if (method === 'POST') {
+            opts.method = 'POST';
+            opts.headers = { 'Content-Type': 'application/json' };
+            opts.body = JSON.stringify(body || {});
+        }
+        return fetch(API + '?action=' + encodeURIComponent(action), opts).then(function(r){ return r.json(); });
+    }
+
+    /* ── Abrir/cerrar ventana ── */
+    function openWindow() {
+        winEl.style.display = '';
+        showTab('list');
+        loadEvents();
+        loadFriends();
+    }
+    function closeWindow() {
+        winEl.style.display = 'none';
+        closeDetail();
+    }
+    btnOpen.addEventListener('click', openWindow);
+    document.getElementById('events-close').addEventListener('click', closeWindow);
+
+    function showTab(name) {
+        listPane.style.display   = (name === 'list')   ? '' : 'none';
+        createPane.style.display = (name === 'create') ? '' : 'none';
+    }
+    document.getElementById('events-tab-list').addEventListener('click', function(){ showTab('list'); });
+    document.getElementById('events-tab-create').addEventListener('click', function(){
+        showTab('create');
+        renderFriendsCheckboxes();
+    });
+    document.getElementById('events-refresh').addEventListener('click', loadEvents);
+
+    /* ── LISTA ── */
+    function loadEvents() {
+        listItemsEl.innerHTML = '<p style="font-size:11px; color:var(--text-faint, #666); padding:8px;">Cargando…</p>';
+        api('list-events').then(function(d){
+            if (!d || !d.ok) {
+                listItemsEl.innerHTML = '<p style="font-size:11px; color:#a33; padding:8px;">Error al cargar eventos.</p>';
+                return;
+            }
+            STATE.events = d.events || [];
+            renderList();
+        }).catch(function(){
+            listItemsEl.innerHTML = '<p style="font-size:11px; color:#a33; padding:8px;">Error de red.</p>';
+        });
+    }
+
+    function renderList() {
+        if (!STATE.events.length) {
+            listItemsEl.innerHTML = '';
+            listEmptyEl.style.display = '';
+            return;
+        }
+        listEmptyEl.style.display = 'none';
+        var html = STATE.events.map(function(ev){
+            var badge = '';
+            if (ev.myStatus === 'joined')   badge = '<span style="background:#2e8b57;color:#fff;padding:1px 5px;font-size:10px;border-radius:2px;">UNIDO</span>';
+            else if (ev.myStatus === 'waitlist') badge = '<span style="background:#d4a017;color:#000;padding:1px 5px;font-size:10px;border-radius:2px;">ESPERA</span>';
+            else if (ev.myStatus === 'invited') badge = '<span style="background:#4a90d9;color:#fff;padding:1px 5px;font-size:10px;border-radius:2px;">INVITADO</span>';
+            var visBadge = ev.visibility === 'private'
+                ? '<span style="background:#888;color:#fff;padding:1px 5px;font-size:10px;border-radius:2px;">PRIVADO</span>'
+                : '';
+            var capLabel = ev.maxParticipants > 0
+                ? (ev.joinedCount + '/' + ev.maxParticipants + (ev.waitlistCount ? ' (+' + ev.waitlistCount + ' espera)' : ''))
+                : (ev.joinedCount + ' unidos');
+            return '<div class="ev-card" data-event-id="' + ev.id + '" style="' +
+                'padding:6px 8px; margin-bottom:5px; background:var(--win-bg); border:1px outset; cursor:pointer;">' +
+                '<div style="display:flex; gap:6px; align-items:baseline; margin-bottom:2px;">' +
+                    '<strong style="font-size:12px; flex:1;">' + esc(ev.title) + '</strong>' +
+                    badge + ' ' + visBadge +
+                '</div>' +
+                '<div style="font-size:10px; color:var(--text-faint, #666);">' +
+                    '📅 ' + esc(fmtDate(ev.eventDate)) + ' · ⏱ ' + ev.durationMin + ' min · 👥 ' + esc(capLabel) +
+                '</div>' +
+            '</div>';
+        }).join('');
+        listItemsEl.innerHTML = html;
+        listItemsEl.querySelectorAll('.ev-card').forEach(function(card){
+            card.addEventListener('click', function(){
+                openDetail(parseInt(card.dataset.eventId, 10));
+            });
+        });
+    }
+
+    /* ── AMIGOS para invitar ── */
+    function loadFriends() {
+        api('list-mutual-friends').then(function(d){
+            if (d && d.ok) STATE.friends = d.friends || [];
+            renderFriendsCheckboxes();
+        }).catch(function(){});
+    }
+    function renderFriendsCheckboxes() {
+        var box = document.getElementById('ev-create-friends');
+        if (!box) return;
+        if (!STATE.friends.length) {
+            box.innerHTML = '<p style="font-size:10px; color:var(--text-faint, #666); margin:4px;">No tienes amigos mutuos para invitar.</p>';
+            return;
+        }
+        box.innerHTML = STATE.friends.map(function(f){
+            var checked = STATE.selectedInvitees[f.key] ? 'checked' : '';
+            return '<label style="display:block; font-size:11px; padding:2px 4px;">' +
+                '<input type="checkbox" class="ev-inv-cb" value="' + esc(f.key) + '" ' + checked + '> ' +
+                esc(f.label) + '</label>';
+        }).join('');
+        box.querySelectorAll('.ev-inv-cb').forEach(function(cb){
+            cb.addEventListener('change', function(){
+                if (cb.checked) STATE.selectedInvitees[cb.value] = true;
+                else delete STATE.selectedInvitees[cb.value];
+            });
+        });
+    }
+
+    /* ── CREAR ── */
+    document.getElementById('ev-create-cancel').addEventListener('click', function(){
+        showTab('list');
+    });
+    document.getElementById('ev-create-submit').addEventListener('click', function(){
+        var statusEl = document.getElementById('ev-create-status');
+        statusEl.style.color = 'var(--text-faint, #666)';
+        statusEl.textContent = 'Creando…';
+
+        var title = document.getElementById('ev-create-title').value.trim();
+        var desc  = document.getElementById('ev-create-desc').value.trim();
+        var dateRaw = document.getElementById('ev-create-date').value;  // "YYYY-MM-DDTHH:MM"
+        var durMin = parseInt(document.getElementById('ev-create-duration').value, 10) || 60;
+        var minP   = parseInt(document.getElementById('ev-create-min').value, 10) || 1;
+        var maxP   = parseInt(document.getElementById('ev-create-max').value, 10) || 0;
+        var vis = document.querySelector('input[name="ev-visibility"]:checked');
+        vis = vis ? vis.value : 'public';
+        var invitees = Object.keys(STATE.selectedInvitees);
+
+        if (!title)   { statusEl.style.color = '#a33'; statusEl.textContent = 'El título es obligatorio.'; return; }
+        if (!dateRaw) { statusEl.style.color = '#a33'; statusEl.textContent = 'La fecha es obligatoria.'; return; }
+        if (maxP > 0 && maxP < minP) { statusEl.style.color = '#a33'; statusEl.textContent = 'Máximo no puede ser menor que mínimo.'; return; }
+
+        var dateStr = dateRaw.replace('T', ' ') + ':00';  // "YYYY-MM-DD HH:MM:SS"
+
+        api('create-event', {
+            title: title,
+            description: desc,
+            eventDate: dateStr,
+            durationMin: durMin,
+            minParticipants: minP,
+            maxParticipants: maxP,
+            visibility: vis,
+            invitees: invitees,
+        }, 'POST').then(function(d){
+            if (!d || !d.ok) {
+                statusEl.style.color = '#a33';
+                statusEl.textContent = (d && d.error) ? d.error : 'Error al crear.';
+                return;
+            }
+            statusEl.style.color = 'green';
+            statusEl.textContent = '✓ Evento creado.';
+            /* Reset form */
+            document.getElementById('ev-create-title').value = '';
+            document.getElementById('ev-create-desc').value = '';
+            document.getElementById('ev-create-date').value = '';
+            document.getElementById('ev-create-duration').value = '60';
+            document.getElementById('ev-create-min').value = '1';
+            document.getElementById('ev-create-max').value = '0';
+            STATE.selectedInvitees = {};
+            renderFriendsCheckboxes();
+            /* Refrescar lista + recordatorios del calendario. */
+            loadEvents();
+            if (typeof window.cargarTodo === 'function') window.cargarTodo();
+            setTimeout(function(){ showTab('list'); }, 700);
+        }).catch(function(){
+            statusEl.style.color = '#a33';
+            statusEl.textContent = 'Error de red.';
+        });
+    });
+
+    /* ── DETALLE ── */
+    function openDetail(eventId) {
+        STATE.currentDetailId = eventId;
+        var bodyEl = document.getElementById('event-detail-body');
+        bodyEl.innerHTML = '<p style="font-size:11px; color:var(--text-faint, #666);">Cargando…</p>';
+        detailEl.style.display = '';
+        api('get-event&id=' + eventId).then(function(d){
+            if (!d || !d.ok) {
+                bodyEl.innerHTML = '<p style="font-size:11px; color:#a33;">' + esc((d && d.error) || 'Error') + '</p>';
+                return;
+            }
+            renderDetail(d.event);
+        }).catch(function(){
+            bodyEl.innerHTML = '<p style="font-size:11px; color:#a33;">Error de red.</p>';
+        });
+    }
+    function closeDetail() {
+        detailEl.style.display = 'none';
+        STATE.currentDetailId = null;
+    }
+    document.getElementById('event-detail-close').addEventListener('click', closeDetail);
+
+    function renderDetail(ev) {
+        document.getElementById('event-detail-title').textContent = ev.title;
+        var bodyEl = document.getElementById('event-detail-body');
+        var capInfo = ev.maxParticipants > 0
+            ? (ev.joinedCount + ' / ' + ev.maxParticipants)
+            : (ev.joinedCount + ' (sin límite)');
+        var waitInfo = ev.waitlistCount > 0
+            ? '<div style="font-size:11px; margin-top:2px;">En lista de espera: <strong>' + ev.waitlistCount + '</strong></div>'
+            : '';
+        var partList = (ev.participants || []).map(function(p){
+            var sLabel = p.status === 'waitlist' ? ' <span style="color:#d4a017;">(espera)</span>' : '';
+            return '<li style="font-size:11px;">' + esc(p.label) + sLabel + '</li>';
+        }).join('');
+        var actions = '';
+        if (ev.isFinished) {
+            actions = '<p style="font-size:11px; color:var(--text-faint, #666);">Este evento ya ha finalizado.</p>';
+        } else if (ev.myStatus === 'joined' || ev.myStatus === 'waitlist') {
+            actions = '<button class="button" id="ev-detail-leave">Salir del evento</button>';
+        } else if (ev.myStatus === 'invited') {
+            actions = '<button class="button" id="ev-detail-decline">Rechazar</button> ' +
+                      '<button class="button default" id="ev-detail-accept">Aceptar invitación</button>';
+        } else {
+            var joinLabel = (ev.maxParticipants > 0 && ev.joinedCount >= ev.maxParticipants)
+                ? 'Unirme (lista de espera)'
+                : 'Unirme';
+            actions = '<button class="button default" id="ev-detail-join">' + joinLabel + '</button>';
+        }
+        var deleteBtn = ev.isCreator
+            ? '<button class="button" id="ev-detail-delete" style="margin-left:auto; color:#a33;">Eliminar evento</button>'
+            : '';
+        var inviteBtn = (!ev.isFinished && (ev.isCreator || (ev.visibility === 'public' && ev.myStatus === 'joined')))
+            ? '<button class="button" id="ev-detail-invite">Invitar amigos…</button>'
+            : '';
+
+        bodyEl.innerHTML =
+            '<div style="margin-bottom:8px;">' +
+                '<div style="font-size:11px;"><strong>Fecha:</strong> ' + esc(fmtDate(ev.eventDate)) + '</div>' +
+                '<div style="font-size:11px;"><strong>Duración:</strong> ' + ev.durationMin + ' min</div>' +
+                '<div style="font-size:11px;"><strong>Visibilidad:</strong> ' + (ev.visibility === 'private' ? 'Privado' : 'Público') + '</div>' +
+                '<div style="font-size:11px;"><strong>Mín / Máx:</strong> ' + ev.minParticipants + ' / ' + (ev.maxParticipants || '∞') + '</div>' +
+                '<div style="font-size:11px;"><strong>Participantes:</strong> ' + esc(capInfo) + '</div>' +
+                waitInfo +
+            '</div>' +
+            (ev.description ? '<div style="font-size:11px; white-space:pre-wrap; padding:6px; background:var(--win-body-bg, var(--win-bg)); border:1px inset; margin-bottom:8px;">' + esc(ev.description) + '</div>' : '') +
+            '<div style="margin-bottom:8px;"><strong style="font-size:11px;">Participantes:</strong>' +
+                (partList ? '<ul style="margin:4px 0 0 18px; padding:0;">' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint,#666);">Nadie todavía.</p>') +
+            '</div>' +
+            '<div class="field-row" style="gap:4px; align-items:center; margin-top:8px;">' +
+                actions + ' ' + inviteBtn + ' ' + deleteBtn +
+            '</div>' +
+            '<div id="ev-detail-invite-panel" style="display:none; margin-top:8px; border:1px inset; padding:6px; background:var(--win-body-bg, var(--win-bg));">' +
+                '<p style="font-size:11px; margin:0 0 4px;"><strong>Invitar a amigos mutuos:</strong></p>' +
+                '<div id="ev-detail-invite-list" style="max-height:140px; overflow:auto;"></div>' +
+                '<p id="ev-detail-invite-status" style="font-size:10px; margin:4px 0 0; color:var(--text-faint, #666);"></p>' +
+            '</div>';
+
+        wireDetailActions(ev);
+    }
+
+    function wireDetailActions(ev) {
+        var join    = document.getElementById('ev-detail-join');
+        var leave   = document.getElementById('ev-detail-leave');
+        var accept  = document.getElementById('ev-detail-accept');
+        var decline = document.getElementById('ev-detail-decline');
+        var del     = document.getElementById('ev-detail-delete');
+        var invite  = document.getElementById('ev-detail-invite');
+
+        if (join) join.addEventListener('click', function(){
+            api('join-event', { eventId: ev.id }, 'POST').then(function(d){
+                if (d && d.ok) {
+                    openDetail(ev.id);
+                    loadEvents();
+                    if (typeof window.cargarTodo === 'function') window.cargarTodo();
+                }
+            });
+        });
+        if (leave) leave.addEventListener('click', function(){
+            api('leave-event', { eventId: ev.id }, 'POST').then(function(d){
+                if (d && d.ok) {
+                    openDetail(ev.id);
+                    loadEvents();
+                    if (typeof window.cargarTodo === 'function') window.cargarTodo();
+                }
+            });
+        });
+        if (accept) accept.addEventListener('click', function(){
+            api('respond-event-invite', { inviteId: ev.myInviteId, action: 'accept' }, 'POST').then(function(d){
+                if (d && d.ok) {
+                    openDetail(ev.id);
+                    loadEvents();
+                    if (typeof window.cargarTodo === 'function') window.cargarTodo();
+                }
+            });
+        });
+        if (decline) decline.addEventListener('click', function(){
+            api('respond-event-invite', { inviteId: ev.myInviteId, action: 'decline' }, 'POST').then(function(d){
+                if (d && d.ok) {
+                    closeDetail();
+                    loadEvents();
+                }
+            });
+        });
+        if (del) del.addEventListener('click', function(){
+            if (!confirm('¿Eliminar este evento? Se borrará también de los calendarios de todos los participantes.')) return;
+            api('delete-event', { eventId: ev.id }, 'POST').then(function(d){
+                if (d && d.ok) {
+                    closeDetail();
+                    loadEvents();
+                    if (typeof window.cargarTodo === 'function') window.cargarTodo();
+                }
+            });
+        });
+        if (invite) invite.addEventListener('click', function(){
+            var panel = document.getElementById('ev-detail-invite-panel');
+            var list  = document.getElementById('ev-detail-invite-list');
+            panel.style.display = '';
+            api('list-mutual-friends').then(function(d){
+                if (!d || !d.ok) { list.innerHTML = '<p style="font-size:10px;">Error.</p>'; return; }
+                var already = {};
+                (ev.participants || []).forEach(function(p){ already[p.key] = true; });
+                var avail = (d.friends || []).filter(function(f){ return !already[f.key]; });
+                if (!avail.length) { list.innerHTML = '<p style="font-size:10px;">Sin amigos disponibles para invitar.</p>'; return; }
+                list.innerHTML = avail.map(function(f){
+                    return '<div style="display:flex; align-items:center; gap:4px; padding:2px 0;">' +
+                        '<span style="flex:1; font-size:11px;">' + esc(f.label) + '</span>' +
+                        '<button class="button ev-inv-send" data-key="' + esc(f.key) + '" style="font-size:10px; padding:1px 6px;">Invitar</button>' +
+                    '</div>';
+                }).join('');
+                list.querySelectorAll('.ev-inv-send').forEach(function(btn){
+                    btn.addEventListener('click', function(){
+                        var key = btn.dataset.key;
+                        btn.disabled = true; btn.textContent = '…';
+                        api('invite-to-event', { eventId: ev.id, userKey: key }, 'POST').then(function(r){
+                            if (r && r.ok) { btn.textContent = '✓ Enviado'; }
+                            else { btn.disabled = false; btn.textContent = 'Invitar'; document.getElementById('ev-detail-invite-status').textContent = (r && r.error) || 'Error'; }
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    /* ── HARO POLLING para invitaciones pendientes ──
+       Cada 30s comprobamos invites pending NO notificados todavía.
+       Por cada uno, disparamos notifSystem.show con type:'action' y
+       callbacks onAccept/onReject que POSTean al endpoint. Tras
+       mostrar, marcamos como notified para no spamear cada poll. */
+    function getNotifSystem() {
+        try {
+            if (window.parent && window.parent !== window && window.parent.notifSystem) {
+                return window.parent.notifSystem;
+            }
+        } catch (_) {}
+        return (typeof window.notifSystem === 'object' && window.notifSystem) ? window.notifSystem : null;
+    }
+    function pollInvites() {
+        var notifSys = getNotifSystem();
+        if (!notifSys || !notifSys.show) return;
+        api('get-pending-invites').then(function(d){
+            if (!d || !d.ok || !Array.isArray(d.invites)) return;
+            var toMark = [];
+            d.invites.forEach(function(inv){
+                if (inv.notified) return;  /* ya se mostró antes */
+                toMark.push(inv.id);
+                var notifId = 'event-invite-' + inv.id;
+                notifSys.show({
+                    id: notifId,
+                    type: 'action',
+                    title: '📅 Invitación a evento',
+                    message: esc(inv.inviterLabel) + ' te ha invitado a "' + esc(inv.eventTitle) + '" — ' + esc(fmtDate(inv.eventDate)),
+                    sentAt: (inv.sentAt || 0) * 1000,
+                    onAccept: function(){
+                        api('respond-event-invite', { inviteId: inv.id, action: 'accept' }, 'POST').then(function(r){
+                            if (r && r.ok && typeof window.cargarTodo === 'function') window.cargarTodo();
+                        });
+                    },
+                    onReject: function(){
+                        api('respond-event-invite', { inviteId: inv.id, action: 'decline' }, 'POST');
+                    },
+                });
+            });
+            if (toMark.length) api('mark-invites-notified', { inviteIds: toMark }, 'POST');
+        }).catch(function(){});
+    }
+    /* Llamada inicial tras un pequeño delay (para que notifSystem se
+       haya inicializado en el shell padre) y polling cada 30s. */
+    setTimeout(pollInvites, 2500);
+    setInterval(pollInvites, 30000);
 })();
 </script>
 
