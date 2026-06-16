@@ -97,6 +97,11 @@ body:not(.user-selected) #loginWindow .window-body {
     padding: 8px;
 }
 
+/* Padding consistente del login en ambos estados (rojo base y tema del
+   usuario). Sin esto, el tema deja el window-body sin padding y la
+   ventana queda más pequeña que la roja. */
+#loginWindow .window-body { padding: 8px; }
+
 /* Inputs y labels del formulario de registro / login */
 #registerWindow label,
 body:not(.user-selected) #loginWindow label {
