@@ -142,7 +142,7 @@ function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $wai
     $waitStr = $waitlist > 0 ? (' (+' . $waitlist . ' en espera)') : '';
     $partLine = $joined . ' / ' . $maxStr . $waitStr;
 
-    $melonUrl  = 'https://melonhub.es/?openEvent=' . (int)$event['id'];
+    $melonUrl  = 'https://melonhubdev.melonhub.es/?openEvent=' . (int)$event['id'];
 
     $author = ['name' => $creatorLabel];
     if ($creatorAvatarRel) {
@@ -270,7 +270,16 @@ function ev_discordUpdate(PDO $pdo, int $eventId): void {
 
     $url  = 'https://discord.com/api/v10/channels/' . rawurlencode(EV_DISCORD_CHANNEL)
           . '/messages/' . rawurlencode($msgId);
-    $body = json_encode(['embeds' => [$embed]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    /* `attachments: []` es CRÍTICO: sin este campo, Discord desliga el
+       avatar adjunto del POST original y lo renderiza como un archivo
+       suelto encima del embed en cada PATCH. Pasando un array vacío le
+       indicamos explícitamente "no quiero ningún attachment" → el embed
+       queda limpio, sin avatar (lo cual es aceptable; el creador sigue
+       saliendo por nombre en el author del embed). */
+    $body = json_encode([
+        'embeds'      => [$embed],
+        'attachments' => [],
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
