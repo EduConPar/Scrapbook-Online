@@ -4278,10 +4278,17 @@ var PROFILE_USERS = <?php
                expanden el feed después de este scroll. Si estábamos al
                fondo, mantenemos el fondo cuando cada una termina de
                cargar — antes los mensajes con imagen dejaban el chat
-               enganchado arriba del último msg de texto. */
+               enganchado arriba del último msg de texto.
+               RE-CHECK al disparar pin: si el user ha scrolleado arriba
+               entre tanto, NO forzamos abajo. Antes los GIFs/imágenes
+               que cargaban con retraso lo lanzaban abajo aunque
+               estuviera leyendo mensajes anteriores. */
             listEl.querySelectorAll('img').forEach(function(img){
                 if (img.complete) return;
-                var pin = function(){ listEl.scrollTop = listEl.scrollHeight; };
+                var pin = function(){
+                    var stillAtBottom = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 80;
+                    if (stillAtBottom) listEl.scrollTop = listEl.scrollHeight;
+                };
                 img.addEventListener('load',  pin, { once: true });
                 img.addEventListener('error', pin, { once: true });
             });

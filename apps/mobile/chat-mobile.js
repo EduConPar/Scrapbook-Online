@@ -500,10 +500,17 @@ function renderFeed(messages) {
            DESPUÉS de este scroll. Si estábamos al fondo antes del
            render, mantenemos el fondo a medida que cada imagen termina
            de cargar — sin esto, los mensajes con imágenes dejaban la
-           vista enganchada arriba del último msg de texto. */
+           vista enganchada arriba del último msg de texto.
+           RE-CHECK al disparar pin: si el user ha scrolleado arriba
+           entre tanto, NO forzamos abajo. Antes los GIFs/imágenes que
+           cargaban con retraso te empujaban al fondo aunque estuvieras
+           leyendo mensajes anteriores. */
         feed.querySelectorAll('img').forEach(function(img){
             if (img.complete) return;
-            var pin = function(){ feed.scrollTop = feed.scrollHeight; };
+            var pin = function(){
+                var stillAtBottom = (feed.scrollHeight - feed.scrollTop - feed.clientHeight) < 80;
+                if (stillAtBottom) feed.scrollTop = feed.scrollHeight;
+            };
             img.addEventListener('load',  pin, { once: true });
             img.addEventListener('error', pin, { once: true });
         });
