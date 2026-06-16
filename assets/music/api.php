@@ -977,45 +977,123 @@ case 'import-playlist': {
     $playlistId = '';
     if (preg_match('/[?&]list=([A-Za-z0-9_-]+)/', $url, $m)) {
         $playlistId = preg_replace('/[^A-Za-z0-9_-]/', '', $m[1]);
+    } elseif (preg_match('/^[A-Za-z0-9_-]{10,}$/', $url)) {
+        /* Acepta también el ID puro pegado por el usuario. */
+        $playlistId = $url;
     }
     if (!$playlistId) jsonError('URL de playlist inválida');
-    $ctx = stream_context_create(['http' => [
-        'timeout' => 20, 'ignore_errors' => true,
-        'header'  => implode("\r\n", [
+
+    /* Pide la página intentando varios approaches — YouTube redirige a
+       consent.youtube.com sin cookies, devuelve HTML "simplificado"
+       sin ytInitialData a clientes que no se parecen a Chrome reciente,
+       y ha movido la variable de JS a varias formas (`var ytInitialData
+       = {...};`, `window["ytInitialData"] = {...};`, etc.). Probamos
+       hasta agotar opciones. */
+    $fetchPage = function($pid) {
+        $headers = [
             'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'Accept-Language: en-US,en;q=0.9',
             'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        ]),
-    ]]);
-    $html = @file_get_contents('https://www.youtube.com/playlist?list=' . $playlistId, false, $ctx);
-    if (!$html) jsonError('No se pudo acceder a la playlist', 502);
-    $marker = 'var ytInitialData = ';
-    $pos = strpos($html, $marker);
-    if ($pos === false) jsonError('No se pudo parsear la playlist', 502);
-    $pos += strlen($marker);
-    $endPos = strpos($html, ';</script>', $pos);
-    if ($endPos === false) $endPos = strpos($html, ';var ', $pos);
-    if ($endPos === false) jsonError('Datos de playlist mal formados', 502);
-    $data = json_decode(substr($html, $pos, $endPos - $pos), true);
-    if (!$data) jsonError('JSON de playlist inválido', 502);
+            /* CONSENT=YES+cb: salta el wall de consentimiento (UE).
+               Sin esto, en cuentas/IPs europeas YouTube redirige a
+               consent.youtube.com y la página NO contiene ytInitialData. */
+            'Cookie: CONSENT=YES+cb; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; PREF=hl=en&gl=US',
+        ];
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout'       => 25,
+                'ignore_errors' => true,
+                'follow_location' => 1,
+                'max_redirects' => 5,
+                'header'        => implode("\r\n", $headers),
+            ],
+            'ssl' => [
+                'verify_peer'      => false,
+                'verify_peer_name' => false,
+            ],
+        ]);
+        return @file_get_contents('https://www.youtube.com/playlist?list=' . $pid, false, $ctx);
+    };
+
+    $html = $fetchPage($playlistId);
+    if (!$html) jsonError('No se pudo acceder a la playlist (timeout o bloqueo de YouTube)', 502);
+
+    /* Parser tolerante: intenta varios marcadores y técnicas. */
+    $extractYtInitialData = function($html) {
+        /* Variantes vistas en producción: */
+        $markers = [
+            'var ytInitialData = ',
+            'window["ytInitialData"] = ',
+            'ytInitialData = ',
+        ];
+        foreach ($markers as $marker) {
+            $pos = strpos($html, $marker);
+            if ($pos === false) continue;
+            $pos += strlen($marker);
+            /* Termina en `;</script>` (formato clásico) o `;\n`/`;var ` para
+               otras variantes. */
+            $endCandidates = [';</script>', ";\n", ';var ', ';window['];
+            $endPos = false;
+            foreach ($endCandidates as $end) {
+                $cand = strpos($html, $end, $pos);
+                if ($cand !== false && ($endPos === false || $cand < $endPos)) {
+                    $endPos = $cand;
+                }
+            }
+            if ($endPos === false) continue;
+            $jsonRaw = substr($html, $pos, $endPos - $pos);
+            $data = json_decode($jsonRaw, true);
+            if ($data) return $data;
+        }
+        return null;
+    };
+
+    $data = $extractYtInitialData($html);
+    if (!$data) jsonError('YouTube cambió el formato HTML — actualiza el parser', 502);
+
     $findKey = function($arr, $key) use (&$findKey) {
         if (!is_array($arr)) return null;
         if (isset($arr[$key])) return $arr[$key];
         foreach ($arr as $v) { $r = $findKey($v, $key); if ($r !== null) return $r; }
         return null;
     };
-    $videoList = $findKey($data, 'playlistVideoListRenderer');
-    if (!$videoList || empty($videoList['contents'])) jsonError('No se encontraron canciones en la playlist', 404);
+
+    /* Colector recursivo de TODOS los `playlistVideoRenderer` del JSON.
+       Antes solo usábamos `playlistVideoListRenderer.contents`, pero a
+       veces la lista llega particionada en `continuationItemRenderer` o
+       embebida en otros containers. Iterar todo el árbol garantiza
+       que recogemos cada vídeo presente en la página inicial. */
+    $videos = [];
+    $walk = function($node) use (&$walk, &$videos) {
+        if (!is_array($node)) return;
+        if (isset($node['playlistVideoRenderer'])) {
+            $videos[] = $node['playlistVideoRenderer'];
+        }
+        foreach ($node as $v) {
+            if (is_array($v)) $walk($v);
+        }
+    };
+    $walk($data);
+
+    if (empty($videos)) {
+        jsonError('No se encontraron canciones en la playlist (¿es privada o vacía?)', 404);
+    }
+
     $tracks = [];
-    foreach ($videoList['contents'] as $item) {
-        $v = $item['playlistVideoRenderer'] ?? null;
-        if (!$v) continue;
+    foreach ($videos as $v) {
         $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $v['videoId'] ?? '');
         if (strlen($vid) !== 11) continue;
-        $title  = $v['title']['runs'][0]['text'] ?? '';
-        $artist = $v['shortBylineText']['runs'][0]['text'] ?? '';
+        /* El título puede venir en `runs` o `simpleText`. */
+        $title = $v['title']['runs'][0]['text']
+              ?? $v['title']['simpleText']
+              ?? '';
+        $artist = $v['shortBylineText']['runs'][0]['text']
+               ?? $v['shortBylineText']['simpleText']
+               ?? '';
         $artist = trim(preg_replace('/\s*-\s*topic$/i', '', $artist));
-        $lenText = $v['lengthText']['simpleText'] ?? '';
+        $lenText = $v['lengthText']['simpleText']
+                ?? $v['lengthText']['runs'][0]['text']
+                ?? '';
         $duration = 0;
         if ($lenText) {
             $parts = explode(':', $lenText);
@@ -1029,7 +1107,7 @@ case 'import-playlist': {
             'duration' => $duration,
         ];
     }
-    if (empty($tracks)) jsonError('No se encontraron canciones en la playlist', 404);
+    if (empty($tracks)) jsonError('No se encontraron canciones válidas en la playlist', 404);
     jsonResponse(['tracks' => $tracks]);
 }
 
