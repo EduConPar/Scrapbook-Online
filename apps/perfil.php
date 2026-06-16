@@ -183,8 +183,20 @@ if ($_perfilStandalone) {
             width: 100%; height: 100%;
             display: flex; flex-direction: column;
             box-sizing: border-box;
+            /* Minimum content size — el layout de perfil tiene sidebar
+               + main area con anchos mínimos. Sin esto, al achicar la
+               ventana del shell por debajo de ese mínimo el contenido
+               se cortaba sin scrollbar. */
+            min-width: 360px;
+            min-height: 320px;
         }
-        #profile-window > .window-body { flex: 1; min-height: 0; }
+        /* Window body scrolleable como último recurso si el iframe se
+           hace MÁS pequeño que el contenido mínimo. Sin esto, el user
+           veía elementos cortados al redimensionar muy pequeño. Las
+           áreas internas siguen con su propio scroll cuando hay sitio
+           (sunken-panel, lists, etc.) — esto solo entra en juego al
+           overflow del propio wrapper. */
+        #profile-window > .window-body { flex: 1; min-height: 0; overflow: auto; }
         /* En standalone (iframe del perfil ajeno), el "← Volver" no tiene
            sentido — la única forma de salir es cerrando la ventana iframe
            desde el shell padre. Lo ocultamos completamente. */
@@ -6315,44 +6327,73 @@ var PROFILE_USERS = <?php
         iframe.setAttribute('allowtransparency', 'true');
         win.appendChild(iframe);
 
-        /* Resize handle en la esquina inferior-derecha.
-           Como el iframe llena el wrapper y captura pointer events,
-           necesitamos un overlay transparente con z-index encima. El
-           cursor 'nwse-resize' indica al user que se puede arrastrar. */
-        var resizeCorner = document.createElement('div');
-        resizeCorner.style.cssText =
-            'position: absolute;' +
-            'right: 0; bottom: 0;' +
-            'width: 18px; height: 18px;' +
-            'cursor: nwse-resize;' +
-            'z-index: 10;' +
-            'background: transparent;' +
-            'touch-action: none;';
-        win.appendChild(resizeCorner);
-
-        resizeCorner.addEventListener('pointerdown', function(e) {
-            if (win.dataset.maximized === '1') return;  /* no resize si maximizado */
-            e.preventDefault();
-            e.stopPropagation();
-            resizeCorner.setPointerCapture(e.pointerId);
-            var startX = e.screenX, startY = e.screenY;
-            var startW = win.offsetWidth, startH = win.offsetHeight;
-            function onMove(ev) {
-                /* Mínimos para evitar que la ventana colapse a 0. */
-                var newW = Math.max(400, startW + (ev.screenX - startX));
-                var newH = Math.max(280, startH + (ev.screenY - startY));
-                win.style.width  = newW + 'px';
-                win.style.height = newH + 'px';
-            }
-            function onUp(ev) {
-                try { resizeCorner.releasePointerCapture(ev.pointerId); } catch (_) {}
-                resizeCorner.removeEventListener('pointermove', onMove);
-                resizeCorner.removeEventListener('pointerup', onUp);
-                resizeCorner.removeEventListener('pointercancel', onUp);
-            }
-            resizeCorner.addEventListener('pointermove', onMove);
-            resizeCorner.addEventListener('pointerup', onUp);
-            resizeCorner.addEventListener('pointercancel', onUp);
+        /* Resize handles — 4 esquinas + 4 lados (8 en total).
+           Cada uno es un overlay transparente sobre el iframe (que
+           captura pointer events). El nombre `dir` codifica las
+           direcciones afectadas: 'n','s','e','w' (lados); 'nw','ne',
+           'sw','se' (esquinas). Por ejemplo 'ne' = afecta TOP + RIGHT.
+           Mínimos compartidos: 360 × 320 (coherente con el min-width
+           / min-height del #profile-window standalone). */
+        var EDGE      = 6;     /* grosor de los lados */
+        var CORNER    = 14;    /* tamaño de las esquinas (más fáciles de agarrar) */
+        var MIN_W     = 360;
+        var MIN_H     = 320;
+        var handlesDef = [
+            { dir: 'nw', cur: 'nwse-resize', css: 'top:0;left:0;width:'+CORNER+'px;height:'+CORNER+'px;' },
+            { dir: 'ne', cur: 'nesw-resize', css: 'top:0;right:0;width:'+CORNER+'px;height:'+CORNER+'px;' },
+            { dir: 'sw', cur: 'nesw-resize', css: 'bottom:0;left:0;width:'+CORNER+'px;height:'+CORNER+'px;' },
+            { dir: 'se', cur: 'nwse-resize', css: 'bottom:0;right:0;width:'+CORNER+'px;height:'+CORNER+'px;' },
+            { dir: 'n',  cur: 'ns-resize',   css: 'top:0;left:'+CORNER+'px;right:'+CORNER+'px;height:'+EDGE+'px;' },
+            { dir: 's',  cur: 'ns-resize',   css: 'bottom:0;left:'+CORNER+'px;right:'+CORNER+'px;height:'+EDGE+'px;' },
+            { dir: 'w',  cur: 'ew-resize',   css: 'top:'+CORNER+'px;left:0;bottom:'+CORNER+'px;width:'+EDGE+'px;' },
+            { dir: 'e',  cur: 'ew-resize',   css: 'top:'+CORNER+'px;right:0;bottom:'+CORNER+'px;width:'+EDGE+'px;' }
+        ];
+        handlesDef.forEach(function(h) {
+            var el = document.createElement('div');
+            el.className = 'pf-resize-handle pf-resize-' + h.dir;
+            el.style.cssText =
+                'position:absolute;' + h.css +
+                'cursor:' + h.cur + ';' +
+                'z-index:10;background:transparent;touch-action:none;';
+            el.addEventListener('pointerdown', function(e) {
+                if (win.dataset.maximized === '1') return;
+                e.preventDefault(); e.stopPropagation();
+                el.setPointerCapture(e.pointerId);
+                var startX = e.screenX, startY = e.screenY;
+                var startW = win.offsetWidth,  startH = win.offsetHeight;
+                var startL = win.offsetLeft,   startT = win.offsetTop;
+                var dir = h.dir;
+                function onMove(ev) {
+                    var dx = ev.screenX - startX, dy = ev.screenY - startY;
+                    var newW = startW, newH = startH, newL = startL, newT = startT;
+                    if (dir.indexOf('e') >= 0) {
+                        newW = Math.max(MIN_W, startW + dx);
+                    } else if (dir.indexOf('w') >= 0) {
+                        newW = Math.max(MIN_W, startW - dx);
+                        newL = startL + (startW - newW);
+                    }
+                    if (dir.indexOf('s') >= 0) {
+                        newH = Math.max(MIN_H, startH + dy);
+                    } else if (dir.indexOf('n') >= 0) {
+                        newH = Math.max(MIN_H, startH - dy);
+                        newT = startT + (startH - newH);
+                    }
+                    win.style.width  = newW + 'px';
+                    win.style.height = newH + 'px';
+                    win.style.left   = newL + 'px';
+                    win.style.top    = newT + 'px';
+                }
+                function onUp(ev) {
+                    try { el.releasePointerCapture(ev.pointerId); } catch (_) {}
+                    el.removeEventListener('pointermove', onMove);
+                    el.removeEventListener('pointerup', onUp);
+                    el.removeEventListener('pointercancel', onUp);
+                }
+                el.addEventListener('pointermove', onMove);
+                el.addEventListener('pointerup', onUp);
+                el.addEventListener('pointercancel', onUp);
+            });
+            win.appendChild(el);
         });
 
         document.body.appendChild(win);
