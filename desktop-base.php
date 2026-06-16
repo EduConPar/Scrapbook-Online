@@ -525,6 +525,42 @@ window.DesktopState.whenReady = function(cb){
     </div>
 </div>
 
+<!-- MODAL Reportes (bug/sugerencia → Discord) -->
+<div class="window" id="reports-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:420px;max-height:80vh;">
+    <div class="title-bar">
+        <div class="title-bar-text">📨 Reportes</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="reports-x"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+        <fieldset style="border:0;padding:0;margin:0;">
+            <legend style="padding:0;margin:0 0 4px;font-size:11px;">Tipo</legend>
+            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:12px;">
+                <input type="radio" name="report-type" value="bug" checked>🐛 Bug
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+                <input type="radio" name="report-type" value="suggestion">💡 Sugerencia
+            </label>
+        </fieldset>
+        <label style="font-size:11px;">Título
+            <input id="report-title" type="text" maxlength="200" style="width:100%;display:block;margin-top:3px;">
+        </label>
+        <label style="font-size:11px;">Descripción
+            <textarea id="report-body" maxlength="1900" rows="6" style="width:100%;display:block;margin-top:3px;resize:vertical;font-family:inherit;font-size:12px;"></textarea>
+        </label>
+        <label style="font-size:11px;">Imágenes (opcional, máx 4)
+            <input id="report-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:block;margin-top:3px;">
+        </label>
+        <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);"></div>
+        <p id="report-status" style="margin:6px 0 0;font-size:11px;min-height:14px;"></p>
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">
+            <button id="report-ok" class="default">Enviar</button>
+            <button id="report-cancel">Cancelar</button>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL confirmar borrar carpeta -->
 <div class="window" id="folder-delete-modal" data-no-auto-z style="display:none; flex-direction:column; position:fixed;">
     <div class="title-bar">
@@ -818,6 +854,7 @@ window.DesktopState.whenReady = function(cb){
         <div id="start-sidebar">MelonOS 98</div>
         <div id="start-menu-items">
             <div class="menu-sep"></div>
+            <a class="menu-item" href="#" id="menu-reports">📨 Reportes...</a>
             <a class="menu-item" href="#" id="menu-change-password">Cambiar contraseña...</a>
             <a class="menu-item" href="logout.php">Cerrar sesión...</a>
             <div class="menu-sep"></div>
@@ -1264,6 +1301,91 @@ document.addEventListener('click', function() {
             else if (ev.key === 'Escape'){ ev.preventDefault(); close(); }
         });
     });
+})();
+
+/* =========================
+   REPORTES (BUG / SUGERENCIA → DISCORD)
+========================= */
+(function(){
+    var link    = document.getElementById('menu-reports');
+    if (!link) return;
+    var modal   = document.getElementById('reports-modal');
+    var titleEl = document.getElementById('report-title');
+    var bodyEl  = document.getElementById('report-body');
+    var filesEl = document.getElementById('report-files');
+    var listEl  = document.getElementById('report-files-list');
+    var status  = document.getElementById('report-status');
+    var okBtn   = document.getElementById('report-ok');
+
+    function setStat(msg, color){ status.style.color = color || ''; status.textContent = msg || ''; }
+    function reset(){
+        titleEl.value = ''; bodyEl.value = ''; filesEl.value = '';
+        listEl.textContent = '';
+        var bug = document.querySelector('input[name="report-type"][value="bug"]');
+        if (bug) bug.checked = true;
+        setStat(''); okBtn.disabled = false;
+    }
+    function open(e){
+        if (e) e.preventDefault();
+        reset();
+        modal.style.display = 'flex';
+        if (window.centerModal) window.centerModal(modal);
+        if (window.windowZ) windowZ.bringToFront('reports-modal');
+        setTimeout(function(){ titleEl.focus(); }, 30);
+    }
+    function close(){ modal.style.display = 'none'; reset(); }
+    link.addEventListener('click', open);
+    document.getElementById('reports-x').addEventListener('click', close);
+    document.getElementById('report-cancel').addEventListener('click', close);
+
+    filesEl.addEventListener('change', function(){
+        var n = filesEl.files ? filesEl.files.length : 0;
+        if (!n) { listEl.textContent = ''; return; }
+        if (n > 4) {
+            setStat('Máximo 4 imágenes.', 'var(--error-text,#c00)');
+            filesEl.value = ''; listEl.textContent = ''; return;
+        }
+        var names = [];
+        for (var i = 0; i < n; i++) names.push(filesEl.files[i].name);
+        listEl.textContent = names.join(', ');
+    });
+
+    function submit(){
+        var type = (document.querySelector('input[name="report-type"]:checked') || {}).value || 'bug';
+        var t = (titleEl.value || '').trim();
+        var b = (bodyEl.value  || '').trim();
+        if (!t) { setStat('Pon un título.', 'var(--error-text,#c00)'); return; }
+        if (!b) { setStat('Escribe la descripción.', 'var(--error-text,#c00)'); return; }
+        okBtn.disabled = true;
+        setStat('Enviando…', 'var(--text-muted,#666)');
+        var fd = new FormData();
+        fd.append('type',  type);
+        fd.append('title', t);
+        fd.append('body',  b);
+        if (filesEl.files) {
+            for (var i = 0; i < filesEl.files.length && i < 4; i++) {
+                fd.append('files[]', filesEl.files[i]);
+            }
+        }
+        fetch('assets/profile/api.php?action=submit-report', {
+            method: 'POST', credentials: 'same-origin', body: fd
+        })
+        .then(function(r){ return r.json().catch(function(){ return {}; }); })
+        .then(function(d){
+            if (d && d.ok) {
+                setStat('✔ Enviado.', '');
+                setTimeout(close, 900);
+            } else {
+                setStat((d && d.error) || 'Error al enviar.', 'var(--error-text,#c00)');
+                okBtn.disabled = false;
+            }
+        })
+        .catch(function(){
+            setStat('Error de red.', 'var(--error-text,#c00)');
+            okBtn.disabled = false;
+        });
+    }
+    okBtn.addEventListener('click', submit);
 })();
 
 /* =========================
@@ -2349,6 +2471,7 @@ window.notifSystem = (function() {
     setup('music-player', true);
     /* Modales pequeños — arrastrables por su title-bar pero sin resize. */
     setup('change-password-modal', true);
+    setup('reports-modal',         true);
     setup('folder-create-modal',   true);
     setup('folder-delete-modal',   true);
 })();

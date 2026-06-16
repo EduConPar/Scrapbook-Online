@@ -2310,6 +2310,139 @@ case 'tenor-search': {
     jsonResponse(['gifs' => $out]);
 }
 
+case 'submit-report': {
+    /* Reportes del usuario (bug / sugerencia) → enviados a Discord en
+       el canal correspondiente vía bot.
+       Multipart: type=bug|suggestion, title, body, opcional files[].
+       Requiere DISCORD_BOT_TOKEN en .env. */
+    global $loginUsers;
+    $type  = strtolower(trim((string)($_POST['type']  ?? '')));
+    $title = trim((string)($_POST['title'] ?? ''));
+    $body  = trim((string)($_POST['body']  ?? ''));
+    if (!in_array($type, ['bug','suggestion'], true)) jsonError('type inválido (bug|suggestion)');
+    if ($title === '' || mb_strlen($title) > 200) jsonError('Título requerido (1-200 caracteres)');
+    if ($body === '' || mb_strlen($body) > 1900)  jsonError('Texto requerido (1-1900 caracteres)');
+
+    $botToken = trim(env('DISCORD_BOT_TOKEN', ''));
+    if ($botToken === '') {
+        jsonResponse([
+            'error' => 'Discord no configurado (falta DISCORD_BOT_TOKEN en .env).',
+            'code'  => 'discordNotConfigured'
+        ], 503);
+    }
+    /* IDs de canales fijos hardcoded — pedidos explícitamente. */
+    $channelId = $type === 'bug'
+        ? '1508966914624589917'
+        : '1508966824941850805';
+
+    $userLabel = $loginUsers[$userKey]['label'] ?? $userKey;
+
+    /* Avatar adjunto del autor, mismo patrón que discord-publish.
+       Si no hay avatar resoluble, cae al icono por defecto. */
+    $avatarFsPath = null; $avatarMime = ''; $avatarExt = '';
+    if (function_exists('getUserImage')) {
+        $rel = getUserImage($userLabel);
+        if ($rel) {
+            $cand = dirname(__DIR__, 2) . '/' . $rel;
+            if (is_file($cand)) {
+                $avatarFsPath = $cand;
+                $avatarExt    = strtolower(pathinfo($cand, PATHINFO_EXTENSION));
+                $mimeMap      = ['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png','gif'=>'image/gif','webp'=>'image/webp'];
+                $avatarMime   = $mimeMap[$avatarExt] ?? 'image/png';
+            }
+        }
+    }
+
+    $color = $type === 'bug' ? 0xE74C3C : 0x3498DB;   /* rojo / azul */
+    $emoji = $type === 'bug' ? '🐛' : '💡';
+    $kind  = $type === 'bug' ? 'Bug'  : 'Sugerencia';
+
+    $author = ['name' => $userLabel];
+    if ($avatarFsPath) $author['icon_url'] = 'attachment://avatar.' . $avatarExt;
+    $embed = [
+        'author'      => $author,
+        'title'       => mb_substr($emoji . ' ' . $title, 0, 256),
+        'description' => $body,
+        'color'       => $color,
+        'footer'      => ['text' => $kind . ' reportado desde Melon Hub'],
+        'timestamp'   => gmdate('c'),
+    ];
+
+    /* Adjuntar imágenes que el usuario haya subido (máx 8 MB cada una,
+       total <= 25 MB que es el límite de Discord para bots no boosters).
+       El primer attachment image va como `image` del embed para que el
+       preview se muestre destacado; los siguientes quedan como adjuntos
+       sueltos debajo del mensaje. */
+    $userFiles = [];
+    if (!empty($_FILES['files']) && is_array($_FILES['files']['name'])) {
+        for ($i = 0; $i < count($_FILES['files']['name']); $i++) {
+            if ($_FILES['files']['error'][$i] !== UPLOAD_ERR_OK) continue;
+            if ($_FILES['files']['size'][$i] > 8 * 1024 * 1024)  continue;
+            $tmp  = $_FILES['files']['tmp_name'][$i];
+            $info = @getimagesize($tmp);
+            if (!$info) continue;
+            $typeToExt = [
+                IMAGETYPE_JPEG=>'jpg', IMAGETYPE_PNG=>'png',
+                IMAGETYPE_GIF=>'gif',  IMAGETYPE_WEBP=>'webp',
+            ];
+            if (!isset($typeToExt[$info[2]])) continue;
+            $ext  = $typeToExt[$info[2]];
+            $mime = image_type_to_mime_type($info[2]);
+            $userFiles[] = [
+                'path' => $tmp,
+                'mime' => $mime,
+                'name' => 'imagen_' . ($i + 1) . '.' . $ext,
+            ];
+        }
+    }
+    if (!empty($userFiles)) {
+        $embed['image'] = ['url' => 'attachment://' . $userFiles[0]['name']];
+    }
+
+    $payload = [
+        'embeds'           => [$embed],
+        'allowed_mentions' => ['parse' => []],
+    ];
+
+    $url        = 'https://discord.com/api/v10/channels/' . rawurlencode($channelId) . '/messages';
+    $authHeader = 'Authorization: Bot ' . $botToken;
+    $uaHeader   = 'User-Agent: MelonHub (https://github.com, 1.0)';
+
+    /* Multipart: payload_json + files[0..N] (avatar + adjuntos del user). */
+    $postFields = [
+        'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ];
+    $fileIdx = 0;
+    if ($avatarFsPath) {
+        $postFields['files[' . $fileIdx . ']'] = new CURLFile($avatarFsPath, $avatarMime, 'avatar.' . $avatarExt);
+        $fileIdx++;
+    }
+    foreach ($userFiles as $uf) {
+        $postFields['files[' . $fileIdx . ']'] = new CURLFile($uf['path'], $uf['mime'], $uf['name']);
+        $fileIdx++;
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postFields,
+        CURLOPT_HTTPHEADER     => [$authHeader, $uaHeader],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_FOLLOWLOCATION => true,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code < 200 || $code >= 300) {
+        $detail = '';
+        $j = json_decode((string)$resp, true);
+        if (is_array($j) && isset($j['message'])) $detail = ' — ' . $j['message'];
+        jsonError('Discord rechazó el reporte (HTTP ' . $code . ')' . $detail, 502);
+    }
+    jsonResponse(['ok' => true]);
+}
+
 default:
     jsonError('Acción no válida: ' . $action, 400);
 }

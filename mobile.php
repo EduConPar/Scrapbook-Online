@@ -403,8 +403,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             margin-top: 2px;
         }
 
-        /* ── MODAL CAMBIAR CONTRASEÑA ── (igual estilo Win98) */
-        #mh-cp-backdrop {
+        /* ── MODAL CAMBIAR CONTRASEÑA / REPORTES ── (igual estilo Win98) */
+        #mh-cp-backdrop, #mh-rep-backdrop {
             position: fixed; inset: 0;
             background: rgba(0, 0, 0, 0.45);
             z-index: 90;
@@ -414,7 +414,13 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             padding: 16px;
             box-sizing: border-box;
         }
-        #mh-cp-backdrop.is-open { display: flex; }
+        #mh-cp-backdrop.is-open, #mh-rep-backdrop.is-open { display: flex; }
+        #mh-rep-window { width: 100%; max-width: 380px; max-height: 92vh; display: flex; flex-direction: column; }
+        #mh-rep-window .window-body { padding: 12px; overflow-y: auto; }
+        #mh-rep-window input[type="text"], #mh-rep-window textarea {
+            font-size: 13px; padding: 4px 6px;
+        }
+        #mh-rep-status { font-size: 11px; min-height: 14px; margin: 6px 0 0; }
         #mh-cp-window { width: 100%; max-width: 320px; display: flex; flex-direction: column; }
         #mh-cp-window .window-body {
             padding: 14px;
@@ -1240,6 +1246,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             </button>
             <!-- Input oculto: el OS abre su propio file picker como "modal". -->
             <input type="file" id="mh-set-photo-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+            <button class="mh-set-btn" type="button" id="mh-set-report">
+                <span class="mh-set-emoji">📨</span>
+                <span class="mh-set-text">Reportes
+                    <small>Manda un bug o una sugerencia</small>
+                </span>
+            </button>
             <button class="mh-set-btn" type="button" id="mh-set-change-password">
                 <!-- Icono de llaves con fallback al emoji 🔑 si el PNG
                      no existe en el pack activo. onerror reemplaza el
@@ -1259,6 +1271,41 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <small>Borra permanentemente tu cuenta y todos sus datos</small>
                 </span>
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL REPORTES — manda bug/sugerencia al canal de Discord. -->
+<div id="mh-rep-backdrop">
+    <div class="window" id="mh-rep-window">
+        <div class="title-bar">
+            <div class="title-bar-text">📨 Reportes</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-rep-close"></button>
+            </div>
+        </div>
+        <div class="window-body">
+            <fieldset id="mh-rep-type-row" style="border:0;padding:0;margin:0 0 8px;">
+                <legend style="padding:0;margin:0 0 4px;font-size:11px;">Tipo</legend>
+                <label style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:12px;">
+                    <input type="radio" name="mh-rep-type" value="bug" checked>🐛 Bug
+                </label>
+                <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
+                    <input type="radio" name="mh-rep-type" value="suggestion">💡 Sugerencia
+                </label>
+            </fieldset>
+            <label style="display:block;font-size:11px;margin-bottom:2px;">Título</label>
+            <input type="text" id="mh-rep-title" maxlength="200" style="width:100%;box-sizing:border-box;">
+            <label style="display:block;font-size:11px;margin:8px 0 2px;">Descripción</label>
+            <textarea id="mh-rep-body" maxlength="1900" rows="6" style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
+            <label style="display:block;font-size:11px;margin:8px 0 2px;">Imágenes (opcional, máx 4)</label>
+            <input type="file" id="mh-rep-files" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+            <div id="mh-rep-files-list" style="font-size:10px;color:var(--text-faint,#666);margin-top:4px;"></div>
+            <p id="mh-rep-status"></p>
+            <div id="mh-rep-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">
+                <button id="mh-rep-cancel">Cancelar</button>
+                <button id="mh-rep-ok" class="default">Enviar</button>
+            </div>
         </div>
     </div>
 </div>
@@ -3936,6 +3983,91 @@ window.MuShell = (function(){
             else if (ev.key === 'Escape'){ ev.preventDefault(); cpCloseModal(); }
         });
     });
+
+    /* ── modal Reportes (bug / sugerencia → Discord) ── */
+    (function(){
+        var repOpen  = document.getElementById('mh-set-report');
+        var repBp    = document.getElementById('mh-rep-backdrop');
+        var repClose = document.getElementById('mh-rep-close');
+        var repCancel= document.getElementById('mh-rep-cancel');
+        var repOk    = document.getElementById('mh-rep-ok');
+        var repTitle = document.getElementById('mh-rep-title');
+        var repBody  = document.getElementById('mh-rep-body');
+        var repFiles = document.getElementById('mh-rep-files');
+        var repList  = document.getElementById('mh-rep-files-list');
+        var repStat  = document.getElementById('mh-rep-status');
+        if (!repOpen || !repBp) return;
+        function setStat(msg, color){ repStat.style.color = color || ''; repStat.textContent = msg || ''; }
+        function reset(){
+            repTitle.value = ''; repBody.value = '';
+            repFiles.value = ''; repList.textContent = '';
+            var bug = document.querySelector('input[name="mh-rep-type"][value="bug"]');
+            if (bug) bug.checked = true;
+            setStat('');
+            repOk.disabled = false;
+        }
+        function openModal(){
+            reset();
+            closeSettings();
+            repBp.classList.add('is-open');
+            setTimeout(function(){ repTitle.focus(); }, 30);
+        }
+        function closeModal(){ repBp.classList.remove('is-open'); reset(); }
+        repOpen.addEventListener('click', openModal);
+        repClose.addEventListener('click', closeModal);
+        repCancel.addEventListener('click', closeModal);
+        repBp.addEventListener('click', function(e){ if (e.target === repBp) closeModal(); });
+        repFiles.addEventListener('change', function(){
+            var n = repFiles.files ? repFiles.files.length : 0;
+            if (!n) { repList.textContent = ''; return; }
+            /* Tope cliente-side: 4 archivos máx. El backend también
+               valida tamaño individual (8MB) y formato. */
+            if (n > 4) {
+                setStat('Máximo 4 imágenes.', 'var(--error-text, #c00)');
+                repFiles.value = ''; repList.textContent = ''; return;
+            }
+            var names = [];
+            for (var i = 0; i < n; i++) names.push(repFiles.files[i].name);
+            repList.textContent = names.join(', ');
+        });
+        repOk.addEventListener('click', function(){
+            var type = (document.querySelector('input[name="mh-rep-type"]:checked') || {}).value || 'bug';
+            var t = (repTitle.value || '').trim();
+            var b = (repBody.value  || '').trim();
+            if (!t) { setStat('Pon un título.', 'var(--error-text, #c00)'); return; }
+            if (!b) { setStat('Escribe la descripción.', 'var(--error-text, #c00)'); return; }
+            repOk.disabled = true;
+            setStat('Enviando…', 'var(--text-muted, #666)');
+            var fd = new FormData();
+            fd.append('type',  type);
+            fd.append('title', t);
+            fd.append('body',  b);
+            if (repFiles.files) {
+                for (var i = 0; i < repFiles.files.length && i < 4; i++) {
+                    fd.append('files[]', repFiles.files[i]);
+                }
+            }
+            fetch('assets/profile/api.php?action=submit-report', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd
+            })
+            .then(function(r){ return r.json().catch(function(){ return {}; }); })
+            .then(function(d){
+                if (d && d.ok) {
+                    setStat('✔ Enviado.', '');
+                    setTimeout(closeModal, 900);
+                } else {
+                    setStat((d && d.error) || 'Error al enviar.', 'var(--error-text, #c00)');
+                    repOk.disabled = false;
+                }
+            })
+            .catch(function(){
+                setStat('Error de red.', 'var(--error-text, #c00)');
+                repOk.disabled = false;
+            });
+        });
+    })();
 
     /* ── modal eliminar cuenta ── */
     var delOpen   = document.getElementById('mh-set-delete-account');
