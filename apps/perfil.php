@@ -4276,6 +4276,7 @@ var PROFILE_USERS = <?php
        throttled a 1.5s, así que si entran mensaje + notif a la vez, solo
        suena una. */
     var _prevChatUnread = -1;
+    var _lastUnreadSig = '';
     function loadUnreadChats() {
         fetch('assets/profile/api.php?action=get-unread-chats')
             .then(function(r) { return r.json(); })
@@ -4303,7 +4304,16 @@ var PROFILE_USERS = <?php
                     playProfileNotifSound('chat');
                 }
                 _prevChatUnread = total;
-                renderFollowedNav();
+                /* IDEMPOTENCIA: solo re-renderizar el sidebar si los
+                   counts realmente cambiaron. Antes este poll de 4s
+                   reconstruía siempre el DOM completo del nav →
+                   mataba el marquee de now-playing cada 4 segundos
+                   incluso cuando no había ningún chat nuevo. */
+                var sig = JSON.stringify(unreadChats);
+                if (sig !== _lastUnreadSig) {
+                    _lastUnreadSig = sig;
+                    renderFollowedNav();
+                }
             }).catch(function() {});
     }
 
