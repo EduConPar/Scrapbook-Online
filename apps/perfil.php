@@ -867,11 +867,12 @@ var PROFILE_USERS = <?php
        showReviewView. Si no se encuentra tras N intentos, se rinde
        en silencio (la reseña pudo haberse borrado entre la notif y
        el click). */
-    function _perfilOpenReviewWhenReady(cat, title) {
+    function _perfilOpenReviewWhenReady(cat, title, mtype) {
         if (!cat || !title) return;
         var attempts = 0;
         var maxAttempts = 40;   /* ~4 segundos a 100ms */
         var titleNorm = String(title).toLowerCase().trim();
+        var navigated = false;
         var tick = function(){
             attempts++;
             if (typeof lists === 'undefined' || !lists || !lists[cat]) {
@@ -883,6 +884,23 @@ var PROFILE_USERS = <?php
             for (var i = 0; i < items.length; i++) {
                 if (items[i] && items[i].title && items[i].title.toLowerCase().trim() === titleNorm) {
                     found = items[i]; break;
+                }
+            }
+            /* Navega a la sección correspondiente la PRIMERA vez que
+               podemos (lists ya están cargadas, aunque no hayamos
+               encontrado el item aún). Música → showMusicView con tab
+               'albums' o 'songs' según mtype del item. Resto → showCatView. */
+            if (!navigated) {
+                navigated = true;
+                if (cat === 'music' && typeof showMusicView === 'function') {
+                    /* Determina tab: prefiere mtype del item encontrado;
+                       fallback a mtype del param; fallback a 'albums'. */
+                    var mt = (found && found.type) || mtype || 'album';
+                    var tab = (mt === 'song') ? 'songs' : 'albums';
+                    showMusicView();
+                    if (typeof renderMusicView === 'function') renderMusicView(tab);
+                } else if (typeof showCatView === 'function') {
+                    showCatView(cat);
                 }
             }
             if (found && found.review && typeof showReviewView === 'function') {
@@ -902,7 +920,7 @@ var PROFILE_USERS = <?php
     window.addEventListener('message', function(e){
         if (!e || !e.data) return;
         if (e.data.type === 'perfil-open-review' && e.data.reviewCategory && e.data.reviewTitle) {
-            _perfilOpenReviewWhenReady(e.data.reviewCategory, e.data.reviewTitle);
+            _perfilOpenReviewWhenReady(e.data.reviewCategory, e.data.reviewTitle, e.data.reviewMtype || '');
         }
     });
 
@@ -927,7 +945,8 @@ var PROFILE_USERS = <?php
                         var q = new URLSearchParams(location.search);
                         var rc = q.get('reviewCat');
                         var rt = q.get('reviewTitle');
-                        if (rc && rt) _perfilOpenReviewWhenReady(rc, rt);
+                        var rm = q.get('reviewMtype') || '';
+                        if (rc && rt) _perfilOpenReviewWhenReady(rc, rt, rm);
                     } catch (_) {}
                 }
             });
@@ -2601,7 +2620,11 @@ var PROFILE_USERS = <?php
                        reseña directamente tras cargar las lists. */
                     var opts = null;
                     if (notif.type === 'review' && notif.category && notif.itemTitle) {
-                        opts = { reviewCategory: notif.category, reviewTitle: notif.itemTitle };
+                        opts = {
+                            reviewCategory: notif.category,
+                            reviewTitle:    notif.itemTitle,
+                            reviewMtype:    notif.mtype || ''   /* 'album' | 'song' (solo música) */
+                        };
                     }
                     /* Abre el perfil de uk como NUEVA ventana iframe
                        (con su interfaz/tema/iconos). Si estamos en
@@ -6057,7 +6080,8 @@ var PROFILE_USERS = <?php
                         type: 'perfil-open-at-user',
                         userKey: userKey,
                         reviewCategory: opts.reviewCategory || '',
-                        reviewTitle:    opts.reviewTitle    || ''
+                        reviewTitle:    opts.reviewTitle    || '',
+                        reviewMtype:    opts.reviewMtype    || ''
                     }, '*');
                 }
             } catch (_) {}
@@ -6085,7 +6109,8 @@ var PROFILE_USERS = <?php
                         iframeEl.contentWindow.postMessage({
                             type: 'perfil-open-review',
                             reviewCategory: opts.reviewCategory,
-                            reviewTitle:    opts.reviewTitle
+                            reviewTitle:    opts.reviewTitle,
+                            reviewMtype:    opts.reviewMtype || ''
                         }, '*');
                     } catch (_) {}
                 }
@@ -6132,6 +6157,9 @@ var PROFILE_USERS = <?php
         if (opts.reviewCategory && opts.reviewTitle) {
             _reviewQs = '&reviewCat=' + encodeURIComponent(opts.reviewCategory)
                       + '&reviewTitle=' + encodeURIComponent(opts.reviewTitle);
+            if (opts.reviewMtype) {
+                _reviewQs += '&reviewMtype=' + encodeURIComponent(opts.reviewMtype);
+            }
         }
         iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey) + (_isTab ? '&tablet=1' : '') + _reviewQs;
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: transparent;';
@@ -6251,7 +6279,8 @@ var PROFILE_USERS = <?php
                 if (e.data.userKey && typeof openProfileInIframe === 'function') {
                     openProfileInIframe(e.data.userKey, {
                         reviewCategory: e.data.reviewCategory || '',
-                        reviewTitle:    e.data.reviewTitle    || ''
+                        reviewTitle:    e.data.reviewTitle    || '',
+                        reviewMtype:    e.data.reviewMtype    || ''
                     });
                 }
                 return;

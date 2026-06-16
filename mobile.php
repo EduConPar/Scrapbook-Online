@@ -404,7 +404,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
 
         /* ── MODAL CAMBIAR CONTRASEÑA / REPORTES ── (igual estilo Win98) */
-        #mh-cp-backdrop, #mh-rep-backdrop {
+        #mh-cp-backdrop, #mh-rep-backdrop, #mh-cl-backdrop {
             position: fixed; inset: 0;
             background: rgba(0, 0, 0, 0.45);
             z-index: 90;
@@ -414,7 +414,23 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             padding: 16px;
             box-sizing: border-box;
         }
-        #mh-cp-backdrop.is-open, #mh-rep-backdrop.is-open { display: flex; }
+        #mh-cp-backdrop.is-open, #mh-rep-backdrop.is-open, #mh-cl-backdrop.is-open { display: flex; }
+        #mh-cl-window {
+            width: 100%; max-width: 380px;
+            max-height: 88vh;
+            display: flex; flex-direction: column;
+        }
+        #mh-cl-body h1 { font-size: 16px; margin: 0 0 10px; }
+        #mh-cl-body h2 { font-size: 14px; margin: 14px 0 8px; border-bottom: 1px solid var(--border, #808080); padding-bottom: 3px; }
+        #mh-cl-body h3 { font-size: 12px; margin: 10px 0 4px; color: var(--text-muted, #444); }
+        #mh-cl-body p  { margin: 0 0 8px; }
+        #mh-cl-body ul, #mh-cl-body ol { margin: 0 0 8px; padding-left: 20px; }
+        #mh-cl-body li { margin: 0 0 3px; }
+        #mh-cl-body code { font-family: 'Lucida Console', Consolas, monospace; background: rgba(0,0,0,0.08); padding: 1px 4px; font-size: 11px; }
+        #mh-cl-body pre { background: rgba(0,0,0,0.08); padding: 8px; overflow-x: auto; }
+        #mh-cl-body pre code { background: transparent; padding: 0; }
+        #mh-cl-body a { color: var(--accent, #000080); }
+        #mh-cl-body hr { border: 0; border-top: 1px solid var(--border, #808080); margin: 18px 0; }
         #mh-rep-window { width: 100%; max-width: 380px; max-height: 92vh; display: flex; flex-direction: column; }
         #mh-rep-window .window-body { padding: 12px; overflow-y: auto; }
         #mh-rep-window input[type="text"], #mh-rep-window textarea {
@@ -1260,6 +1276,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             </button>
             <!-- Input oculto: el OS abre su propio file picker como "modal". -->
             <input type="file" id="mh-set-photo-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
+            <button class="mh-set-btn" type="button" id="mh-set-changelog">
+                <span class="mh-set-emoji"><img src="assets/img/appIcons/newsIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;"></span>
+                <span class="mh-set-text">Changelog
+                    <small>Novedades y cambios recientes</small>
+                </span>
+            </button>
             <button class="mh-set-btn" type="button" id="mh-set-report">
                 <span class="mh-set-emoji">🪲</span>
                 <span class="mh-set-text">Reportes
@@ -1285,6 +1307,23 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     <small>Borra permanentemente tu cuenta y todos sus datos</small>
                 </span>
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CHANGELOG — renderiza changelog.md con un mini parser MD. -->
+<div id="mh-cl-backdrop">
+    <div class="window" id="mh-cl-window">
+        <div class="title-bar">
+            <div class="title-bar-text">Changelog</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close" id="mh-cl-close"></button>
+            </div>
+        </div>
+        <div class="window-body" style="padding:0;display:flex;flex-direction:column;flex:1;min-height:0;">
+            <div id="mh-cl-body" style="flex:1;min-height:0;overflow-y:auto;padding:12px 14px;font-size:13px;line-height:1.5;">
+                Cargando…
+            </div>
         </div>
     </div>
 </div>
@@ -3993,6 +4032,102 @@ window.MuShell = (function(){
             else if (ev.key === 'Escape'){ ev.preventDefault(); cpCloseModal(); }
         });
     });
+
+    /* ── modal Changelog ──
+       Renderiza changelog.md con un mini parser Markdown inline. */
+    (function(){
+        var clOpen  = document.getElementById('mh-set-changelog');
+        var clBp    = document.getElementById('mh-cl-backdrop');
+        var clClose = document.getElementById('mh-cl-close');
+        var clBody  = document.getElementById('mh-cl-body');
+        if (!clOpen || !clBp) return;
+        var loaded = false;
+
+        function escHtml(s){
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function mdToHtml(md){
+            var lines = String(md).split(/\r?\n/);
+            var out = [], i = 0, inUl = false, inOl = false, inCode = false;
+            function flushList(){
+                if (inUl) { out.push('</ul>'); inUl = false; }
+                if (inOl) { out.push('</ol>'); inOl = false; }
+            }
+            function inline(s){
+                s = s.replace(/`([^`]+)`/g, function(_, c){ return '<code>' + escHtml(c) + '</code>'; });
+                s = escHtml(s);
+                s = s.replace(/&lt;code&gt;([\s\S]*?)&lt;\/code&gt;/g, '<code>$1</code>');
+                s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                s = s.replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>');
+                s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function(_, t, u){
+                    return '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + '</a>';
+                });
+                return s;
+            }
+            while (i < lines.length) {
+                var line = lines[i];
+                if (/^```/.test(line)) {
+                    flushList();
+                    if (!inCode) { inCode = true; out.push('<pre><code>'); }
+                    else { inCode = false; out.push('</code></pre>'); }
+                    i++; continue;
+                }
+                if (inCode) { out.push(escHtml(line)); i++; continue; }
+                /* Horizontal rule (--- o *** o ___) — divisor entre versiones. */
+                if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+                    flushList();
+                    out.push('<hr>');
+                    i++; continue;
+                }
+                var h = line.match(/^(#{1,3})\s+(.*)$/);
+                if (h) {
+                    flushList();
+                    var lvl = h[1].length;
+                    out.push('<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>');
+                    i++; continue;
+                }
+                var ul = line.match(/^\s*[-*]\s+(.*)$/);
+                if (ul) {
+                    if (inOl) { out.push('</ol>'); inOl = false; }
+                    if (!inUl) { out.push('<ul>'); inUl = true; }
+                    out.push('<li>' + inline(ul[1]) + '</li>');
+                    i++; continue;
+                }
+                var ol = line.match(/^\s*\d+\.\s+(.*)$/);
+                if (ol) {
+                    if (inUl) { out.push('</ul>'); inUl = false; }
+                    if (!inOl) { out.push('<ol>'); inOl = true; }
+                    out.push('<li>' + inline(ol[1]) + '</li>');
+                    i++; continue;
+                }
+                if (!line.trim()) { flushList(); i++; continue; }
+                flushList();
+                out.push('<p>' + inline(line) + '</p>');
+                i++;
+            }
+            flushList();
+            if (inCode) out.push('</code></pre>');
+            return out.join('\n');
+        }
+
+        function openModal(){
+            closeSettings();
+            clBp.classList.add('is-open');
+            if (loaded) return;
+            loaded = true;
+            clBody.textContent = 'Cargando…';
+            fetch('changelog.md?ts=' + Date.now())
+                .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                .then(function(md){ clBody.innerHTML = mdToHtml(md); })
+                .catch(function(err){
+                    clBody.innerHTML = '<p style="color:var(--error-text,#c00);">Error al cargar el changelog: ' + escHtml(err.message) + '</p>';
+                });
+        }
+        function closeModal(){ clBp.classList.remove('is-open'); }
+        clOpen.addEventListener('click', openModal);
+        clClose.addEventListener('click', closeModal);
+        clBp.addEventListener('click', function(e){ if (e.target === clBp) closeModal(); });
+    })();
 
     /* ── modal Reportes (bug / sugerencia → Discord) ── */
     (function(){

@@ -525,6 +525,21 @@ window.DesktopState.whenReady = function(cb){
     </div>
 </div>
 
+<!-- MODAL Changelog -->
+<div class="window" id="changelog-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:520px;height:560px;min-width:320px;min-height:240px;">
+    <div class="title-bar">
+        <div class="title-bar-text">Changelog</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="changelog-x"></button>
+        </div>
+    </div>
+    <div class="window-body" style="padding:0;flex:1;min-height:0;display:flex;flex-direction:column;">
+        <div id="changelog-body" style="flex:1;min-height:0;overflow-y:auto;padding:12px 14px;font-size:12px;line-height:1.5;">
+            Cargando…
+        </div>
+    </div>
+</div>
+
 <!-- MODAL Reportes (bug/sugerencia → Discord) -->
 <div class="window" id="reports-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:420px;max-height:80vh;">
     <div class="title-bar">
@@ -870,6 +885,7 @@ window.DesktopState.whenReady = function(cb){
         <div id="start-sidebar">MelonOS 98</div>
         <div id="start-menu-items">
             <div class="menu-sep"></div>
+            <a class="menu-item" href="#" id="menu-changelog">Changelog...</a>
             <a class="menu-item" href="#" id="menu-reports">Reportes...</a>
             <a class="menu-item" href="#" id="menu-change-password">Cambiar contraseña...</a>
             <a class="menu-item" href="logout.php">Cerrar sesión...</a>
@@ -1317,6 +1333,149 @@ document.addEventListener('click', function() {
             else if (ev.key === 'Escape'){ ev.preventDefault(); close(); }
         });
     });
+})();
+
+/* =========================
+   CHANGELOG
+   ─────────────────────────
+   Modal que renderiza changelog.md (raíz del proyecto). Mini parser
+   Markdown inline cubriendo headers, listas, bold, italic, code y links
+   — suficiente para una changelog. Sin libs externas para no añadir peso. */
+(function(){
+    var link    = document.getElementById('menu-changelog');
+    if (!link) return;
+    var modal   = document.getElementById('changelog-modal');
+    var bodyEl  = document.getElementById('changelog-body');
+    var loaded  = false;
+
+    function escHtml(s){
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    /* Renderiza Markdown muy básico → HTML. Maneja:
+        # h1 / ## h2 / ### h3
+        - lista     |   * lista     |   N. lista numerada
+        **bold**    |   *italic*    |   `code`     |   [text](url)
+        ```block code```
+        Líneas en blanco → separador de párrafo. */
+    function mdToHtml(md){
+        var lines = String(md).split(/\r?\n/);
+        var out = [], i = 0, inUl = false, inOl = false, inCode = false;
+        function flushList(){
+            if (inUl) { out.push('</ul>'); inUl = false; }
+            if (inOl) { out.push('</ol>'); inOl = false; }
+        }
+        function inline(s){
+            /* Code inline primero (no procesar markdown dentro). */
+            s = s.replace(/`([^`]+)`/g, function(_, c){ return '<code>' + escHtml(c) + '</code>'; });
+            /* Escape el resto. */
+            s = escHtml(s);
+            /* Re-aplicar los <code> que ya estaban escapados. */
+            s = s.replace(/&lt;code&gt;([\s\S]*?)&lt;\/code&gt;/g, '<code>$1</code>');
+            /* Bold y italic. */
+            s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            s = s.replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>');
+            /* Links [text](url). */
+            s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function(_, t, u){
+                return '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + t + '</a>';
+            });
+            return s;
+        }
+        while (i < lines.length) {
+            var line = lines[i];
+            /* Code block fence. */
+            if (/^```/.test(line)) {
+                flushList();
+                if (!inCode) {
+                    inCode = true;
+                    out.push('<pre><code>');
+                } else {
+                    inCode = false;
+                    out.push('</code></pre>');
+                }
+                i++; continue;
+            }
+            if (inCode) { out.push(escHtml(line)); i++; continue; }
+            /* Horizontal rule (--- o *** o ___) — divisor entre versiones. */
+            if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+                flushList();
+                out.push('<hr>');
+                i++; continue;
+            }
+            /* Headers. */
+            var h = line.match(/^(#{1,3})\s+(.*)$/);
+            if (h) {
+                flushList();
+                var lvl = h[1].length;
+                out.push('<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>');
+                i++; continue;
+            }
+            /* Lista no ordenada. */
+            var ul = line.match(/^\s*[-*]\s+(.*)$/);
+            if (ul) {
+                if (inOl) { out.push('</ol>'); inOl = false; }
+                if (!inUl) { out.push('<ul>'); inUl = true; }
+                out.push('<li>' + inline(ul[1]) + '</li>');
+                i++; continue;
+            }
+            /* Lista numerada. */
+            var ol = line.match(/^\s*\d+\.\s+(.*)$/);
+            if (ol) {
+                if (inUl) { out.push('</ul>'); inUl = false; }
+                if (!inOl) { out.push('<ol>'); inOl = true; }
+                out.push('<li>' + inline(ol[1]) + '</li>');
+                i++; continue;
+            }
+            /* Línea en blanco. */
+            if (!line.trim()) {
+                flushList();
+                i++; continue;
+            }
+            /* Párrafo normal. */
+            flushList();
+            out.push('<p>' + inline(line) + '</p>');
+            i++;
+        }
+        flushList();
+        if (inCode) out.push('</code></pre>');
+        return out.join('\n');
+    }
+
+    function open(e){
+        if (e) e.preventDefault();
+        modal.style.display = 'flex';
+        if (window.centerModal) window.centerModal(modal);
+        if (window.windowZ) windowZ.bringToFront('changelog-modal');
+        if (loaded) return;
+        loaded = true;
+        bodyEl.textContent = 'Cargando…';
+        fetch('changelog.md?ts=' + Date.now())
+            .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+            .then(function(md){ bodyEl.innerHTML = mdToHtml(md); })
+            .catch(function(err){
+                bodyEl.innerHTML = '<p style="color:var(--error-text,#c00);">Error al cargar el changelog: ' + escHtml(err.message) + '</p>';
+            });
+    }
+    function close(){ modal.style.display = 'none'; }
+    link.addEventListener('click', open);
+    document.getElementById('changelog-x').addEventListener('click', close);
+})();
+
+/* Estilos básicos para el body del changelog en desktop. */
+(function(){
+    var style = document.createElement('style');
+    style.textContent =
+        '#changelog-body h1{font-size:16px;margin:0 0 10px;}' +
+        '#changelog-body h2{font-size:14px;margin:14px 0 8px;border-bottom:1px solid var(--border,#808080);padding-bottom:3px;}' +
+        '#changelog-body h3{font-size:12px;margin:10px 0 4px;color:var(--text-muted,#444);}' +
+        '#changelog-body p{margin:0 0 8px;}' +
+        '#changelog-body ul, #changelog-body ol{margin:0 0 8px;padding-left:20px;}' +
+        '#changelog-body li{margin:0 0 3px;}' +
+        '#changelog-body code{font-family:"Lucida Console",Consolas,monospace;background:rgba(0,0,0,0.08);padding:1px 4px;font-size:11px;}' +
+        '#changelog-body pre{background:rgba(0,0,0,0.08);padding:8px;overflow-x:auto;}' +
+        '#changelog-body pre code{background:transparent;padding:0;}' +
+        '#changelog-body a{color:var(--accent,#000080);}' +
+        '#changelog-body hr{border:0;border-top:1px solid var(--border,#808080);margin:18px 0;}';
+    document.head.appendChild(style);
 })();
 
 /* =========================
@@ -2509,6 +2668,7 @@ window.notifSystem = (function() {
     /* Modales pequeños — arrastrables por su title-bar pero sin resize. */
     setup('change-password-modal', true);
     setup('reports-modal',         true);
+    setup('changelog-modal',       true);
     setup('folder-create-modal',   true);
     setup('folder-delete-modal',   true);
 })();
