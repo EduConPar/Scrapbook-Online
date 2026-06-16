@@ -448,15 +448,23 @@ async function pollMessages(initial) {
     }).join(',');
     if (!initial && sig === STATE.chatLastSig) return;
     STATE.chatLastSig = sig;
-    renderFeed(d.messages);
+    renderFeed(d.messages, !!initial);
 }
 
 /* HTML helper para el placeholder de mensajes eliminados — replazado el
    emoji 🗑 por trashIcon.png para coherencia visual con el tema. */
 const TRASH_ICON_HTML = '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">';
 
-/* ── Renderizar el feed de mensajes ── */
-function renderFeed(messages) {
+/* ── Renderizar el feed de mensajes ──
+   initial=true cuando se acaba de abrir el chat: las imágenes aún no
+   han cargado, así que activamos un GRACE de 3s donde cualquier
+   image-load fuerza scroll al fondo sin condiciones. Tras el grace
+   o en polls subsiguientes, NO registramos pin handlers: si llega un
+   msg con imagen mientras estás al fondo, el scroll inicial te deja
+   ahí y la imagen al cargar empuja solo un poco — eso evita que un
+   GIF que carga tarde te lance hacia abajo cuando ya scrolleaste
+   arriba a leer. */
+function renderFeed(messages, initial) {
     const feed = document.getElementById('ch-feed');
     if (!messages.length) {
         feed.innerHTML = '<div class="ch-feed-empty">No hay mensajes todavía. Escribe el primero ↓</div>';
@@ -496,24 +504,25 @@ function renderFeed(messages) {
     feed.querySelectorAll('.ch-msg.is-mine:not(.is-deleted)').forEach(el => attachMsgLongPress(el));
     if (wasAtBottom) {
         feed.scrollTop = feed.scrollHeight;
-        /* Las imágenes/GIFs cargan asíncronamente y expanden el feed
-           DESPUÉS de este scroll. Si estábamos al fondo antes del
-           render, mantenemos el fondo a medida que cada imagen termina
-           de cargar — sin esto, los mensajes con imágenes dejaban la
-           vista enganchada arriba del último msg de texto.
-           RE-CHECK al disparar pin: si el user ha scrolleado arriba
-           entre tanto, NO forzamos abajo. Antes los GIFs/imágenes que
-           cargaban con retraso te empujaban al fondo aunque estuvieras
-           leyendo mensajes anteriores. */
-        feed.querySelectorAll('img').forEach(function(img){
-            if (img.complete) return;
-            var pin = function(){
-                var stillAtBottom = (feed.scrollHeight - feed.scrollTop - feed.clientHeight) < 80;
-                if (stillAtBottom) feed.scrollTop = feed.scrollHeight;
-            };
-            img.addEventListener('load',  pin, { once: true });
-            img.addEventListener('error', pin, { once: true });
-        });
+        /* Solo en el render INICIAL (apertura del chat) registramos pin
+           handlers para mantener el scroll al fondo mientras las
+           imágenes/GIFs cargan. Grace de 3s para no pegar tirones si el
+           user empieza a scrollear inmediatamente. En polls posteriores,
+           NO registramos pin: una imagen que carga tarde no debe lanzar
+           al user al fondo cuando ya scrolleó arriba a leer. */
+        if (initial) {
+            const startTime = Date.now();
+            const GRACE_MS  = 3000;
+            feed.querySelectorAll('img').forEach(function(img){
+                if (img.complete) return;
+                var pin = function(){
+                    if (Date.now() - startTime > GRACE_MS) return;
+                    feed.scrollTop = feed.scrollHeight;
+                };
+                img.addEventListener('load',  pin, { once: true });
+                img.addEventListener('error', pin, { once: true });
+            });
+        }
     }
 }
 

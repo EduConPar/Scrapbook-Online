@@ -4033,7 +4033,7 @@ var PROFILE_USERS = <?php
         win.style.display = 'flex';
         win.style.left = Math.round((window.innerWidth  - win.offsetWidth)  / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
-        loadChatMessages();
+        loadChatMessages(true);   /* initial=true: pin imágenes durante grace */
         if (chatPollTimer) clearInterval(chatPollTimer);
         chatPollTimer = setInterval(loadChatMessages, 1500);
         /* Quita el contador local al abrir el chat */
@@ -4091,13 +4091,13 @@ var PROFILE_USERS = <?php
         if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
     }
 
-    function loadChatMessages() {
+    function loadChatMessages(initial) {
         if (!chatWithUser) return;
         fetch('assets/profile/api.php?action=get-messages&with=' + encodeURIComponent(chatWithUser))
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (!d || !d.ok) return;
-                renderChatMessages(d.messages || []);
+                renderChatMessages(d.messages || [], !!initial);
             }).catch(function() {});
     }
 
@@ -4222,7 +4222,7 @@ var PROFILE_USERS = <?php
         });
     }
 
-    function renderChatMessages(messages) {
+    function renderChatMessages(messages, initial) {
         var listEl = document.getElementById('profile-chat-messages');
         if (!listEl) return;
         var sig = chatMessagesSig(messages);
@@ -4274,24 +4274,25 @@ var PROFILE_USERS = <?php
         });
         if (atBottom) {
             listEl.scrollTop = listEl.scrollHeight;
-            /* Las imágenes/GIFs del mensaje cargan asíncronamente y
-               expanden el feed después de este scroll. Si estábamos al
-               fondo, mantenemos el fondo cuando cada una termina de
-               cargar — antes los mensajes con imagen dejaban el chat
-               enganchado arriba del último msg de texto.
-               RE-CHECK al disparar pin: si el user ha scrolleado arriba
-               entre tanto, NO forzamos abajo. Antes los GIFs/imágenes
-               que cargaban con retraso lo lanzaban abajo aunque
-               estuviera leyendo mensajes anteriores. */
-            listEl.querySelectorAll('img').forEach(function(img){
-                if (img.complete) return;
-                var pin = function(){
-                    var stillAtBottom = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 80;
-                    if (stillAtBottom) listEl.scrollTop = listEl.scrollHeight;
-                };
-                img.addEventListener('load',  pin, { once: true });
-                img.addEventListener('error', pin, { once: true });
-            });
+            /* Solo en el render INICIAL (apertura del chat) registramos
+               pin handlers para mantener el scroll al fondo mientras las
+               imágenes/GIFs cargan. Grace de 3s para no pegar tirones
+               si el user empieza a scrollear inmediatamente. En polls
+               siguientes NO registramos pin: una imagen que carga tarde
+               no debe lanzar al user abajo cuando ya scrolleó arriba. */
+            if (initial) {
+                var startTime = Date.now();
+                var GRACE_MS  = 3000;
+                listEl.querySelectorAll('img').forEach(function(img){
+                    if (img.complete) return;
+                    var pin = function(){
+                        if (Date.now() - startTime > GRACE_MS) return;
+                        listEl.scrollTop = listEl.scrollHeight;
+                    };
+                    img.addEventListener('load',  pin, { once: true });
+                    img.addEventListener('error', pin, { once: true });
+                });
+            }
         }
     }
 
