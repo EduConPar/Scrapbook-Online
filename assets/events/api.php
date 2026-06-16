@@ -38,21 +38,10 @@ $userKey = $u['key'];
 $action  = $_GET['action'] ?? $_POST['action'] ?? '';
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
-function jsonResponse(array $payload): void {
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
-    exit;
-}
-function jsonError(string $msg, int $code = 400): void {
-    http_response_code($code);
-    jsonResponse(['ok' => false, 'error' => $msg]);
-}
-function jsonBody(): array {
-    $raw = file_get_contents('php://input');
-    if (!$raw) return [];
-    $d = json_decode($raw, true);
-    return is_array($d) ? $d : [];
-}
+/* jsonResponse/jsonError/jsonBody ya están definidas en assets/auth.php
+   (cargado arriba). No las redeclaramos aquí. La firma de jsonError de
+   auth.php devuelve {error: msg}; nosotros también pasamos el message
+   como primer arg → compat. */
 function ev_uid(PDO $pdo, string $userKey): ?int {
     static $cache = [];
     if (array_key_exists($userKey, $cache)) return $cache[$userKey];
