@@ -3974,84 +3974,51 @@ var PROFILE_USERS = <?php
        Devuelve un stop() para limpiar timers/raf al re-renderizar.
        Si el texto no desborda el contenedor, no anima. */
     /* ──────────────────────────────────────────────────────────────
-       NOW-PLAYING MARQUEE — diseño minimalista:
-         - Estructura: slot (flex+overflow:hidden) → icon + text.
-           Sin capas intermedias.
-         - El text es flex-item con `flex-shrink: 0` y `display:
-           inline-block` → su `offsetWidth` es siempre el ancho
-           natural del texto (flex-shrink:0 garantiza que no se
-           comprime para caber).
-         - Animación: RAF puro, mismo patrón que `marqueeScroll`
-           del reproductor — pausa, scroll left, salida completa,
-           reentrada por la derecha, vuelta a 0, pausa, loop.
-         - Idempotencia: si el texto no cambió, no se toca el DOM.
-         - Espera a `document.fonts.ready` antes de medir, para
-           que el ancho se calcule con la fuente real, no con un
-           fallback más estrecho que daría una W subestimada.
+       NOW-PLAYING — calcado del `setupMarquee` del reproductor móvil
+       (mu-marquee), que sí funciona consistentemente. CSS animation
+       con texto duplicado: el navegador hace toda la matemática del
+       loop, sin RAF ni mediciones complicadas. La única medida que
+       necesitamos es `text.offsetWidth` para calcular el ciclo en
+       píxeles — y en la estructura wrap-block + track-inline-block
+       + text-inline-block del reproductor móvil ese offsetWidth ES
+       fiable (ya está probado en producción).
        ────────────────────────────────────────────────────────── */
-    function pfMarqueeRun(textEl, slot, speed, pauseMs) {
-        textEl.style.transform = 'translateX(0)';
-        var W = textEl.offsetWidth;
-        var slotW = slot.clientWidth;
-        var iconEl = slot.querySelector('.pf-np-icon');
-        var iconW  = iconEl ? iconEl.offsetWidth : 0;
-        /* gap del flex container = 4px (`gap: 4px` en CSS). */
-        var C = Math.max(0, slotW - iconW - 4);
-        /* +2px de margen para subpixel rounding. */
-        if (!W || !C || W <= C + 2) return function(){};
-        var pos = 0, last = null, fromRight = false, raf = null, timer = null;
-        function tick(ts) {
-            if (last == null) last = ts;
-            var dt = Math.min(ts - last, 50);
-            last = ts;
-            pos -= speed * dt / 1000;
-            /* Texto fully off-left → reaparece por la derecha. */
-            if (pos < -W) {
-                pos = C + (pos + W);
-                fromRight = true;
-            }
-            /* De vuelta a posición natural → pausa y loop. */
-            if (fromRight && pos <= 0) {
-                pos = 0;
-                fromRight = false;
-                textEl.style.transform = 'translateX(0)';
-                last = null;
-                timer = setTimeout(function() {
-                    last = null;
-                    raf = requestAnimationFrame(tick);
-                }, pauseMs);
-                return;
-            }
-            textEl.style.transform = 'translateX(' + pos + 'px)';
-            raf = requestAnimationFrame(tick);
-        }
-        /* Pausa inicial — texto visible en posición natural. */
-        timer = setTimeout(function() {
-            raf = requestAnimationFrame(tick);
-        }, pauseMs);
-        return function() {
-            if (timer) { clearTimeout(timer); timer = null; }
-            if (raf)   { cancelAnimationFrame(raf); raf = null; }
-            textEl.style.transform = '';
-        };
-    }
-
-    function pfStartMarqueeFor(slot, text) {
+    function pfSetupMarquee(slot) {
+        var wrap  = slot.querySelector('.pf-np-wrap');
+        var track = slot.querySelector('.pf-np-track');
+        var text  = slot.querySelector('.pf-np-text');
+        if (!wrap || !track || !text) return;
+        /* Limpia estado previo. */
+        wrap.classList.remove('is-marquee');
+        while (track.children.length > 1) track.removeChild(track.lastChild);
+        track.style.removeProperty('--pf-cycle');
+        track.style.removeProperty('--pf-dur');
         var go = function() {
-            /* Sigue siendo el texto que toca? El slot podría haberse
-               re-renderizado mientras esperábamos document.fonts. */
-            if (slot.getAttribute('data-np-text') !== text) return;
-            var textEl = slot.querySelector('.pf-np-text');
-            if (!textEl) return;
-            if (slot.__npStop) { try { slot.__npStop(); } catch(_){} }
-            /* 30 px/seg + 2000ms pause = scroll suave + pausa cómoda
-               entre vueltas. */
-            slot.__npStop = pfMarqueeRun(textEl, slot, 30, 2000);
+            var textW = text.offsetWidth;
+            /* No anima si el texto cabe (margen de 4px subpixel). */
+            if (textW <= wrap.clientWidth + 4) return;
+            /* Clona el texto: la segunda copia ocupa el "hueco" cuando
+               la primera se desplaza fuera por la izquierda → loop
+               sin salto. */
+            var dup = text.cloneNode(true);
+            dup.setAttribute('aria-hidden', 'true');
+            track.appendChild(dup);
+            var em    = parseFloat(getComputedStyle(text).fontSize) || 10;
+            var gap   = em * 3;   /* `gap: 3em` del CSS. */
+            var cycle = textW + gap;
+            /* 30 px/seg → vuelta cómoda. Mínimo 10s para que un
+               texto corto no pase a la velocidad del rayo. */
+            var dur   = Math.max(10, cycle / 30).toFixed(1) + 's';
+            track.style.setProperty('--pf-cycle', cycle + 'px');
+            track.style.setProperty('--pf-dur', dur);
+            wrap.classList.add('is-marquee');
         };
+        /* Espera a las fuentes para que la medida coincida con el
+           glifo final que se renderiza. */
         if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
             document.fonts.ready.then(go, go);
         } else {
-            setTimeout(go, 50);
+            requestAnimationFrame(go);
         }
     }
 
@@ -4061,11 +4028,9 @@ var PROFILE_USERS = <?php
             var np = lastNowPlaying[k];
             var nextText = np ? ((np.title || '') + (np.artist ? ' - ' + np.artist : '')) : '';
             var prevText = slot.getAttribute('data-np-text') || '';
-            /* IDEMPOTENCIA: el texto no cambió → no tocamos nada,
-               el marquee sigue corriendo sin reset. */
+            /* IDEMPOTENCIA: el texto no cambió → no tocamos nada.
+               El marquee CSS sigue corriendo sin reset. */
             if (nextText === prevText) return;
-            /* Stop del marquee anterior antes de cambiar el DOM. */
-            if (slot.__npStop) { try { slot.__npStop(); } catch(_){} slot.__npStop = null; }
             slot.setAttribute('data-np-text', nextText);
             if (!np) {
                 slot.style.display = 'none';
@@ -4073,12 +4038,16 @@ var PROFILE_USERS = <?php
                 return;
             }
             slot.style.display = '';
-            /* Estructura PLANA: el slot es el viewport, dentro va
-               solamente icon + text (sin wrap intermedio). */
+            /* Estructura calcada del reproductor móvil:
+               icon + wrap(block) → track(inline-block) → text(inline-block) */
             slot.innerHTML =
                 '<span class="pf-np-icon">♪</span>' +
-                '<span class="pf-np-text">' + escHtml(nextText) + '</span>';
-            pfStartMarqueeFor(slot, nextText);
+                '<span class="pf-np-wrap">' +
+                    '<span class="pf-np-track">' +
+                        '<span class="pf-np-text">' + escHtml(nextText) + '</span>' +
+                    '</span>' +
+                '</span>';
+            pfSetupMarquee(slot);
         });
     }
     /* Helper: marca un .profile-avatar-frame con su dot de presencia.

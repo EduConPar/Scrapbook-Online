@@ -496,9 +496,16 @@
 /* ══════════════════════════════════════════════════════════════════
    NOW-PLAYING en social cards y sidebar followed-nav
    ══════════════════════════════════════════════════════════════════ */
-/* El SLOT ES el viewport del marquee: flex container con
-   overflow:hidden recorta lo que sobresalga. Sin capas intermedias
-   ni overflow anidados que confundan a la medición. */
+/* Estructura calcada del reproductor móvil (mu-marquee), que SÍ
+   funciona — no del DOM-marquee custom que veníamos intentando:
+     slot (flex container)
+       └── icon (flex item)
+       └── wrap (flex item, OVERFLOW:HIDDEN, NO flex container —
+                 establece BFC propio, el track interior es un
+                 inline-block normal cuyo offsetWidth es siempre
+                 el ancho natural del contenido)
+             └── track (inline-block, animado vía CSS)
+                   └── text (inline-block, lo medible) */
 .profile-social-np,
 .profile-nav-np {
     display: flex;
@@ -508,24 +515,42 @@
     color: var(--text-muted, #666);
     margin-top: 2px;
     max-width: 100%;
-    overflow: hidden;
-    white-space: nowrap;
 }
 .pf-np-icon {
     flex-shrink: 0;
     color: var(--accent, #000080);
 }
-/* El texto va directo dentro del slot como flex-item con
-   `flex-shrink: 0` (no se comprime para caber). Inline-block →
-   su offsetWidth es SIEMPRE el ancho natural del contenido,
-   sin importar las restricciones del flex layout del padre. El
-   JS lo desplaza con `transform: translateX(...)` y el slot
-   recorta lo que sobresalga. */
+.pf-np-wrap {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 1.4em;
+    line-height: 1.4em;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.pf-np-track {
+    display: inline-block;
+    will-change: transform;
+}
 .pf-np-text {
     display: inline-block;
-    flex-shrink: 0;
-    white-space: nowrap;
-    will-change: transform;
+    line-height: inherit;
+}
+/* Cuando el track tiene la clase `.is-marquee` se duplica el texto
+   y se anima — patrón mu-marquee del reproductor móvil. El gap
+   entre los dos copies da la separación visible entre vueltas y
+   `--pf-cycle` (texto + gap, en px) define cuánto desplazar para
+   que la copia 2 caiga sobre donde estaba la copia 1 (loop sin
+   salto, completamente predecible: el navegador hace toda la
+   matemática). */
+.pf-np-wrap.is-marquee .pf-np-track {
+    display: inline-flex;
+    gap: 3em;
+    animation: pf-np-marquee var(--pf-dur, 15s) linear infinite;
+}
+@keyframes pf-np-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(-1 * var(--pf-cycle, 100%))); }
 }
 .profile-nav-text {
     display: flex;
