@@ -254,7 +254,10 @@ function renderList() {
         const av = u.image
             ? '<img src="' + esc(u.image) + '" alt="">'
             : '<img class="ch-friend-av-fallback" src="../../assets/img/appIcons/profileIcon.png" alt="">';
-        const presence = '<span class="ch-presence-dot' + (c.online ? ' is-online' : '') + '"></span>';
+        const presenceCls = c.dnd  ? ' is-dnd'
+                          : c.away ? ' is-away'
+                          : c.online ? ' is-online' : '';
+        const presence = '<span class="ch-presence-dot' + presenceCls + '"></span>';
         /* Sub-text: último mensaje o "Tocar para chatear" si no hay. */
         let sub;
         if (c.lastText) {
@@ -381,13 +384,27 @@ function refreshChatHeader() {
     const av = u.image
         ? '<img src="' + esc(u.image) + '" alt="">'
         : '<img class="ch-friend-av-fallback" src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:60%;height:60%;margin:20%;">';
-    const presence = '<span class="ch-presence-dot' + (meta && meta.online ? ' is-online' : '') + '"></span>';
+    const presenceCls = (meta && meta.dnd)  ? ' is-dnd'
+                      : (meta && meta.away) ? ' is-away'
+                      : (meta && meta.online) ? ' is-online' : '';
+    const presence = '<span class="ch-presence-dot' + presenceCls + '"></span>';
     avEl.innerHTML = av + presence;
     nmEl.textContent = name;
-    /* Status: "En línea" si online, "Última vez HH:MM" si offline y
-       tenemos timestamp de presencia, vacío si nunca pingueó. */
+    /* Status — hereda los flags del meta cacheado (los mismos que usa
+       Social). Prioridad:
+         1. No molestar  (DND activo)
+         2. Ausente      (online pero state='away')
+         3. En línea     (heartbeat reciente)
+         4. Última vez X (offline conocido)
+         5. Sin status   (offline desconocido) */
     if (stEl) {
-        if (meta && meta.online) {
+        if (meta && meta.dnd) {
+            stEl.textContent = 'No molestar';
+            stEl.classList.remove('is-online');
+        } else if (meta && meta.away) {
+            stEl.textContent = 'Ausente';
+            stEl.classList.remove('is-online');
+        } else if (meta && meta.online) {
             stEl.textContent = 'En línea';
             stEl.classList.add('is-online');
         } else if (meta && meta.lastSeenAt > 0) {

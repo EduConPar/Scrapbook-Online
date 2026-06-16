@@ -3989,20 +3989,33 @@ var PROFILE_USERS = <?php
             /* Comprueba overflow tras paint para activar el marquee.
                requestAnimationFrame da tiempo a que el layout se calcule. */
             requestAnimationFrame(function(){
-                var wrap  = slot.querySelector('.pf-np-wrap');
-                var track = slot.querySelector('.pf-np-track');
-                if (!wrap || !track) return;
-                if (track.scrollWidth > wrap.clientWidth + 2) {
-                    /* Clonamos el span para tener un loop sin "salto" al
-                       reaparecer — la animación traslada el track por el
-                       ancho del primer texto + un gap. */
-                    var dup = track.firstElementChild.cloneNode(true);
-                    dup.style.paddingLeft = '24px';
-                    track.appendChild(dup);
-                    slot.classList.add('is-marquee');
-                } else {
-                    slot.classList.remove('is-marquee');
-                }
+                var wrap   = slot.querySelector('.pf-np-wrap');
+                var track  = slot.querySelector('.pf-np-track');
+                var textEl = slot.querySelector('.pf-np-text');
+                if (!wrap || !track || !textEl) return;
+                /* Limpia estado previo (re-renders). */
+                slot.classList.remove('is-marquee');
+                track.style.removeProperty('--pf-np-cycle');
+                track.style.removeProperty('--pf-np-cycle-duration');
+                while (track.children.length > 1) track.removeChild(track.lastChild);
+                var textW = textEl.offsetWidth;
+                if (textW <= wrap.clientWidth + 4) return;
+                /* Clona el texto: original + duplicado separados por el
+                   gap del CSS (3em). Ciclo = ancho del texto + gap, en
+                   px → al trasladar exactamente esa distancia el
+                   duplicado cae sobre la posición inicial del original
+                   y el loop reinicia sin salto, dejando hueco en blanco
+                   entre cada pasada (igual que el reproductor). */
+                var dup = textEl.cloneNode(true);
+                dup.setAttribute('aria-hidden', 'true');
+                track.appendChild(dup);
+                var em  = parseFloat(getComputedStyle(textEl).fontSize) || 10;
+                var gap = em * 3;
+                var cycle = textW + gap;
+                var duration = Math.max(8, cycle / 30).toFixed(1) + 's';
+                track.style.setProperty('--pf-np-cycle', cycle + 'px');
+                track.style.setProperty('--pf-np-cycle-duration', duration);
+                slot.classList.add('is-marquee');
             });
         });
     }
@@ -4074,13 +4087,26 @@ var PROFILE_USERS = <?php
         }
         return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + ' ' + hh;
     }
-    /* Actualiza el sub-status del chat header — "· En línea" o
-       "· Última vez X". */
+    /* Actualiza el sub-status del chat header — "· En línea" / "· Ausente"
+       / "· No molestar" / "· Última vez X". Hereda los sets ya cacheados
+       desde el último poll de presencia (los mismos que usa Social) →
+       sin flicker "online → away" al abrir. Prioridad:
+         1. DND (más restrictivo: el usuario no quiere ser molestado)
+         2. Away  (online pero inactivo / lock screen)
+         3. Online activo
+         4. Última vez X (offline conocido)
+         5. Sin status (offline desconocido) */
     function refreshChatStatus() {
         var stEl = document.getElementById('profile-chat-status');
         if (!stEl) return;
         if (!chatWithUser) { stEl.textContent = ''; stEl.classList.remove('is-online'); return; }
-        if (lastOnlineSet[chatWithUser]) {
+        if (lastDndSet[chatWithUser]) {
+            stEl.textContent = '· No molestar';
+            stEl.classList.remove('is-online');
+        } else if (lastAwaySet[chatWithUser]) {
+            stEl.textContent = '· Ausente';
+            stEl.classList.remove('is-online');
+        } else if (lastOnlineSet[chatWithUser]) {
             stEl.textContent = '· En línea';
             stEl.classList.add('is-online');
         } else if (lastSeenMap[chatWithUser]) {
@@ -4175,13 +4201,17 @@ var PROFILE_USERS = <?php
                fuera del rect (bottom/right negativos). */
             avEl.style.position = 'relative';
             avEl.style.overflow = 'visible';
-            /* Dot de presencia del user con el que chateo. */
+            /* Dot de presencia del user con el que chateo. Hereda
+               online/away/dnd del cache (mismos sets que Social) para
+               no parpadear: applyPresence() los re-aplica en cada poll. */
             var prevDot = avEl.querySelector('.pf-presence-dot');
             if (prevDot) prevDot.remove();
             var chatDot = document.createElement('span');
             chatDot.className = 'pf-presence-dot pf-presence-dot-small';
             chatDot.setAttribute('data-userkey', userKey);
             if (lastOnlineSet[userKey]) chatDot.classList.add('online');
+            if (lastAwaySet[userKey])   chatDot.classList.add('away');
+            if (lastDndSet[userKey])    chatDot.classList.add('dnd');
             avEl.appendChild(chatDot);
         }
         document.getElementById('profile-chat-title-text').textContent = u.label;

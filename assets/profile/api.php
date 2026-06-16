@@ -1477,12 +1477,19 @@ case 'presence': {
        DND = preferencia `mute_messages` activa → indicador rojo en el
        UI en lugar del verde habitual. La app de chat también la usa
        para silenciar el ping de mensajes entrantes en el receptor. */
-    /* Tolerante a BDs sin columna `state` (migración pendiente). */
+    /* Tolerante a BDs sin columna `state` (migración pendiente).
+       Devolvemos el flag `isOnlineRecent` (heartbeat < 60s) y el flag
+       `isAwayWindow` (heartbeat < 3 min) por separado. Los usuarios en
+       state='away' cuentan como visibles si su último ping está dentro
+       de la ventana extendida — porque navegadores móviles throttlean
+       setInterval cuando la pantalla está bloqueada y un ping puede
+       llegar tarde sin que el usuario haya cerrado realmente la app. */
     try {
         $st = $pdo->query("
             SELECT u.user_key,
                    UNIX_TIMESTAMP(p.last_at) AS lastAt,
-                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND))  AS isOnlineRecent,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 180 SECOND)) AS isAwayWindow,
                    p.state AS state
               FROM user_presence p
               JOIN usuarios u ON u.id = p.user_id
@@ -1491,7 +1498,8 @@ case 'presence': {
         $st = $pdo->query("
             SELECT u.user_key,
                    UNIX_TIMESTAMP(p.last_at) AS lastAt,
-                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND))  AS isOnlineRecent,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 180 SECOND)) AS isAwayWindow,
                    'online' AS state
               FROM user_presence p
               JOIN usuarios u ON u.id = p.user_id
@@ -1501,9 +1509,12 @@ case 'presence': {
     $away     = [];
     $lastSeen = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if ((int)$r['isOnline']) {
+        $state    = $r['state'] ?? '';
+        $isAway   = ($state === 'away' && (int)$r['isAwayWindow']);
+        $isOnline = (int)$r['isOnlineRecent'] || $isAway;
+        if ($isOnline) {
             $online[] = $r['user_key'];
-            if (($r['state'] ?? '') === 'away') $away[] = $r['user_key'];
+            if ($isAway) $away[] = $r['user_key'];
         }
         $lastSeen[$r['user_key']] = (int)$r['lastAt'];
     }
@@ -1821,12 +1832,32 @@ case 'get-recent-chats': {
 
         /* Online: presencia en los últimos 60s. lastAt: última vez que
            el otro lado pingueó heartbeat (para mostrar "Última vez HH:MM"
-           cuando está offline). */
-        $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(last_at) FROM user_presence
-                             WHERE user_id = ?");
+           cuando está offline).
+           Para usuarios en state='away' usamos un umbral más amplio
+           (3 min) porque el navegador móvil bloqueado throttlea los
+           setInterval y un ping puede llegar tarde — sin esto se verían
+           como offline en vez de away mientras suena el reproductor. */
+        $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(last_at) AS lastAt, state
+                             FROM user_presence WHERE user_id = ?");
         $st->execute([$withUid]);
-        $otherLastAt = (int)($st->fetchColumn() ?: 0);
-        $online = ($otherLastAt > 0 && $otherLastAt > (time() - 60));
+        $rowP = $st->fetch(PDO::FETCH_ASSOC) ?: null;
+        $otherLastAt = (int)($rowP['lastAt'] ?? 0);
+        $otherState  = (string)($rowP['state'] ?? 'online');
+        $now = time();
+        $awayFresh   = ($otherLastAt > 0 && $otherLastAt > ($now - 180));
+        $onlineFresh = ($otherLastAt > 0 && $otherLastAt > ($now - 60));
+        $isAway      = ($otherState === 'away' && $awayFresh);
+        $online      = ($isAway || $onlineFresh);
+
+        /* DND: mute_messages activo en user_settings → indicador y label
+           "No molestar" en la cabecera del chat. */
+        $isDnd = false;
+        try {
+            $st = $pdo->prepare("SELECT 1 FROM user_settings
+                                 WHERE user_id = ? AND key_name = 'mute_messages' AND value = 'true' LIMIT 1");
+            $st->execute([$withUid]);
+            $isDnd = (bool)$st->fetchColumn();
+        } catch (Throwable $_) {}
 
         /* Mute. */
         $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(mute_until) FROM chat_mutes
@@ -1849,6 +1880,8 @@ case 'get-recent-chats': {
             'lastFromMe' => $last ? ($last['from'] === $userKey) : false,
             'unread'     => $unread,
             'online'     => $online,
+            'away'       => $isAway,
+            'dnd'        => $isDnd,
             /* Última vez visto del otro (presencia) — para "Última vez
                HH:MM" en la cabecera del chat cuando NO está online. */
             'lastSeenAt' => $otherLastAt,

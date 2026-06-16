@@ -521,17 +521,23 @@
 .pf-np-track {
     display: inline-block;
     white-space: nowrap;
+    will-change: transform;
 }
 .profile-social-np.is-marquee .pf-np-track,
 .profile-nav-np.is-marquee .pf-np-track {
-    /* Cuando el texto sobra, animamos un desplazamiento horizontal en
-       loop. El span se duplica vía JS para que la segunda mitad
-       aparezca sin "salto" al volver a posición 0. */
-    animation: pfNpMarquee 10s linear infinite;
+    /* Mismo patrón que el marquee del reproductor: el track pasa a
+       inline-flex con un gap fijo entre el texto original y el
+       duplicado, y JS calcula `--pf-np-cycle` = anchoTexto + gap (px).
+       La animación desplaza el track exactamente ese ciclo: cuando
+       el duplicado ocupa la posición inicial del original, el loop
+       reinicia sin salto y aparece el hueco en blanco entre pasadas. */
+    display: inline-flex;
+    gap: 3em;
+    animation: pfNpMarquee var(--pf-np-cycle-duration, 10s) linear infinite;
 }
 @keyframes pfNpMarquee {
     from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
+    to   { transform: translateX(calc(-1 * var(--pf-np-cycle, 100%))); }
 }
 .profile-nav-text {
     display: flex;

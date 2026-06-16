@@ -4533,7 +4533,14 @@ a:not(.button):not(.start-app-item):focus:not(:focus-visible) {
     inset: 0;
     display: flex;
     align-items: center;
-    justify-content: center;
+    /* Anclar el texto al FONDO visual del sidebar — con el
+       `transform: rotate(180deg)` del padre + `writing-mode: vertical-rl`
+       en este flex, el main axis va top→bottom en coordenadas
+       pre-rotación, así que `justify-content: flex-start` cae en el
+       extremo que tras la rotación queda abajo. Si el menú crece (más
+       items), el texto se queda anclado abajo en lugar de subir. */
+    justify-content: flex-start;
+    padding-block-start: 12px !important;
     /* Hereda writing-mode:vertical-rl + transform:rotate(180deg) del
        parent — pero al ser un pseudo absoluto rota junto al sidebar
        mostrando el texto vertical correcto. */

@@ -242,7 +242,12 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname(dirname($_SERVER[
         border-radius: 50%;
         display: none;
     }
-    .ch-presence-dot.is-online { display: block; }
+    .ch-presence-dot.is-online { display: block; background: #2ecc71; }
+    /* Ausente: el usuario tiene heartbeat reciente pero está inactivo
+       o con la pantalla bloqueada — amarillo, sin animación. */
+    .ch-presence-dot.is-away   { display: block; background: #f1c40f; }
+    /* No molestar: mute_messages activo — rojo, gana sobre away/online. */
+    .ch-presence-dot.is-dnd    { display: block; background: #e74c3c; }
     .ch-chat-av .ch-presence-dot {
         right: -1px; bottom: -1px;
         width: 10px; height: 10px;
