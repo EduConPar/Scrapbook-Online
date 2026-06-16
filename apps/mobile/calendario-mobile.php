@@ -113,6 +113,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     <link rel="stylesheet" id="active-theme-link" href="../../<?= htmlspecialchars($activeThemeCss); ?>">
     <?php endif; ?>
     <link rel="stylesheet" href="../../assets/css/mobile-theme.css?v=<?= filemtime(dirname(__DIR__, 2) . '/assets/css/mobile-theme.css') ?>">
+    <link rel="stylesheet" href="../../assets/events/events.css?v=<?= @filemtime(dirname(__DIR__, 2) . '/assets/events/events.css') ?>">
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <style>
     /* ════════════════════════════════════════════════════════════════
@@ -1047,80 +1048,76 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 </div>
 
 <!-- ═══════════ EVENTOS — sheet fullscreen Win98 estilo móvil ═══════════ -->
-<div id="ev-mobile-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9500;"></div>
-<div class="window mh-window" id="ev-mobile-window"
-     style="display:none; position:fixed; inset:8px; z-index:9510; flex-direction:column;">
+<div id="ev-mobile-backdrop" class="ev-m-backdrop" style="display:none;"></div>
+<div class="window mh-window ev-m-window" id="ev-mobile-window" style="display:none;">
     <div class="title-bar">
         <div class="title-bar-text">Eventos</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="ev-mobile-close"></button>
         </div>
     </div>
-    <div class="window-body" style="flex:1; min-height:0; display:flex; flex-direction:column; padding:6px 8px; overflow:hidden;">
-        <div style="display:flex; gap:4px; margin-bottom:6px;">
-            <button class="button" id="ev-m-tab-list" type="button" style="flex:1;">Lista</button>
-            <button class="button" id="ev-m-tab-create" type="button" style="flex:1;">Crear</button>
+    <div class="window-body ev-body">
+        <div class="ev-m-tabs">
+            <button class="button ev-tab-active" id="ev-m-tab-list"  type="button">Lista</button>
+            <button class="button"               id="ev-m-tab-create" type="button">Crear</button>
         </div>
-        <div id="ev-m-list-pane" style="flex:1; min-height:0; overflow-y:auto; border:1px inset; padding:4px; background:var(--win-body-bg, var(--win-bg));">
-            <div id="ev-m-list" style="font-size:12px;"></div>
+        <div id="ev-m-list-pane" class="ev-pane ev-pane-inset">
+            <div id="ev-m-list"></div>
         </div>
-        <div id="ev-m-create-pane" style="display:none; flex:1; min-height:0; overflow-y:auto; padding:4px;">
-            <div style="margin-bottom:8px;">
-                <label style="font-size:11px; display:block;">Título *</label>
-                <input type="text" id="ev-m-title" maxlength="120" style="width:100%;">
+        <div id="ev-m-create-pane" class="ev-pane ev-pane-form" style="display:none;">
+            <div class="ev-field">
+                <label>Título *</label>
+                <input type="text" id="ev-m-title" maxlength="120">
             </div>
-            <div style="margin-bottom:8px;">
-                <label style="font-size:11px; display:block;">Descripción</label>
-                <textarea id="ev-m-desc" rows="3" maxlength="2000" style="width:100%; resize:vertical;"></textarea>
+            <div class="ev-field">
+                <label>Descripción</label>
+                <textarea id="ev-m-desc" rows="3" maxlength="2000" style="resize:vertical;"></textarea>
             </div>
-            <div style="display:flex; gap:6px; margin-bottom:8px;">
-                <div style="flex:1;">
-                    <label style="font-size:11px; display:block;">Fecha y hora *</label>
-                    <input type="datetime-local" id="ev-m-date" style="width:100%;">
+            <div class="ev-row">
+                <div class="ev-field">
+                    <label>Fecha y hora *</label>
+                    <input type="datetime-local" id="ev-m-date">
                 </div>
-                <div style="flex:0 0 90px;">
-                    <label style="font-size:11px; display:block;">Min</label>
-                    <input type="number" id="ev-m-duration" value="60" min="15" style="width:100%;">
-                </div>
-            </div>
-            <div style="display:flex; gap:6px; margin-bottom:8px;">
-                <div style="flex:1;">
-                    <label style="font-size:11px; display:block;">Mín participantes</label>
-                    <input type="number" id="ev-m-min" value="1" min="1" style="width:100%;">
-                </div>
-                <div style="flex:1;">
-                    <label style="font-size:11px; display:block;">Máx (0=∞)</label>
-                    <input type="number" id="ev-m-max" value="0" min="0" style="width:100%;">
+                <div class="ev-field" style="max-width:110px;">
+                    <label>Duración (min)</label>
+                    <input type="number" id="ev-m-duration" value="60" min="15">
                 </div>
             </div>
-            <div style="margin-bottom:8px;">
-                <label style="font-size:11px; display:block;">Visibilidad</label>
-                <label style="font-size:11px; display:block; padding:2px 0;">
-                    <input type="radio" name="ev-m-vis" value="public" checked> Público
-                </label>
-                <label style="font-size:11px; display:block; padding:2px 0;">
-                    <input type="radio" name="ev-m-vis" value="private"> Privado (solo invitados)
-                </label>
-            </div>
-            <div style="margin-bottom:8px;">
-                <label style="font-size:11px; display:block; margin-bottom:2px;">Invitar amigos</label>
-                <div id="ev-m-friends" style="max-height:140px; overflow-y:auto; border:1px inset; padding:4px; background:var(--win-body-bg, var(--win-bg));">
-                    <p style="font-size:10px; color:var(--text-faint, #666); margin:4px;">Cargando…</p>
+            <div class="ev-row">
+                <div class="ev-field">
+                    <label>Mín participantes</label>
+                    <input type="number" id="ev-m-min" value="1" min="1">
+                </div>
+                <div class="ev-field">
+                    <label>Máx (0=∞)</label>
+                    <input type="number" id="ev-m-max" value="0" min="0">
                 </div>
             </div>
-            <div style="display:flex; gap:4px; justify-content:flex-end; margin-top:8px;">
-                <button class="button" id="ev-m-create-cancel" type="button">Cancelar</button>
-                <button class="button default" id="ev-m-create-submit" type="button">Crear</button>
+            <div class="ev-field">
+                <label>Visibilidad</label>
+                <div class="ev-radio-group">
+                    <label><input type="radio" name="ev-m-vis" value="public" checked> Público</label>
+                    <label><input type="radio" name="ev-m-vis" value="private"> Privado (solo invitados)</label>
+                </div>
             </div>
-            <p id="ev-m-create-status" style="font-size:11px; margin:6px 0 0;"></p>
+            <div class="ev-field">
+                <label>Invitar amigos <span style="color:var(--text-muted,#666); font-weight:normal;">(opcional)</span></label>
+                <div id="ev-m-friends" class="ev-friends-box">
+                    <p style="font-size:10px; color:var(--text-faint, #808080); margin:4px; font-style:italic;">Cargando…</p>
+                </div>
+            </div>
+            <div class="ev-actions">
+                <button class="button"         id="ev-m-create-cancel" type="button">Cancelar</button>
+                <button class="button default" id="ev-m-create-submit" type="button">Crear evento</button>
+            </div>
+            <p id="ev-m-create-status" class="ev-status"></p>
         </div>
     </div>
 </div>
 
 <!-- DETALLE MÓVIL -->
-<div id="ev-m-detail-backdrop" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:9520;"></div>
-<div class="window mh-window" id="ev-m-detail-window"
-     style="display:none; position:fixed; inset:8px; z-index:9530; flex-direction:column;">
+<div id="ev-m-detail-backdrop" class="ev-m-detail-backdrop" style="display:none;"></div>
+<div class="window mh-window ev-m-detail-window" id="ev-m-detail-window" style="display:none;">
     <div class="title-bar">
         <div class="title-bar-text" id="ev-m-detail-title">Detalle</div>
         <div class="title-bar-controls">
@@ -1196,6 +1193,8 @@ window.__EV_CFG = {
     function showTab(name){
         document.getElementById('ev-m-list-pane').style.display   = (name === 'list')   ? '' : 'none';
         document.getElementById('ev-m-create-pane').style.display = (name === 'create') ? '' : 'none';
+        document.getElementById('ev-m-tab-list').classList.toggle('ev-tab-active',   name === 'list');
+        document.getElementById('ev-m-tab-create').classList.toggle('ev-tab-active', name === 'create');
     }
     openBtn.addEventListener('click', openWindow);
     document.getElementById('ev-mobile-close').addEventListener('click', closeWindow);
@@ -1216,25 +1215,31 @@ window.__EV_CFG = {
     function renderList(){
         var l = document.getElementById('ev-m-list');
         if (!STATE.events.length) {
-            l.innerHTML = '<p style="font-size:11px;color:var(--text-faint,#666); text-align:center; padding:20px;">No hay eventos. ¡Crea el primero!</p>';
+            l.innerHTML = '<div class="ev-empty">No hay eventos.<br>¡Crea el primero!</div>';
             return;
         }
         l.innerHTML = STATE.events.map(function(ev){
-            var badge = '';
-            if (ev.myStatus === 'joined') badge = '<span style="background:#2e8b57;color:#fff;padding:1px 4px;font-size:9px;border-radius:2px;">UNIDO</span>';
-            else if (ev.myStatus === 'waitlist') badge = '<span style="background:#d4a017;color:#000;padding:1px 4px;font-size:9px;border-radius:2px;">ESPERA</span>';
-            else if (ev.myStatus === 'invited') badge = '<span style="background:#4a90d9;color:#fff;padding:1px 4px;font-size:9px;border-radius:2px;">INVITADO</span>';
-            var cap = ev.maxParticipants > 0 ? (ev.joinedCount+'/'+ev.maxParticipants) : (ev.joinedCount+' unidos');
-            return '<div class="ev-m-card" data-id="' + ev.id + '" style="padding:6px 8px; margin-bottom:5px; background:var(--win-bg); border:1px outset;">' +
-                '<div style="display:flex; gap:4px; align-items:baseline; margin-bottom:2px;">' +
-                    '<strong style="font-size:12px; flex:1;">' + esc(ev.title) + '</strong>' + badge +
+            var badges = [];
+            if (ev.myStatus === 'joined')        badges.push('<span class="ev-badge is-joined">UNIDO</span>');
+            else if (ev.myStatus === 'waitlist') badges.push('<span class="ev-badge is-waitlist">ESPERA</span>');
+            else if (ev.myStatus === 'invited')  badges.push('<span class="ev-badge is-invited">INVITADO</span>');
+            if (ev.visibility === 'private')     badges.push('<span class="ev-badge is-private">PRIV</span>');
+            var cap = ev.maxParticipants > 0
+                ? (ev.joinedCount + '/' + ev.maxParticipants + (ev.waitlistCount ? ' · +' + ev.waitlistCount + ' espera' : ''))
+                : (ev.joinedCount + ' unidos');
+            return '<div class="ev-card" data-id="' + ev.id + '">' +
+                '<div class="ev-card-head">' +
+                    '<span class="ev-card-title">' + esc(ev.title) + '</span>' +
+                    badges.join('') +
                 '</div>' +
-                '<div style="font-size:10px; color:var(--text-faint, #666);">' +
-                    esc(fmtDate(ev.eventDate)) + ' · ' + ev.durationMin + 'min · ' + esc(cap) +
+                '<div class="ev-card-meta">' +
+                    '<span class="ev-card-meta-item">📅 ' + esc(fmtDate(ev.eventDate)) + '</span>' +
+                    '<span class="ev-card-meta-item">⏱ ' + ev.durationMin + ' min</span>' +
+                    '<span class="ev-card-meta-item">👥 ' + esc(cap) + '</span>' +
                 '</div>' +
             '</div>';
         }).join('');
-        l.querySelectorAll('.ev-m-card').forEach(function(c){
+        l.querySelectorAll('.ev-card').forEach(function(c){
             c.addEventListener('click', function(){ openDetail(parseInt(c.dataset.id, 10)); });
         });
     }
@@ -1249,11 +1254,13 @@ window.__EV_CFG = {
     function renderFriends(){
         var box = document.getElementById('ev-m-friends');
         if (!box) return;
-        if (!STATE.friends.length) { box.innerHTML = '<p style="font-size:10px;color:var(--text-faint, #666); margin:4px;">No tienes amigos mutuos.</p>'; return; }
+        if (!STATE.friends.length) {
+            box.innerHTML = '<p style="font-size:10px; color:var(--text-faint, #808080); margin:4px; font-style:italic;">No tienes amigos mutuos.</p>';
+            return;
+        }
         box.innerHTML = STATE.friends.map(function(f){
             var ck = STATE.selectedInvitees[f.key] ? 'checked' : '';
-            return '<label style="display:block; font-size:11px; padding:3px 4px;">' +
-                '<input type="checkbox" class="ev-m-cb" value="' + esc(f.key) + '" ' + ck + '> ' + esc(f.label) + '</label>';
+            return '<label><input type="checkbox" class="ev-m-cb" value="' + esc(f.key) + '" ' + ck + '><span>' + esc(f.label) + '</span></label>';
         }).join('');
         box.querySelectorAll('.ev-m-cb').forEach(function(cb){
             cb.addEventListener('change', function(){
@@ -1267,7 +1274,7 @@ window.__EV_CFG = {
     document.getElementById('ev-m-create-cancel').addEventListener('click', function(){ showTab('list'); });
     document.getElementById('ev-m-create-submit').addEventListener('click', function(){
         var status = document.getElementById('ev-m-create-status');
-        status.style.color = 'var(--text-faint, #666)';
+        status.className = 'ev-status';
         status.textContent = 'Creando…';
         var title = document.getElementById('ev-m-title').value.trim();
         var desc  = document.getElementById('ev-m-desc').value.trim();
@@ -1277,17 +1284,17 @@ window.__EV_CFG = {
         var maxP   = parseInt(document.getElementById('ev-m-max').value, 10) || 0;
         var visEl = document.querySelector('input[name="ev-m-vis"]:checked');
         var vis = visEl ? visEl.value : 'public';
-        if (!title) { status.style.color='#a33'; status.textContent='Título obligatorio.'; return; }
-        if (!dateRaw) { status.style.color='#a33'; status.textContent='Fecha obligatoria.'; return; }
-        if (maxP > 0 && maxP < minP) { status.style.color='#a33'; status.textContent='Máx no puede ser menor que mín.'; return; }
+        if (!title) { status.className = 'ev-status is-error'; status.textContent = 'Título obligatorio.'; return; }
+        if (!dateRaw) { status.className = 'ev-status is-error'; status.textContent = 'Fecha obligatoria.'; return; }
+        if (maxP > 0 && maxP < minP) { status.className = 'ev-status is-error'; status.textContent = 'Máx no puede ser menor que mín.'; return; }
         api('create-event', {
             title: title, description: desc,
             eventDate: dateRaw.replace('T', ' ') + ':00',
             durationMin: durMin, minParticipants: minP, maxParticipants: maxP,
             visibility: vis, invitees: Object.keys(STATE.selectedInvitees),
         }, 'POST').then(function(d){
-            if (!d || !d.ok) { status.style.color='#a33'; status.textContent = (d && d.error) || 'Error.'; return; }
-            status.style.color = 'green'; status.textContent = '✓ Evento creado.';
+            if (!d || !d.ok) { status.className = 'ev-status is-error'; status.textContent = (d && d.error) || 'Error.'; return; }
+            status.className = 'ev-status is-success'; status.textContent = '✓ Evento creado.';
             document.getElementById('ev-m-title').value = '';
             document.getElementById('ev-m-desc').value = '';
             document.getElementById('ev-m-date').value = '';
@@ -1297,7 +1304,7 @@ window.__EV_CFG = {
             /* Refrescar grid del calendario si está accesible. */
             if (typeof window.cargarTodo === 'function') window.cargarTodo();
             setTimeout(function(){ showTab('list'); }, 700);
-        }).catch(function(){ status.style.color='#a33'; status.textContent='Error de red.'; });
+        }).catch(function(){ status.className = 'ev-status is-error'; status.textContent = 'Error de red.'; });
     });
 
     /* ── Detail ── */
@@ -1319,30 +1326,34 @@ window.__EV_CFG = {
         var b = document.getElementById('ev-m-detail-body');
         var cap = ev.maxParticipants > 0 ? (ev.joinedCount+' / '+ev.maxParticipants) : (ev.joinedCount+' (sin límite)');
         var partList = (ev.participants || []).map(function(p){
-            var sl = p.status === 'waitlist' ? ' <span style="color:#d4a017;">(espera)</span>' : '';
-            return '<li style="font-size:11px;">' + esc(p.label) + sl + '</li>';
+            var sl = p.status === 'waitlist' ? ' <span class="ev-waitlist-tag">(espera)</span>' : '';
+            return '<li>' + esc(p.label) + sl + '</li>';
         }).join('');
+        var waitInfo = ev.waitlistCount > 0
+            ? '<div class="ev-detail-meta-row">En lista de espera: <strong>' + ev.waitlistCount + '</strong></div>'
+            : '';
         var actions = '';
-        if (ev.isFinished) actions = '<p style="font-size:11px;color:var(--text-faint,#666);">Evento finalizado.</p>';
+        if (ev.isFinished) actions = '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Evento finalizado.</p>';
         else if (ev.myStatus === 'joined' || ev.myStatus === 'waitlist') actions = '<button class="button" id="ev-m-leave" type="button">Salir</button>';
         else if (ev.myStatus === 'invited') actions = '<button class="button" id="ev-m-decline" type="button">Rechazar</button> <button class="button default" id="ev-m-accept" type="button">Aceptar</button>';
         else {
             var lbl = (ev.maxParticipants > 0 && ev.joinedCount >= ev.maxParticipants) ? 'Unirme (espera)' : 'Unirme';
             actions = '<button class="button default" id="ev-m-join" type="button">' + lbl + '</button>';
         }
-        var delBtn = ev.isCreator ? '<button class="button" id="ev-m-del" type="button" style="color:#a33;">Eliminar</button>' : '';
+        var delBtn = ev.isCreator ? '<button class="button ev-btn-danger" id="ev-m-del" type="button">Eliminar</button>' : '';
         b.innerHTML =
-            '<div style="margin-bottom:8px; font-size:11px;">' +
-                '<div><strong>Fecha:</strong> ' + esc(fmtDate(ev.eventDate)) + '</div>' +
-                '<div><strong>Duración:</strong> ' + ev.durationMin + ' min</div>' +
-                '<div><strong>Visibilidad:</strong> ' + (ev.visibility === 'private' ? 'Privado' : 'Público') + '</div>' +
-                '<div><strong>Participantes:</strong> ' + esc(cap) + (ev.waitlistCount ? ' (+'+ev.waitlistCount+' espera)' : '') + '</div>' +
+            '<dl class="ev-detail-meta">' +
+                '<div class="ev-detail-meta-row"><dt>Fecha:</dt> <dd>' + esc(fmtDate(ev.eventDate)) + '</dd></div>' +
+                '<div class="ev-detail-meta-row"><dt>Duración:</dt> <dd>' + ev.durationMin + ' min</dd></div>' +
+                '<div class="ev-detail-meta-row"><dt>Visibilidad:</dt> <dd>' + (ev.visibility === 'private' ? 'Privado' : 'Público') + '</dd></div>' +
+                '<div class="ev-detail-meta-row"><dt>Participantes:</dt> <dd>' + esc(cap) + '</dd></div>' +
+                waitInfo +
+            '</dl>' +
+            (ev.description ? '<div class="ev-detail-desc">' + esc(ev.description) + '</div>' : '') +
+            '<div class="ev-detail-participants"><h4>Participantes</h4>' +
+                (partList ? '<ul>' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Nadie todavía.</p>') +
             '</div>' +
-            (ev.description ? '<div style="font-size:11px;white-space:pre-wrap; padding:6px; background:var(--win-body-bg, var(--win-bg)); border:1px inset; margin-bottom:8px;">' + esc(ev.description) + '</div>' : '') +
-            '<div style="margin-bottom:8px;"><strong style="font-size:11px;">Participantes:</strong>' +
-                (partList ? '<ul style="margin:4px 0 0 18px; padding:0;">' + partList + '</ul>' : '<p style="font-size:11px;color:var(--text-faint,#666);">Nadie todavía.</p>') +
-            '</div>' +
-            '<div style="display:flex; gap:4px; flex-wrap:wrap;">' + actions + ' ' + delBtn + '</div>';
+            '<div class="ev-detail-actions">' + actions + delBtn + '</div>';
         wireDetail(ev);
     }
     function wireDetail(ev){

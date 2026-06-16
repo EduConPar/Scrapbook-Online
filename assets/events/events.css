@@ -1,0 +1,402 @@
+/* ════════════════════════════════════════════════════════════════════
+   EVENTS UI — estilos compartidos desktop / mobile.
+   Diseñado para verse coherente en Win98 (gris+azul) y en MelonOS
+   Overdose (lavanda+rosa): SOLO usa tokens (var(--…)) y clases 98.css.
+   La interfaz activa controla el palette y la tipografía automáticamente.
+   ════════════════════════════════════════════════════════════════════ */
+
+.ev-window {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9500;
+}
+#events-window  { width: min(560px, 94vw); height: min(580px, 86vh); }
+#event-detail-window { width: min(480px, 92vw); max-height: 86vh; z-index: 9550; }
+
+.ev-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    gap: 8px;
+}
+.ev-toolbar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.ev-toolbar .button { min-width: 70px; }
+.ev-toolbar-spacer { flex: 1; }
+
+/* Tab activo: doble bezel inset (look "presionado") + acento. */
+.ev-tab-active {
+    box-shadow:
+        inset -1px -1px 0 var(--bezel-light-1, #fff),
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -2px -2px 0 var(--bezel-light-2, #dfdfdf),
+        inset  2px  2px 0 var(--bezel-dark-2, #808080);
+    font-weight: bold;
+    color: var(--accent, #000080);
+}
+
+.ev-pane {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+.ev-pane-inset {
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--win-body-bg, var(--win-bg, #c0c0c0));
+    padding: 6px;
+}
+.ev-pane-form { padding: 4px 2px; }
+
+.ev-empty {
+    text-align: center;
+    font-size: 11px;
+    padding: 28px 14px;
+    color: var(--text-faint, #808080);
+    font-style: italic;
+}
+
+/* ─── Cards de la lista ─── */
+.ev-card {
+    display: block;
+    padding: 7px 9px;
+    margin-bottom: 6px;
+    background: var(--win-bg, #c0c0c0);
+    border: 2px solid;
+    border-color:
+        var(--bezel-light-1, #fff)
+        var(--bezel-dark-1, #000)
+        var(--bezel-dark-1, #000)
+        var(--bezel-light-1, #fff);
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+.ev-card:hover {
+    background: color-mix(in srgb, var(--win-bg, #c0c0c0) 88%, var(--accent, #000080) 12%);
+}
+.ev-card:active {
+    border-color:
+        var(--bezel-dark-1, #000)
+        var(--bezel-light-1, #fff)
+        var(--bezel-light-1, #fff)
+        var(--bezel-dark-1, #000);
+}
+.ev-card-head {
+    display: flex;
+    gap: 5px;
+    align-items: baseline;
+    margin-bottom: 3px;
+    flex-wrap: wrap;
+}
+.ev-card-title {
+    flex: 1;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text, #000);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.ev-card-meta {
+    font-size: 10px;
+    color: var(--text-muted, #666);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ev-card-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* ─── Badges ─── */
+.ev-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 9px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border: 1px solid var(--bezel-dark-1, #000);
+    line-height: 1.3;
+    flex-shrink: 0;
+}
+.ev-badge.is-joined {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+}
+.ev-badge.is-waitlist {
+    background: var(--accent-coral, color-mix(in srgb, var(--accent, #000080) 50%, gold));
+    color: #000;
+}
+.ev-badge.is-invited {
+    background: var(--accent-deep, #00004a);
+    color: var(--accent-text, #fff);
+}
+.ev-badge.is-private {
+    background: var(--inset-bg, #808080);
+    color: var(--win-bg, #c0c0c0);
+}
+
+/* ─── Forms ─── */
+.ev-field { margin-bottom: 9px; }
+.ev-field > label {
+    display: block;
+    font-size: 11px;
+    margin-bottom: 3px;
+    color: var(--text, #000);
+}
+.ev-field > input[type="text"],
+.ev-field > input[type="number"],
+.ev-field > input[type="datetime-local"],
+.ev-field > textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+.ev-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ev-row > .ev-field {
+    flex: 1;
+    min-width: 130px;
+}
+
+.ev-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px 0 0;
+}
+.ev-radio-group label {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+}
+
+.ev-friends-box {
+    max-height: 140px;
+    overflow-y: auto;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--input-bg, #fff);
+    padding: 4px;
+}
+.ev-friends-box label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    padding: 3px 4px;
+    cursor: pointer;
+    color: var(--input-text, #000);
+}
+.ev-friends-box label:hover {
+    background: var(--accent, #000080);
+    color: var(--accent-text, #fff);
+}
+
+.ev-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--bezel-dark-2, #808080);
+}
+
+.ev-status {
+    font-size: 11px;
+    margin: 6px 0 0;
+    color: var(--text-muted, #666);
+    min-height: 14px;
+}
+.ev-status.is-error   { color: var(--error, #a02525); }
+.ev-status.is-success { color: var(--success, #1a7a1a); }
+
+/* ─── Detalle ─── */
+.ev-detail-meta {
+    background: var(--win-body-bg, var(--win-bg, #c0c0c0));
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    padding: 7px 9px;
+    margin-bottom: 9px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.ev-detail-meta dt {
+    display: inline;
+    font-weight: bold;
+}
+.ev-detail-meta dd {
+    display: inline;
+    margin: 0;
+}
+.ev-detail-meta-row { margin-bottom: 2px; }
+
+.ev-detail-desc {
+    font-size: 11px;
+    white-space: pre-wrap;
+    padding: 7px 9px;
+    background: var(--input-bg, #fff);
+    color: var(--input-text, #000);
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    margin-bottom: 9px;
+}
+
+.ev-detail-participants h4 {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 0 4px;
+}
+.ev-detail-participants ul {
+    margin: 0;
+    padding: 0 0 0 18px;
+    font-size: 11px;
+}
+.ev-detail-participants li { padding: 1px 0; }
+.ev-detail-participants .ev-waitlist-tag {
+    color: var(--accent-deep, color-mix(in srgb, var(--accent, #000080) 70%, #000));
+    font-style: italic;
+    font-size: 10px;
+    margin-left: 4px;
+}
+
+.ev-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--bezel-dark-2, #808080);
+}
+.ev-btn-danger {
+    color: var(--error, #a02525);
+    margin-left: auto !important;
+}
+
+.ev-invite-panel {
+    margin-top: 9px;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    background: var(--win-body-bg, var(--win-bg, #c0c0c0));
+    padding: 7px;
+}
+.ev-invite-panel h4 {
+    font-size: 11px;
+    font-weight: bold;
+    margin: 0 0 5px;
+}
+.ev-invite-list {
+    max-height: 150px;
+    overflow-y: auto;
+    background: var(--input-bg, #fff);
+    padding: 3px;
+    border: 1px solid var(--bezel-dark-2, #808080);
+}
+.ev-invite-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+}
+.ev-invite-row + .ev-invite-row {
+    border-top: 1px dotted var(--bezel-dark-2, #808080);
+}
+.ev-invite-row span {
+    flex: 1;
+    font-size: 11px;
+    color: var(--input-text, #000);
+}
+.ev-invite-row .button { font-size: 10px; padding: 1px 8px; }
+
+/* ─── MOBILE — sheet fullscreen Win98 ─── */
+.ev-m-window {
+    position: fixed;
+    inset: 8px;
+    z-index: 9510;
+    display: flex;
+    flex-direction: column;
+}
+.ev-m-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 9500;
+}
+.ev-m-detail-window {
+    position: fixed;
+    inset: 8px;
+    z-index: 9530;
+    display: flex;
+    flex-direction: column;
+}
+.ev-m-detail-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 9520;
+}
+.ev-m-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.ev-m-tabs .button { flex: 1; }
+
+/* En la versión kawaii (MelonOS Overdose) el botón "Eventos" del menú
+   móvil queda mejor con el accent. El selector usa el atributo
+   `data-iface` de body si está; si no, hereda el look base. */
+body[data-iface="kawaii"] #cm-events-btn,
+body[data-iface="kawaii"] #btn-eventos {
+    color: var(--accent, #FF66B2);
+}
