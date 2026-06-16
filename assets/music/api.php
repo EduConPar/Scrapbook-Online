@@ -1035,36 +1035,46 @@ case 'import-playlist': {
        Es lo que usa la propia web y herramientas como yt-dlp.
        Mucho más fiable que parsear HTML porque devuelve datos
        estructurados y sin marcadores que cambien con cada update
-       del front. Soporta paginación vía `continuations`. */
-    $innerTubeBrowse = function($browseId, $continuation = null) use ($httpRequest) {
+       del front. Soporta paginación vía `continuations`.
+
+       INNERTUBE_API_KEY: clave pública del cliente WEB de YouTube.
+       Está hardcoded en la propia web y es la misma para todos.
+       Sin esta key la API devuelve 403. */
+    $INNERTUBE_KEY     = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+    $INNERTUBE_VERSION = '2.20240814.01.00';
+    $innerTubeBrowse = function($browseId, $continuation = null) use ($httpRequest, $INNERTUBE_KEY, $INNERTUBE_VERSION) {
         $payload = [
             'context' => [
                 'client' => [
-                    'clientName'    => 'WEB',
-                    'clientVersion' => '2.20240301.00.00',
-                    'hl'            => 'en',
-                    'gl'            => 'US',
+                    'clientName'       => 'WEB',
+                    'clientVersion'    => $INNERTUBE_VERSION,
+                    'hl'               => 'en',
+                    'gl'               => 'US',
+                    'platform'         => 'DESKTOP',
+                    'clientFormFactor' => 'UNKNOWN_FORM_FACTOR',
                 ],
+                'user'    => ['lockedSafetyMode' => false],
+                'request' => ['useSsl' => true],
             ],
         ];
         if ($continuation) $payload['continuation'] = $continuation;
         else               $payload['browseId']     = $browseId;
         $r = $httpRequest(
-            'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+            'https://www.youtube.com/youtubei/v1/browse?key=' . $INNERTUBE_KEY . '&prettyPrint=false',
             'POST',
             json_encode($payload),
             [
                 'Content-Type: application/json',
                 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'Accept-Language: en-US,en;q=0.9',
+                'Accept: */*',
                 'Origin: https://www.youtube.com',
                 'Referer: https://www.youtube.com/',
                 'X-YouTube-Client-Name: 1',
-                'X-YouTube-Client-Version: 2.20240301.00.00',
+                'X-YouTube-Client-Version: ' . $INNERTUBE_VERSION,
             ]
         );
-        if (!$r['body']) return null;
-        return json_decode($r['body'], true);
+        return ['code' => $r['code'], 'data' => $r['body'] ? json_decode($r['body'], true) : null];
     };
 
     /* Walker recursivo: recolecta TODOS los `playlistVideoRenderer`
@@ -1086,32 +1096,29 @@ case 'import-playlist': {
     };
 
     $videos = [];
-    $errorDetail = '';
-    /* La browseId de una playlist es "VL" + playlistId. */
+    $diag   = [];   /* códigos HTTP de cada intento, para el mensaje
+                       de error si todos fallan. */
+
+    /* ── A: InnerTube browse — La browseId de una playlist es "VL"+id. */
     $browseRes = $innerTubeBrowse('VL' . $playlistId);
-    if (is_array($browseRes)) {
-        $col = $collectVideos($browseRes);
+    $diag[]    = 'innertube:' . ($browseRes['code'] ?: '?');
+    if (is_array($browseRes['data'])) {
+        $col = $collectVideos($browseRes['data']);
         $videos = $col['videos'];
-        /* Paginación: hasta 5 saltos por seguridad (playlists de >500
-           tracks). Cada continuation trae otra hornada. */
         $cont = $col['continuation'];
         $hops = 0;
         while ($cont && $hops < 5) {
             $next = $innerTubeBrowse(null, $cont);
-            if (!is_array($next)) break;
-            $col2 = $collectVideos($next);
+            if (!is_array($next['data'])) break;
+            $col2 = $collectVideos($next['data']);
             if (!$col2['videos']) break;
             $videos = array_merge($videos, $col2['videos']);
             $cont = $col2['continuation'];
             $hops++;
         }
-    } else {
-        $errorDetail = 'innertube no respondió';
     }
 
-    /* ──────────────────────────────────────────────────────────────
-       APPROACH B (fallback) — scraping del HTML clásico. Por si
-       YouTube tira la InnerTube API o devuelve algo raro. */
+    /* ── B: scraping del HTML clásico. */
     if (empty($videos)) {
         $r = $httpRequest(
             'https://www.youtube.com/playlist?list=' . $playlistId,
@@ -1124,6 +1131,7 @@ case 'import-playlist': {
                 'Cookie: CONSENT=YES+cb; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; PREF=hl=en&gl=US',
             ]
         );
+        $diag[] = 'html:' . ($r['code'] ?: '?');
         $html = $r['body'] ?? '';
         if ($html) {
             $markers = ['var ytInitialData = ', 'window["ytInitialData"] = ', 'ytInitialData = '];
@@ -1146,13 +1154,43 @@ case 'import-playlist': {
                     break;
                 }
             }
-        } else {
-            $errorDetail = $errorDetail ?: 'HTML vacío';
+        }
+    }
+
+    /* ── C: feed RSS público (último recurso — solo 15 tracks máximo,
+          pero útil para verificar que el servidor PUEDE alcanzar
+          YouTube). Si los anteriores devolvieron 0 vídeos pero ninguno
+          dio error de red, esto demuestra que el problema es de
+          parseo, no de conectividad. */
+    if (empty($videos)) {
+        $r = $httpRequest(
+            'https://www.youtube.com/feeds/videos.xml?playlist_id=' . $playlistId,
+            'GET',
+            null,
+            ['User-Agent: Mozilla/5.0', 'Accept: application/atom+xml,application/xml']
+        );
+        $diag[] = 'rss:' . ($r['code'] ?: '?');
+        if (!empty($r['body']) && preg_match_all('#<yt:videoId>([A-Za-z0-9_-]{11})</yt:videoId>.*?<title>([^<]+)</title>.*?<name>([^<]+)</name>#s', $r['body'], $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $row) {
+                $videos[] = [
+                    'videoId' => $row[1],
+                    'title'   => ['simpleText' => $row[2]],
+                    'shortBylineText' => ['simpleText' => $row[3]],
+                ];
+            }
         }
     }
 
     if (empty($videos)) {
-        jsonError('No se pudo leer la playlist desde YouTube' . ($errorDetail ? " ($errorDetail)" : '') . '. ¿Está pública?', 502);
+        $msg = 'No se pudo leer la playlist [' . implode(' ', $diag) . ']. ';
+        if (in_array('innertube:403', $diag) || in_array('html:403', $diag)) {
+            $msg .= 'YouTube bloqueó la petición (IP del servidor restringida).';
+        } elseif (in_array('innertube:0', $diag) && in_array('html:0', $diag)) {
+            $msg .= 'El servidor no puede alcanzar youtube.com (firewall outbound).';
+        } else {
+            $msg .= '¿Está pública la playlist?';
+        }
+        jsonError($msg, 502);
     }
 
     $tracks = [];
