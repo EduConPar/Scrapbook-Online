@@ -874,7 +874,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <button class="button" id="cm-add-rec-btn" type="button">
             <img src="../../assets/img/appIcons/bellIcon.png" alt="">Recordatorio
         </button>
-        <button class="button" id="cm-events-btn" type="button">📅 Eventos</button>
+        <button class="button" id="cm-events-btn" type="button"><img src="../../assets/img/appIcons/calendarioIcon.png" alt="" class="ev-icon-cal">Eventos</button>
     </div>
 
     <!-- Lista próximos recordatorios -->
@@ -1073,6 +1073,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <label>Descripción</label>
                 <textarea id="ev-m-desc" rows="3" maxlength="2000" style="resize:vertical;"></textarea>
             </div>
+            <div class="ev-field">
+                <label>URL de imagen <span style="color:var(--text-muted,#666); font-weight:normal;">(opcional)</span></label>
+                <input type="url" id="ev-m-image" placeholder="https://…" maxlength="500">
+            </div>
             <div class="ev-row">
                 <div class="ev-field">
                     <label>Fecha *</label>
@@ -1209,6 +1213,20 @@ window.__EV_CFG = {
 (function evMobileModule(){
     'use strict';
     var API = (window.__EV_CFG && window.__EV_CFG.API) || '../../assets/events/api.php';
+
+    /* SVGs inline reutilizables — sustituyen a los emojis ⏱ y 👥. */
+    var ICON_CLOCK_SVG =
+        '<svg class="ev-icon-inline" viewBox="0 0 16 16" aria-hidden="true">' +
+            '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+            '<path d="M8 4.5 V8 L10.5 9.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg> ';
+    var ICON_USERS_SVG =
+        '<svg class="ev-icon-inline" viewBox="0 0 16 16" aria-hidden="true">' +
+            '<circle cx="5.7" cy="5" r="2.3" fill="currentColor"/>' +
+            '<path d="M1 14 C1 10.5 3 9 5.7 9 C8.4 9 10.4 10.5 10.4 14 Z" fill="currentColor"/>' +
+            '<circle cx="11.5" cy="6" r="1.7" fill="currentColor"/>' +
+            '<path d="M9 13.5 C9 11.5 10 10.5 11.5 10.5 C13 10.5 15 11.5 15 14 H9 Z" fill="currentColor"/>' +
+        '</svg> ';
 
     var winEl    = document.getElementById('ev-mobile-window');
     var backEl   = document.getElementById('ev-mobile-backdrop');
@@ -1357,9 +1375,9 @@ window.__EV_CFG = {
                     badges.join('') +
                 '</div>' +
                 '<div class="ev-card-meta">' +
-                    '<span class="ev-card-meta-item">📅 ' + esc(fmtDate(ev.eventDate)) + '</span>' +
-                    '<span class="ev-card-meta-item">⏱ ' + ev.durationMin + ' min</span>' +
-                    '<span class="ev-card-meta-item">👥 ' + esc(cap) + '</span>' +
+                    '<span class="ev-card-meta-item"><img src="../../assets/img/appIcons/calendarioIcon.png" alt="" class="ev-icon-cal">' + esc(fmtDate(ev.eventDate)) + '</span>' +
+                    '<span class="ev-card-meta-item">' + ICON_CLOCK_SVG + ev.durationMin + ' min</span>' +
+                    '<span class="ev-card-meta-item">' + ICON_USERS_SVG + esc(cap) + '</span>' +
                 '</div>' +
             '</div>';
         }).join('');
@@ -1485,6 +1503,7 @@ window.__EV_CFG = {
         var maxP   = parseInt(document.getElementById('ev-m-max').value, 10) || 0;
         var visEl = document.querySelector('input[name="ev-m-vis"]:checked');
         var vis = visEl ? visEl.value : 'public';
+        var imageUrl = document.getElementById('ev-m-image').value.trim();
         if (!title) { status.className = 'ev-status is-error'; status.textContent = 'Título obligatorio.'; return; }
         if (!dateRaw) { status.className = 'ev-status is-error'; status.textContent = 'Fecha obligatoria.'; return; }
         if (maxP > 0 && maxP < minP) { status.className = 'ev-status is-error'; status.textContent = 'Máx no puede ser menor que mín.'; return; }
@@ -1495,6 +1514,7 @@ window.__EV_CFG = {
             eventDate: dateRaw + ' ' + timeStr + ':00',
             durationMin: durMin, minParticipants: minP, maxParticipants: maxP,
             visibility: vis,
+            imageUrl: imageUrl,
         };
         if (isEdit) body.eventId = STATE.editingId;
         else        body.invitees = Object.keys(STATE.selectedInvitees);
@@ -1505,6 +1525,7 @@ window.__EV_CFG = {
             if (!isEdit) {
                 document.getElementById('ev-m-title').value = '';
                 document.getElementById('ev-m-desc').value = '';
+                document.getElementById('ev-m-image').value = '';
                 document.getElementById('ev-m-date').value = '';
                 if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet('12:00');
                 STATE.selectedInvitees = {};
@@ -1562,7 +1583,11 @@ window.__EV_CFG = {
             ? '<button class="button" id="ev-m-edit" type="button">Editar</button>' : '';
         var inviteBtn = (!ev.isFinished && (ev.isCreator || (ev.visibility === 'public' && ev.myStatus === 'joined')))
             ? '<button class="button" id="ev-m-invite" type="button">Invitar amigos…</button>' : '';
+        var imgBanner = ev.imageUrl
+            ? '<img class="ev-detail-image" src="' + esc(ev.imageUrl) + '" alt="" onerror="this.style.display=\'none\'">'
+            : '';
         b.innerHTML =
+            imgBanner +
             '<dl class="ev-detail-meta">' +
                 '<div class="ev-detail-meta-row"><dt>Fecha:</dt> <dd>' + esc(fmtDate(ev.eventDate)) + '</dd></div>' +
                 '<div class="ev-detail-meta-row"><dt>Duración:</dt> <dd>' + ev.durationMin + ' min</dd></div>' +
@@ -1690,6 +1715,7 @@ window.__EV_CFG = {
         if (tabCreate) tabCreate.textContent = 'Editando';
         document.getElementById('ev-m-title').value = ev.title || '';
         document.getElementById('ev-m-desc').value  = ev.description || '';
+        document.getElementById('ev-m-image').value = ev.imageUrl || '';
         var d = ev.eventDate || '';
         document.getElementById('ev-m-date').value = d.substring(0, 10) || '';
         var timeWrap = document.getElementById('ev-m-time');

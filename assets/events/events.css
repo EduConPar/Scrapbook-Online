@@ -127,6 +127,51 @@
     align-items: center;
     gap: 3px;
 }
+/* Icono del calendario inline (sustituye al emoji 📅). Usa el mismo
+   tamaño que el texto que acompaña para que se vea nativo en cualquier
+   contexto: card meta, botón, embed de notif, etc. icon-pack.js
+   reescribe el src para que sirva el calendarioIcon del pack activo. */
+.ev-icon-cal {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    vertical-align: -2px;
+    flex-shrink: 0;
+    margin-right: 3px;
+}
+/* SVG icons inline (sustituyen a los emojis ⏱ y 👥). Heredan color
+   del texto via `currentColor` para integrarse con el tema activo. */
+.ev-icon-inline {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    vertical-align: -2px;
+    flex-shrink: 0;
+    margin-right: 3px;
+    color: inherit;
+}
+
+/* Banner de imagen del evento en el detalle. NO se muestra en la lista
+   (solo en el detail view). Sunken bezel Win98 para coherencia. */
+.ev-detail-image {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    display: block;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--input-bg, #fff);
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
 
 /* ─── Badges ─── */
 .ev-badge {

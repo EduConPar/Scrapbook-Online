@@ -1801,6 +1801,12 @@ body:has(.cal-cell) {
 .ev-part-actionable:hover {
     background: color-mix(in srgb, var(--accent, #FF66B2) 18%, transparent) !important;
 }
+.ev-detail-image {
+    box-shadow: none !important;
+    border: 2px solid var(--accent, #FF66B2) !important;
+    border-radius: 0 !important;
+    background: var(--rose-100, #FFE4F0) !important;
+}
 
 /* Friends dialog — overrides kawaii */
 #ev-friends-dialog-list {

@@ -10,7 +10,7 @@
    alguien sale.
 
    Cuando un usuario se une a un evento, se inserta una fila en
-   `recordatorios` con un titulo prefijado "📅 Evento: …" para que
+   `recordatorios` con un titulo prefijado "Evento: …" para que
    aparezca en la grid del calendario como recordatorio. Al salir,
    se elimina esa fila.
 
@@ -79,16 +79,21 @@ try {
             min_participants    INT NOT NULL DEFAULT 1,
             max_participants    INT NOT NULL DEFAULT 0,
             visibility          ENUM('public','private') NOT NULL DEFAULT 'public',
+            image_url           VARCHAR(500) NULL,
             discord_message_id  VARCHAR(32) NULL,
             created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_event_date (event_date),
             INDEX idx_creator (creator_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
-    /* Idempotente: añade la columna en BDs viejas que ya tenían la tabla. */
+    /* Idempotente: añade columnas en BDs viejas que ya tenían la tabla. */
     try {
         $has = $pdo->query("SHOW COLUMNS FROM events LIKE 'discord_message_id'")->fetch();
         if (!$has) $pdo->exec("ALTER TABLE events ADD COLUMN discord_message_id VARCHAR(32) NULL");
+    } catch (Throwable $_) {}
+    try {
+        $has = $pdo->query("SHOW COLUMNS FROM events LIKE 'image_url'")->fetch();
+        if (!$has) $pdo->exec("ALTER TABLE events ADD COLUMN image_url VARCHAR(500) NULL AFTER visibility");
     } catch (Throwable $_) {}
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS event_participants (
@@ -161,23 +166,31 @@ function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $wai
     }
     $desc .= ($desc !== '' ? "\n\n" : '') . '**[→ Unirse en Melon Hub](' . $melonUrl . ')**';
 
-    return [
+    $embed = [
         'title'       => mb_substr((string)$event['title'], 0, 240),
         'url'         => $melonUrl,
         'description' => $desc,
         'color'       => 0xFF66B2,       /* rosa accent kawaii — coherente con Overdose */
         'author'      => $author,
         'fields'      => [
-            ['name' => '📅 Fecha y hora', 'value' => $when . ($whenShort ? "\n" . $whenShort : ''), 'inline' => true],
-            ['name' => '⏱ Duración',     'value' => ((int)$event['duration_min']) . ' min',         'inline' => true],
-            ['name' => '👥 Participantes','value' => $partLine,                                      'inline' => true],
-            ['name' => 'Mínimo',          'value' => (string)(int)$event['min_participants'],         'inline' => true],
-            ['name' => 'Máximo',          'value' => $maxStr,                                          'inline' => true],
-            ['name' => 'Visibilidad',     'value' => 'Público',                                        'inline' => true],
+            ['name' => 'Fecha y hora', 'value' => $when . ($whenShort ? "\n" . $whenShort : ''), 'inline' => true],
+            ['name' => 'Duración',     'value' => ((int)$event['duration_min']) . ' min',         'inline' => true],
+            ['name' => 'Participantes','value' => $partLine,                                      'inline' => true],
+            ['name' => 'Mínimo',       'value' => (string)(int)$event['min_participants'],         'inline' => true],
+            ['name' => 'Máximo',       'value' => $maxStr,                                          'inline' => true],
+            ['name' => 'Visibilidad',  'value' => 'Público',                                        'inline' => true],
         ],
         'footer'      => ['text' => 'Evento creado por ' . $creatorLabel . ' en Melon Hub'],
         'timestamp'   => gmdate('c', $ts ?: time()),
     ];
+    /* Imagen del evento (banner grande del embed). Discord la fetchea
+       y la cachea. Si el URL es inválido el embed igualmente se renderiza
+       sin la imagen — no necesita validación previa aquí. */
+    $imgUrl = trim((string)($event['image_url'] ?? ''));
+    if ($imgUrl !== '' && preg_match('#^https?://#i', $imgUrl)) {
+        $embed['image'] = ['url' => $imgUrl];
+    }
+    return $embed;
 }
 
 /* Lee creator label + URL pública del avatar (sin multipart). */
@@ -428,6 +441,7 @@ function ev_hydrate(PDO $pdo, int $uid, array $event): array {
         'minParticipants' => (int)$event['min_participants'],
         'maxParticipants' => (int)$event['max_participants'],
         'visibility'      => (string)$event['visibility'],
+        'imageUrl'        => (string)($event['image_url'] ?? ''),
         'creatorKey'      => $creatorKey,
         'isCreator'       => ((int)$event['creator_id'] === $uid),
         'isFinished'      => $isFinished,
@@ -496,12 +510,19 @@ case 'create-event': {
     $maxP        = max(0, min(10000, (int)($b['maxParticipants'] ?? 0)));
     if ($maxP > 0 && $maxP < $minP) jsonError('Máximo no puede ser menor que mínimo');
     $visibility = (($b['visibility'] ?? '') === 'private') ? 'private' : 'public';
+    /* URL de imagen opcional. Si se pasa, debe ser http/https.
+       Trim → 500 chars max (cabe en VARCHAR(500)). Cualquier cosa que
+       no sea URL válida se descarta silenciosamente para no bloquear
+       el create. */
+    $imageUrl = trim((string)($b['imageUrl'] ?? ''));
+    if ($imageUrl !== '' && !preg_match('#^https?://#i', $imageUrl)) $imageUrl = '';
+    if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
     $invitees   = is_array($b['invitees'] ?? null) ? $b['invitees'] : [];
 
     $stmt = $pdo->prepare("INSERT INTO events
-        (creator_id, title, description, event_date, duration_min, min_participants, max_participants, visibility)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$uid, $title, $desc, $eventDate, $durationMin, $minP, $maxP, $visibility]);
+        (creator_id, title, description, event_date, duration_min, min_participants, max_participants, visibility, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$uid, $title, $desc, $eventDate, $durationMin, $minP, $maxP, $visibility, $imageUrl ?: null]);
     $eventId = (int)$pdo->lastInsertId();
 
     /* El creador se une automáticamente como 'joined'. */
@@ -845,12 +866,16 @@ case 'update-event': {
     $maxP = max(0, min(10000, (int)($b['maxParticipants'] ?? $event['max_participants'])));
     if ($maxP > 0 && $maxP < $minP) jsonError('Máximo no puede ser menor que mínimo');
     $visibility = (($b['visibility'] ?? $event['visibility']) === 'private') ? 'private' : 'public';
+    /* imageUrl: cae al actual si no se envía. Vacío explícito = quitar. */
+    $imageUrl = array_key_exists('imageUrl', $b) ? trim((string)$b['imageUrl']) : (string)$event['image_url'];
+    if ($imageUrl !== '' && !preg_match('#^https?://#i', $imageUrl)) $imageUrl = '';
+    if (mb_strlen($imageUrl) > 500) $imageUrl = mb_substr($imageUrl, 0, 500);
 
     $pdo->prepare("UPDATE events
                    SET title=?, description=?, event_date=?, duration_min=?,
-                       min_participants=?, max_participants=?, visibility=?
+                       min_participants=?, max_participants=?, visibility=?, image_url=?
                    WHERE id=?")
-        ->execute([$title, $desc, $eventDate, $durationMin, $minP, $maxP, $visibility, $eid]);
+        ->execute([$title, $desc, $eventDate, $durationMin, $minP, $maxP, $visibility, $imageUrl ?: null, $eid]);
 
     /* Refresca recordatorios de todos los participantes si la fecha o
        el título cambiaron. */
