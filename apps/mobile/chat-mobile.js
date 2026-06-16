@@ -64,17 +64,47 @@ function esc(s) {
      embebida (la regex es greedy hasta whitespace o tag).
 */
 const _URL_RE = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
-const _IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s#]*)?(#.*)?$/i;
+/* Detecta imágenes por DOS rutas:
+   1. Extensión en el path antes de ?/# (jpg, png, gif, webp, svg, bmp, avif).
+   2. Host conocido que sirve imágenes aunque la URL no tenga extensión
+      (Google image thumbs, Discord CDN, imgur, reddit, twitter media,
+      googleusercontent, tenor/giphy CDNs…). Sin esto, URLs tipo
+      `https://encrypted-tbn0.gstatic.com/images?q=tbn:…` no se
+      reconocían como imagen y salían como link. */
+const _IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i;
+const _IMG_HOST_RE = /^https?:\/\/(?:encrypted-tbn\d*\.gstatic\.com\/images|lh\d+\.googleusercontent\.com|[^/]*\.googleusercontent\.com|i\.imgur\.com|media\d*\.tenor\.com|c\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|cdn\.discordapp\.com\/attachments|media\.discordapp\.net\/attachments|i\.redd\.it|preview\.redd\.it|pbs\.twimg\.com\/media)/i;
+/* Google Drive: las URLs típicas que copia un usuario apuntan a una
+   PÁGINA HTML (`/file/d/<ID>/view`) que no se puede usar como <img src>.
+   Extraemos el ID del fichero de cualquiera de los formatos que
+   comparte Drive (file/d/, uc?id=, open?id=, thumbnail?id=) y lo
+   convertimos al endpoint `thumbnail?id=…&sz=w1920` que SÍ sirve la
+   imagen directamente. Devolvemos null si no es una URL de Drive. */
+function _driveImageUrl(url) {
+    if (!/^https?:\/\/(?:drive|docs)\.google\.com\//i.test(url)) return null;
+    let id = '';
+    let m = url.match(/\/file\/d\/([A-Za-z0-9_-]{15,})/);
+    if (m) id = m[1];
+    if (!id) { m = url.match(/[?&]id=([A-Za-z0-9_-]{15,})/); if (m) id = m[1]; }
+    if (!id) return null;
+    return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1920';
+}
+function _isImageUrl(url) {
+    return _IMG_EXT_RE.test(url) || _IMG_HOST_RE.test(url);
+}
 function _renderUrlToken(url) {
     /* Normaliza www.… a http://www.… para que href sea válido. */
     const isWww   = /^www\./i.test(url);
     const fullUrl = isWww ? ('http://' + url) : url;
-    /* Detecta imagen por extensión (acepta query strings y fragmentos
-       — Discord/Drive sirven imágenes con ?ex=… y similares).
-       Click en la imagen abre el lightbox (handler delegado en el
-       feed); sin envolver en <a> porque eso navegaba al link
-       en lugar de mostrar preview. */
-    if (_IMG_EXT_RE.test(url)) {
+    /* Detecta imagen por extensión, host conocido o link de Drive
+       (Drive necesita además REESCRIBIR la URL al endpoint thumbnail
+       porque la URL que comparte el usuario apunta a una página HTML
+       no embebible). Click abre lightbox; sin <a> alrededor para no
+       navegar al link en vez de previsualizar. */
+    const driveSrc = _driveImageUrl(url);
+    if (driveSrc) {
+        return '<img class="ch-msg-img" src="' + esc(driveSrc) + '" data-fullsrc="' + esc(driveSrc) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
+    }
+    if (_isImageUrl(url)) {
         return '<img class="ch-msg-img" src="' + esc(fullUrl) + '" data-fullsrc="' + esc(fullUrl) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
     }
     return '<a class="ch-msg-link" href="' + esc(fullUrl) + '" target="_blank" rel="noopener noreferrer">' +

@@ -4125,11 +4125,41 @@ var PROFILE_USERS = <?php
        resto como <a target="_blank">. El texto fuera de URLs se
        escapa con escHtml para evitar XSS. */
     var _CH_URL_RE = /(https?:\/\/[^\s<>"']+|www\.[^\s<>"']+)/gi;
-    var _CH_IMG_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s#]*)?(#.*)?$/i;
+    /* Detecta imágenes por DOS rutas:
+       1. Extensión en el path antes de ?/# (jpg/png/gif/webp/svg/bmp/avif).
+       2. Host conocido que sirve imágenes aunque la URL no tenga
+          extensión (Google image thumbs, Discord CDN, imgur, reddit,
+          twitter media, googleusercontent, tenor/giphy). Sin esto,
+          URLs tipo `encrypted-tbn0.gstatic.com/images?q=tbn:…` no se
+          reconocían como imagen y salían como link. */
+    var _CH_IMG_EXT_RE  = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i;
+    var _CH_IMG_HOST_RE = /^https?:\/\/(?:encrypted-tbn\d*\.gstatic\.com\/images|lh\d+\.googleusercontent\.com|[^/]*\.googleusercontent\.com|i\.imgur\.com|media\d*\.tenor\.com|c\.tenor\.com|media\d*\.giphy\.com|i\.giphy\.com|cdn\.discordapp\.com\/attachments|media\.discordapp\.net\/attachments|i\.redd\.it|preview\.redd\.it|pbs\.twimg\.com\/media)/i;
+    /* Google Drive: las URLs típicas que copia el usuario apuntan a
+       una página HTML (`/file/d/<ID>/view`) que no se puede usar como
+       <img src>. Extraemos el ID y devolvemos el endpoint
+       `thumbnail?id=…&sz=w1920` que sirve la imagen directamente.
+       Soporta formatos file/d/, uc?id=, open?id=, thumbnail?id=. */
+    function _chatDriveImageUrl(url) {
+        if (!/^https?:\/\/(?:drive|docs)\.google\.com\//i.test(url)) return null;
+        var id = '';
+        var m = url.match(/\/file\/d\/([A-Za-z0-9_-]{15,})/);
+        if (m) id = m[1];
+        if (!id) { m = url.match(/[?&]id=([A-Za-z0-9_-]{15,})/); if (m) id = m[1]; }
+        if (!id) return null;
+        return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1920';
+    }
+    function _chatIsImageUrl(url) {
+        return _CH_IMG_EXT_RE.test(url) || _CH_IMG_HOST_RE.test(url);
+    }
     function chatRenderUrlToken(url) {
         var isWww = /^www\./i.test(url);
         var full  = isWww ? ('http://' + url) : url;
-        if (_CH_IMG_EXT_RE.test(url)) {
+        /* Drive: reescribir al endpoint thumbnail antes de pintar. */
+        var driveSrc = _chatDriveImageUrl(url);
+        if (driveSrc) {
+            return '<img class="chat-msg-img" src="' + escHtml(driveSrc) + '" data-fullsrc="' + escHtml(driveSrc) + '" alt="" loading="lazy" referrerpolicy="no-referrer">';
+        }
+        if (_chatIsImageUrl(url)) {
             /* Imagen embebida: click abre lightbox in-page; sin
                envolver en <a> porque eso navegaría al link en lugar
                de mostrar preview. El handler delegado más abajo
