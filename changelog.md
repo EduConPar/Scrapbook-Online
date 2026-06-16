@@ -71,3 +71,28 @@
 - Añadido scroll a los posts en móvil.
 - Arreglado un bug que hacía que al salir del navegador te devolviera a una página incorrecta y te diera un error diciendo que no existía la página.
 - Arreglado el bug que no te dejaba publicar en el canal de arte de Discord desde la Melon Hub.
+
+---
+
+# Alfa 0.1.4
+
+## Nuevas funciones y cambios
+- Ahora al importar o añadir una cancion ya no necesitas darle a guardar playlist para que la cancion se reproduzca.
+- Al añadir canciones a una playlist la playlist a la que la has añadido se guarda automaticamente
+- Añadido una seccion para reportar bugs y añadir sugerencias desde la melon hub. En movil se encuentra en la ventana de ajustes y en pc en el menu del boton de inicio
+- Ahora las notificaciones del haro no se van hasta que las pulsas
+- Añadido un cooldown al sonido de notificacion del haro para que no spamee el sonido cuando hayan muchas notificaciones juntas
+- Añadida una seccion de changelog para que podais leer los cambios desde la melon hub. En movil se encuentra en la ventana de ajustes y en pc en el menu del boton de inicio (Los changelogs se van a seguir posteando en discord igual que siempre)
+- Añadido un estado de ausente para cuando el usuario esta mucho tiempo sin usar la pagina
+- Ahora puedes ver lo que tus seguidos estan escuchando en el reproductor en el apartado de perfil de la app de social
+- Añadidos el nombre de los estados del usuario (En linea/Ausente/No molestar) al chat
+- Añadida una funcion de eventos en las que los usuarios pueden crear eventos e invitar a gente, el evento se anunciara tambien en #eventos 
+
+## Bugs y mejoras
+- Ahora los archivos .webp, los links de google drive que sean imagenes, y otros tantos se pasan como imagen en el chat
+- Arreglado un bug que hacia que, al scrollear hacia arriba en el chat, te tirara hacia abajo de golpe
+- Arreglado un bug que hacia que MelonOS 98 se viera en pequeñito en la barra del menu del boton de inicio cuando se tenia puesto la interfaz de MelonOS Overdose
+- Solucionado un bug que no dejaba cambiar entre interfaces en la app de movil
+- Solucionado un bug que no dejaba importar playlist de youtube
+- Solucionado un bug en que la ventana de otros perfiles no se acomodaban a su tamaño
+- Solucionado un bug en que la ventana de otros perfiles no se podia resizear en todas sus esquinas
