@@ -2357,34 +2357,28 @@ case 'submit-report': {
     $emoji = $type === 'bug' ? '🐛' : '💡';
     $kind  = $type === 'bug' ? 'Bug'  : 'Sugerencia';
 
-    /* URL que sirve para DOS cosas:
-       1. Hacer clickable el título del embed → lleva a melonhub.es.
-       2. Truco de galería: Discord agrupa varios embeds del mismo
-          mensaje en UN solo recuadro si comparten el mismo `url`.
-          Cada imagen adicional sale como un mini-embed con solo `image`
-          y el mismo url → quedan dentro del recuadro principal en lugar
-          de pegadas SUELTAS encima del mensaje. */
-    $melonUrl = 'https://melonhub.es';
-
     $author = ['name' => $userLabel];
     if ($avatarFsPath) $author['icon_url'] = 'attachment://avatar.' . $avatarExt;
-    /* Línea de atribución al final del body — el footer de Discord NO
-       soporta Markdown ni URLs (limitación dura de su API), así que
-       para tener "Melon Hub" como link clicable lo metemos aquí, en
-       la description, donde sí se procesa el Markdown. */
-    $bodyWithCredit = $body . "\n\n*Reportado desde [Melon Hub](" . $melonUrl . ")*";
     $embed = [
         'author'      => $author,
         'title'       => mb_substr($emoji . ' ' . $title, 0, 256),
-        'url'         => $melonUrl,
-        'description' => mb_substr($bodyWithCredit, 0, 4000),
+        'description' => mb_substr($body, 0, 4000),
         'color'       => $color,
-        'footer'      => ['text' => $kind],
+        /* Footer "Bug/Sugerencia reportado desde Melon Hub". Discord NO
+           soporta Markdown ni URLs en el footer.text (limitación de su
+           API), así que "Melon Hub" no puede ser clicable aquí — se
+           queda como texto plano. */
+        'footer'      => ['text' => $kind . ' reportado desde Melon Hub'],
         'timestamp'   => gmdate('c'),
     ];
 
     /* Adjuntar imágenes que el usuario haya subido (máx 8 MB cada una,
-       total <= 25 MB que es el límite de Discord para bots no boosters). */
+       total <= 25 MB que es el límite de Discord para bots no boosters).
+       La primera se monta como `image` del embed para que sirva de
+       preview; las siguientes irán como attachments sueltos del
+       mensaje (Discord no permite mostrar varias imágenes dentro del
+       mismo embed sin el truco de `url` compartido, que requeriría
+       hacer clicable el título — opción descartada por petición). */
     $userFiles = [];
     if (!empty($_FILES['files']) && is_array($_FILES['files']['name'])) {
         for ($i = 0; $i < count($_FILES['files']['name']); $i++) {
@@ -2407,24 +2401,12 @@ case 'submit-report': {
             ];
         }
     }
-
-    /* Galería de imágenes: la primera como `image` del embed principal,
-       las siguientes como embeds-fantasma con SOLO `image` + el mismo
-       `url`. Discord los apila visualmente debajo del primer embed,
-       todos dentro del mismo recuadro coloreado. */
-    $embeds = [$embed];
     if (!empty($userFiles)) {
-        $embeds[0]['image'] = ['url' => 'attachment://' . $userFiles[0]['name']];
-        for ($i = 1; $i < count($userFiles); $i++) {
-            $embeds[] = [
-                'url'   => $melonUrl,
-                'image' => ['url' => 'attachment://' . $userFiles[$i]['name']],
-            ];
-        }
+        $embed['image'] = ['url' => 'attachment://' . $userFiles[0]['name']];
     }
 
     $payload = [
-        'embeds'           => $embeds,
+        'embeds'           => [$embed],
         'allowed_mentions' => ['parse' => []],
     ];
 
