@@ -1284,25 +1284,21 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                 <button aria-label="Close" id="mh-rep-close"></button>
             </div>
         </div>
-        <div class="window-body">
-            <fieldset id="mh-rep-type-row" style="border:0;padding:0;margin:0 0 8px;">
-                <legend style="padding:0;margin:0 0 4px;font-size:11px;">Tipo</legend>
-                <label style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:12px;">
-                    <input type="radio" name="mh-rep-type" value="bug" checked>🐛 Bug
-                </label>
-                <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                    <input type="radio" name="mh-rep-type" value="suggestion">💡 Sugerencia
-                </label>
-            </fieldset>
-            <label style="display:block;font-size:11px;margin-bottom:2px;">Título</label>
-            <input type="text" id="mh-rep-title" maxlength="200" style="width:100%;box-sizing:border-box;">
-            <label style="display:block;font-size:11px;margin:8px 0 2px;">Descripción</label>
-            <textarea id="mh-rep-body" maxlength="1900" rows="6" style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
-            <label style="display:block;font-size:11px;margin:8px 0 2px;">Imágenes (opcional, máx 4)</label>
-            <input type="file" id="mh-rep-files" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
-            <div id="mh-rep-files-list" style="font-size:10px;color:var(--text-faint,#666);margin-top:4px;"></div>
+        <div class="window-body" data-report-type="bug">
+            <div style="font-size:11px;margin:0 0 4px;">Tipo:</div>
+            <div style="display:flex;gap:6px;margin-bottom:10px;">
+                <button type="button" class="button default mh-rep-type-btn" data-type="bug" style="flex:1;font-size:12px;padding:4px 8px;">🐛 Bug</button>
+                <button type="button" class="button mh-rep-type-btn" data-type="suggestion" style="flex:1;font-size:12px;padding:4px 8px;">💡 Sugerencia</button>
+            </div>
+            <label style="display:block;font-size:11px;margin:0 0 4px;">Título</label>
+            <input type="text" id="mh-rep-title" maxlength="200" style="width:100%;box-sizing:border-box;padding:4px 6px;">
+            <label style="display:block;font-size:11px;margin:10px 0 4px;">Descripción</label>
+            <textarea id="mh-rep-body" maxlength="1900" rows="6" style="width:100%;box-sizing:border-box;resize:vertical;padding:4px 6px;font-family:inherit;font-size:13px;"></textarea>
+            <label style="display:block;font-size:11px;margin:10px 0 4px;">Imágenes (opcional, máx 4)</label>
+            <input type="file" id="mh-rep-files" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="font-size:11px;">
+            <div id="mh-rep-files-list" style="font-size:10px;color:var(--text-faint,#666);margin-top:4px;min-height:12px;"></div>
             <p id="mh-rep-status"></p>
-            <div id="mh-rep-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;">
+            <div id="mh-rep-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;">
                 <button id="mh-rep-cancel">Cancelar</button>
                 <button id="mh-rep-ok" class="default">Enviar</button>
             </div>
@@ -3996,13 +3992,19 @@ window.MuShell = (function(){
         var repFiles = document.getElementById('mh-rep-files');
         var repList  = document.getElementById('mh-rep-files-list');
         var repStat  = document.getElementById('mh-rep-status');
+        var repWin   = document.getElementById('mh-rep-window');
+        var repBody2 = repWin ? repWin.querySelector('[data-report-type]') : null;
+        var typeBtns = repWin ? repWin.querySelectorAll('.mh-rep-type-btn') : [];
         if (!repOpen || !repBp) return;
         function setStat(msg, color){ repStat.style.color = color || ''; repStat.textContent = msg || ''; }
+        function setType(t){
+            if (repBody2) repBody2.dataset.reportType = t;
+            typeBtns.forEach(function(b){ b.classList.toggle('default', b.dataset.type === t); });
+        }
         function reset(){
             repTitle.value = ''; repBody.value = '';
             repFiles.value = ''; repList.textContent = '';
-            var bug = document.querySelector('input[name="mh-rep-type"][value="bug"]');
-            if (bug) bug.checked = true;
+            setType('bug');
             setStat('');
             repOk.disabled = false;
         }
@@ -4017,6 +4019,9 @@ window.MuShell = (function(){
         repClose.addEventListener('click', closeModal);
         repCancel.addEventListener('click', closeModal);
         repBp.addEventListener('click', function(e){ if (e.target === repBp) closeModal(); });
+        typeBtns.forEach(function(b){
+            b.addEventListener('click', function(){ setType(b.dataset.type); });
+        });
         repFiles.addEventListener('change', function(){
             var n = repFiles.files ? repFiles.files.length : 0;
             if (!n) { repList.textContent = ''; return; }
@@ -4031,7 +4036,7 @@ window.MuShell = (function(){
             repList.textContent = names.join(', ');
         });
         repOk.addEventListener('click', function(){
-            var type = (document.querySelector('input[name="mh-rep-type"]:checked') || {}).value || 'bug';
+            var type = (repBody2 && repBody2.dataset.reportType) || 'bug';
             var t = (repTitle.value || '').trim();
             var b = (repBody.value  || '').trim();
             if (!t) { setStat('Pon un título.', 'var(--error-text, #c00)'); return; }

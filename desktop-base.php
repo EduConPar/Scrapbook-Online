@@ -533,28 +533,24 @@ window.DesktopState.whenReady = function(cb){
             <button aria-label="Close" id="reports-x"></button>
         </div>
     </div>
-    <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
-        <fieldset style="border:0;padding:0;margin:0;">
-            <legend style="padding:0;margin:0 0 4px;font-size:11px;">Tipo</legend>
-            <label style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;font-size:12px;">
-                <input type="radio" name="report-type" value="bug" checked>🐛 Bug
-            </label>
-            <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;">
-                <input type="radio" name="report-type" value="suggestion">💡 Sugerencia
-            </label>
-        </fieldset>
-        <label style="font-size:11px;">Título
-            <input id="report-title" type="text" maxlength="200" style="width:100%;display:block;margin-top:3px;">
+    <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;" data-report-type="bug">
+        <div style="font-size:11px;margin-bottom:2px;">Tipo:</div>
+        <div style="display:flex;gap:6px;">
+            <button type="button" class="button report-type-btn default" data-type="bug" style="flex:1;font-size:12px;padding:4px 8px;">🐛 Bug</button>
+            <button type="button" class="button report-type-btn" data-type="suggestion" style="flex:1;font-size:12px;padding:4px 8px;">💡 Sugerencia</button>
+        </div>
+        <label style="font-size:11px;display:block;">Título
+            <input id="report-title" type="text" maxlength="200" style="width:100%;display:block;margin-top:4px;box-sizing:border-box;padding:4px 6px;">
         </label>
-        <label style="font-size:11px;">Descripción
-            <textarea id="report-body" maxlength="1900" rows="6" style="width:100%;display:block;margin-top:3px;resize:vertical;font-family:inherit;font-size:12px;"></textarea>
+        <label style="font-size:11px;display:block;">Descripción
+            <textarea id="report-body" maxlength="1900" rows="6" style="width:100%;display:block;margin-top:4px;resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box;padding:4px 6px;"></textarea>
         </label>
-        <label style="font-size:11px;">Imágenes (opcional, máx 4)
-            <input id="report-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:block;margin-top:3px;">
+        <label style="font-size:11px;display:block;">Imágenes (opcional, máx 4)
+            <input id="report-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:block;margin-top:4px;font-size:11px;">
         </label>
-        <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);"></div>
+        <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);min-height:12px;"></div>
         <p id="report-status" style="margin:6px 0 0;font-size:11px;min-height:14px;"></p>
-        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
             <button id="report-ok" class="default">Enviar</button>
             <button id="report-cancel">Cancelar</button>
         </div>
@@ -1310,6 +1306,8 @@ document.addEventListener('click', function() {
     var link    = document.getElementById('menu-reports');
     if (!link) return;
     var modal   = document.getElementById('reports-modal');
+    var body    = modal.querySelector('[data-report-type]');
+    var typeBtns= modal.querySelectorAll('.report-type-btn');
     var titleEl = document.getElementById('report-title');
     var bodyEl  = document.getElementById('report-body');
     var filesEl = document.getElementById('report-files');
@@ -1318,11 +1316,16 @@ document.addEventListener('click', function() {
     var okBtn   = document.getElementById('report-ok');
 
     function setStat(msg, color){ status.style.color = color || ''; status.textContent = msg || ''; }
+    function setType(t){
+        body.dataset.reportType = t;
+        typeBtns.forEach(function(b){
+            b.classList.toggle('default', b.dataset.type === t);
+        });
+    }
     function reset(){
         titleEl.value = ''; bodyEl.value = ''; filesEl.value = '';
         listEl.textContent = '';
-        var bug = document.querySelector('input[name="report-type"][value="bug"]');
-        if (bug) bug.checked = true;
+        setType('bug');
         setStat(''); okBtn.disabled = false;
     }
     function open(e){
@@ -1338,6 +1341,10 @@ document.addEventListener('click', function() {
     document.getElementById('reports-x').addEventListener('click', close);
     document.getElementById('report-cancel').addEventListener('click', close);
 
+    typeBtns.forEach(function(b){
+        b.addEventListener('click', function(){ setType(b.dataset.type); });
+    });
+
     filesEl.addEventListener('change', function(){
         var n = filesEl.files ? filesEl.files.length : 0;
         if (!n) { listEl.textContent = ''; return; }
@@ -1351,7 +1358,7 @@ document.addEventListener('click', function() {
     });
 
     function submit(){
-        var type = (document.querySelector('input[name="report-type"]:checked') || {}).value || 'bug';
+        var type = body.dataset.reportType || 'bug';
         var t = (titleEl.value || '').trim();
         var b = (bodyEl.value  || '').trim();
         if (!t) { setStat('Pon un título.', 'var(--error-text,#c00)'); return; }
