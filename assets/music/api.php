@@ -978,112 +978,187 @@ case 'import-playlist': {
     if (preg_match('/[?&]list=([A-Za-z0-9_-]+)/', $url, $m)) {
         $playlistId = preg_replace('/[^A-Za-z0-9_-]/', '', $m[1]);
     } elseif (preg_match('/^[A-Za-z0-9_-]{10,}$/', $url)) {
-        /* Acepta también el ID puro pegado por el usuario. */
         $playlistId = $url;
     }
     if (!$playlistId) jsonError('URL de playlist inválida');
 
-    /* Pide la página intentando varios approaches — YouTube redirige a
-       consent.youtube.com sin cookies, devuelve HTML "simplificado"
-       sin ytInitialData a clientes que no se parecen a Chrome reciente,
-       y ha movido la variable de JS a varias formas (`var ytInitialData
-       = {...};`, `window["ytInitialData"] = {...};`, etc.). Probamos
-       hasta agotar opciones. */
-    $fetchPage = function($pid) {
-        $headers = [
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept-Language: en-US,en;q=0.9',
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            /* CONSENT=YES+cb: salta el wall de consentimiento (UE).
-               Sin esto, en cuentas/IPs europeas YouTube redirige a
-               consent.youtube.com y la página NO contiene ytInitialData. */
-            'Cookie: CONSENT=YES+cb; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; PREF=hl=en&gl=US',
-        ];
+    /* ── Helper HTTP unificado: cURL con file_get_contents como
+          fallback. Algunos hosts (Hostinger entre ellos) tienen
+          allow_url_fopen restringido o problemas de SSL con streams
+          → cURL es más fiable. */
+    $httpRequest = function($url, $method = 'GET', $body = null, $headers = []) {
+        if (function_exists('curl_init')) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+            curl_setopt($ch, CURLOPT_ENCODING, '');  /* aceptar gzip */
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            if ($method === 'POST') {
+                curl_setopt($ch, CURLOPT_POST, true);
+                if ($body !== null) curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            }
+            $res  = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            /* No llamamos curl_close — deprecado en PHP 8.5. El handle
+               se cierra automáticamente al salir de scope. */
+            return ['code' => $code, 'body' => $res];
+        }
+        /* Fallback file_get_contents */
         $ctx = stream_context_create([
             'http' => [
-                'timeout'       => 25,
-                'ignore_errors' => true,
+                'method'          => $method,
+                'timeout'         => 25,
+                'ignore_errors'   => true,
                 'follow_location' => 1,
-                'max_redirects' => 5,
-                'header'        => implode("\r\n", $headers),
+                'max_redirects'   => 5,
+                'header'          => implode("\r\n", $headers),
+                'content'         => $body,
             ],
-            'ssl' => [
-                'verify_peer'      => false,
-                'verify_peer_name' => false,
-            ],
+            'ssl' => ['verify_peer' => false, 'verify_peer_name' => false],
         ]);
-        return @file_get_contents('https://www.youtube.com/playlist?list=' . $pid, false, $ctx);
+        $res = @file_get_contents($url, false, $ctx);
+        $code = 0;
+        if (isset($http_response_header[0]) && preg_match('#\s(\d{3})\s#', $http_response_header[0], $mm)) {
+            $code = (int)$mm[1];
+        }
+        return ['code' => $code, 'body' => $res];
     };
 
-    $html = $fetchPage($playlistId);
-    if (!$html) jsonError('No se pudo acceder a la playlist (timeout o bloqueo de YouTube)', 502);
-
-    /* Parser tolerante: intenta varios marcadores y técnicas. */
-    $extractYtInitialData = function($html) {
-        /* Variantes vistas en producción: */
-        $markers = [
-            'var ytInitialData = ',
-            'window["ytInitialData"] = ',
-            'ytInitialData = ',
+    /* ──────────────────────────────────────────────────────────────
+       APPROACH A — InnerTube API (el JSON interno de YouTube).
+       Es lo que usa la propia web y herramientas como yt-dlp.
+       Mucho más fiable que parsear HTML porque devuelve datos
+       estructurados y sin marcadores que cambien con cada update
+       del front. Soporta paginación vía `continuations`. */
+    $innerTubeBrowse = function($browseId, $continuation = null) use ($httpRequest) {
+        $payload = [
+            'context' => [
+                'client' => [
+                    'clientName'    => 'WEB',
+                    'clientVersion' => '2.20240301.00.00',
+                    'hl'            => 'en',
+                    'gl'            => 'US',
+                ],
+            ],
         ];
-        foreach ($markers as $marker) {
-            $pos = strpos($html, $marker);
-            if ($pos === false) continue;
-            $pos += strlen($marker);
-            /* Termina en `;</script>` (formato clásico) o `;\n`/`;var ` para
-               otras variantes. */
-            $endCandidates = [';</script>', ";\n", ';var ', ';window['];
-            $endPos = false;
-            foreach ($endCandidates as $end) {
-                $cand = strpos($html, $end, $pos);
-                if ($cand !== false && ($endPos === false || $cand < $endPos)) {
-                    $endPos = $cand;
+        if ($continuation) $payload['continuation'] = $continuation;
+        else               $payload['browseId']     = $browseId;
+        $r = $httpRequest(
+            'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false',
+            'POST',
+            json_encode($payload),
+            [
+                'Content-Type: application/json',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept-Language: en-US,en;q=0.9',
+                'Origin: https://www.youtube.com',
+                'Referer: https://www.youtube.com/',
+                'X-YouTube-Client-Name: 1',
+                'X-YouTube-Client-Version: 2.20240301.00.00',
+            ]
+        );
+        if (!$r['body']) return null;
+        return json_decode($r['body'], true);
+    };
+
+    /* Walker recursivo: recolecta TODOS los `playlistVideoRenderer`
+       y devuelve cualquier `continuationCommand.token` para paginar. */
+    $collectVideos = function($data) use (&$collectVideos) {
+        $out  = ['videos' => [], 'continuation' => null];
+        $walk = function($node) use (&$walk, &$out) {
+            if (!is_array($node)) return;
+            if (isset($node['playlistVideoRenderer'])) {
+                $out['videos'][] = $node['playlistVideoRenderer'];
+            }
+            if (isset($node['continuationCommand']['token'])) {
+                $out['continuation'] = $node['continuationCommand']['token'];
+            }
+            foreach ($node as $v) if (is_array($v)) $walk($v);
+        };
+        $walk($data);
+        return $out;
+    };
+
+    $videos = [];
+    $errorDetail = '';
+    /* La browseId de una playlist es "VL" + playlistId. */
+    $browseRes = $innerTubeBrowse('VL' . $playlistId);
+    if (is_array($browseRes)) {
+        $col = $collectVideos($browseRes);
+        $videos = $col['videos'];
+        /* Paginación: hasta 5 saltos por seguridad (playlists de >500
+           tracks). Cada continuation trae otra hornada. */
+        $cont = $col['continuation'];
+        $hops = 0;
+        while ($cont && $hops < 5) {
+            $next = $innerTubeBrowse(null, $cont);
+            if (!is_array($next)) break;
+            $col2 = $collectVideos($next);
+            if (!$col2['videos']) break;
+            $videos = array_merge($videos, $col2['videos']);
+            $cont = $col2['continuation'];
+            $hops++;
+        }
+    } else {
+        $errorDetail = 'innertube no respondió';
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+       APPROACH B (fallback) — scraping del HTML clásico. Por si
+       YouTube tira la InnerTube API o devuelve algo raro. */
+    if (empty($videos)) {
+        $r = $httpRequest(
+            'https://www.youtube.com/playlist?list=' . $playlistId,
+            'GET',
+            null,
+            [
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept-Language: en-US,en;q=0.9',
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Cookie: CONSENT=YES+cb; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg; PREF=hl=en&gl=US',
+            ]
+        );
+        $html = $r['body'] ?? '';
+        if ($html) {
+            $markers = ['var ytInitialData = ', 'window["ytInitialData"] = ', 'ytInitialData = '];
+            foreach ($markers as $marker) {
+                $pos = strpos($html, $marker);
+                if ($pos === false) continue;
+                $pos += strlen($marker);
+                $endCandidates = [';</script>', ";\n", ';var ', ';window['];
+                $endPos = false;
+                foreach ($endCandidates as $end) {
+                    $cand = strpos($html, $end, $pos);
+                    if ($cand !== false && ($endPos === false || $cand < $endPos)) $endPos = $cand;
+                }
+                if ($endPos === false) continue;
+                $data = json_decode(substr($html, $pos, $endPos - $pos), true);
+                if (!$data) continue;
+                $col = $collectVideos($data);
+                if (!empty($col['videos'])) {
+                    $videos = $col['videos'];
+                    break;
                 }
             }
-            if ($endPos === false) continue;
-            $jsonRaw = substr($html, $pos, $endPos - $pos);
-            $data = json_decode($jsonRaw, true);
-            if ($data) return $data;
+        } else {
+            $errorDetail = $errorDetail ?: 'HTML vacío';
         }
-        return null;
-    };
-
-    $data = $extractYtInitialData($html);
-    if (!$data) jsonError('YouTube cambió el formato HTML — actualiza el parser', 502);
-
-    $findKey = function($arr, $key) use (&$findKey) {
-        if (!is_array($arr)) return null;
-        if (isset($arr[$key])) return $arr[$key];
-        foreach ($arr as $v) { $r = $findKey($v, $key); if ($r !== null) return $r; }
-        return null;
-    };
-
-    /* Colector recursivo de TODOS los `playlistVideoRenderer` del JSON.
-       Antes solo usábamos `playlistVideoListRenderer.contents`, pero a
-       veces la lista llega particionada en `continuationItemRenderer` o
-       embebida en otros containers. Iterar todo el árbol garantiza
-       que recogemos cada vídeo presente en la página inicial. */
-    $videos = [];
-    $walk = function($node) use (&$walk, &$videos) {
-        if (!is_array($node)) return;
-        if (isset($node['playlistVideoRenderer'])) {
-            $videos[] = $node['playlistVideoRenderer'];
-        }
-        foreach ($node as $v) {
-            if (is_array($v)) $walk($v);
-        }
-    };
-    $walk($data);
+    }
 
     if (empty($videos)) {
-        jsonError('No se encontraron canciones en la playlist (¿es privada o vacía?)', 404);
+        jsonError('No se pudo leer la playlist desde YouTube' . ($errorDetail ? " ($errorDetail)" : '') . '. ¿Está pública?', 502);
     }
 
     $tracks = [];
     foreach ($videos as $v) {
         $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $v['videoId'] ?? '');
         if (strlen($vid) !== 11) continue;
-        /* El título puede venir en `runs` o `simpleText`. */
         $title = $v['title']['runs'][0]['text']
               ?? $v['title']['simpleText']
               ?? '';

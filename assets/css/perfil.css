@@ -496,6 +496,9 @@
 /* ══════════════════════════════════════════════════════════════════
    NOW-PLAYING en social cards y sidebar followed-nav
    ══════════════════════════════════════════════════════════════════ */
+/* El SLOT ES el viewport del marquee: flex container con
+   overflow:hidden recorta lo que sobresalga. Sin capas intermedias
+   ni overflow anidados que confundan a la medición. */
 .profile-social-np,
 .profile-nav-np {
     display: flex;
@@ -506,31 +509,21 @@
     margin-top: 2px;
     max-width: 100%;
     overflow: hidden;
+    white-space: nowrap;
 }
 .pf-np-icon {
     flex-shrink: 0;
     color: var(--accent, #000080);
 }
-/* Contenedor visible: ancho fijo dado por el flex, recorta lo que
-   sobresalga. Posición relativa para anclar el texto absoluto de
-   dentro. */
-.pf-np-wrap {
-    flex: 1 1 0;
-    min-width: 0;
-    position: relative;
-    overflow: hidden;
-    height: 1.2em;
-    line-height: 1.2em;
-}
-/* El texto va en position:absolute para escapar TOTALMENTE del
-   sizing del padre. Inline-block + nowrap → su ancho es el
-   contenido natural, sin importar las restricciones del flex.
-   El JS lo desplaza con `transform: translateX(...)`. */
+/* El texto va directo dentro del slot como flex-item con
+   `flex-shrink: 0` (no se comprime para caber). Inline-block →
+   su offsetWidth es SIEMPRE el ancho natural del contenido,
+   sin importar las restricciones del flex layout del padre. El
+   JS lo desplaza con `transform: translateX(...)` y el slot
+   recorta lo que sobresalga. */
 .pf-np-text {
-    position: absolute;
-    left: 0;
-    top: 0;
     display: inline-block;
+    flex-shrink: 0;
     white-space: nowrap;
     will-change: transform;
 }
