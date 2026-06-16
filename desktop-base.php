@@ -1853,29 +1853,11 @@ window.notifSystem = (function() {
            todas juntas en el setTimeout REVEAL_MS de createHaroEl. */
         if (!startsPending) playHaroSound();
 
-        /* Auto-dismiss: solo se aplica si el caller pasa explícitamente
-           `autoDismissAfter` como número > 0 (típico de mensajes de
-           confirmación de Listen Together, errores temporales, etc.).
-           Si no se pasa, la notif se queda hasta que el usuario haga
-           click sobre ella. Antes el default era 5000ms — pedido
-           expresamente cambiarlo para que las notifs no se vayan solas. */
-        var startDismiss = null;
-        if (!isAction && typeof opts.autoDismissAfter === 'number' && opts.autoDismissAfter > 0) {
-            var delay = opts.autoDismissAfter;
-            startDismiss = function() {
-                setTimeout(function() {
-                    if (slot.parentNode) {
-                        if (typeof opts.onAutoDismiss === 'function') opts.onAutoDismiss();
-                        removeSlot(slot);
-                    }
-                }, delay);
-            };
-            if (startsPending) {
-                slot._startDismiss = startDismiss;
-            } else {
-                startDismiss();
-            }
-        }
+        /* Auto-dismiss DESHABILITADO. Pedido expresamente: las notifs
+           del Haro NO se cierran solas con el tiempo. Solo desaparecen
+           cuando el usuario hace click sobre la tarjeta (o usa los
+           botones Aceptar/Rechazar en las de acción). Aunque el caller
+           pase `autoDismissAfter`, lo ignoramos. */
 
         /* Click en la tarjeta no-action → cerrarla manualmente.
            Para las action (con botones Aceptar/Rechazar) NO añadimos
