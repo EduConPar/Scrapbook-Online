@@ -2835,7 +2835,6 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             ? '<img class="ev-detail-image" src="' + esc(ev.imageUrl) + '" alt="" onerror="this.style.display=\'none\'">'
             : '';
         bodyEl.innerHTML =
-            imgBanner +
             '<dl class="ev-detail-meta">' +
                 '<div class="ev-detail-meta-row"><dt>Fecha:</dt> <dd>' + esc(fmtDate(ev.eventDate)) + '</dd></div>' +
                 '<div class="ev-detail-meta-row"><dt>Duración:</dt> <dd>' + ev.durationMin + ' min</dd></div>' +
@@ -2845,6 +2844,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
                 waitInfo +
             '</dl>' +
             (ev.description ? '<div class="ev-detail-desc">' + esc(ev.description) + '</div>' : '') +
+            imgBanner +
             '<div class="ev-detail-participants"><h4>Participantes</h4>' +
                 (partList ? '<ul>' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Nadie todavía.</p>') +
             '</div>' +
