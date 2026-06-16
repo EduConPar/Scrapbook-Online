@@ -3973,27 +3973,63 @@ var PROFILE_USERS = <?php
        posición 0. Allí pausa de nuevo `pauseMs` y vuelve a empezar.
        Devuelve un stop() para limpiar timers/raf al re-renderizar.
        Si el texto no desborda el contenedor, no anima. */
-    /* Mide el ancho NATURAL del texto sin que el layout flex/overflow
-       del padre lo restrinja: clona el elemento, lo mete en
-       <body> con position:absolute (fuera de flow), copia las props
-       de fuente con `getComputedStyle` para que el clone se renderice
-       con la MISMA tipografía que el original, mide y limpia. */
-    function pfMeasureTextWidth(textEl) {
+    /* Mide el ancho NATURAL del texto desconstriñendo temporalmente el
+       wrap y el track. Probamos en orden y nos quedamos con el máximo:
+         1. offsetWidth del propio textEl tras forzarlo a inline-block
+            y dejar al wrap en width: max-content (deja que el texto se
+            extienda libremente)
+         2. offsetWidth tras restablecer
+         3. Clon en <body> con font-props copiadas (último recurso)
+       Las asignaciones de estilo se hacen en un único batch síncrono
+       (lectura inmediata de offsetWidth fuerza reflow sin paint
+       intermedio), así que no hay flicker visible. */
+    function pfMeasureTextWidth(textEl, wrap, track) {
         if (!textEl) return 0;
-        var cs = window.getComputedStyle(textEl);
-        var clone = textEl.cloneNode(true);
-        clone.style.cssText =
-            'position:absolute;left:-99999px;top:0;visibility:hidden;' +
-            'white-space:nowrap;display:inline-block;margin:0;padding:0;border:0;' +
-            'font-family:' + cs.fontFamily + ';' +
-            'font-size:'   + cs.fontSize   + ';' +
-            'font-weight:' + cs.fontWeight + ';' +
-            'font-style:'  + cs.fontStyle  + ';' +
-            'letter-spacing:' + cs.letterSpacing + ';';
-        document.body.appendChild(clone);
-        var w = clone.getBoundingClientRect().width || clone.offsetWidth || 0;
-        document.body.removeChild(clone);
-        return Math.ceil(w);
+        var best = 0;
+        /* 1. Unconstrain trick: dejar al wrap crecer a max-content y al
+           track sin restricciones. Leer offsetWidth fuerza reflow ya. */
+        var sw = { flex: wrap.style.flex, width: wrap.style.width, maxWidth: wrap.style.maxWidth, overflow: wrap.style.overflow };
+        var st = { display: textEl.style.display, position: textEl.style.position };
+        try {
+            wrap.style.flex     = '0 0 auto';
+            wrap.style.width    = 'max-content';
+            wrap.style.maxWidth = 'none';
+            wrap.style.overflow = 'visible';
+            textEl.style.display = 'inline-block';
+            /* Forzar reflow + leer */
+            best = Math.max(best, textEl.offsetWidth, textEl.getBoundingClientRect().width);
+        } catch (_) {}
+        /* Restaurar inmediatamente — todo en el mismo task, sin paint
+           intermedio. */
+        wrap.style.flex     = sw.flex;
+        wrap.style.width    = sw.width;
+        wrap.style.maxWidth = sw.maxWidth;
+        wrap.style.overflow = sw.overflow;
+        textEl.style.display = st.display;
+        textEl.style.position = st.position;
+        /* 2. Fallback con clon: si el unconstrain no dio nada (por ej.
+           el navegador ignoró las asignaciones por algún motivo). */
+        if (!best) {
+            try {
+                var cs = window.getComputedStyle(textEl);
+                var clone = textEl.cloneNode(true);
+                clone.style.cssText =
+                    'position:absolute;left:-99999px;top:0;visibility:hidden;' +
+                    'white-space:nowrap;display:inline-block;margin:0;padding:0;border:0;' +
+                    'font:' + cs.font + ';' +
+                    'font-family:' + cs.fontFamily + ';' +
+                    'font-size:'   + cs.fontSize   + ';' +
+                    'font-weight:' + cs.fontWeight + ';' +
+                    'font-style:'  + cs.fontStyle  + ';' +
+                    'letter-spacing:' + cs.letterSpacing + ';' +
+                    'word-spacing:'   + cs.wordSpacing   + ';' +
+                    'text-transform:' + cs.textTransform + ';';
+                document.body.appendChild(clone);
+                best = Math.max(best, clone.getBoundingClientRect().width, clone.offsetWidth);
+                document.body.removeChild(clone);
+            } catch (_) {}
+        }
+        return Math.ceil(best);
     }
     function pfMarqueeScroll(el, parent, speed, pauseMs, W) {
         el.style.transform = 'translateX(0)';
@@ -4072,7 +4108,7 @@ var PROFILE_USERS = <?php
                 var track  = slot.querySelector('.pf-np-track');
                 var textEl = slot.querySelector('.pf-np-text');
                 if (!wrap || !track || !textEl) return;
-                var W = pfMeasureTextWidth(textEl);
+                var W = pfMeasureTextWidth(textEl, wrap, track);
                 /* 30 px/seg + 1500ms pause = scroll suave + descanso al
                    completar cada vuelta (más lento que el reproductor
                    porque el slot es muy pequeño y un scroll rápido se
