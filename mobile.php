@@ -1261,7 +1261,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <!-- Input oculto: el OS abre su propio file picker como "modal". -->
             <input type="file" id="mh-set-photo-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;">
             <button class="mh-set-btn" type="button" id="mh-set-report">
-                <span class="mh-set-emoji">📨</span>
+                <span class="mh-set-emoji">🪲</span>
                 <span class="mh-set-text">Reportes
                     <small>Manda un bug o una sugerencia</small>
                 </span>
@@ -1293,7 +1293,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 <div id="mh-rep-backdrop">
     <div class="window" id="mh-rep-window">
         <div class="title-bar">
-            <div class="title-bar-text">📨 Reportes</div>
+            <div class="title-bar-text">🪲 Reportes</div>
             <div class="title-bar-controls">
                 <button aria-label="Close" id="mh-rep-close"></button>
             </div>

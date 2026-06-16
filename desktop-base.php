@@ -528,7 +528,7 @@ window.DesktopState.whenReady = function(cb){
 <!-- MODAL Reportes (bug/sugerencia → Discord) -->
 <div class="window" id="reports-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:420px;max-height:80vh;">
     <div class="title-bar">
-        <div class="title-bar-text">📨 Reportes</div>
+        <div class="title-bar-text">Reportes</div>
         <div class="title-bar-controls">
             <button aria-label="Close" id="reports-x"></button>
         </div>
@@ -870,7 +870,7 @@ window.DesktopState.whenReady = function(cb){
         <div id="start-sidebar">MelonOS 98</div>
         <div id="start-menu-items">
             <div class="menu-sep"></div>
-            <a class="menu-item" href="#" id="menu-reports">📨 Reportes...</a>
+            <a class="menu-item" href="#" id="menu-reports">Reportes...</a>
             <a class="menu-item" href="#" id="menu-change-password">Cambiar contraseña...</a>
             <a class="menu-item" href="logout.php">Cerrar sesión...</a>
             <div class="menu-sep"></div>
@@ -1658,8 +1658,16 @@ window.notifSystem = (function() {
 
     /* Reproduce el sonido del Haro. Lo dispara cualquier "aparición" de
        notificación: tanto la revelación en lote tras el giro del Haro
-       como cualquier notif que entre después (sin Haro). */
+       como cualquier notif que entre después (sin Haro).
+       COOLDOWN: si llegan varias notifs en un lapso corto (típico cuando
+       llegan 5 likes seguidos, etc.) el sonido NO se repite. Solo suena
+       una vez por ráfaga. */
+    var HARO_SOUND_COOLDOWN_MS = 3000;
+    var lastHaroSoundAt = 0;
     function playHaroSound() {
+        var now = Date.now();
+        if (now - lastHaroSoundAt < HARO_SOUND_COOLDOWN_MS) return;
+        lastHaroSoundAt = now;
         try {
             haroAudio.currentTime = 0;
             var pPlay = haroAudio.play();
@@ -1845,11 +1853,15 @@ window.notifSystem = (function() {
            todas juntas en el setTimeout REVEAL_MS de createHaroEl. */
         if (!startsPending) playHaroSound();
 
-        /* Auto-dismiss: si el slot arranca pending, dejamos la función
-           guardada para dispararla al revelarse. Si no, arranca ya. */
+        /* Auto-dismiss: solo se aplica si el caller pasa explícitamente
+           `autoDismissAfter` como número > 0 (típico de mensajes de
+           confirmación de Listen Together, errores temporales, etc.).
+           Si no se pasa, la notif se queda hasta que el usuario haga
+           click sobre ella. Antes el default era 5000ms — pedido
+           expresamente cambiarlo para que las notifs no se vayan solas. */
         var startDismiss = null;
-        if (!isAction) {
-            var delay = (typeof opts.autoDismissAfter === 'number') ? opts.autoDismissAfter : 5000;
+        if (!isAction && typeof opts.autoDismissAfter === 'number' && opts.autoDismissAfter > 0) {
+            var delay = opts.autoDismissAfter;
             startDismiss = function() {
                 setTimeout(function() {
                     if (slot.parentNode) {
@@ -1863,6 +1875,22 @@ window.notifSystem = (function() {
             } else {
                 startDismiss();
             }
+        }
+
+        /* Click en la tarjeta no-action → cerrarla manualmente.
+           Para las action (con botones Aceptar/Rechazar) NO añadimos
+           este handler: el usuario debe usar los botones explícitos
+           para no aceptar/rechazar por accidente con un click. */
+        if (!isAction) {
+            slot.style.cursor = 'pointer';
+            slot.addEventListener('click', function(ev) {
+                /* Si el caller añadió un onClick, lo ejecutamos antes
+                   de cerrar. */
+                if (typeof opts.onClick === 'function') {
+                    try { opts.onClick(ev); } catch (_) {}
+                }
+                removeSlot(slot);
+            });
         }
 
         /* Los setTimeout de revelación y freeze viven en createHaroEl

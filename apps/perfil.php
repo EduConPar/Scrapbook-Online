@@ -861,6 +861,51 @@ var PROFILE_USERS = <?php
        Las funciones referenciadas adentro (loadLists, loadProfile, etc.)
        son `function` declarations → hoisted, accesibles aunque su
        definición esté más abajo en este IIFE. */
+    /* Espera (con poll suave) a que las `lists` del visitado se hayan
+       poblado tras viewOtherUser, busca el item por título (case-
+       insensitive) en la categoría dada y abre su reseña vía
+       showReviewView. Si no se encuentra tras N intentos, se rinde
+       en silencio (la reseña pudo haberse borrado entre la notif y
+       el click). */
+    function _perfilOpenReviewWhenReady(cat, title) {
+        if (!cat || !title) return;
+        var attempts = 0;
+        var maxAttempts = 40;   /* ~4 segundos a 100ms */
+        var titleNorm = String(title).toLowerCase().trim();
+        var tick = function(){
+            attempts++;
+            if (typeof lists === 'undefined' || !lists || !lists[cat]) {
+                if (attempts < maxAttempts) return setTimeout(tick, 100);
+                return;
+            }
+            var items = lists[cat] || [];
+            var found = null;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i] && items[i].title && items[i].title.toLowerCase().trim() === titleNorm) {
+                    found = items[i]; break;
+                }
+            }
+            if (found && found.review && typeof showReviewView === 'function') {
+                showReviewView(found.review);
+                return;
+            }
+            if (!found && attempts < maxAttempts) {
+                /* Lists puede que aún no esté del visitado (timing con
+                   viewOtherUser que es async). Reintenta. */
+                return setTimeout(tick, 100);
+            }
+        };
+        tick();
+    }
+    /* Permite al perfil ya abierto recibir un deep-link nuevo (cuando el
+       shell padre nos manda postMessage en vez de recargar el iframe). */
+    window.addEventListener('message', function(e){
+        if (!e || !e.data) return;
+        if (e.data.type === 'perfil-open-review' && e.data.reviewCategory && e.data.reviewTitle) {
+            _perfilOpenReviewWhenReady(e.data.reviewCategory, e.data.reviewTitle);
+        }
+    });
+
     window.__perfilStandaloneInit = function() {
         loaded = true;
         console.log('[PERFIL standalone] init, viewingKey:', window.__PERFIL_VIEWING_KEY);
@@ -872,6 +917,18 @@ var PROFILE_USERS = <?php
                 if (asKey && typeof viewOtherUser === 'function') {
                     console.log('[PERFIL standalone] calling viewOtherUser:', asKey);
                     viewOtherUser(asKey);
+                    /* Deep-link a una reseña concreta (?reviewCat=...&reviewTitle=...).
+                       Usado por las notificaciones de tipo 'review' para
+                       llevar al usuario directamente a la reseña en vez
+                       de solo al perfil. Espera a que viewOtherUser cargue
+                       las lists del visitado y entonces busca el item por
+                       título y abre showReviewView. */
+                    try {
+                        var q = new URLSearchParams(location.search);
+                        var rc = q.get('reviewCat');
+                        var rt = q.get('reviewTitle');
+                        if (rc && rt) _perfilOpenReviewWhenReady(rc, rt);
+                    } catch (_) {}
                 }
             });
         }
@@ -2535,19 +2592,27 @@ var PROFILE_USERS = <?php
                 row.appendChild(fbBtn);
             }
 
-            (function(uk) {
+            (function(uk, notif) {
                 row.addEventListener('click', function() {
                     closeNotifsWindow();
+                    /* Si es notif de reseña, deep-link a la reseña
+                       concreta del visitado (categoría + título del
+                       item). El perfil destino abre la ventana de
+                       reseña directamente tras cargar las lists. */
+                    var opts = null;
+                    if (notif.type === 'review' && notif.category && notif.itemTitle) {
+                        opts = { reviewCategory: notif.category, reviewTitle: notif.itemTitle };
+                    }
                     /* Abre el perfil de uk como NUEVA ventana iframe
                        (con su interfaz/tema/iconos). Si estamos en
                        standalone, forward al shell padre vía postMessage. */
                     if (typeof window.openProfileAtUser === 'function') {
-                        window.openProfileAtUser(uk);
+                        window.openProfileAtUser(uk, opts);
                     } else {
-                        viewOtherUser(uk);
+                        viewOtherUser(uk, opts);
                     }
                 });
-            })(n.fromUser);
+            })(n.fromUser, n);
             listEl.appendChild(row);
         });
     }
@@ -5982,23 +6047,27 @@ var PROFILE_USERS = <?php
          iframe localmente (sería una iframe dentro de iframe); avisa
          al shell padre vía postMessage para que cree la ventana a
          nivel raíz del escritorio. */
-    window.openProfileAtUser = function(userKey) {
+    window.openProfileAtUser = function(userKey, opts) {
         if (!userKey) return;
+        opts = opts || {};
         if (window.__PERFIL_STANDALONE) {
             try {
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({
                         type: 'perfil-open-at-user',
-                        userKey: userKey
+                        userKey: userKey,
+                        reviewCategory: opts.reviewCategory || '',
+                        reviewTitle:    opts.reviewTitle    || ''
                     }, '*');
                 }
             } catch (_) {}
             return;
         }
-        openProfileInIframe(userKey);
+        openProfileInIframe(userKey, opts);
     };
 
-    function openProfileInIframe(userKey) {
+    function openProfileInIframe(userKey, opts) {
+        opts = opts || {};
         var winId = 'profile-iframe-' + userKey;
         var existing = document.getElementById(winId);
         if (existing) {
@@ -6006,6 +6075,20 @@ var PROFILE_USERS = <?php
             if (window.windowZ) windowZ.bringToFront(winId);
             if (window.taskbarManager && taskbarManager.isRegistered(winId)) {
                 taskbarManager.restore(winId);
+            }
+            /* Si ya estaba abierto y nos piden abrir una reseña, mandamos
+               postMessage al iframe para que la abra sin recargar. */
+            if (opts.reviewCategory && opts.reviewTitle) {
+                var iframeEl = existing.querySelector('iframe');
+                if (iframeEl && iframeEl.contentWindow) {
+                    try {
+                        iframeEl.contentWindow.postMessage({
+                            type: 'perfil-open-review',
+                            reviewCategory: opts.reviewCategory,
+                            reviewTitle:    opts.reviewTitle
+                        }, '*');
+                    } catch (_) {}
+                }
             }
             return;
         }
@@ -6045,7 +6128,12 @@ var PROFILE_USERS = <?php
            nuestra URL (lo añade appSrc() del shell padre cuando es tablet)
            o el flag global window.__IS_TABLET__. */
         var _isTab = window.__IS_TABLET__ === true || /[?&]tablet=1/.test(location.search);
-        iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey) + (_isTab ? '&tablet=1' : '');
+        var _reviewQs = '';
+        if (opts.reviewCategory && opts.reviewTitle) {
+            _reviewQs = '&reviewCat=' + encodeURIComponent(opts.reviewCategory)
+                      + '&reviewTitle=' + encodeURIComponent(opts.reviewTitle);
+        }
+        iframe.src = 'apps/perfil.php?standalone=1&as=' + encodeURIComponent(userKey) + (_isTab ? '&tablet=1' : '') + _reviewQs;
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: transparent;';
         iframe.setAttribute('title', 'Perfil de ' + visitedLabel);
         iframe.setAttribute('allowtransparency', 'true');
@@ -6157,9 +6245,14 @@ var PROFILE_USERS = <?php
                 /* Forward desde standalone iframe: queremos abrir el
                    perfil de e.data.userKey como NUEVA ventana iframe-
                    based a nivel del shell. Si ya está abierto, trae al
-                   frente. openProfileInIframe maneja ambos casos. */
+                   frente. openProfileInIframe maneja ambos casos.
+                   Si la notif era de reseña, propagamos los hints para
+                   que el perfil destino abra directamente la reseña. */
                 if (e.data.userKey && typeof openProfileInIframe === 'function') {
-                    openProfileInIframe(e.data.userKey);
+                    openProfileInIframe(e.data.userKey, {
+                        reviewCategory: e.data.reviewCategory || '',
+                        reviewTitle:    e.data.reviewTitle    || ''
+                    });
                 }
                 return;
 
