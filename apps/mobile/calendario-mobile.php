@@ -1075,12 +1075,39 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             </div>
             <div class="ev-row">
                 <div class="ev-field">
-                    <label>Fecha y hora *</label>
-                    <input type="datetime-local" id="ev-m-date">
+                    <label>Fecha *</label>
+                    <input type="date" id="ev-m-date">
                 </div>
                 <div class="ev-field" style="max-width:110px;">
                     <label>Duración (min)</label>
                     <input type="number" id="ev-m-duration" value="60" min="15">
+                </div>
+            </div>
+            <div class="ev-field">
+                <label>Hora *</label>
+                <div class="w98-time-wrap" id="ev-m-time">
+                    <svg class="w98-clock-face" viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="w98-clock-bezel-outer" cx="50" cy="50" r="48"/>
+                        <circle class="w98-clock-bezel-mid"   cx="50" cy="50" r="44"/>
+                        <circle class="w98-clock-bezel-inner" cx="50" cy="50" r="40"/>
+                        <g class="w98-clock-marks" id="ev-m-time-marks"></g>
+                        <line class="w98-clock-hand w98-clock-hand-hour" id="ev-m-time-hh-hand" x1="50" y1="50" x2="50" y2="30"/>
+                        <line class="w98-clock-hand w98-clock-hand-min"  id="ev-m-time-mm-hand" x1="50" y1="50" x2="50" y2="20"/>
+                        <circle class="w98-clock-center" cx="50" cy="50" r="2.5"/>
+                    </svg>
+                    <div class="w98-time-controls">
+                        <div class="w98-time-field">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="hh" data-tp-dir="up">▲</button>
+                            <input type="text" class="w98-time-input" id="ev-m-time-hh" value="12" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="hh" data-tp-dir="down">▼</button>
+                        </div>
+                        <span class="w98-time-sep">:</span>
+                        <div class="w98-time-field">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="mm" data-tp-dir="up">▲</button>
+                            <input type="text" class="w98-time-input" id="ev-m-time-mm" value="00" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="mm" data-tp-dir="down">▼</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="ev-row">
@@ -1102,8 +1129,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             </div>
             <div class="ev-field">
                 <label>Invitar amigos <span style="color:var(--text-muted,#666); font-weight:normal;">(opcional)</span></label>
-                <div id="ev-m-friends" class="ev-friends-box">
-                    <p style="font-size:10px; color:var(--text-faint, #808080); margin:4px; font-style:italic;">Cargando…</p>
+                <div class="ev-invite-trigger">
+                    <button type="button" class="button" id="ev-m-invite-btn">Elegir amigos…</button>
+                    <span class="ev-invite-trigger-count" id="ev-m-invite-count">Ninguno seleccionado</span>
                 </div>
             </div>
             <div class="ev-actions">
@@ -1126,6 +1154,24 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </div>
     <div class="window-body" style="flex:1; min-height:0; overflow-y:auto; padding:8px;">
         <div id="ev-m-detail-body"></div>
+    </div>
+</div>
+
+<!-- VENTANA INVITAR AMIGOS (móvil) -->
+<div class="window" id="ev-friends-dialog">
+    <div class="title-bar">
+        <div class="title-bar-text" id="ev-friends-dialog-title">Invitar amigos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="ev-friends-dialog-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <p id="ev-friends-dialog-event"></p>
+        <div id="ev-friends-dialog-list"></div>
+        <p id="ev-friends-dialog-status"></p>
+        <div class="field-row" style="justify-content:flex-end; margin-top:6px;">
+            <button class="button" id="ev-friends-dialog-cancel">Cerrar</button>
+        </div>
     </div>
 </div>
 
@@ -1196,8 +1242,70 @@ window.__EV_CFG = {
         return fetch(url, opts).then(function(r){ return r.json(); });
     }
 
+    /* ── Time picker: reloj analógico + spin HH/MM (idéntico al desktop). */
+    function pfInitTimePicker(rootId, marksId, hhHandId, mmHandId, hhInputId, mmInputId) {
+        var root = document.getElementById(rootId);
+        if (!root || root.__tpInit) return;
+        root.__tpInit = true;
+        var marksEl = document.getElementById(marksId);
+        var hhHand  = document.getElementById(hhHandId);
+        var mmHand  = document.getElementById(mmHandId);
+        var hhInput = document.getElementById(hhInputId);
+        var mmInput = document.getElementById(mmInputId);
+        if (!marksEl || !hhHand || !mmHand || !hhInput || !mmInput) return;
+        var marks = '';
+        for (var i = 0; i < 12; i++) {
+            var angle = (i * 30 - 90) * Math.PI / 180;
+            var x = 50 + Math.cos(angle) * 36;
+            var y = 50 + Math.sin(angle) * 36;
+            var isHour = (i % 3 === 0);
+            var size = isHour ? 1.8 : 1;
+            var cls = isHour ? 'w98-clock-mark w98-clock-mark-hour' : 'w98-clock-mark';
+            marks += '<circle class="' + cls + '" cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="' + size + '"/>';
+        }
+        marksEl.innerHTML = marks;
+        function clamp(v, mn, mx){ return Math.max(mn, Math.min(mx, v)); }
+        function pad2(n){ return (n < 10 ? '0' : '') + n; }
+        function update(hh, mm){
+            hh = clamp(hh|0, 0, 23); mm = clamp(mm|0, 0, 59);
+            hhInput.value = pad2(hh); mmInput.value = pad2(mm);
+            hhHand.style.transform = 'rotate(' + (((hh%12)*30) + (mm*0.5)) + 'deg)';
+            mmHand.style.transform = 'rotate(' + (mm * 6) + 'deg)';
+        }
+        function read(){ return { hh: clamp(parseInt(hhInput.value,10)||0, 0, 23), mm: clamp(parseInt(mmInput.value,10)||0, 0, 59) }; }
+        function step(unit, dir){
+            var c = read();
+            if (unit === 'hh') c.hh = (c.hh + dir + 24) % 24;
+            else               c.mm = (c.mm + dir + 60) % 60;
+            update(c.hh, c.mm);
+        }
+        root.querySelectorAll('.w98-time-spin').forEach(function(btn){
+            btn.addEventListener('click', function(e){
+                e.preventDefault();
+                step(btn.dataset.tpUnit, btn.dataset.tpDir === 'up' ? 1 : -1);
+            });
+        });
+        [hhInput, mmInput].forEach(function(inp){
+            inp.addEventListener('input', function(){ inp.value = inp.value.replace(/\D/g,'').slice(0,2); });
+            inp.addEventListener('blur',  function(){ var c = read(); update(c.hh, c.mm); });
+        });
+        root.__tpGet = function(){ var c = read(); return pad2(c.hh) + ':' + pad2(c.mm); };
+        root.__tpSet = function(s){
+            if (!s) return;
+            var m = /^(\d{1,2}):(\d{1,2})$/.exec(String(s));
+            if (m) update(parseInt(m[1],10), parseInt(m[2],10));
+        };
+        var v = read(); update(v.hh, v.mm);
+    }
+
     /* ── Open / close ── */
-    function openWindow(){ winEl.style.display = ''; backEl.style.display = ''; showTab('list'); loadEvents(); loadFriends(); }
+    function openWindow(){
+        winEl.style.display = ''; backEl.style.display = '';
+        showTab('list'); loadEvents(); loadFriends();
+        pfInitTimePicker('ev-m-time', 'ev-m-time-marks',
+                         'ev-m-time-hh-hand', 'ev-m-time-mm-hand',
+                         'ev-m-time-hh', 'ev-m-time-mm');
+    }
     function closeWindow(){ winEl.style.display = 'none'; backEl.style.display = 'none'; closeDetail(); }
     function showTab(name){
         document.getElementById('ev-m-list-pane').style.display   = (name === 'list')   ? '' : 'none';
@@ -1209,7 +1317,7 @@ window.__EV_CFG = {
     document.getElementById('ev-mobile-close').addEventListener('click', closeWindow);
     backEl.addEventListener('click', closeWindow);
     document.getElementById('ev-m-tab-list').addEventListener('click', function(){ showTab('list'); });
-    document.getElementById('ev-m-tab-create').addEventListener('click', function(){ showTab('create'); renderFriends(); });
+    document.getElementById('ev-m-tab-create').addEventListener('click', function(){ showTab('create'); updateInviteCount(); });
 
     /* ── List ── */
     function loadEvents(){
@@ -1257,27 +1365,102 @@ window.__EV_CFG = {
     function loadFriends(){
         api('list-mutual-friends').then(function(d){
             if (d && d.ok) STATE.friends = d.friends || [];
-            renderFriends();
+            updateInviteCount();
         }).catch(function(){});
     }
-    function renderFriends(){
-        var box = document.getElementById('ev-m-friends');
-        if (!box) return;
+    function updateInviteCount(){
+        var n = Object.keys(STATE.selectedInvitees).length;
+        var el = document.getElementById('ev-m-invite-count');
+        if (!el) return;
+        el.textContent = n ? (n + (n === 1 ? ' amigo seleccionado' : ' amigos seleccionados')) : 'Ninguno seleccionado';
+    }
+
+    /* ── Friends dialog (compartido modo create / detail) ── */
+    var FRIENDS_DIALOG = { mode: null, event: null };
+    function openFriendsDialog(mode, event){
+        FRIENDS_DIALOG.mode  = mode;
+        FRIENDS_DIALOG.event = event || null;
+        var dlg = document.getElementById('ev-friends-dialog');
+        document.getElementById('ev-friends-dialog-title').textContent = (mode === 'create') ? 'Elegir amigos' : 'Invitar al evento';
+        document.getElementById('ev-friends-dialog-event').innerHTML = (mode === 'create')
+            ? 'Marca los amigos que quieras invitar al crear el evento.'
+            : 'Evento: <strong>' + esc(event ? event.title : '') + '</strong>';
+        var listEl = document.getElementById('ev-friends-dialog-list');
+        var stEl = document.getElementById('ev-friends-dialog-status');
+        stEl.textContent = ''; stEl.style.color = '';
+        listEl.innerHTML = '<p style="font-size:11px; padding:8px;">Cargando…</p>';
+        dlg.style.display = 'flex';
+        api('list-mutual-friends').then(function(d){
+            if (!d || !d.ok) { listEl.innerHTML = '<p style="font-size:11px; padding:8px; color:var(--error, #a02525);">Error.</p>'; return; }
+            STATE.friends = d.friends || [];
+            renderFriendsDialog();
+        }).catch(function(){ listEl.innerHTML = '<p style="font-size:11px; padding:8px; color:var(--error, #a02525);">Error de red.</p>'; });
+    }
+    function closeFriendsDialog(){ document.getElementById('ev-friends-dialog').style.display = 'none'; }
+    function renderFriendsDialog(){
+        var listEl = document.getElementById('ev-friends-dialog-list');
         if (!STATE.friends.length) {
-            box.innerHTML = '<p style="font-size:10px; color:var(--text-faint, #808080); margin:4px; font-style:italic;">No tienes amigos mutuos.</p>';
+            listEl.innerHTML = '<p style="font-size:11px; padding:10px; color:var(--text-faint, #808080); font-style:italic; text-align:center;">No tienes amigos mutuos.<br><span style="font-size:10px;">Seguíos entre vosotros para haceros amigos.</span></p>';
             return;
         }
-        box.innerHTML = STATE.friends.map(function(f){
-            var ck = STATE.selectedInvitees[f.key] ? 'checked' : '';
-            return '<label><input type="checkbox" class="ev-m-cb" value="' + esc(f.key) + '" ' + ck + '><span>' + esc(f.label) + '</span></label>';
+        var mode = FRIENDS_DIALOG.mode;
+        var ev = FRIENDS_DIALOG.event;
+        var already = {};
+        if (mode === 'detail' && ev && Array.isArray(ev.participants)) {
+            ev.participants.forEach(function(p){ already[p.key] = p.status; });
+        }
+        listEl.innerHTML = STATE.friends.map(function(f){
+            var pStatus = already[f.key];
+            var isJoined = !!pStatus;
+            var isMarked = (mode === 'create' && STATE.selectedInvitees[f.key]);
+            var rowCls = 'ev-friend-row' + (isJoined ? ' is-joined' : '');
+            var right;
+            if (isJoined) {
+                right = '<span class="ev-friend-status">' + (pStatus === 'waitlist' ? 'en espera' : 'ya unido') + '</span>';
+            } else {
+                var lbl = isMarked ? '✓ Invitado' : 'Invitar';
+                var cls = 'button ev-friend-invite-btn' + (isMarked ? ' is-invited' : '');
+                right = '<button type="button" class="' + cls + '" data-key="' + esc(f.key) + '">' + lbl + '</button>';
+            }
+            return '<div class="' + rowCls + '"><span class="ev-friend-name">' + esc(f.label) + '</span>' + right + '</div>';
         }).join('');
-        box.querySelectorAll('.ev-m-cb').forEach(function(cb){
-            cb.addEventListener('change', function(){
-                if (cb.checked) STATE.selectedInvitees[cb.value] = true;
-                else delete STATE.selectedInvitees[cb.value];
-            });
+        listEl.querySelectorAll('.ev-friend-invite-btn').forEach(function(btn){
+            btn.addEventListener('click', function(){ handleInviteClick(btn); });
         });
     }
+    function handleInviteClick(btn){
+        var key = btn.dataset.key;
+        var stEl = document.getElementById('ev-friends-dialog-status');
+        if (FRIENDS_DIALOG.mode === 'create') {
+            if (STATE.selectedInvitees[key]) {
+                delete STATE.selectedInvitees[key];
+                btn.classList.remove('is-invited');
+                btn.textContent = 'Invitar';
+            } else {
+                STATE.selectedInvitees[key] = true;
+                btn.classList.add('is-invited');
+                btn.textContent = '✓ Invitado';
+            }
+            updateInviteCount();
+            return;
+        }
+        btn.disabled = true; btn.textContent = 'Enviando…';
+        api('invite-to-event', { eventId: FRIENDS_DIALOG.event.id, userKey: key }, 'POST').then(function(r){
+            if (r && r.ok) {
+                btn.classList.add('is-invited');
+                btn.textContent = '✓ Invitado';
+                stEl.style.color = 'var(--success, #1a7a1a)';
+                stEl.textContent = 'Invitación enviada.';
+            } else {
+                btn.disabled = false; btn.textContent = 'Invitar';
+                stEl.style.color = 'var(--error, #a02525)';
+                stEl.textContent = (r && r.error) || 'Error.';
+            }
+        }).catch(function(){ btn.disabled = false; btn.textContent = 'Invitar'; stEl.style.color = 'var(--error, #a02525)'; stEl.textContent = 'Error de red.'; });
+    }
+    document.getElementById('ev-friends-dialog-close').addEventListener('click', closeFriendsDialog);
+    document.getElementById('ev-friends-dialog-cancel').addEventListener('click', closeFriendsDialog);
+    document.getElementById('ev-m-invite-btn').addEventListener('click', function(){ openFriendsDialog('create', null); });
 
     /* ── Create ── */
     document.getElementById('ev-m-create-cancel').addEventListener('click', function(){ showTab('list'); });
@@ -1287,7 +1470,9 @@ window.__EV_CFG = {
         status.textContent = 'Creando…';
         var title = document.getElementById('ev-m-title').value.trim();
         var desc  = document.getElementById('ev-m-desc').value.trim();
-        var dateRaw = document.getElementById('ev-m-date').value;
+        var dateRaw = document.getElementById('ev-m-date').value;           // "YYYY-MM-DD"
+        var timeWrap = document.getElementById('ev-m-time');
+        var timeStr = (timeWrap && typeof timeWrap.__tpGet === 'function') ? timeWrap.__tpGet() : '00:00';
         var durMin = parseInt(document.getElementById('ev-m-duration').value, 10) || 60;
         var minP   = parseInt(document.getElementById('ev-m-min').value, 10) || 1;
         var maxP   = parseInt(document.getElementById('ev-m-max').value, 10) || 0;
@@ -1298,7 +1483,7 @@ window.__EV_CFG = {
         if (maxP > 0 && maxP < minP) { status.className = 'ev-status is-error'; status.textContent = 'Máx no puede ser menor que mín.'; return; }
         api('create-event', {
             title: title, description: desc,
-            eventDate: dateRaw.replace('T', ' ') + ':00',
+            eventDate: dateRaw + ' ' + timeStr + ':00',
             durationMin: durMin, minParticipants: minP, maxParticipants: maxP,
             visibility: vis, invitees: Object.keys(STATE.selectedInvitees),
         }, 'POST').then(function(d){
@@ -1307,8 +1492,9 @@ window.__EV_CFG = {
             document.getElementById('ev-m-title').value = '';
             document.getElementById('ev-m-desc').value = '';
             document.getElementById('ev-m-date').value = '';
+            if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet('12:00');
             STATE.selectedInvitees = {};
-            renderFriends();
+            updateInviteCount();
             loadEvents();
             /* Refrescar grid del calendario si está accesible. */
             if (typeof window.cargarTodo === 'function') window.cargarTodo();
@@ -1350,6 +1536,8 @@ window.__EV_CFG = {
             actions = '<button class="button default" id="ev-m-join" type="button">' + lbl + '</button>';
         }
         var delBtn = ev.isCreator ? '<button class="button ev-btn-danger" id="ev-m-del" type="button">Eliminar</button>' : '';
+        var inviteBtn = (!ev.isFinished && (ev.isCreator || (ev.visibility === 'public' && ev.myStatus === 'joined')))
+            ? '<button class="button" id="ev-m-invite" type="button">Invitar amigos…</button>' : '';
         b.innerHTML =
             '<dl class="ev-detail-meta">' +
                 '<div class="ev-detail-meta-row"><dt>Fecha:</dt> <dd>' + esc(fmtDate(ev.eventDate)) + '</dd></div>' +
@@ -1362,7 +1550,7 @@ window.__EV_CFG = {
             '<div class="ev-detail-participants"><h4>Participantes</h4>' +
                 (partList ? '<ul>' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Nadie todavía.</p>') +
             '</div>' +
-            '<div class="ev-detail-actions">' + actions + delBtn + '</div>';
+            '<div class="ev-detail-actions">' + actions + inviteBtn + delBtn + '</div>';
         wireDetail(ev);
     }
     function wireDetail(ev){
@@ -1377,6 +1565,7 @@ window.__EV_CFG = {
         var a = document.getElementById('ev-m-accept');
         var d = document.getElementById('ev-m-decline');
         var del = document.getElementById('ev-m-del');
+        var inv = document.getElementById('ev-m-invite');
         if (j) j.addEventListener('click', function(){ post('join-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) refresh(); }); });
         if (l) l.addEventListener('click', function(){ post('leave-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) refresh(); }); });
         if (a) a.addEventListener('click', function(){ post('respond-event-invite', { inviteId: ev.myInviteId, action: 'accept' }).then(function(r){ if (r && r.ok) refresh(); }); });
@@ -1385,6 +1574,7 @@ window.__EV_CFG = {
             if (!confirm('¿Eliminar este evento?')) return;
             post('delete-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) { closeDetail(); loadEvents(); if (typeof window.cargarTodo === 'function') window.cargarTodo(); } });
         });
+        if (inv) inv.addEventListener('click', function(){ openFriendsDialog('detail', ev); });
     }
 })();
 </script>

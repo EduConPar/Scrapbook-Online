@@ -359,6 +359,211 @@
 }
 .ev-invite-row .button { font-size: 10px; padding: 1px 8px; }
 
+/* ════════════════════════════════════════════════════════════════════
+   FRIENDS DIALOG — ventana de invitar amigos estilo "colaboradores"
+   del reproductor: una fila por amigo con nombre + botón Invitar.
+   ════════════════════════════════════════════════════════════════════ */
+#ev-friends-dialog {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9600;
+    width: min(320px, 92vw);
+    max-height: 80vh;
+    flex-direction: column;
+}
+#ev-friends-dialog .window-body {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    overflow: hidden;
+}
+#ev-friends-dialog-event {
+    font-size: 11px;
+    margin: 0 0 6px;
+    color: var(--text, #000);
+}
+#ev-friends-dialog-event strong { color: var(--accent, #000080); }
+#ev-friends-dialog-list {
+    flex: 1;
+    min-height: 120px;
+    max-height: 280px;
+    overflow-y: auto;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--input-bg, #fff);
+    padding: 4px 6px;
+}
+.ev-friend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 5px 4px;
+    border-bottom: 1px solid var(--border, #808080);
+    font-size: 12px;
+    color: var(--input-text, #000);
+}
+.ev-friend-row:last-child { border-bottom: 0; }
+.ev-friend-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ev-friend-invite-btn {
+    font-size: 11px;
+    padding: 2px 10px;
+    min-width: 72px;
+    white-space: nowrap;
+}
+.ev-friend-invite-btn.is-invited {
+    background: var(--accent, #000080) !important;
+    color: var(--accent-text, #fff) !important;
+    font-weight: bold;
+}
+.ev-friend-row.is-joined {
+    opacity: 0.6;
+}
+.ev-friend-status {
+    font-size: 10px;
+    color: var(--text-faint, #808080);
+    font-style: italic;
+}
+#ev-friends-dialog-status {
+    font-size: 10px;
+    color: var(--text-muted, #666);
+    min-height: 14px;
+    margin: 6px 0 0;
+}
+
+/* Botón disparador en el form de crear con contador a la derecha. */
+.ev-invite-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ev-invite-trigger-count {
+    font-size: 11px;
+    color: var(--text-muted, #666);
+    font-style: italic;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   TIME PICKER — reloj Win98 con manecillas + HH/MM spin buttons
+   ════════════════════════════════════════════════════════════════════
+   Reemplaza el <input type="datetime-local"> nativo (no estilable).
+   Estructura: SVG analog clock + dos campos HH y MM con flechas
+   ▲▼ para subir/bajar. Wrap con bezel sunken Win98. */
+.w98-time-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--win-body-bg, var(--win-bg, #c0c0c0));
+}
+.w98-clock-face {
+    width: 76px;
+    height: 76px;
+    flex-shrink: 0;
+}
+.w98-clock-bezel-outer { fill: var(--bezel-dark-2, #808080); }
+.w98-clock-bezel-mid   { fill: var(--bezel-light-2, #dfdfdf); }
+.w98-clock-bezel-inner { fill: var(--input-bg, #fff); stroke: var(--bezel-dark-1, #000); stroke-width: 0.4; }
+.w98-clock-mark        { fill: var(--text, #000); }
+.w98-clock-mark-hour   { fill: var(--accent, #000080); }
+.w98-clock-hand {
+    stroke-linecap: round;
+    transform-origin: 50px 50px;
+    transition: transform 200ms ease-out;
+}
+.w98-clock-hand-hour {
+    stroke: var(--text, #000);
+    stroke-width: 3;
+}
+.w98-clock-hand-min {
+    stroke: var(--accent, #000080);
+    stroke-width: 1.6;
+}
+.w98-clock-center {
+    fill: var(--accent, #000080);
+    stroke: var(--text, #000);
+    stroke-width: 0.4;
+}
+
+.w98-time-controls {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+.w98-time-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+}
+.w98-time-spin {
+    min-width: 36px;
+    height: 13px;
+    padding: 0;
+    font-size: 9px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    /* Toma del .button base de 98.css. */
+}
+.w98-time-input {
+    width: 42px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+    line-height: 1.1;
+    padding: 4px 0;
+    border: 2px solid;
+    border-color:
+        var(--bezel-dark-2, #808080)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-light-2, #dfdfdf)
+        var(--bezel-dark-2, #808080);
+    box-shadow:
+        inset  1px  1px 0 var(--bezel-dark-1, #000),
+        inset -1px -1px 0 var(--bezel-light-1, #fff);
+    background: var(--input-bg, #fff);
+    color: var(--input-text, #000);
+    font-family: 'Courier New', 'Consolas', monospace;
+    box-sizing: border-box;
+}
+.w98-time-input:focus {
+    outline: 1px dotted var(--text, #000);
+    outline-offset: -4px;
+}
+.w98-time-sep {
+    font-size: 26px;
+    font-weight: bold;
+    color: var(--text, #000);
+    align-self: center;
+    margin: 0 -2px;
+    font-family: 'Courier New', 'Consolas', monospace;
+}
+
 /* ─── MOBILE — sheet fullscreen Win98 ─── */
 .ev-m-window {
     position: fixed;

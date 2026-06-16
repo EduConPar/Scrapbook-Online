@@ -1744,6 +1744,78 @@ body:has(.cal-cell) {
     color: var(--accent-text, #fff) !important;
 }
 
+/* Time picker — overrides kawaii. Aplanar bezels del wrap, reloj con
+   bordes rosa, manecillas en accent. */
+.w98-time-wrap {
+    box-shadow: none !important;
+    border: 2px solid var(--accent, #FF66B2) !important;
+    border-radius: 0 !important;
+    background: var(--rose-100, #FFE4F0) !important;
+}
+.w98-clock-bezel-outer { fill: var(--accent, #FF66B2) !important; }
+.w98-clock-bezel-mid   { fill: var(--rose-100, #FFE4F0) !important; }
+.w98-clock-bezel-inner {
+    fill: var(--accent-text, #fff) !important;
+    stroke: var(--accent-deep, #CC4499) !important;
+    stroke-width: 0.6 !important;
+}
+.w98-clock-mark        { fill: var(--accent-deep, #CC4499) !important; }
+.w98-clock-mark-hour   { fill: var(--accent, #FF66B2) !important; }
+.w98-clock-hand-hour {
+    stroke: var(--accent-deep, #CC4499) !important;
+    stroke-width: 3.2 !important;
+}
+.w98-clock-hand-min {
+    stroke: var(--accent, #FF66B2) !important;
+    stroke-width: 2 !important;
+}
+.w98-clock-center {
+    fill: var(--accent, #FF66B2) !important;
+    stroke: var(--accent-deep, #CC4499) !important;
+}
+
+.w98-time-input {
+    box-shadow: none !important;
+    border: 2px solid var(--accent, #FF66B2) !important;
+    background: var(--accent-text, #fff) !important;
+    color: var(--accent-deep, #CC4499) !important;
+    border-radius: 0 !important;
+}
+.w98-time-sep {
+    color: var(--accent-deep, #CC4499) !important;
+}
+
+/* Friends dialog — overrides kawaii */
+#ev-friends-dialog-list {
+    box-shadow: none !important;
+    border: 2px solid var(--accent, #FF66B2) !important;
+    background: var(--accent-text, #fff) !important;
+    border-radius: 0 !important;
+}
+.ev-friend-row {
+    border-bottom: 1px dashed color-mix(in srgb, var(--accent, #FF66B2) 50%, transparent) !important;
+    font-size: 12px !important;
+    color: var(--text) !important;
+}
+.ev-friend-row:last-child { border-bottom: 0 !important; }
+.ev-friend-invite-btn {
+    font-size: 11px !important;
+    padding: 3px 12px !important;
+}
+.ev-friend-invite-btn.is-invited {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+    border-color: var(--accent-deep, #CC4499) !important;
+}
+.ev-friend-status {
+    color: var(--accent-orange, #D97A4E) !important;
+}
+.ev-invite-trigger-count {
+    color: var(--accent-deep, #CC4499) !important;
+    font-style: normal !important;
+    font-weight: 700 !important;
+}
+
 /* ════════════════════════════════════════════════════════════════════
    GALERÍA — sidebar, grid de cards, chips, preview kawaii
    ════════════════════════════════════════════════════════════════════ */

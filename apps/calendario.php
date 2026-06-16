@@ -114,12 +114,40 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
             </div>
             <div class="ev-row">
                 <div class="ev-field">
-                    <label for="ev-create-date">Fecha y hora *</label>
-                    <input type="datetime-local" id="ev-create-date">
+                    <label for="ev-create-date">Fecha *</label>
+                    <input type="date" id="ev-create-date">
                 </div>
                 <div class="ev-field" style="max-width:130px;">
                     <label for="ev-create-duration">Duración (min) *</label>
                     <input type="number" id="ev-create-duration" value="60" min="15" max="10080">
+                </div>
+            </div>
+            <div class="ev-field">
+                <label>Hora *</label>
+                <!-- TIME PICKER WIN98 — reloj analógico SVG + spin buttons -->
+                <div class="w98-time-wrap" id="ev-create-time">
+                    <svg class="w98-clock-face" viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="w98-clock-bezel-outer" cx="50" cy="50" r="48"/>
+                        <circle class="w98-clock-bezel-mid"   cx="50" cy="50" r="44"/>
+                        <circle class="w98-clock-bezel-inner" cx="50" cy="50" r="40"/>
+                        <g class="w98-clock-marks" id="ev-create-time-marks"></g>
+                        <line class="w98-clock-hand w98-clock-hand-hour" id="ev-create-time-hh-hand" x1="50" y1="50" x2="50" y2="30"/>
+                        <line class="w98-clock-hand w98-clock-hand-min"  id="ev-create-time-mm-hand" x1="50" y1="50" x2="50" y2="20"/>
+                        <circle class="w98-clock-center" cx="50" cy="50" r="2.5"/>
+                    </svg>
+                    <div class="w98-time-controls">
+                        <div class="w98-time-field">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="hh" data-tp-dir="up">▲</button>
+                            <input type="text" class="w98-time-input" id="ev-create-time-hh" value="12" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="hh" data-tp-dir="down">▼</button>
+                        </div>
+                        <span class="w98-time-sep">:</span>
+                        <div class="w98-time-field">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="mm" data-tp-dir="up">▲</button>
+                            <input type="text" class="w98-time-input" id="ev-create-time-mm" value="00" maxlength="2" inputmode="numeric" pattern="[0-9]*">
+                            <button type="button" class="button w98-time-spin" data-tp-unit="mm" data-tp-dir="down">▼</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="ev-row">
@@ -141,8 +169,9 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
             </div>
             <div class="ev-field">
                 <label>Invitar amigos <span style="color:var(--text-muted,#666); font-weight:normal;">(opcional)</span></label>
-                <div id="ev-create-friends" class="ev-friends-box">
-                    <p style="font-size:10px; color:var(--text-faint, #666); margin:4px; font-style:italic;">Cargando amigos…</p>
+                <div class="ev-invite-trigger">
+                    <button type="button" class="button" id="ev-create-invite-btn">Elegir amigos…</button>
+                    <span class="ev-invite-trigger-count" id="ev-create-invite-count">Ninguno seleccionado</span>
                 </div>
             </div>
             <div class="ev-actions">
@@ -164,6 +193,27 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
     </div>
     <div class="window-body" style="padding:10px; overflow:auto;">
         <div id="event-detail-body"></div>
+    </div>
+</div>
+
+<!-- VENTANA INVITAR AMIGOS — patrón "colaboradores" del reproductor.
+     Reusable para los dos flujos:
+       · mode='create'  → marcar invitados a enviar en el create POST.
+       · mode='detail'  → invita inmediatamente vía API por cada click. -->
+<div class="window" id="ev-friends-dialog">
+    <div class="title-bar">
+        <div class="title-bar-text" id="ev-friends-dialog-title">Invitar amigos</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="ev-friends-dialog-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <p id="ev-friends-dialog-event"></p>
+        <div id="ev-friends-dialog-list"></div>
+        <p id="ev-friends-dialog-status"></p>
+        <div class="field-row" style="justify-content:flex-end; margin-top:6px;">
+            <button class="button" id="ev-friends-dialog-cancel">Cerrar</button>
+        </div>
     </div>
 </div>
 
@@ -2284,12 +2334,121 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         return fetch(url, opts).then(function(r){ return r.json(); });
     }
 
+    /* ────────────────────────────────────────────────────────────────
+       TIME PICKER — reloj analógico + spin buttons HH/MM.
+       Reemplaza al <input type="datetime-local"> nativo (no estilable).
+       Inicializa una sola vez por root element. Expone get/set en el
+       propio elemento via __tpGet() / __tpSet('HH:MM'). ────────────── */
+    function pfInitTimePicker(rootId, marksId, hhHandId, mmHandId, hhInputId, mmInputId) {
+        var root = document.getElementById(rootId);
+        if (!root || root.__tpInit) return;
+        root.__tpInit = true;
+        var marksEl = document.getElementById(marksId);
+        var hhHand  = document.getElementById(hhHandId);
+        var mmHand  = document.getElementById(mmHandId);
+        var hhInput = document.getElementById(hhInputId);
+        var mmInput = document.getElementById(mmInputId);
+        if (!marksEl || !hhHand || !mmHand || !hhInput || !mmInput) return;
+
+        /* Genera 12 ticks del reloj — los 4 cardinales más grandes. */
+        var marks = '';
+        for (var i = 0; i < 12; i++) {
+            var angle = (i * 30 - 90) * Math.PI / 180;
+            var x1 = 50 + Math.cos(angle) * 36;
+            var y1 = 50 + Math.sin(angle) * 36;
+            var isHour = (i % 3 === 0);
+            var size = isHour ? 1.8 : 1;
+            var cls = isHour ? 'w98-clock-mark w98-clock-mark-hour' : 'w98-clock-mark';
+            marks += '<circle class="' + cls + '" cx="' + x1.toFixed(2) + '" cy="' + y1.toFixed(2) + '" r="' + size + '"/>';
+        }
+        marksEl.innerHTML = marks;
+
+        function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+        function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+        function update(hh, mm) {
+            hh = clamp(hh | 0, 0, 23);
+            mm = clamp(mm | 0, 0, 59);
+            hhInput.value = pad2(hh);
+            mmInput.value = pad2(mm);
+            /* Manecillas: hora avanza 30° por hora + fracción de minutos.
+               Minutos avanzan 6° por minuto. */
+            var hourAngle = ((hh % 12) * 30) + (mm * 0.5);
+            var minAngle  = mm * 6;
+            hhHand.style.transform = 'rotate(' + hourAngle + 'deg)';
+            mmHand.style.transform = 'rotate(' + minAngle + 'deg)';
+        }
+        function read() {
+            return {
+                hh: clamp(parseInt(hhInput.value, 10) || 0, 0, 23),
+                mm: clamp(parseInt(mmInput.value, 10) || 0, 0, 59)
+            };
+        }
+        function step(unit, dir) {
+            var cur = read();
+            if (unit === 'hh') {
+                cur.hh = (cur.hh + dir + 24) % 24;
+            } else {
+                cur.mm = (cur.mm + dir + 60) % 60;
+            }
+            update(cur.hh, cur.mm);
+        }
+        /* Spin buttons */
+        root.querySelectorAll('.w98-time-spin').forEach(function(btn){
+            btn.addEventListener('click', function(e){
+                e.preventDefault();
+                step(btn.dataset.tpUnit, btn.dataset.tpDir === 'up' ? 1 : -1);
+            });
+        });
+        /* Edición manual: sanitiza al perder foco. */
+        [hhInput, mmInput].forEach(function(inp){
+            inp.addEventListener('input', function(){
+                inp.value = inp.value.replace(/\D/g, '').slice(0, 2);
+            });
+            inp.addEventListener('blur', function(){
+                var cur = read();
+                update(cur.hh, cur.mm);
+            });
+            /* Flechas arriba/abajo del teclado también incrementan. */
+            inp.addEventListener('keydown', function(e){
+                if (e.key === 'ArrowUp')   { e.preventDefault(); step(inp === hhInput ? 'hh' : 'mm',  1); }
+                if (e.key === 'ArrowDown') { e.preventDefault(); step(inp === hhInput ? 'hh' : 'mm', -1); }
+            });
+        });
+
+        /* API pública en el root element. */
+        root.__tpGet = function() {
+            var cur = read();
+            return pad2(cur.hh) + ':' + pad2(cur.mm);
+        };
+        root.__tpSet = function(hhmm) {
+            if (!hhmm) return;
+            var m = /^(\d{1,2}):(\d{1,2})$/.exec(String(hhmm));
+            if (!m) return;
+            update(parseInt(m[1], 10), parseInt(m[2], 10));
+        };
+
+        /* Estado inicial. */
+        var initVal = read();
+        update(initVal.hh, initVal.mm);
+    }
+
     /* ── Abrir/cerrar ventana ── */
     function openWindow() {
         winEl.style.display = '';
         showTab('list');
         loadEvents();
         loadFriends();
+        /* Inicializa pickers la primera vez (la ventana estaba display:none
+           al cargar la página). buildDatePicker viene del scope global de
+           calendario.php; pfInitTimePicker está aquí mismo. */
+        if (typeof window.buildDatePicker === 'function') {
+            var dateInp = document.getElementById('ev-create-date');
+            if (dateInp && dateInp.type === 'date') window.buildDatePicker(dateInp);
+        }
+        pfInitTimePicker('ev-create-time', 'ev-create-time-marks',
+                         'ev-create-time-hh-hand', 'ev-create-time-mm-hand',
+                         'ev-create-time-hh', 'ev-create-time-mm');
     }
     function closeWindow() {
         winEl.style.display = 'none';
@@ -2310,7 +2469,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
     document.getElementById('events-tab-list').addEventListener('click', function(){ showTab('list'); });
     document.getElementById('events-tab-create').addEventListener('click', function(){
         showTab('create');
-        renderFriendsCheckboxes();
+        updateInviteCount();
     });
     document.getElementById('events-refresh').addEventListener('click', loadEvents);
 
@@ -2369,29 +2528,135 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
     function loadFriends() {
         api('list-mutual-friends').then(function(d){
             if (d && d.ok) STATE.friends = d.friends || [];
-            renderFriendsCheckboxes();
+            updateInviteCount();
         }).catch(function(){});
     }
-    function renderFriendsCheckboxes() {
-        var box = document.getElementById('ev-create-friends');
-        if (!box) return;
-        if (!STATE.friends.length) {
-            box.innerHTML = '<p style="font-size:10px; color:var(--text-faint, #808080); margin:4px; font-style:italic;">No tienes amigos mutuos para invitar.</p>';
-            return;
+    function updateInviteCount() {
+        var n = Object.keys(STATE.selectedInvitees).length;
+        var el = document.getElementById('ev-create-invite-count');
+        if (!el) return;
+        if (!n) el.textContent = 'Ninguno seleccionado';
+        else    el.textContent = n + (n === 1 ? ' amigo seleccionado' : ' amigos seleccionados');
+    }
+
+    /* ── DIALOG INVITAR AMIGOS ──
+       mode = 'create' → marca/desmarca amigos para el create POST.
+       mode = 'detail' → cada Invitar dispara la API por separado y
+                         deja el botón en estado "Invitado". */
+    var FRIENDS_DIALOG = { mode: null, eventId: null, event: null };
+    function openFriendsDialog(mode, event) {
+        FRIENDS_DIALOG.mode    = mode;
+        FRIENDS_DIALOG.event   = event || null;
+        FRIENDS_DIALOG.eventId = event ? event.id : null;
+        var dlg = document.getElementById('ev-friends-dialog');
+        var titleEl = document.getElementById('ev-friends-dialog-title');
+        var infoEl  = document.getElementById('ev-friends-dialog-event');
+        var listEl  = document.getElementById('ev-friends-dialog-list');
+        var statusEl = document.getElementById('ev-friends-dialog-status');
+        statusEl.textContent = '';
+        statusEl.className = '';
+        if (mode === 'create') {
+            titleEl.textContent = 'Elegir amigos a invitar';
+            infoEl.innerHTML = 'Marca los amigos que quieras invitar al crear el evento.';
+        } else {
+            titleEl.textContent = 'Invitar amigos al evento';
+            infoEl.innerHTML = 'Evento: <strong>' + esc(event ? event.title : '') + '</strong>';
         }
-        box.innerHTML = STATE.friends.map(function(f){
-            var checked = STATE.selectedInvitees[f.key] ? 'checked' : '';
-            return '<label>' +
-                '<input type="checkbox" class="ev-inv-cb" value="' + esc(f.key) + '" ' + checked + '>' +
-                '<span>' + esc(f.label) + '</span></label>';
-        }).join('');
-        box.querySelectorAll('.ev-inv-cb').forEach(function(cb){
-            cb.addEventListener('change', function(){
-                if (cb.checked) STATE.selectedInvitees[cb.value] = true;
-                else delete STATE.selectedInvitees[cb.value];
-            });
+        dlg.style.display = 'flex';
+        listEl.innerHTML = '<p style="font-size:11px; padding:8px; color:var(--text-faint, #808080);">Cargando…</p>';
+        api('list-mutual-friends').then(function(d){
+            if (!d || !d.ok) { listEl.innerHTML = '<p style="font-size:11px; padding:8px; color:var(--error, #a02525);">Error al cargar amigos.</p>'; return; }
+            STATE.friends = d.friends || [];
+            renderFriendsDialog();
+        }).catch(function(){
+            listEl.innerHTML = '<p style="font-size:11px; padding:8px; color:var(--error, #a02525);">Error de red.</p>';
         });
     }
+    function closeFriendsDialog() {
+        document.getElementById('ev-friends-dialog').style.display = 'none';
+    }
+    function renderFriendsDialog() {
+        var listEl = document.getElementById('ev-friends-dialog-list');
+        if (!STATE.friends.length) {
+            listEl.innerHTML = '<p style="font-size:11px; padding:10px; color:var(--text-faint, #808080); font-style:italic; text-align:center;">No tienes amigos mutuos para invitar.<br><span style="font-size:10px;">Seguíos entre vosotros para haceros amigos.</span></p>';
+            return;
+        }
+        var mode = FRIENDS_DIALOG.mode;
+        var ev   = FRIENDS_DIALOG.event;
+        /* Set de quienes ya están en el evento — solo aplica en mode='detail'. */
+        var already = {};
+        if (mode === 'detail' && ev && Array.isArray(ev.participants)) {
+            ev.participants.forEach(function(p){ already[p.key] = p.status; });
+        }
+        listEl.innerHTML = STATE.friends.map(function(f){
+            var pStatus = already[f.key];
+            var isJoinedAlready = !!pStatus;
+            var isMarked = (mode === 'create' && STATE.selectedInvitees[f.key]);
+            var rowCls = 'ev-friend-row' + (isJoinedAlready ? ' is-joined' : '');
+            var rightHtml;
+            if (isJoinedAlready) {
+                rightHtml = '<span class="ev-friend-status">' + (pStatus === 'waitlist' ? 'en espera' : 'ya unido') + '</span>';
+            } else {
+                var btnLabel = isMarked ? '✓ Invitado' : 'Invitar';
+                var btnCls = 'button ev-friend-invite-btn' + (isMarked ? ' is-invited' : '');
+                rightHtml = '<button type="button" class="' + btnCls + '" data-friend-key="' + esc(f.key) + '">' + btnLabel + '</button>';
+            }
+            return '<div class="' + rowCls + '">' +
+                '<span class="ev-friend-name">' + esc(f.label) + '</span>' +
+                rightHtml +
+            '</div>';
+        }).join('');
+        listEl.querySelectorAll('.ev-friend-invite-btn').forEach(function(btn){
+            btn.addEventListener('click', function(){ handleInviteClick(btn); });
+        });
+    }
+    function handleInviteClick(btn) {
+        var key = btn.dataset.friendKey;
+        if (!key) return;
+        var statusEl = document.getElementById('ev-friends-dialog-status');
+        if (FRIENDS_DIALOG.mode === 'create') {
+            /* Toggle selección local. */
+            if (STATE.selectedInvitees[key]) {
+                delete STATE.selectedInvitees[key];
+                btn.classList.remove('is-invited');
+                btn.textContent = 'Invitar';
+            } else {
+                STATE.selectedInvitees[key] = true;
+                btn.classList.add('is-invited');
+                btn.textContent = '✓ Invitado';
+            }
+            updateInviteCount();
+            return;
+        }
+        /* Modo detail: API inmediata. */
+        btn.disabled = true;
+        btn.textContent = 'Enviando…';
+        api('invite-to-event', { eventId: FRIENDS_DIALOG.eventId, userKey: key }, 'POST').then(function(r){
+            if (r && r.ok) {
+                btn.classList.add('is-invited');
+                btn.textContent = '✓ Invitado';
+                statusEl.style.color = 'var(--success, #1a7a1a)';
+                statusEl.textContent = 'Invitación enviada.';
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Invitar';
+                statusEl.style.color = 'var(--error, #a02525)';
+                statusEl.textContent = (r && r.error) || 'Error.';
+            }
+        }).catch(function(){
+            btn.disabled = false;
+            btn.textContent = 'Invitar';
+            statusEl.style.color = 'var(--error, #a02525)';
+            statusEl.textContent = 'Error de red.';
+        });
+    }
+    /* Listeners del dialog. */
+    document.getElementById('ev-friends-dialog-close').addEventListener('click', closeFriendsDialog);
+    document.getElementById('ev-friends-dialog-cancel').addEventListener('click', closeFriendsDialog);
+    /* Botón del form de crear. */
+    document.getElementById('ev-create-invite-btn').addEventListener('click', function(){
+        openFriendsDialog('create', null);
+    });
 
     /* ── CREAR ── */
     document.getElementById('ev-create-cancel').addEventListener('click', function(){
@@ -2404,7 +2669,9 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
 
         var title = document.getElementById('ev-create-title').value.trim();
         var desc  = document.getElementById('ev-create-desc').value.trim();
-        var dateRaw = document.getElementById('ev-create-date').value;  // "YYYY-MM-DDTHH:MM"
+        var dateRaw = document.getElementById('ev-create-date').value;  // "YYYY-MM-DD"
+        var timePicker = document.getElementById('ev-create-time');
+        var timeStr = (timePicker && typeof timePicker.__tpGet === 'function') ? timePicker.__tpGet() : '00:00';
         var durMin = parseInt(document.getElementById('ev-create-duration').value, 10) || 60;
         var minP   = parseInt(document.getElementById('ev-create-min').value, 10) || 1;
         var maxP   = parseInt(document.getElementById('ev-create-max').value, 10) || 0;
@@ -2416,7 +2683,8 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         if (!dateRaw) { statusEl.className = 'ev-status is-error'; statusEl.textContent = 'La fecha es obligatoria.'; return; }
         if (maxP > 0 && maxP < minP) { statusEl.className = 'ev-status is-error'; statusEl.textContent = 'Máximo no puede ser menor que mínimo.'; return; }
 
-        var dateStr = dateRaw.replace('T', ' ') + ':00';  // "YYYY-MM-DD HH:MM:SS"
+        /* Combina fecha (YYYY-MM-DD) + hora del picker (HH:MM) → "YYYY-MM-DD HH:MM:SS" */
+        var dateStr = dateRaw + ' ' + timeStr + ':00';
 
         api('create-event', {
             title: title,
@@ -2442,8 +2710,9 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             document.getElementById('ev-create-duration').value = '60';
             document.getElementById('ev-create-min').value = '1';
             document.getElementById('ev-create-max').value = '0';
+            if (timePicker && typeof timePicker.__tpSet === 'function') timePicker.__tpSet('12:00');
             STATE.selectedInvitees = {};
-            renderFriendsCheckboxes();
+            updateInviteCount();
             /* Refrescar lista + recordatorios del calendario. */
             loadEvents();
             if (typeof window.cargarTodo === 'function') window.cargarTodo();
@@ -2525,11 +2794,6 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             '</div>' +
             '<div class="ev-detail-actions">' +
                 actions + inviteBtn + deleteBtn +
-            '</div>' +
-            '<div class="ev-invite-panel" id="ev-detail-invite-panel" style="display:none;">' +
-                '<h4>Invitar a amigos mutuos</h4>' +
-                '<div id="ev-detail-invite-list" class="ev-invite-list"></div>' +
-                '<p id="ev-detail-invite-status" class="ev-status"></p>' +
             '</div>';
 
         wireDetailActions(ev);
@@ -2589,33 +2853,9 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             });
         });
         if (invite) invite.addEventListener('click', function(){
-            var panel = document.getElementById('ev-detail-invite-panel');
-            var list  = document.getElementById('ev-detail-invite-list');
-            panel.style.display = '';
-            api('list-mutual-friends').then(function(d){
-                if (!d || !d.ok) { list.innerHTML = '<p style="font-size:11px; padding:6px; color:var(--text-faint, #808080);">Error al cargar amigos.</p>'; return; }
-                var already = {};
-                (ev.participants || []).forEach(function(p){ already[p.key] = true; });
-                var avail = (d.friends || []).filter(function(f){ return !already[f.key]; });
-                if (!avail.length) { list.innerHTML = '<p style="font-size:11px; padding:6px; color:var(--text-faint, #808080); font-style:italic;">No tienes amigos mutuos disponibles para invitar.</p>'; return; }
-                list.innerHTML = avail.map(function(f){
-                    return '<div class="ev-invite-row">' +
-                        '<span>' + esc(f.label) + '</span>' +
-                        '<button class="button ev-inv-send" data-key="' + esc(f.key) + '">Invitar</button>' +
-                    '</div>';
-                }).join('');
-                list.querySelectorAll('.ev-inv-send').forEach(function(btn){
-                    btn.addEventListener('click', function(){
-                        var key = btn.dataset.key;
-                        btn.disabled = true; btn.textContent = '…';
-                        api('invite-to-event', { eventId: ev.id, userKey: key }, 'POST').then(function(r){
-                            var status = document.getElementById('ev-detail-invite-status');
-                            if (r && r.ok) { btn.textContent = '✓ Enviado'; status.className = 'ev-status is-success'; status.textContent = 'Invitación enviada.'; }
-                            else { btn.disabled = false; btn.textContent = 'Invitar'; status.className = 'ev-status is-error'; status.textContent = (r && r.error) || 'Error'; }
-                        });
-                    });
-                });
-            });
+            /* Abre el dialog compartido en modo detail — envía cada invite
+               al API en cuanto se pulsa "Invitar" en cada fila. */
+            openFriendsDialog('detail', ev);
         });
     }
 
