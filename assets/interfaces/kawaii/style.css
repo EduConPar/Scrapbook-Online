@@ -4504,28 +4504,47 @@ a:not(.button):not(.start-app-item):focus:not(:focus-visible) {
 }
 
 /* Sidebar vertical — gradiente del title-bar style + texto destacado
-   con override de la frase a "MelonOS Overdose" en kawaii. Truco:
-   ocultamos el texto original (font-size:0) y mostramos el nuevo via
-   pseudo-elemento ::before que hereda writing-mode/transform del
-   parent. Así solo cambia para esta interfaz, no toca el HTML
-   compartido con MelonOS 98. */
+   con override de la frase a "Overdose" en kawaii.
+   Antes: usábamos `font-size:0` sobre el texto inline "MelonOS 98" +
+   ::before con "Overdose" encima. Cuando el menú crecía vertical
+   (muchos items), algunos motores no aplicaban el font-size:0 al text
+   node y "MelonOS 98" aparecía en pequeño junto al texto nuevo.
+   Ahora: matamos el texto original a fondo (transparente + clip +
+   indent) y montamos el ::before como capa ABSOLUTA centrada sobre
+   todo el sidebar. Así no importa cuán alto sea el menú: el contenido
+   visible es solo "Overdose". */
 #start-sidebar {
+    position: relative !important;
+    overflow: hidden !important;
     background: linear-gradient(to top, var(--border), var(--disabled-text, #7A6BA8)) !important;
-    color: var(--accent-text, var(--accent-text, #FFFFFF)) !important;
-    font-size: 0 !important;                      /* oculta el texto "MelonOS 98" original */
-    font-weight: 700 !important;
-    font-style: normal !important;
-    letter-spacing: 1.5px !important;
+    /* Matar el texto inline original. */
+    color: transparent !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+    text-indent: -9999px !important;
+    text-shadow: none !important;
     width: 28px !important;
     padding: 8px 4px !important;
 }
 
 #start-sidebar::before {
     content: "Overdose";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Hereda writing-mode:vertical-rl + transform:rotate(180deg) del
+       parent — pero al ser un pseudo absoluto rota junto al sidebar
+       mostrando el texto vertical correcto. */
+    text-indent: 0 !important;
     font-size: 14px !important;
-    color: var(--accent-text, var(--accent-text, #FFFFFF)) !important;
-    text-shadow: 1px 1px 0 var(--shadow-color, #2D2052) !important;
+    line-height: 1 !important;
+    font-weight: 700 !important;
+    font-style: normal !important;
     letter-spacing: 1.5px !important;
+    color: var(--accent-text, #FFFFFF) !important;
+    text-shadow: 1px 1px 0 var(--shadow-color, #2D2052) !important;
 }
 
 /* ════════════════════════════════════════════════════════════════════

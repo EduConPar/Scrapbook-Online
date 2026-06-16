@@ -568,7 +568,7 @@ window.DesktopState.whenReady = function(cb){
             opacity: 0.85;
         }
     </style>
-    <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;" data-report-type="bug">
+    <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1;min-height:0;" data-report-type="bug">
         <div style="font-size:11px;margin-bottom:2px;">Tipo:</div>
         <div style="display:flex;gap:6px;">
             <button type="button" class="button report-type-btn is-active" data-type="bug" style="flex:1;font-size:12px;padding:6px 10px;min-height:32px;">🐛 Bug</button>

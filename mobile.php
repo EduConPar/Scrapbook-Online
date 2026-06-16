@@ -1368,8 +1368,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <input type="text" id="mh-rep-title" maxlength="200" style="width:100%;box-sizing:border-box;padding:4px 6px;">
             <label style="display:block;font-size:11px;margin:10px 0 4px;">Descripción</label>
             <textarea id="mh-rep-body" maxlength="1900" rows="6" style="width:100%;box-sizing:border-box;resize:vertical;padding:4px 6px;font-family:inherit;font-size:13px;"></textarea>
-            <label style="display:block;font-size:11px;margin:10px 0 4px;">Imágenes (opcional, máx 4)</label>
-            <input type="file" id="mh-rep-files" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="font-size:11px;">
+            <div style="font-size:11px;margin:10px 0 4px;">Imágenes (opcional, máx 4)</div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <!-- Input file nativo OCULTO; el botón Win98 de al lado
+                     lo dispara con .click() para que el control use el
+                     estilo de la interfaz en lugar del look nativo del
+                     navegador móvil. -->
+                <input type="file" id="mh-rep-files" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none;">
+                <button type="button" class="button" id="mh-rep-files-browse" style="min-height:30px;">Examinar...</button>
+                <span id="mh-rep-files-name" style="font-size:11px;color:var(--text-faint,#666);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Sin archivos</span>
+            </div>
             <div id="mh-rep-files-list" style="font-size:10px;color:var(--text-faint,#666);margin-top:4px;min-height:12px;"></div>
             <p id="mh-rep-status"></p>
             <div id="mh-rep-actions" style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;">
@@ -4165,19 +4173,31 @@ window.MuShell = (function(){
         var repWin   = document.getElementById('mh-rep-window');
         var repBody2 = repWin ? repWin.querySelector('[data-report-type]') : null;
         var typeBtns = repWin ? repWin.querySelectorAll('.mh-rep-type-btn') : [];
+        var browseBtn = document.getElementById('mh-rep-files-browse');
+        var fileName  = document.getElementById('mh-rep-files-name');
         if (!repOpen || !repBp) return;
         function setStat(msg, color){ repStat.style.color = color || ''; repStat.textContent = msg || ''; }
         function setType(t){
             if (repBody2) repBody2.dataset.reportType = t;
             typeBtns.forEach(function(b){ b.classList.toggle('is-active', b.dataset.type === t); });
         }
+        /* Resumen del listado de archivos junto al botón Examinar... */
+        function updateFileNameSummary(n){
+            if (!fileName) return;
+            if (!n) { fileName.textContent = 'Sin archivos'; return; }
+            if (n === 1) { fileName.textContent = repFiles.files[0].name; return; }
+            fileName.textContent = n + ' archivos seleccionados';
+        }
         function reset(){
             repTitle.value = ''; repBody.value = '';
             repFiles.value = ''; repList.textContent = '';
+            updateFileNameSummary(0);
             setType('bug');
             setStat('');
             repOk.disabled = false;
         }
+        /* Botón Win98 dispara el input file oculto. */
+        if (browseBtn) browseBtn.addEventListener('click', function(){ repFiles.click(); });
         function openModal(){
             reset();
             closeSettings();
@@ -4194,16 +4214,17 @@ window.MuShell = (function(){
         });
         repFiles.addEventListener('change', function(){
             var n = repFiles.files ? repFiles.files.length : 0;
-            if (!n) { repList.textContent = ''; return; }
+            if (!n) { repList.textContent = ''; updateFileNameSummary(0); return; }
             /* Tope cliente-side: 4 archivos máx. El backend también
                valida tamaño individual (8MB) y formato. */
             if (n > 4) {
                 setStat('Máximo 4 imágenes.', 'var(--error-text, #c00)');
-                repFiles.value = ''; repList.textContent = ''; return;
+                repFiles.value = ''; repList.textContent = ''; updateFileNameSummary(0); return;
             }
             var names = [];
             for (var i = 0; i < n; i++) names.push(repFiles.files[i].name);
             repList.textContent = names.join(', ');
+            updateFileNameSummary(n);
         });
         repOk.addEventListener('click', function(){
             var type = (repBody2 && repBody2.dataset.reportType) || 'bug';
