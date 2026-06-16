@@ -1771,13 +1771,25 @@ function renderInterfacePacks() {
             /* applyInterfacePack viene de interface-loader.js. NO usamos
                setActiveInterface porque ese nombre lo ocupa una función
                local que POSTea al endpoint viejo y devuelve 400. */
-            if (typeof window.applyInterfacePack === 'function') {
-                try {
-                    var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
-                    topStorage.setItem('temas-restore-tab', 'personalize');
-                } catch (_) {}
+            if (typeof window.applyInterfacePack !== 'function') return;
+            try {
+                var topStorage = (window.top && window.top.sessionStorage) || sessionStorage;
+                topStorage.setItem('temas-restore-tab', 'personalize');
+            } catch (_) {}
+            /* PRIMERO persistimos la slug en BD — sin esto, el sync
+               server-side de mobile.php (cookie ← BD) sobrescribiría la
+               cookie nueva con la vieja en el siguiente reload y el
+               cambio de interfaz no surtiría efecto. Mismo patrón que
+               desktop (apps/temas.php). El reload se dispara en
+               `finally` para que también ocurra si el POST falla. */
+            fetch('../../assets/personalize/api.php?action=set-active-interface-slug', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: name })
+            }).catch(function(){}).finally(function() {
                 window.applyInterfacePack(name);
-            }
+            });
         });
     });
 }

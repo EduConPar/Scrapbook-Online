@@ -523,22 +523,11 @@
     white-space: nowrap;
     will-change: transform;
 }
-.profile-social-np.is-marquee .pf-np-track,
-.profile-nav-np.is-marquee .pf-np-track {
-    /* Mismo patrón que el marquee del reproductor: el track pasa a
-       inline-flex con un gap fijo entre el texto original y el
-       duplicado, y JS calcula `--pf-np-cycle` = anchoTexto + gap (px).
-       La animación desplaza el track exactamente ese ciclo: cuando
-       el duplicado ocupa la posición inicial del original, el loop
-       reinicia sin salto y aparece el hueco en blanco entre pasadas. */
-    display: inline-flex;
-    gap: 3em;
-    animation: pfNpMarquee var(--pf-np-cycle-duration, 10s) linear infinite;
-}
-@keyframes pfNpMarquee {
-    from { transform: translateX(0); }
-    to   { transform: translateX(calc(-1 * var(--pf-np-cycle, 100%))); }
-}
+/* El marquee se conduce desde JS (RAF) en perfil.php — replica
+   exactamente el patrón de `marqueeScroll` del reproductor: pausa al
+   inicio en la posición natural, scroll hacia la izquierda, salida
+   completa, reaparición por la derecha, vuelta a posición 0, pausa,
+   loop. No CSS keyframes para evitar saltos de fase al re-render. */
 .profile-nav-text {
     display: flex;
     flex-direction: column;

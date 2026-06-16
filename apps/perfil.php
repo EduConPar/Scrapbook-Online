@@ -3966,16 +3966,57 @@ var PROFILE_USERS = <?php
         });
         applyNowPlaying();
     }
+    /* Marquee clonado tal cual de apps/reproductor.php — el texto
+       arranca en su posición natural (visible desde el principio),
+       pausa `pauseMs`, se desplaza a la izquierda a `speed` px/seg,
+       sale completamente, reaparece por la derecha y vuelve a la
+       posición 0. Allí pausa de nuevo `pauseMs` y vuelve a empezar.
+       Devuelve un stop() para limpiar timers/raf al re-renderizar.
+       Si el texto no desborda el contenedor, no anima. */
+    function pfMarqueeScroll(el, parent, speed, pauseMs) {
+        el.style.transform = 'translateX(0)';
+        var pos = 0, last = null, fromRight = false, raf = null, timer = null;
+        var W = el.offsetWidth, C = parent.clientWidth;
+        if (W <= C) return function(){};
+        function tick(ts) {
+            if (!last) last = ts;
+            var dt = Math.min(ts - last, 50);
+            last = ts;
+            pos -= speed * dt / 1000;
+            if (pos < -W) {
+                pos = C + (pos + W);
+                fromRight = true;
+            }
+            if (fromRight && pos <= 0) {
+                pos = 0;
+                fromRight = false;
+                el.style.transform = 'translateX(0)';
+                last = null;
+                timer = setTimeout(function() { last = null; raf = requestAnimationFrame(tick); }, pauseMs);
+                return;
+            }
+            el.style.transform = 'translateX(' + pos + 'px)';
+            raf = requestAnimationFrame(tick);
+        }
+        timer = setTimeout(function() { raf = requestAnimationFrame(tick); }, pauseMs);
+        return function() {
+            clearTimeout(timer);
+            if (raf) cancelAnimationFrame(raf);
+            el.style.transform = '';
+        };
+    }
     /* Pinta la línea "♪ Canción - Artista" debajo del nombre en cualquier
        elemento con `data-np-userkey`. Si el texto no cabe, activa el
-       marquee (animación CSS) clonando el span para loop sin saltos. */
+       marquee JS (mismo patrón que el reproductor de escritorio). */
     function applyNowPlaying() {
         document.querySelectorAll('[data-np-userkey]').forEach(function(slot) {
-            var k = slot.getAttribute('data-np-userkey');
+            var k  = slot.getAttribute('data-np-userkey');
             var np = lastNowPlaying[k];
+            /* Para cualquier marquee anterior antes de re-renderizar. El
+               stop() también limpia transform inline. */
+            if (slot.__npStop) { try { slot.__npStop(); } catch(_){} slot.__npStop = null; }
             if (!np) {
                 slot.style.display = 'none';
-                slot.classList.remove('is-marquee');
                 slot.innerHTML = '';
                 return;
             }
@@ -3986,37 +4027,19 @@ var PROFILE_USERS = <?php
                 '<span class="pf-np-wrap"><span class="pf-np-track">' +
                     '<span class="pf-np-text">' + escHtml(text) + '</span>' +
                 '</span></span>';
-            /* Comprueba overflow tras paint para activar el marquee.
-               requestAnimationFrame da tiempo a que el layout se calcule. */
-            requestAnimationFrame(function(){
-                var wrap   = slot.querySelector('.pf-np-wrap');
-                var track  = slot.querySelector('.pf-np-track');
-                var textEl = slot.querySelector('.pf-np-text');
-                if (!wrap || !track || !textEl) return;
-                /* Limpia estado previo (re-renders). */
-                slot.classList.remove('is-marquee');
-                track.style.removeProperty('--pf-np-cycle');
-                track.style.removeProperty('--pf-np-cycle-duration');
-                while (track.children.length > 1) track.removeChild(track.lastChild);
-                var textW = textEl.offsetWidth;
-                if (textW <= wrap.clientWidth + 4) return;
-                /* Clona el texto: original + duplicado separados por el
-                   gap del CSS (3em). Ciclo = ancho del texto + gap, en
-                   px → al trasladar exactamente esa distancia el
-                   duplicado cae sobre la posición inicial del original
-                   y el loop reinicia sin salto, dejando hueco en blanco
-                   entre cada pasada (igual que el reproductor). */
-                var dup = textEl.cloneNode(true);
-                dup.setAttribute('aria-hidden', 'true');
-                track.appendChild(dup);
-                var em  = parseFloat(getComputedStyle(textEl).fontSize) || 10;
-                var gap = em * 3;
-                var cycle = textW + gap;
-                var duration = Math.max(8, cycle / 30).toFixed(1) + 's';
-                track.style.setProperty('--pf-np-cycle', cycle + 'px');
-                track.style.setProperty('--pf-np-cycle-duration', duration);
-                slot.classList.add('is-marquee');
-            });
+            /* Espera al primer paint para que offsetWidth / clientWidth
+               estén calculados. El reproductor también usa un setTimeout
+               de 50ms para esto mismo. */
+            setTimeout(function() {
+                var wrap  = slot.querySelector('.pf-np-wrap');
+                var track = slot.querySelector('.pf-np-track');
+                if (!wrap || !track) return;
+                /* 30 px/seg + 1500ms pause = scroll suave + descanso al
+                   completar cada vuelta (más lento que el reproductor
+                   porque el slot es muy pequeño y un scroll rápido se
+                   leería peor). */
+                slot.__npStop = pfMarqueeScroll(track, wrap, 30, 1500);
+            }, 50);
         });
     }
     /* Helper: marca un .profile-avatar-frame con su dot de presencia.
