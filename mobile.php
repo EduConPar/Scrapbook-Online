@@ -2808,6 +2808,10 @@ window.MuShell = (function(){
         /* Apaga los filtros LCD del fullscreen subyacente vía CSS. */
         document.body.classList.add('mu-lock-active');
         muRequestFs();
+        /* Notifica al heartbeat de presencia que el usuario está en lock
+           screen del reproductor → debe pasar a 'away'. Escuchar música
+           no es actividad. */
+        try { window.dispatchEvent(new Event('melon:idle:on')); } catch (_) {}
     }
     function closeLock() {
         var lock = document.getElementById('mu-lock');
@@ -2817,6 +2821,8 @@ window.MuShell = (function(){
         document.body.classList.remove('mu-lock-active');
         setTimeout(function(){ if (hint) { hint.style.transform = ''; hint.style.opacity = ''; } }, 1200);
         muExitFs();
+        /* Salimos del lock screen → el heartbeat vuelve a 'online'. */
+        try { window.dispatchEvent(new Event('melon:idle:off')); } catch (_) {}
     }
     function muRequestFs() {
         var el = document.documentElement;
@@ -4592,7 +4598,9 @@ window.MuShell = (function(){
     var awayTimer    = null;
 
     function ping(){
-        if (idleOff) return;
+        /* Seguimos latiendo SIEMPRE — escuchar música o tener la
+           pantalla bloqueada no debe hacernos desaparecer. Lo que
+           cambia es `currentState`: 'online' o 'away'. */
         fetch('assets/profile/api.php?action=heartbeat&state=' + encodeURIComponent(currentState), {
             method: 'POST', credentials: 'same-origin'
         }).catch(function(){});
@@ -4612,6 +4620,12 @@ window.MuShell = (function(){
     }
     function onActivity(){
         lastActivity = Date.now();
+        /* En lock screen del reproductor o con la pestaña oculta NO
+           contamos eventos de touch/scroll/etc como actividad —
+           escuchar música no es estar disponible. El state seguirá
+           siendo 'away' hasta que el lock screen se cierre y la
+           pestaña vuelva a primer plano. */
+        if (idleOff || document.hidden) return;
         if (currentState !== 'online') setState('online');
         scheduleAwayCheck();
     }
@@ -4620,8 +4634,11 @@ window.MuShell = (function(){
     });
     function startPing(){
         if (PING_T) clearInterval(PING_T);
-        if (idleOff) return; /* no rearrancar mientras lock activo */
-        var iv = (document.visibilityState === 'hidden') ? 90000 : 30000;
+        /* En lock screen o pestaña oculta latimos más espaciado (90s),
+           pero NUNCA paramos — si paramos, otros usuarios nos verían
+           caer offline después de 60s en vez de seguir viéndonos como
+           ausentes. */
+        var iv = (idleOff || document.visibilityState === 'hidden') ? 90000 : 30000;
         PING_T = setInterval(ping, iv);
     }
     function stopPing(){
@@ -4635,9 +4652,11 @@ window.MuShell = (function(){
         startPing();
     });
     /* Reproductor avisa con `melon:idle` cuando la pantalla de bloqueo
-       de música se activa. Marcamos away aunque sigamos en pantalla. */
+       de música se activa. Marcamos away aunque sigamos en pantalla y
+       espaciamos el ping a 90s, pero NO lo paramos: queremos que otros
+       sigan viéndonos en Social como ausentes (amarillo), no offline. */
     window.addEventListener('melon:idle:on',  function(){
-        idleOff = true; setState('away'); stopPing();
+        idleOff = true; setState('away'); startPing();
     });
     window.addEventListener('melon:idle:off', function(){
         idleOff = false; onActivity(); startPing(); ping();

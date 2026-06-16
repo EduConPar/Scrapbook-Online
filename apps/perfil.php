@@ -3669,6 +3669,14 @@ var PROFILE_USERS = <?php
         nameEl.className = 'profile-social-name';
         nameEl.textContent = u.label;
         card.appendChild(nameEl);
+        /* Now-playing slot: applyNowPlaying() lo rellena/oculta según
+           el state del usuario. Empieza display:none y se activa solo
+           si el server reporta que está reproduciendo. */
+        var npEl = document.createElement('div');
+        npEl.className = 'profile-social-np';
+        npEl.setAttribute('data-np-userkey', userKey);
+        npEl.style.display = 'none';
+        card.appendChild(npEl);
         card.addEventListener('click', function() {
             /* Abre el perfil del clicked user como ventana iframe-
                based (con su interfaz/tema/iconos) en vez de navegar
@@ -3740,10 +3748,19 @@ var PROFILE_USERS = <?php
             navDot.setAttribute('data-userkey', k);
             iconWrap.appendChild(navDot);
             item.appendChild(iconWrap);
+            /* Bloque con label + slot de now-playing apilados. */
+            var textCol = document.createElement('span');
+            textCol.className = 'profile-nav-text';
             var label = document.createElement('span');
             label.className = 'profile-nav-label';
             label.textContent = u.label;
-            item.appendChild(label);
+            textCol.appendChild(label);
+            var npEl = document.createElement('span');
+            npEl.className = 'profile-nav-np';
+            npEl.setAttribute('data-np-userkey', k);
+            npEl.style.display = 'none';
+            textCol.appendChild(npEl);
+            item.appendChild(textCol);
             (function(uk) {
                 item.addEventListener('click', function() {
                     /* Abre el perfil del seguido como ventana iframe-
@@ -3935,9 +3952,10 @@ var PROFILE_USERS = <?php
     /* Presencia: cada 20s pide la lista de online y refresca los puntos.
        Cacheamos el último set para que renderSocialList/renderFollowedNav
        puedan re-aplicar el estado sin esperar al siguiente fetch. */
-    var lastOnlineSet = {};
-    var lastAwaySet   = {};
-    var lastDndSet    = {};
+    var lastOnlineSet  = {};
+    var lastAwaySet    = {};
+    var lastDndSet     = {};
+    var lastNowPlaying = {};   /* user_key → {title, artist} */
     function applyPresence() {
         document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
             var k = dot.getAttribute('data-userkey');
@@ -3945,6 +3963,47 @@ var PROFILE_USERS = <?php
             /* away gana visualmente sobre online (verde→amarillo). */
             dot.classList.toggle('away',   !!lastAwaySet[k]);
             dot.classList.toggle('dnd',    !!lastDndSet[k]);
+        });
+        applyNowPlaying();
+    }
+    /* Pinta la línea "♪ Canción - Artista" debajo del nombre en cualquier
+       elemento con `data-np-userkey`. Si el texto no cabe, activa el
+       marquee (animación CSS) clonando el span para loop sin saltos. */
+    function applyNowPlaying() {
+        document.querySelectorAll('[data-np-userkey]').forEach(function(slot) {
+            var k = slot.getAttribute('data-np-userkey');
+            var np = lastNowPlaying[k];
+            if (!np) {
+                slot.style.display = 'none';
+                slot.classList.remove('is-marquee');
+                slot.innerHTML = '';
+                return;
+            }
+            var text = (np.title || '') + (np.artist ? ' - ' + np.artist : '');
+            slot.style.display = '';
+            slot.innerHTML =
+                '<span class="pf-np-icon">♪</span>' +
+                '<span class="pf-np-wrap"><span class="pf-np-track">' +
+                    '<span class="pf-np-text">' + escHtml(text) + '</span>' +
+                '</span></span>';
+            /* Comprueba overflow tras paint para activar el marquee.
+               requestAnimationFrame da tiempo a que el layout se calcule. */
+            requestAnimationFrame(function(){
+                var wrap  = slot.querySelector('.pf-np-wrap');
+                var track = slot.querySelector('.pf-np-track');
+                if (!wrap || !track) return;
+                if (track.scrollWidth > wrap.clientWidth + 2) {
+                    /* Clonamos el span para tener un loop sin "salto" al
+                       reaparecer — la animación traslada el track por el
+                       ancho del primer texto + un gap. */
+                    var dup = track.firstElementChild.cloneNode(true);
+                    dup.style.paddingLeft = '24px';
+                    track.appendChild(dup);
+                    slot.classList.add('is-marquee');
+                } else {
+                    slot.classList.remove('is-marquee');
+                }
+            });
         });
     }
     /* Helper: marca un .profile-avatar-frame con su dot de presencia.
@@ -3988,6 +4047,7 @@ var PROFILE_USERS = <?php
                 if (Array.isArray(d.dnd)) {
                     d.dnd.forEach(function(k) { lastDndSet[k] = true; });
                 }
+                lastNowPlaying = (d.nowPlaying && typeof d.nowPlaying === 'object') ? d.nowPlaying : {};
                 if (d.lastSeen && typeof d.lastSeen === 'object') {
                     lastSeenMap = d.lastSeen;
                 }

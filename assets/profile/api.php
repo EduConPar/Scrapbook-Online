@@ -1523,7 +1523,38 @@ case 'presence': {
         ");
         foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $k) $dnd[] = $k;
     } catch (Throwable $_) {}
-    jsonResponse(['ok' => true, 'online' => $online, 'away' => $away, 'lastSeen' => $lastSeen, 'dnd' => $dnd]);
+    /* Now-playing: mapa user_key → {title, artist} de los que están
+       reproduciendo música en estos momentos. La tabla `now_playing`
+       la mantiene el reproductor (save-now-playing). Solo incluimos
+       updates de los últimos 90s para no mostrar canciones obsoletas
+       si el usuario cerró el reproductor sin pausar. */
+    $nowPlaying = [];
+    try {
+        $stN = $pdo->query("
+            SELECT u.user_key, np.track_json
+              FROM now_playing np
+              JOIN usuarios u ON u.id = np.user_id
+             WHERE np.is_playing = 1
+               AND np.updated_at > DATE_SUB(NOW(), INTERVAL 90 SECOND)
+        ");
+        foreach ($stN->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $tr = json_decode((string)$r['track_json'], true);
+            if (!is_array($tr)) continue;
+            $title  = trim((string)($tr['title']  ?? ''));
+            $artist = trim((string)($tr['artist'] ?? ''));
+            if ($title === '' && $artist === '') continue;
+            $nowPlaying[$r['user_key']] = ['title' => $title, 'artist' => $artist];
+        }
+    } catch (Throwable $_) { /* tabla puede no existir */ }
+
+    jsonResponse([
+        'ok'         => true,
+        'online'     => $online,
+        'away'       => $away,
+        'lastSeen'   => $lastSeen,
+        'dnd'        => $dnd,
+        'nowPlaying' => $nowPlaying,
+    ]);
 }
 
 case 'notif-settings': {

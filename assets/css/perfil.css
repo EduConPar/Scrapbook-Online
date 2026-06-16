@@ -492,6 +492,53 @@
     background: #2ecc71;
     animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   NOW-PLAYING en social cards y sidebar followed-nav
+   ══════════════════════════════════════════════════════════════════ */
+.profile-social-np,
+.profile-nav-np {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted, #666);
+    margin-top: 2px;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.pf-np-icon {
+    flex-shrink: 0;
+    color: var(--accent, #000080);
+}
+.pf-np-wrap {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    /* Clipping rectangulo fijo: el track de dentro puede ser más ancho. */
+}
+.pf-np-track {
+    display: inline-block;
+    white-space: nowrap;
+}
+.profile-social-np.is-marquee .pf-np-track,
+.profile-nav-np.is-marquee .pf-np-track {
+    /* Cuando el texto sobra, animamos un desplazamiento horizontal en
+       loop. El span se duplica vía JS para que la segunda mitad
+       aparezca sin "salto" al volver a posición 0. */
+    animation: pfNpMarquee 10s linear infinite;
+}
+@keyframes pfNpMarquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+.profile-nav-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
 /* Ausente: el usuario está online (heartbeat reciente) pero lleva un
    tiempo sin interactuar — o tiene la pantalla bloqueada en móvil.
    Amarillo sin pulse para no llamar la atención como online. Gana en
