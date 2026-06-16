@@ -577,8 +577,14 @@ window.DesktopState.whenReady = function(cb){
         <label style="font-size:11px;display:block;">Título
             <input id="report-title" type="text" maxlength="200" style="width:100%;display:block;margin-top:4px;box-sizing:border-box;padding:4px 6px;">
         </label>
-        <label style="font-size:11px;display:block;">Descripción
-            <textarea id="report-body" maxlength="1900" rows="6" style="width:100%;display:block;margin-top:4px;resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box;padding:4px 6px;"></textarea>
+        <!-- Descripción ocupa el espacio extra del body cuando la
+             ventana se hace más alta. Antes el body usaba margin-top
+             auto en los botones para empujarlos al fondo, pero eso
+             dejaba un hueco enorme entre el último input y los
+             botones. Ahora es la textarea la que crece, los botones
+             quedan justo debajo. -->
+        <label style="font-size:11px;display:flex;flex-direction:column;flex:1;min-height:120px;">Descripción
+            <textarea id="report-body" maxlength="1900" style="width:100%;display:block;margin-top:4px;resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box;padding:4px 6px;flex:1;min-height:80px;"></textarea>
         </label>
         <div style="font-size:11px;">Imágenes (opcional, máx 4)</div>
         <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
@@ -592,11 +598,7 @@ window.DesktopState.whenReady = function(cb){
         </div>
         <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);min-height:12px;"></div>
         <p id="report-status" style="margin:6px 0 0;font-size:11px;min-height:14px;"></p>
-        <!-- margin-top:auto empuja la fila de acciones al fondo del
-             body (que es flex column) cuando la ventana se hace más
-             alta. Sin esto los botones quedaban pegados arriba con
-             el resto del contenido y un hueco enorme debajo. -->
-        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:auto;">
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:6px;">
             <button id="report-ok" class="default">Enviar</button>
             <button id="report-cancel">Cancelar</button>
         </div>
