@@ -193,6 +193,15 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <!-- Deep link de Discord: si llega ?openEvent=N, lo guardamos en
+         sessionStorage para que el shell (mobile.php / desktop-base) lo
+         consuma tras el login y abra la app de Calendario con el evento. -->
+    <script>(function(){
+        try {
+            var p = new URLSearchParams(location.search).get('openEvent');
+            if (p) sessionStorage.setItem('pendingOpenEvent', p);
+        } catch(_){}
+    })();</script>
     <!-- Login responsivo: el formulario y el grid de usuarios usan flex/grid
          y caben tanto en móvil-tablet como en PC. Sin esto, móvil/tablet
          heredan el viewport default del browser (~980px) y se descuajan. -->

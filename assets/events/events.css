@@ -185,14 +185,20 @@
 .ev-radio-group {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 6px;
     padding: 4px 0 0;
 }
-.ev-radio-group label {
+/* Cada línea contiene un input radio + su label. 98.css hace
+   opacity:0 + position:fixed sobre el input y dibuja el círculo via
+   `input[type=radio]+label:before` — por eso necesitamos input y
+   label como HERMANOS directos (no input dentro de label). */
+.ev-radio-line {
+    display: block;
+    line-height: 14px;
+    min-height: 14px;
+}
+.ev-radio-line label {
     font-size: 11px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
     cursor: pointer;
 }
 

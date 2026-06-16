@@ -2159,6 +2159,21 @@ window.notifSystem = (function() {
     document.getElementById('calendar-close').addEventListener('click', function() {
         taskbarManager.unregister('calendar-window');
     });
+
+    /* Deep link Discord: si pendingOpenEvent está en sessionStorage,
+       lo movemos a calOpenEvent (que el iframe leerá) y simulamos
+       dblclick para abrir el calendario. El módulo de eventos en
+       calendario.php hará openWindow + openDetail al detectar la flag. */
+    (function() {
+        try {
+            var pe = sessionStorage.getItem('pendingOpenEvent');
+            if (!pe) return;
+            sessionStorage.removeItem('pendingOpenEvent');
+            sessionStorage.setItem('calOpenEvent', pe);
+            var calIcon = document.getElementById('calendar-icon');
+            if (calIcon) calIcon.dispatchEvent(new Event('dblclick'));
+        } catch(_){}
+    })();
 })();
 
 /* =========================

@@ -1123,8 +1123,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             <div class="ev-field">
                 <label>Visibilidad</label>
                 <div class="ev-radio-group">
-                    <label><input type="radio" name="ev-m-vis" value="public" checked> Público</label>
-                    <label><input type="radio" name="ev-m-vis" value="private"> Privado (solo invitados)</label>
+                    <div class="ev-radio-line">
+                        <input type="radio" id="ev-m-vis-public" name="ev-m-vis" value="public" checked>
+                        <label for="ev-m-vis-public">Público</label>
+                    </div>
+                    <div class="ev-radio-line">
+                        <input type="radio" id="ev-m-vis-private" name="ev-m-vis" value="private">
+                        <label for="ev-m-vis-private">Privado (solo invitados)</label>
+                    </div>
                 </div>
             </div>
             <div class="ev-field">
@@ -1576,6 +1582,20 @@ window.__EV_CFG = {
         });
         if (inv) inv.addEventListener('click', function(){ openFriendsDialog('detail', ev); });
     }
+
+    /* Deep link Discord: el shell móvil dejó calOpenEvent en sessionStorage
+       → abrimos la ventana de eventos y luego el detalle del evento. */
+    (function() {
+        try {
+            var eid = sessionStorage.getItem('calOpenEvent');
+            if (!eid) return;
+            sessionStorage.removeItem('calOpenEvent');
+            setTimeout(function() {
+                openWindow();
+                setTimeout(function() { openDetail(parseInt(eid, 10)); }, 350);
+            }, 300);
+        } catch(_){}
+    })();
 })();
 </script>
 </body>

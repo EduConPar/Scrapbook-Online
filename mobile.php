@@ -1877,6 +1877,19 @@ if ('serviceWorker' in navigator) {
         });
     });
 
+    /* Deep link Discord: si pendingOpenEvent existe en sessionStorage,
+       lo movemos a calOpenEvent (que el iframe leerá) y abrimos
+       Calendario directamente. El módulo de eventos lo consumirá. */
+    (function() {
+        try {
+            var pe = sessionStorage.getItem('pendingOpenEvent');
+            if (!pe) return;
+            sessionStorage.removeItem('pendingOpenEvent');
+            sessionStorage.setItem('calOpenEvent', pe);
+            openApp('apps/mobile/calendario-mobile.php', 'Calendario', false);
+        } catch(_){}
+    })();
+
     /* Apps embebidas → postMessage para volver atrás o lanzar otra. */
     window.addEventListener('message', function(ev){
         var d = ev.data || {};

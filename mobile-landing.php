@@ -79,6 +79,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <!-- Deep link Discord: ?openEvent=N → sessionStorage para que el
+         shell móvil lo consuma tras el login y abra Calendario. -->
+    <script>(function(){
+        try {
+            var p = new URLSearchParams(location.search).get('openEvent');
+            if (p) sessionStorage.setItem('pendingOpenEvent', p);
+        } catch(_){}
+    })();</script>
     <!-- Si la landing se abre DENTRO de la PWA (alguien volvió desde
          dentro o el icono apunta aquí), redirigimos a mobile.php con
          el marcador pwa=1 para que el servidor establezca la sesión

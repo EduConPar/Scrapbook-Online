@@ -1663,7 +1663,7 @@ body:has(.cal-cell) {
     font-size: 12px !important;
     font-weight: 700 !important;
 }
-.ev-radio-group label {
+.ev-radio-line label {
     font-size: 12px !important;
     color: var(--text) !important;
 }

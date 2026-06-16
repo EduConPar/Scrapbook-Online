@@ -155,14 +155,21 @@ case 'get-recordatorios': {
     if (!$userId) jsonResponse([]);
     $parejaId = (int)($_GET['pareja_id'] ?? 0);
     /* COALESCE para que filas legacy con periodicidad NULL no exploten
-       en el frontend (que esperaba 'ninguna' por default). */
+       en el frontend (que esperaba 'ninguna' por default).
+       Con pareja: devuelve los compartidos (pareja_id = N) Y los
+       personales del usuario actual (pareja_id = 0). Antes solo se
+       devolvían los compartidos, así los recordatorios personales
+       (p.ej. los que genera la app de Eventos al unirse a un evento)
+       no aparecían a usuarios con pareja. */
     if ($parejaId) {
         $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion,
                                COALESCE(r.periodicidad, 'ninguna') AS periodicidad,
                                u.username AS autor
                                FROM recordatorios r JOIN usuarios u ON r.usuario_id = u.id
-                               WHERE r.pareja_id = ? ORDER BY r.fecha ASC");
-        $stmt->execute([$parejaId]);
+                               WHERE r.pareja_id = ?
+                                  OR (r.usuario_id = ? AND (r.pareja_id = 0 OR r.pareja_id IS NULL))
+                               ORDER BY r.fecha ASC");
+        $stmt->execute([$parejaId, $userId]);
     } else {
         $stmt = $pdo->prepare("SELECT r.id, r.titulo, r.fecha, r.descripcion,
                                COALESCE(r.periodicidad, 'ninguna') AS periodicidad,
@@ -223,11 +230,19 @@ case 'purge-recordatorios': {
     /* fecha < hoy - 1 día → solo borramos lo que pasó hace 2+ días. */
     $hoy = date('Y-m-d', strtotime('-1 day'));
     if ($parejaId) {
+        /* Compartidos de la pareja: cualquiera de los dos puede limpiar. */
         $stmt = $pdo->prepare("DELETE FROM recordatorios
                                WHERE pareja_id = ?
                                  AND (periodicidad = 'ninguna' OR periodicidad IS NULL)
                                  AND fecha < ?");
         $stmt->execute([$parejaId, $hoy]);
+        /* Personales del usuario actual (p.ej. recordatorios de eventos):
+           cada usuario limpia los SUYOS — no los de su pareja. */
+        $stmt = $pdo->prepare("DELETE FROM recordatorios
+                               WHERE usuario_id = ? AND (pareja_id = 0 OR pareja_id IS NULL)
+                                 AND (periodicidad = 'ninguna' OR periodicidad IS NULL)
+                                 AND fecha < ?");
+        $stmt->execute([$userId, $hoy]);
     } else {
         $stmt = $pdo->prepare("DELETE FROM recordatorios
                                WHERE usuario_id = ? AND (pareja_id = 0 OR pareja_id IS NULL)

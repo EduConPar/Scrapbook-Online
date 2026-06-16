@@ -163,8 +163,14 @@ $projectBaseUrl = rtrim(str_replace('\\', '/', dirname(dirname($_SERVER['SCRIPT_
             <div class="ev-field">
                 <label>Visibilidad</label>
                 <div class="ev-radio-group">
-                    <label><input type="radio" name="ev-visibility" value="public" checked> Público <span style="color:var(--text-muted,#666);">(cualquiera puede unirse)</span></label>
-                    <label><input type="radio" name="ev-visibility" value="private"> Privado <span style="color:var(--text-muted,#666);">(solo invitados)</span></label>
+                    <div class="ev-radio-line">
+                        <input type="radio" id="ev-vis-public" name="ev-visibility" value="public" checked>
+                        <label for="ev-vis-public">Público <span style="color:var(--text-muted,#666);">(cualquiera puede unirse)</span></label>
+                    </div>
+                    <div class="ev-radio-line">
+                        <input type="radio" id="ev-vis-private" name="ev-visibility" value="private">
+                        <label for="ev-vis-private">Privado <span style="color:var(--text-muted,#666);">(solo invitados)</span></label>
+                    </div>
                 </div>
             </div>
             <div class="ev-field">
@@ -2905,6 +2911,21 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
        haya inicializado en el shell padre) y polling cada 30s. */
     setTimeout(pollInvites, 2500);
     setInterval(pollInvites, 30000);
+
+    /* Deep link: si el shell padre nos dejó calOpenEvent en sessionStorage
+       (vino de un link de Discord), abrimos la ventana de eventos y
+       enseguida el detalle del evento que toca. */
+    (function() {
+        try {
+            var eid = sessionStorage.getItem('calOpenEvent');
+            if (!eid) return;
+            sessionStorage.removeItem('calOpenEvent');
+            setTimeout(function() {
+                openWindow();
+                setTimeout(function() { openDetail(parseInt(eid, 10)); }, 350);
+            }, 250);
+        } catch(_){}
+    })();
 })();
 </script>
 
