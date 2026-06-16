@@ -421,6 +421,20 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             font-size: 13px; padding: 4px 6px;
         }
         #mh-rep-status { font-size: 11px; min-height: 14px; margin: 6px 0 0; }
+        /* Botones tipo (Bug/Sugerencia): el activo se destaca con
+           fondo accent + bezel hundido para que sea inequívoco. */
+        .mh-rep-type-btn { transition: none; }
+        .mh-rep-type-btn.is-active {
+            background: var(--accent, #000080) !important;
+            color: var(--accent-text, #fff) !important;
+            font-weight: bold;
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-2, grey) !important;
+        }
+        .mh-rep-type-btn:not(.is-active) { opacity: 0.85; }
         #mh-cp-window { width: 100%; max-width: 320px; display: flex; flex-direction: column; }
         #mh-cp-window .window-body {
             padding: 14px;
@@ -1287,8 +1301,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         <div class="window-body" data-report-type="bug">
             <div style="font-size:11px;margin:0 0 4px;">Tipo:</div>
             <div style="display:flex;gap:6px;margin-bottom:10px;">
-                <button type="button" class="button default mh-rep-type-btn" data-type="bug" style="flex:1;font-size:12px;padding:4px 8px;">🐛 Bug</button>
-                <button type="button" class="button mh-rep-type-btn" data-type="suggestion" style="flex:1;font-size:12px;padding:4px 8px;">💡 Sugerencia</button>
+                <button type="button" class="button mh-rep-type-btn is-active" data-type="bug" style="flex:1;font-size:13px;padding:8px 10px;min-height:38px;">🐛 Bug</button>
+                <button type="button" class="button mh-rep-type-btn" data-type="suggestion" style="flex:1;font-size:13px;padding:8px 10px;min-height:38px;">💡 Sugerencia</button>
             </div>
             <label style="display:block;font-size:11px;margin:0 0 4px;">Título</label>
             <input type="text" id="mh-rep-title" maxlength="200" style="width:100%;box-sizing:border-box;padding:4px 6px;">
@@ -3999,7 +4013,7 @@ window.MuShell = (function(){
         function setStat(msg, color){ repStat.style.color = color || ''; repStat.textContent = msg || ''; }
         function setType(t){
             if (repBody2) repBody2.dataset.reportType = t;
-            typeBtns.forEach(function(b){ b.classList.toggle('default', b.dataset.type === t); });
+            typeBtns.forEach(function(b){ b.classList.toggle('is-active', b.dataset.type === t); });
         }
         function reset(){
             repTitle.value = ''; repBody.value = '';

@@ -533,11 +533,31 @@ window.DesktopState.whenReady = function(cb){
             <button aria-label="Close" id="reports-x"></button>
         </div>
     </div>
+    <style>
+        /* Botones tipo del modal Reportes — bien diferenciados. */
+        .report-type-btn {
+            transition: none;
+            position: relative;
+        }
+        .report-type-btn.is-active {
+            background: var(--accent, #000080) !important;
+            color: var(--accent-text, #fff) !important;
+            font-weight: bold;
+            box-shadow:
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf),
+                inset  2px  2px var(--bezel-dark-2, grey) !important;
+        }
+        .report-type-btn:not(.is-active) {
+            opacity: 0.85;
+        }
+    </style>
     <div class="window-body" style="padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;" data-report-type="bug">
         <div style="font-size:11px;margin-bottom:2px;">Tipo:</div>
         <div style="display:flex;gap:6px;">
-            <button type="button" class="button report-type-btn default" data-type="bug" style="flex:1;font-size:12px;padding:4px 8px;">🐛 Bug</button>
-            <button type="button" class="button report-type-btn" data-type="suggestion" style="flex:1;font-size:12px;padding:4px 8px;">💡 Sugerencia</button>
+            <button type="button" class="button report-type-btn is-active" data-type="bug" style="flex:1;font-size:12px;padding:6px 10px;min-height:32px;">🐛 Bug</button>
+            <button type="button" class="button report-type-btn" data-type="suggestion" style="flex:1;font-size:12px;padding:6px 10px;min-height:32px;">💡 Sugerencia</button>
         </div>
         <label style="font-size:11px;display:block;">Título
             <input id="report-title" type="text" maxlength="200" style="width:100%;display:block;margin-top:4px;box-sizing:border-box;padding:4px 6px;">
@@ -1319,7 +1339,7 @@ document.addEventListener('click', function() {
     function setType(t){
         body.dataset.reportType = t;
         typeBtns.forEach(function(b){
-            b.classList.toggle('default', b.dataset.type === t);
+            b.classList.toggle('is-active', b.dataset.type === t);
         });
     }
     function reset(){
