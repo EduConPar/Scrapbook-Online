@@ -701,6 +701,41 @@ let ytPlayer = null;
 let progressInterval  = null;
 let autoplayRandom    = false;
 
+/* Publica el track actual a save-now-playing para que (1) la TV lo lea
+   por polling y (2) el apartado social del perfil muestre "escuchando
+   ahora". El backend solo considera la canción si is_playing=1 y el
+   update tiene < 90s, así que reportamos en cada play/pause/cambio de
+   pista (force) y periódicamente desde startProgress (throttled). */
+var __NP_LAST = 0;
+function publishNowPlaying(isPlaying, force) {
+    var tr = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+    if (!tr || !tr.videoId) return;
+    var now = Date.now();
+    if (!force && now - __NP_LAST < 2000) return;
+    __NP_LAST = now;
+    var pos = 0, dur = 0;
+    try { pos = ytPlayer && ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0; } catch (_) {}
+    try { dur = ytPlayer && ytPlayer.getDuration    ? ytPlayer.getDuration()    : 0; } catch (_) {}
+    var plName = '';
+    try { var _e = document.getElementById('player-pl-name'); if (_e) plName = _e.textContent || ''; } catch (_) {}
+    try {
+        fetch('assets/music/api.php?action=save-now-playing', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                videoId:   tr.videoId,
+                title:     tr.title  || '',
+                artist:    tr.artist || '',
+                plName:    plName,
+                position:  pos,
+                duration:  dur,
+                isPlaying: !!isPlaying,
+            }),
+            keepalive: true
+        }).catch(function(){});
+    } catch (_) {}
+}
+
 /* Estado del WRAPPED tracking: guardamos referencia a la última canción
    que se EMPEZÓ a reproducir. Cuando cambia (skip / natural end / cierre
    de la ventana) la logueamos con el tiempo ESCUCHADO real (la
@@ -2342,6 +2377,10 @@ function startProgress()
             playerCurrent.textContent = formatTime(cur);
             playerDur.textContent = formatTime(dur);
         }
+        /* Refresca el now-playing del social/TV mientras suena (throttled
+           a 2s dentro de publishNowPlaying) para no salir de la ventana
+           de 90s del backend. */
+        publishNowPlaying(true, false);
     }, 500);
 }
 
@@ -2410,9 +2449,11 @@ function onYouTubeIframeAPIReady()
                 if (e.data === YT.PlayerState.PLAYING) {
                     btnPlay.textContent = '⏸';
                     startProgress();
+                    publishNowPlaying(true, true);
                 } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
                     btnPlay.textContent = '►';
                     clearInterval(progressInterval);
+                    publishNowPlaying(false, true);
                 }
                 if (e.data === YT.PlayerState.ENDED) {
                     if (autoplayRandom && playlist.length > 1) {
