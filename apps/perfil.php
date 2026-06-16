@@ -3973,26 +3973,33 @@ var PROFILE_USERS = <?php
        posición 0. Allí pausa de nuevo `pauseMs` y vuelve a empezar.
        Devuelve un stop() para limpiar timers/raf al re-renderizar.
        Si el texto no desborda el contenedor, no anima. */
-    function pfMarqueeScroll(el, parent, speed, pauseMs) {
+    /* Mide el ancho NATURAL del texto sin que el layout flex/overflow
+       del padre lo restrinja: clona el elemento, lo mete en
+       <body> con position:absolute (fuera de flow), copia las props
+       de fuente con `getComputedStyle` para que el clone se renderice
+       con la MISMA tipografía que el original, mide y limpia. */
+    function pfMeasureTextWidth(textEl) {
+        if (!textEl) return 0;
+        var cs = window.getComputedStyle(textEl);
+        var clone = textEl.cloneNode(true);
+        clone.style.cssText =
+            'position:absolute;left:-99999px;top:0;visibility:hidden;' +
+            'white-space:nowrap;display:inline-block;margin:0;padding:0;border:0;' +
+            'font-family:' + cs.fontFamily + ';' +
+            'font-size:'   + cs.fontSize   + ';' +
+            'font-weight:' + cs.fontWeight + ';' +
+            'font-style:'  + cs.fontStyle  + ';' +
+            'letter-spacing:' + cs.letterSpacing + ';';
+        document.body.appendChild(clone);
+        var w = clone.getBoundingClientRect().width || clone.offsetWidth || 0;
+        document.body.removeChild(clone);
+        return Math.ceil(w);
+    }
+    function pfMarqueeScroll(el, parent, speed, pauseMs, W) {
         el.style.transform = 'translateX(0)';
         var pos = 0, last = null, fromRight = false, raf = null, timer = null;
-        /* Medimos el ancho REAL del texto interno. El track es
-           inline-block y en algunos casos su `offsetWidth` se ve
-           constreñido por el padre con `overflow:hidden`; pero el
-           `.pf-np-text` de dentro es un span INLINE puro y su
-           getBoundingClientRect().width siempre refleja el ancho
-           natural del texto independientemente del clip del padre.
-           Si no encuentra `.pf-np-text` (uso genérico de la función),
-           cae al track con el máximo de las tres medidas posibles. */
-        var inner = el.querySelector('.pf-np-text');
-        var W;
-        if (inner) {
-            W = Math.max(inner.getBoundingClientRect().width, inner.offsetWidth, inner.scrollWidth);
-        } else {
-            W = Math.max(el.getBoundingClientRect().width, el.offsetWidth, el.scrollWidth);
-        }
         var C = parent.clientWidth;
-        if (W <= C) return function(){};
+        if (!W || W <= C) return function(){};
         function tick(ts) {
             if (!last) last = ts;
             var dt = Math.min(ts - last, 50);
@@ -4042,18 +4049,26 @@ var PROFILE_USERS = <?php
                 '<span class="pf-np-wrap"><span class="pf-np-track">' +
                     '<span class="pf-np-text">' + escHtml(text) + '</span>' +
                 '</span></span>';
-            /* Espera al primer paint para que offsetWidth / clientWidth
-               estén calculados. El reproductor también usa un setTimeout
-               de 50ms para esto mismo. */
+            /* Espera al primer paint para que clientWidth del wrap esté
+               calculado. Para el ANCHO DEL TEXTO usamos el clon en
+               <body> (pfMeasureTextWidth) en vez de measurements del
+               propio track: el track es inline-block dentro de un
+               flex-item con `overflow:hidden` y el navegador lo
+               restringe al ancho del padre, devolviendo un valor menor
+               al real → el warp dispararía antes de tiempo y el texto
+               se cortaría a mitad. El clone se mide en un contexto
+               libre y devuelve el ancho real renderizado del texto. */
             setTimeout(function() {
-                var wrap  = slot.querySelector('.pf-np-wrap');
-                var track = slot.querySelector('.pf-np-track');
-                if (!wrap || !track) return;
+                var wrap   = slot.querySelector('.pf-np-wrap');
+                var track  = slot.querySelector('.pf-np-track');
+                var textEl = slot.querySelector('.pf-np-text');
+                if (!wrap || !track || !textEl) return;
+                var W = pfMeasureTextWidth(textEl);
                 /* 30 px/seg + 1500ms pause = scroll suave + descanso al
                    completar cada vuelta (más lento que el reproductor
                    porque el slot es muy pequeño y un scroll rápido se
                    leería peor). */
-                slot.__npStop = pfMarqueeScroll(track, wrap, 30, 1500);
+                slot.__npStop = pfMarqueeScroll(track, wrap, 30, 1500, W);
             }, 50);
         });
     }
