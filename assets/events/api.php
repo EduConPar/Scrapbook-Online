@@ -546,6 +546,7 @@ case 'create-event': {
             'min_participants' => $minP,
             'max_participants' => $maxP,
             'creator_id'       => $uid,
+            'image_url'        => $imageUrl ?: null,
         ]);
         $msgId = ev_discordPublish($pdo, $eventFull);
         if ($msgId) {
