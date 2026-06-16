@@ -3973,148 +3973,162 @@ var PROFILE_USERS = <?php
        posición 0. Allí pausa de nuevo `pauseMs` y vuelve a empezar.
        Devuelve un stop() para limpiar timers/raf al re-renderizar.
        Si el texto no desborda el contenedor, no anima. */
-    /* Mide el ancho NATURAL del texto desconstriñendo temporalmente el
-       wrap y el track. Probamos en orden y nos quedamos con el máximo:
-         1. offsetWidth del propio textEl tras forzarlo a inline-block
-            y dejar al wrap en width: max-content (deja que el texto se
-            extienda libremente)
-         2. offsetWidth tras restablecer
-         3. Clon en <body> con font-props copiadas (último recurso)
-       Las asignaciones de estilo se hacen en un único batch síncrono
-       (lectura inmediata de offsetWidth fuerza reflow sin paint
-       intermedio), así que no hay flicker visible. */
-    function pfMeasureTextWidth(textEl, wrap, track) {
-        if (!textEl) return 0;
-        var best = 0;
-        /* 1. Unconstrain trick: dejar al wrap crecer a max-content y al
-           track sin restricciones. Leer offsetWidth fuerza reflow ya. */
-        var sw = { flex: wrap.style.flex, width: wrap.style.width, maxWidth: wrap.style.maxWidth, overflow: wrap.style.overflow };
-        var st = { display: textEl.style.display, position: textEl.style.position };
+    /* ──────────────────────────────────────────────────────────────
+       SISTEMA DE NOW-PLAYING MARQUEE — diseño limpio:
+         1. Estructura DOM mínima: wrap (recorta) → text (absolute).
+            El texto en `position: absolute` está FUERA del flow del
+            wrap, así que su tamaño no depende de las restricciones
+            del flex/overflow del padre. `offsetWidth` devuelve el
+            ancho real del contenido — siempre.
+         2. Medición triple: tomamos el máximo de Canvas measureText,
+            offsetWidth y getBoundingClientRect. Si CUALQUIERA reporta
+            el ancho real estamos seguros (más vale gap largo que
+            cortar a mitad).
+         3. Animación: RAF puro replicando el `marqueeScroll` del
+            reproductor — pausa, scroll left, salida completa,
+            reentrada por la derecha, pausa, loop.
+         4. Idempotencia: si el texto no cambió respecto al render
+            anterior, no tocamos nada (el marquee sigue corriendo
+            sin reset).
+         5. Espera a `document.fonts.ready` para medir DESPUÉS de
+            que la tipografía haya cargado — antes la medición usa
+            glifos de un font fallback y devuelve un ancho menor al
+            real. ────────────────────────────────────────────────── */
+    var _pfCanvasCtx = null;
+    function pfMeasureTextWidth(textEl, text) {
+        var widths = [];
+        /* Canvas measureText: medición pura del string con el font del
+           textEl. Independiente del DOM. */
         try {
-            wrap.style.flex     = '0 0 auto';
-            wrap.style.width    = 'max-content';
-            wrap.style.maxWidth = 'none';
-            wrap.style.overflow = 'visible';
-            textEl.style.display = 'inline-block';
-            /* Forzar reflow + leer */
-            best = Math.max(best, textEl.offsetWidth, textEl.getBoundingClientRect().width);
+            if (!_pfCanvasCtx) {
+                _pfCanvasCtx = document.createElement('canvas').getContext('2d');
+            }
+            var cs = window.getComputedStyle(textEl);
+            var font = (cs.fontStyle || 'normal') + ' ' +
+                       (cs.fontVariant || 'normal') + ' ' +
+                       (cs.fontWeight || 'normal') + ' ' +
+                       cs.fontSize + ' ' +
+                       cs.fontFamily;
+            _pfCanvasCtx.font = font;
+            var cw = _pfCanvasCtx.measureText(text).width;
+            /* Canvas no aplica letter-spacing — lo añadimos a mano. */
+            var ls = parseFloat(cs.letterSpacing) || 0;
+            if (ls && text.length > 1) cw += ls * (text.length - 1);
+            widths.push(cw);
         } catch (_) {}
-        /* Restaurar inmediatamente — todo en el mismo task, sin paint
-           intermedio. */
-        wrap.style.flex     = sw.flex;
-        wrap.style.width    = sw.width;
-        wrap.style.maxWidth = sw.maxWidth;
-        wrap.style.overflow = sw.overflow;
-        textEl.style.display = st.display;
-        textEl.style.position = st.position;
-        /* 2. Fallback con clon: si el unconstrain no dio nada (por ej.
-           el navegador ignoró las asignaciones por algún motivo). */
-        if (!best) {
-            try {
-                var cs = window.getComputedStyle(textEl);
-                var clone = textEl.cloneNode(true);
-                clone.style.cssText =
-                    'position:absolute;left:-99999px;top:0;visibility:hidden;' +
-                    'white-space:nowrap;display:inline-block;margin:0;padding:0;border:0;' +
-                    'font:' + cs.font + ';' +
-                    'font-family:' + cs.fontFamily + ';' +
-                    'font-size:'   + cs.fontSize   + ';' +
-                    'font-weight:' + cs.fontWeight + ';' +
-                    'font-style:'  + cs.fontStyle  + ';' +
-                    'letter-spacing:' + cs.letterSpacing + ';' +
-                    'word-spacing:'   + cs.wordSpacing   + ';' +
-                    'text-transform:' + cs.textTransform + ';';
-                document.body.appendChild(clone);
-                best = Math.max(best, clone.getBoundingClientRect().width, clone.offsetWidth);
-                document.body.removeChild(clone);
-            } catch (_) {}
-        }
+        /* Medición DOM directa — el textEl está en position:absolute
+           por CSS, así que no hereda restricciones de ancho del padre.
+           offsetWidth devuelve el ancho del contenido natural. */
+        try { widths.push(textEl.offsetWidth); } catch (_) {}
+        try { widths.push(textEl.getBoundingClientRect().width); } catch (_) {}
+        var best = 0;
+        widths.forEach(function(w) { if (w > best) best = w; });
         return Math.ceil(best);
     }
-    function pfMarqueeScroll(el, parent, speed, pauseMs, W) {
+
+    /* Marquee RAF — clonado literal del reproductor (marqueeScroll en
+       apps/reproductor.php). Devuelve un stop() para limpiar timers
+       y cancelar el siguiente frame. */
+    function pfMarqueeRun(el, wrap, speed, pauseMs, W) {
         el.style.transform = 'translateX(0)';
+        var C = wrap.clientWidth || wrap.getBoundingClientRect().width || 0;
+        /* Si el texto cabe (con margen de 2px para subpixel rounding)
+           no hay marquee — devolvemos no-op. */
+        if (!W || !C || W <= C + 2) return function(){};
         var pos = 0, last = null, fromRight = false, raf = null, timer = null;
-        var C = parent.clientWidth;
-        if (!W || W <= C) return function(){};
         function tick(ts) {
-            if (!last) last = ts;
+            if (last == null) last = ts;
             var dt = Math.min(ts - last, 50);
             last = ts;
             pos -= speed * dt / 1000;
+            /* Texto salió completamente por la izquierda → reaparece
+               por la derecha (warp a C). */
             if (pos < -W) {
                 pos = C + (pos + W);
                 fromRight = true;
             }
+            /* Tras venir desde la derecha, al alcanzar la posición
+               natural (0) hacemos pausa antes del siguiente ciclo. */
             if (fromRight && pos <= 0) {
                 pos = 0;
                 fromRight = false;
                 el.style.transform = 'translateX(0)';
                 last = null;
-                timer = setTimeout(function() { last = null; raf = requestAnimationFrame(tick); }, pauseMs);
+                timer = setTimeout(function() {
+                    last = null;
+                    raf = requestAnimationFrame(tick);
+                }, pauseMs);
                 return;
             }
             el.style.transform = 'translateX(' + pos + 'px)';
             raf = requestAnimationFrame(tick);
         }
-        timer = setTimeout(function() { raf = requestAnimationFrame(tick); }, pauseMs);
+        /* Pausa inicial — texto en posición 0 visible desde el principio. */
+        timer = setTimeout(function() {
+            raf = requestAnimationFrame(tick);
+        }, pauseMs);
         return function() {
-            clearTimeout(timer);
-            if (raf) cancelAnimationFrame(raf);
+            if (timer) { clearTimeout(timer); timer = null; }
+            if (raf)   { cancelAnimationFrame(raf); raf = null; }
             el.style.transform = '';
         };
     }
-    /* Pinta la línea "♪ Canción - Artista" debajo del nombre en cualquier
-       elemento con `data-np-userkey`. Si el texto no cabe, activa el
-       marquee JS (mismo patrón que el reproductor de escritorio). */
+
+    /* Setup del marquee para un slot: mide W, decide si necesita
+       animar y arranca pfMarqueeRun. Espera a que las fuentes
+       hayan cargado (document.fonts.ready) para que la medición use
+       el glifo real, no un fallback que daría un ancho menor. */
+    function pfStartMarqueeFor(slot, text) {
+        var wrap   = slot.querySelector('.pf-np-wrap');
+        var textEl = slot.querySelector('.pf-np-text');
+        if (!wrap || !textEl) return;
+        var go = function() {
+            /* Comprobar que el slot todavía representa este texto —
+               podría haberse re-renderizado mientras esperábamos las
+               fuentes. */
+            if (slot.getAttribute('data-np-text') !== text) return;
+            var W = pfMeasureTextWidth(textEl, text);
+            /* 30 px/seg + 2000ms pause = scroll suave + descanso
+               cómodo al completar cada vuelta. */
+            if (slot.__npStop) { try { slot.__npStop(); } catch(_){} }
+            slot.__npStop = pfMarqueeRun(textEl, wrap, 30, 2000, W);
+        };
+        if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+            document.fonts.ready.then(go, go);
+        } else {
+            setTimeout(go, 50);
+        }
+    }
+
+    /* applyNowPlaying — pinta o limpia la línea por slot, con guarda
+       de idempotencia para no resetear el marquee en cada poll. */
     function applyNowPlaying() {
         document.querySelectorAll('[data-np-userkey]').forEach(function(slot) {
             var k  = slot.getAttribute('data-np-userkey');
             var np = lastNowPlaying[k];
             var nextText = np ? ((np.title || '') + (np.artist ? ' - ' + np.artist : '')) : '';
             var prevText = slot.getAttribute('data-np-text') || '';
-            /* IDEMPOTENCIA: applyPresence() (y por tanto este método) se
-               llama desde refreshPresenceDots (cada 20s), renderSocialList
-               y renderFollowedNav. Si el texto que toca pintar es el
-               mismo que ya está pintado, no tocamos nada — sino, cada
-               llamada destruiría el marquee a media vuelta y volvería a
-               empezar, dando la sensación de "se corta a mitad". */
+            /* IDEMPOTENCIA: si lo que toca pintar es lo mismo que
+               ya hay, no hacemos NADA. El marquee sigue corriendo. */
             if (nextText === prevText) return;
-            slot.setAttribute('data-np-text', nextText);
-            /* Para cualquier marquee anterior antes de re-renderizar. El
-               stop() también limpia transform inline. */
+            /* Stop del marquee anterior antes de cambiar el DOM. */
             if (slot.__npStop) { try { slot.__npStop(); } catch(_){} slot.__npStop = null; }
+            slot.setAttribute('data-np-text', nextText);
             if (!np) {
                 slot.style.display = 'none';
                 slot.innerHTML = '';
                 return;
             }
             slot.style.display = '';
+            /* Estructura mínima: icon + wrap-con-texto-absoluto. El
+               text no tiene wrapper de "track" porque ya está absoluto
+               dentro del wrap y se transforma directamente. */
             slot.innerHTML =
                 '<span class="pf-np-icon">♪</span>' +
-                '<span class="pf-np-wrap"><span class="pf-np-track">' +
+                '<span class="pf-np-wrap">' +
                     '<span class="pf-np-text">' + escHtml(nextText) + '</span>' +
-                '</span></span>';
-            /* Espera al primer paint para que clientWidth del wrap esté
-               calculado. Para el ANCHO DEL TEXTO usamos el clon en
-               <body> (pfMeasureTextWidth) en vez de measurements del
-               propio track: el track es inline-block dentro de un
-               flex-item con `overflow:hidden` y el navegador lo
-               restringe al ancho del padre, devolviendo un valor menor
-               al real → el warp dispararía antes de tiempo y el texto
-               se cortaría a mitad. El clone se mide en un contexto
-               libre y devuelve el ancho real renderizado del texto. */
-            setTimeout(function() {
-                var wrap   = slot.querySelector('.pf-np-wrap');
-                var track  = slot.querySelector('.pf-np-track');
-                var textEl = slot.querySelector('.pf-np-text');
-                if (!wrap || !track || !textEl) return;
-                var W = pfMeasureTextWidth(textEl, wrap, track);
-                /* 30 px/seg + 1500ms pause = scroll suave + descanso al
-                   completar cada vuelta (más lento que el reproductor
-                   porque el slot es muy pequeño y un scroll rápido se
-                   leería peor). */
-                slot.__npStop = pfMarqueeScroll(track, wrap, 30, 1500, W);
-            }, 50);
+                '</span>';
+            pfStartMarqueeFor(slot, nextText);
         });
     }
     /* Helper: marca un .profile-avatar-frame con su dot de presencia.

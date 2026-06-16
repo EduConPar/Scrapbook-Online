@@ -504,30 +504,36 @@
     font-size: 10px;
     color: var(--text-muted, #666);
     margin-top: 2px;
-    overflow: hidden;
-    white-space: nowrap;
     max-width: 100%;
+    overflow: hidden;
 }
 .pf-np-icon {
     flex-shrink: 0;
     color: var(--accent, #000080);
 }
+/* Contenedor visible: ancho fijo dado por el flex, recorta lo que
+   sobresalga. Posición relativa para anclar el texto absoluto de
+   dentro. */
 .pf-np-wrap {
-    flex: 1;
+    flex: 1 1 0;
     min-width: 0;
+    position: relative;
     overflow: hidden;
-    /* Clipping rectangulo fijo: el track de dentro puede ser más ancho. */
+    height: 1.2em;
+    line-height: 1.2em;
 }
-.pf-np-track {
+/* El texto va en position:absolute para escapar TOTALMENTE del
+   sizing del padre. Inline-block + nowrap → su ancho es el
+   contenido natural, sin importar las restricciones del flex.
+   El JS lo desplaza con `transform: translateX(...)`. */
+.pf-np-text {
+    position: absolute;
+    left: 0;
+    top: 0;
     display: inline-block;
     white-space: nowrap;
     will-change: transform;
 }
-/* El marquee se conduce desde JS (RAF) en perfil.php — replica
-   exactamente el patrón de `marqueeScroll` del reproductor: pausa al
-   inicio en la posición natural, scroll hacia la izquierda, salida
-   completa, reaparición por la derecha, vuelta a posición 0, pausa,
-   loop. No CSS keyframes para evitar saltos de fase al re-render. */
 .profile-nav-text {
     display: flex;
     flex-direction: column;
