@@ -537,20 +537,26 @@
     line-height: inherit;
 }
 /* Cuando el track tiene la clase `.is-marquee` se duplica el texto
-   y se anima — patrón mu-marquee del reproductor móvil. El gap
-   entre los dos copies da la separación visible entre vueltas y
-   `--pf-cycle` (texto + gap, en px) define cuánto desplazar para
-   que la copia 2 caiga sobre donde estaba la copia 1 (loop sin
-   salto, completamente predecible: el navegador hace toda la
-   matemática). */
+   y se anima. Tres claves para la sensación de "pausa con hueco
+   blanco" entre vueltas:
+     - `gap` ENORME entre los dos copies → cuando la copia 1 sale
+       por la izquierda hay un gran espacio blanco antes de que
+       aparezca la copia 2. El JS lo setea con --pf-gap (= ancho
+       del wrap) para que se note claramente como "vacío".
+     - Keyframes con hold inicial (0%→10%): el texto se queda
+       quieto en posición natural al principio de cada ciclo →
+       el usuario ve "pausa, scroll, pausa, scroll".
+     - `--pf-cycle` (texto + gap, en px) define cuánto trasladar
+       para que la copia 2 caiga donde estaba la copia 1 al inicio,
+       garantizando el loop sin salto. */
 .pf-np-wrap.is-marquee .pf-np-track {
     display: inline-flex;
-    gap: 3em;
+    gap: var(--pf-gap, 6em);
     animation: pf-np-marquee var(--pf-dur, 15s) linear infinite;
 }
 @keyframes pf-np-marquee {
-    from { transform: translateX(0); }
-    to   { transform: translateX(calc(-1 * var(--pf-cycle, 100%))); }
+    0%, 10%  { transform: translateX(0); }
+    100%     { transform: translateX(calc(-1 * var(--pf-cycle, 100%))); }
 }
 .profile-nav-text {
     display: flex;

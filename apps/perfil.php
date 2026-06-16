@@ -3993,24 +3993,33 @@ var PROFILE_USERS = <?php
         while (track.children.length > 1) track.removeChild(track.lastChild);
         track.style.removeProperty('--pf-cycle');
         track.style.removeProperty('--pf-dur');
+        track.style.removeProperty('--pf-gap');
         var go = function() {
             var textW = text.offsetWidth;
+            var wrapW = wrap.clientWidth;
             /* No anima si el texto cabe (margen de 4px subpixel). */
-            if (textW <= wrap.clientWidth + 4) return;
-            /* Clona el texto: la segunda copia ocupa el "hueco" cuando
-               la primera se desplaza fuera por la izquierda → loop
-               sin salto. */
+            if (textW <= wrapW + 4) return;
+            /* Clona el texto: la segunda copia ocupa el espacio
+               cuando la primera se desplaza fuera por la izquierda →
+               loop sin salto. */
             var dup = text.cloneNode(true);
             dup.setAttribute('aria-hidden', 'true');
             track.appendChild(dup);
+            /* GAP = ancho del wrap → cuando la copia 1 sale por la
+               izquierda, la copia 2 está aún a `wrapW` de distancia
+               por la derecha, así que el contenedor visible queda
+               COMPLETAMENTE VACÍO durante todo ese desplazamiento.
+               Eso es el "espacio blanco" entre vueltas que pide el
+               usuario. Mínimo 4em por si el wrap es muy pequeño. */
             var em    = parseFloat(getComputedStyle(text).fontSize) || 10;
-            var gap   = em * 3;   /* `gap: 3em` del CSS. */
+            var gap   = Math.max(wrapW, em * 4);
             var cycle = textW + gap;
-            /* 30 px/seg → vuelta cómoda. Mínimo 10s para que un
-               texto corto no pase a la velocidad del rayo. */
-            var dur   = Math.max(10, cycle / 30).toFixed(1) + 's';
+            /* 30 px/seg de scroll efectivo (sólo el 90% del tiempo
+               se usa scrolleando — el 10% inicial es el hold). */
+            var dur   = Math.max(10, (cycle / 30) / 0.9).toFixed(1) + 's';
             track.style.setProperty('--pf-cycle', cycle + 'px');
-            track.style.setProperty('--pf-dur', dur);
+            track.style.setProperty('--pf-dur',   dur);
+            track.style.setProperty('--pf-gap',   gap + 'px');
             wrap.classList.add('is-marquee');
         };
         /* Espera a las fuentes para que la medida coincida con el
