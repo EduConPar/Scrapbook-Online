@@ -2465,15 +2465,24 @@ case 'submit-report': {
 
     /* Si es una sugerencia, añadimos reacciones ✅/❌ con el bot para
        que los usuarios voten directamente. Se hace tras crear el
-       mensaje (se necesita su id de la respuesta). Falla silenciosa:
-       si el bot no tiene permiso de "Add Reactions" en el canal o
-       hay rate-limit, el reporte ya está publicado, no abortamos la
-       respuesta. */
+       mensaje (se necesita su id de la respuesta).
+       Emojis declarados con bytes UTF-8 explícitos (no como literales
+       en el archivo) para evitar problemas de codificación si alguien
+       guarda este archivo con un charset distinto:
+         "\xE2\x9C\x85" = ✅ (U+2705)
+         "\xE2\x9D\x8C" = ❌ (U+274C)
+       Entre ambos PUT metemos un usleep de 350 ms para evitar el
+       bucket rate-limit de reacciones de Discord (5 ops / 5s por canal,
+       pero la API a veces es más estricta de facto).
+       Falla silenciosa: si el bot no tiene "Add Reactions" o hay otro
+       error, el reporte ya está publicado, no abortamos la respuesta. */
     if ($type === 'suggestion') {
         $msg       = json_decode((string)$resp, true);
         $messageId = is_array($msg) ? (string)($msg['id'] ?? '') : '';
         if ($messageId !== '') {
-            foreach (['✅', '❌'] as $emoji) {
+            $emojis = ["\xE2\x9C\x85", "\xE2\x9D\x8C"];   /* ✅ , ❌ */
+            foreach ($emojis as $idx => $emoji) {
+                if ($idx > 0) usleep(350 * 1000);   /* delay entre PUTs */
                 $rUrl = 'https://discord.com/api/v10/channels/'
                       . rawurlencode($channelId) . '/messages/'
                       . rawurlencode($messageId) . '/reactions/'
@@ -2485,8 +2494,26 @@ case 'submit-report': {
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT        => 8,
                 ]);
-                curl_exec($rch);
+                $rResp = curl_exec($rch);
+                $rCode = curl_getinfo($rch, CURLINFO_HTTP_CODE);
                 curl_close($rch);
+                /* 429 = rate-limited: respetamos el retry_after de
+                   Discord y reintentamos una vez. */
+                if ($rCode === 429) {
+                    $j = json_decode((string)$rResp, true);
+                    $retry = is_array($j) && isset($j['retry_after'])
+                           ? (float)$j['retry_after'] : 1.0;
+                    usleep((int)(($retry + 0.1) * 1000000));
+                    $rch2 = curl_init($rUrl);
+                    curl_setopt_array($rch2, [
+                        CURLOPT_CUSTOMREQUEST  => 'PUT',
+                        CURLOPT_HTTPHEADER     => [$authHeader, $uaHeader, 'Content-Length: 0'],
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_TIMEOUT        => 8,
+                    ]);
+                    curl_exec($rch2);
+                    curl_close($rch2);
+                }
             }
         }
     }
