@@ -1077,17 +1077,57 @@ case 'import-playlist': {
         return ['code' => $r['code'], 'data' => $r['body'] ? json_decode($r['body'], true) : null];
     };
 
-    /* Walker recursivo: recolecta TODOS los `playlistVideoRenderer`
-       y devuelve cualquier `continuationCommand.token` para paginar. */
-    $collectVideos = function($data) use (&$collectVideos) {
-        $out  = ['videos' => [], 'continuation' => null];
-        $walk = function($node) use (&$walk, &$out) {
+    /* ¿Este nodo es un ítem de vídeo? YouTube usa DOS formatos: el
+       clásico `playlistVideoRenderer` y el nuevo `lockupViewModel`
+       (migración de 2024, hoy el habitual en web). Soportar solo el
+       primero hacía que A devolviera 0 vídeos y se cayera al RSS, que
+       tope en 15 canciones. */
+    $isVideoNode = function($el) {
+        if (!is_array($el)) return false;
+        if (isset($el['playlistVideoRenderer'])) return true;
+        if (isset($el['lockupViewModel'])
+            && (($el['lockupViewModel']['contentType'] ?? '') === 'LOCKUP_CONTENT_TYPE_VIDEO')) return true;
+        return false;
+    };
+    /* Primer `continuationCommand.token` dentro de un nodo (búsqueda
+       recursiva acotada al elemento). */
+    $findToken = function($el) use (&$findToken) {
+        if (!is_array($el)) return null;
+        if (isset($el['continuationCommand']['token'])) return $el['continuationCommand']['token'];
+        foreach ($el as $v) {
+            $t = $findToken($v);
+            if ($t) return $t;
+        }
+        return null;
+    };
+
+    /* Walker recursivo: recolecta TODOS los vídeos (ambos formatos) y el
+       token de continuación CORRECTO para paginar. Clave: el token válido
+       es el que está en el MISMO array que los vídeos (el "load more" de
+       la rejilla). YouTube incluye otros tokens (panel lateral, secciones)
+       en arrays SIN vídeos que no paginan la lista; coger "el último"
+       token de todo el árbol devolvía 0 en la página 2 y cortaba el
+       import en la primera página. */
+    $collectVideos = function($data) use (&$collectVideos, $isVideoNode, $findToken) {
+        $out    = ['videos' => [], 'continuation' => null];
+        $isList = function($a) { return is_array($a) && ($a === [] || array_keys($a) === range(0, count($a) - 1)); };
+        $walk = function($node) use (&$walk, &$out, $isVideoNode, $findToken, $isList) {
             if (!is_array($node)) return;
             if (isset($node['playlistVideoRenderer'])) {
                 $out['videos'][] = $node['playlistVideoRenderer'];
             }
-            if (isset($node['continuationCommand']['token'])) {
-                $out['continuation'] = $node['continuationCommand']['token'];
+            if (isset($node['lockupViewModel'])
+                && (($node['lockupViewModel']['contentType'] ?? '') === 'LOCKUP_CONTENT_TYPE_VIDEO')) {
+                $out['videos'][] = $node['lockupViewModel'];
+            }
+            if ($isList($node)) {
+                $hasVideos = false; $listToken = null;
+                foreach ($node as $el) {
+                    if ($isVideoNode($el)) { $hasVideos = true; continue; }
+                    $t = $findToken($el);
+                    if ($t) $listToken = $t;
+                }
+                if ($hasVideos && $listToken) $out['continuation'] = $listToken;
             }
             foreach ($node as $v) if (is_array($v)) $walk($v);
         };
@@ -1107,7 +1147,7 @@ case 'import-playlist': {
         $videos = $col['videos'];
         $cont = $col['continuation'];
         $hops = 0;
-        while ($cont && $hops < 5) {
+        while ($cont && $hops < 50) {
             $next = $innerTubeBrowse(null, $cont);
             if (!is_array($next['data'])) break;
             $col2 = $collectVideos($next['data']);
@@ -1195,18 +1235,47 @@ case 'import-playlist': {
 
     $tracks = [];
     foreach ($videos as $v) {
-        $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $v['videoId'] ?? '');
+        if (isset($v['contentId']) || isset($v['metadata']['lockupMetadataViewModel'])) {
+            /* ── Formato nuevo: lockupViewModel. */
+            $vidRaw = $v['contentId'] ?? '';
+            $title  = $v['metadata']['lockupMetadataViewModel']['title']['content'] ?? '';
+            /* Artista = primera "parte" de la primera fila de metadata
+               (el nombre del canal). */
+            $artist = '';
+            $rows = $v['metadata']['lockupMetadataViewModel']['metadata']['contentMetadataViewModel']['metadataRows'] ?? [];
+            foreach ($rows as $row) {
+                foreach (($row['metadataParts'] ?? []) as $mp) {
+                    if (!empty($mp['text']['content'])) { $artist = $mp['text']['content']; break 2; }
+                }
+            }
+            /* Duración: el badge del thumbnail con formato m:ss / h:mm:ss. */
+            $findDur = function($node) use (&$findDur) {
+                if (!is_array($node)) return '';
+                if (isset($node['text']) && is_string($node['text'])
+                    && preg_match('/^\d+(:\d{2})+$/', $node['text'])) return $node['text'];
+                foreach ($node as $c) {
+                    $r = $findDur($c);
+                    if ($r !== '') return $r;
+                }
+                return '';
+            };
+            $lenText = $findDur($v['contentImage'] ?? []);
+        } else {
+            /* ── Formato clásico: playlistVideoRenderer / feed RSS. */
+            $vidRaw  = $v['videoId'] ?? '';
+            $title   = $v['title']['runs'][0]['text']
+                    ?? $v['title']['simpleText']
+                    ?? '';
+            $artist  = $v['shortBylineText']['runs'][0]['text']
+                    ?? $v['shortBylineText']['simpleText']
+                    ?? '';
+            $lenText = $v['lengthText']['simpleText']
+                    ?? $v['lengthText']['runs'][0]['text']
+                    ?? '';
+        }
+        $vid = preg_replace('/[^A-Za-z0-9_-]/', '', $vidRaw);
         if (strlen($vid) !== 11) continue;
-        $title = $v['title']['runs'][0]['text']
-              ?? $v['title']['simpleText']
-              ?? '';
-        $artist = $v['shortBylineText']['runs'][0]['text']
-               ?? $v['shortBylineText']['simpleText']
-               ?? '';
         $artist = trim(preg_replace('/\s*-\s*topic$/i', '', $artist));
-        $lenText = $v['lengthText']['simpleText']
-                ?? $v['lengthText']['runs'][0]['text']
-                ?? '';
         $duration = 0;
         if ($lenText) {
             $parts = explode(':', $lenText);
