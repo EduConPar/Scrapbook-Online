@@ -2356,31 +2356,33 @@ case 'submit-report': {
     $color = $type === 'bug' ? 0xE74C3C : 0x3498DB;   /* rojo / azul */
     $kind  = $type === 'bug' ? 'Bug'  : 'Sugerencia';
 
-    /* author.url hace que el NOMBRE del autor (el usuario que reporta)
-       sea clicable a melonhub.es. Es el único link real al sitio que
-       podemos tener visible — el título queda texto plano (sin
-       embed.url) y el footer no puede llevar links (limitación de
-       Discord). */
+    /* URL compartida entre TODOS los embeds del mensaje. Truco oficial
+       de Discord: cuando N embeds del MISMO mensaje comparten el campo
+       `url`, los agrupa en una galería visual (todas las imágenes
+       dentro del mismo recuadro coloreado).
+       Como NO seteamos `embed.title`, el `embed.url` no tiene a qué
+       aplicarse visualmente — Discord lo usa solo para el grouping,
+       no renderiza ningún link visible en el cuerpo del embed.
+       Movemos el título del reporte a la primera línea de la
+       description en negrita, sustituyéndolo. */
     $melonUrl = 'https://melonhub.es';
 
     $author = ['name' => $userLabel, 'url' => $melonUrl];
     if ($avatarFsPath) $author['icon_url'] = 'attachment://avatar.' . $avatarExt;
+    /* Negrita Markdown para el título dentro del body. */
+    $titleLine = '**' . str_replace('**', '\\*\\*', $title) . '**';
+    $desc = $titleLine . "\n" . $body;
     $embed = [
         'author'      => $author,
-        'title'       => mb_substr($title, 0, 256),
-        'description' => mb_substr($body, 0, 4000),
+        'url'         => $melonUrl,
+        'description' => mb_substr($desc, 0, 4000),
         'color'       => $color,
         'footer'      => ['text' => $kind . ' reportado desde Melon Hub'],
         'timestamp'   => gmdate('c'),
     ];
 
     /* Adjuntar imágenes (máx 8 MB cada una, total <= 25 MB del límite
-       Discord para bots no booster). La primera se monta como `image`
-       del embed (preview destacado). Las siguientes, si las hay,
-       quedan como adjuntos sueltos del mensaje — Discord no permite
-       varias imágenes dentro del mismo embed sin el truco de
-       `embed.url` compartido, que haría clicable el título (no
-       queremos eso). */
+       Discord para bots no booster). */
     $userFiles = [];
     if (!empty($_FILES['files']) && is_array($_FILES['files']['name'])) {
         for ($i = 0; $i < count($_FILES['files']['name']); $i++) {
@@ -2403,12 +2405,24 @@ case 'submit-report': {
             ];
         }
     }
+
+    /* Galería: primera imagen como `image` del embed principal; cada
+       imagen adicional como embed-fantasma con SOLO `url` (mismo) +
+       `image`. Discord agrupa todos los embeds en una sola galería
+       visual dentro del recuadro coloreado del primer embed. */
+    $embeds = [$embed];
     if (!empty($userFiles)) {
-        $embed['image'] = ['url' => 'attachment://' . $userFiles[0]['name']];
+        $embeds[0]['image'] = ['url' => 'attachment://' . $userFiles[0]['name']];
+        for ($i = 1; $i < count($userFiles); $i++) {
+            $embeds[] = [
+                'url'   => $melonUrl,
+                'image' => ['url' => 'attachment://' . $userFiles[$i]['name']],
+            ];
+        }
     }
 
     $payload = [
-        'embeds'           => [$embed],
+        'embeds'           => $embeds,
         'allowed_mentions' => ['parse' => []],
     ];
 
