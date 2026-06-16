@@ -592,7 +592,11 @@ window.DesktopState.whenReady = function(cb){
         </div>
         <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);min-height:12px;"></div>
         <p id="report-status" style="margin:6px 0 0;font-size:11px;min-height:14px;"></p>
-        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
+        <!-- margin-top:auto empuja la fila de acciones al fondo del
+             body (que es flex column) cuando la ventana se hace más
+             alta. Sin esto los botones quedaban pegados arriba con
+             el resto del contenido y un hueco enorme debajo. -->
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:auto;">
             <button id="report-ok" class="default">Enviar</button>
             <button id="report-cancel">Cancelar</button>
         </div>
