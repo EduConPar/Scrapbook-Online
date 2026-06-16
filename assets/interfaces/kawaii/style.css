@@ -1569,6 +1569,182 @@ body:has(.cal-cell) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   EVENTOS — overrides kawaii (Overdose)
+   ════════════════════════════════════════════════════════════════════
+   El CSS base (assets/events/events.css) está pensado para Win98 (con
+   bezels duros, fuentes MS Sans Serif, badges con border 1px negro).
+   En la interfaz Overdose aplanamos los bezels, usamos rose-100 como
+   fondo de cards, accent rosa para badges y la fuente Pixelify Sans
+   global se hereda. Mismo lenguaje que `.momento-card` / `.rec-row`. */
+
+/* Tabs activos — bezel inset duro → llano + accent fill */
+.ev-tab-active {
+    box-shadow: none !important;
+    background: color-mix(in srgb, var(--accent, #FF66B2) 18%, var(--win-bg, #E0D4E7)) !important;
+    border-color: var(--accent, #FF66B2) !important;
+    color: var(--accent-deep, #CC4499) !important;
+    font-weight: 700 !important;
+}
+
+/* Panes — quitar el doble bezel duro, usar el card kawaii estándar */
+.ev-pane-inset,
+.ev-friends-box,
+.ev-detail-meta,
+.ev-detail-desc,
+.ev-invite-panel,
+.ev-invite-list {
+    box-shadow: none !important;
+    border: 2px solid var(--border, #49388B) !important;
+    border-radius: 0 !important;
+    background: var(--win-body-bg, var(--win-bg, #E0D4E7)) !important;
+}
+
+/* Cards de evento — look kawaii rosa, mismo lenguaje que momento-card */
+.ev-card {
+    border: 2px solid var(--accent, #FF66B2) !important;
+    border-radius: 0 !important;
+    background: var(--rose-100, #FFE4F0) !important;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--accent-deep, #CC4499) 12%, transparent) !important;
+    font-size: 12px !important;
+    padding: 9px 11px !important;
+}
+.ev-card:hover {
+    background: color-mix(in srgb, var(--rose-100, #FFE4F0) 70%, var(--accent, #FF66B2) 30%) !important;
+    box-shadow: 0 2px 4px color-mix(in srgb, var(--accent-deep, #CC4499) 22%, transparent) !important;
+}
+.ev-card:active {
+    border-color: var(--accent-deep, #CC4499) !important;
+    background: color-mix(in srgb, var(--rose-100, #FFE4F0) 55%, var(--accent, #FF66B2) 45%) !important;
+}
+.ev-card-title {
+    color: var(--accent-deep, #CC4499) !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+}
+.ev-card-meta {
+    color: var(--text-muted, #7A6BA8) !important;
+    font-size: 11px !important;
+}
+
+/* Badges — bordes accent + tipo en Pixelify, sin uppercase tan duro */
+.ev-badge {
+    border: 1.5px solid var(--accent-deep, #CC4499) !important;
+    border-radius: 6px !important;
+    font-size: 10px !important;
+    padding: 1px 7px !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    font-weight: 700 !important;
+}
+.ev-badge.is-joined {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+}
+.ev-badge.is-waitlist {
+    background: var(--accent-orange, #D97A4E) !important;
+    color: #fff !important;
+    border-color: var(--accent-orange, #D97A4E) !important;
+}
+.ev-badge.is-invited {
+    background: var(--button-blue, #6FA3D1) !important;
+    color: #fff !important;
+    border-color: var(--button-blue, #6FA3D1) !important;
+}
+.ev-badge.is-private {
+    background: var(--accent-medium, #8B4A8B) !important;
+    color: #fff !important;
+    border-color: var(--accent-medium, #8B4A8B) !important;
+}
+
+/* Formularios — labels en accent suave, inputs ya cubiertos por el override
+   global de inputs (línea ~1493). */
+.ev-field > label {
+    color: var(--accent-deep, #CC4499) !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+}
+.ev-radio-group label {
+    font-size: 12px !important;
+    color: var(--text) !important;
+}
+
+/* Friends hover — pinta con accent kawaii */
+.ev-friends-box label:hover {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+}
+
+/* Detail meta — los dt en accent para destacar el label */
+.ev-detail-meta {
+    font-size: 12px !important;
+    padding: 10px 12px !important;
+}
+.ev-detail-meta dt {
+    color: var(--accent-deep, #CC4499) !important;
+}
+.ev-detail-desc {
+    background: var(--rose-100, #FFE4F0) !important;
+    border-color: var(--accent, #FF66B2) !important;
+    color: var(--text) !important;
+    font-size: 12px !important;
+}
+.ev-detail-participants h4 {
+    color: var(--accent-deep, #CC4499) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+}
+.ev-waitlist-tag {
+    color: var(--accent-orange, #D97A4E) !important;
+    font-style: italic !important;
+}
+
+/* Action bars — separador con tono accent suave */
+.ev-actions,
+.ev-detail-actions {
+    border-top: 1px dashed var(--accent, #FF66B2) !important;
+    padding-top: 9px !important;
+}
+.ev-btn-danger {
+    color: var(--accent-orange, #D97A4E) !important;
+    font-weight: 700 !important;
+}
+
+/* Status pills */
+.ev-status.is-error   { color: var(--accent-orange, #D97A4E) !important; }
+.ev-status.is-success { color: var(--accent-deep, #CC4499) !important; }
+
+/* Empty state */
+.ev-empty {
+    color: var(--text-muted, #7A6BA8) !important;
+    font-size: 12px !important;
+    font-style: normal;
+}
+
+/* Invite panel — más tarjeta, menos bezel */
+.ev-invite-panel h4 {
+    color: var(--accent-deep, #CC4499) !important;
+    font-size: 12px !important;
+}
+.ev-invite-row + .ev-invite-row {
+    border-top: 1px dashed color-mix(in srgb, var(--accent, #FF66B2) 50%, transparent) !important;
+}
+
+/* Botón "Eventos" en la barra del calendario y en cm-actions móvil —
+   se destaca con el accent kawaii. */
+#btn-eventos,
+#cm-events-btn {
+    border: 2px solid var(--accent, #FF66B2) !important;
+    background: var(--rose-100, #FFE4F0) !important;
+    color: var(--accent-deep, #CC4499) !important;
+    font-weight: 700 !important;
+}
+#btn-eventos:hover,
+#cm-events-btn:hover {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════
    GALERÍA — sidebar, grid de cards, chips, preview kawaii
    ════════════════════════════════════════════════════════════════════ */
 

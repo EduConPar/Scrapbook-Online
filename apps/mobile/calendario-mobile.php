@@ -1177,14 +1177,23 @@ window.__EV_CFG = {
         var pad = function(n){ return String(n).padStart(2,'0'); };
         return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes());
     }
-    function api(action, body, method){
+    /* params = objeto opcional con query-string GET extra (id, etc.).
+       NUNCA concatenes "&clave=…" al action — encodeURIComponent escapa
+       el `&` y el server interpreta todo como un único action. */
+    function api(action, body, method, params){
         var opts = { credentials: 'same-origin' };
         if (method === 'POST') {
             opts.method = 'POST';
             opts.headers = { 'Content-Type': 'application/json' };
             opts.body = JSON.stringify(body || {});
         }
-        return fetch(API + '?action=' + encodeURIComponent(action), opts).then(function(r){ return r.json(); });
+        var url = API + '?action=' + encodeURIComponent(action);
+        if (params) {
+            Object.keys(params).forEach(function(k){
+                url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+            });
+        }
+        return fetch(url, opts).then(function(r){ return r.json(); });
     }
 
     /* ── Open / close ── */
@@ -1312,7 +1321,7 @@ window.__EV_CFG = {
         detailEl.style.display = ''; detailBack.style.display = '';
         var b = document.getElementById('ev-m-detail-body');
         b.innerHTML = '<p style="font-size:11px;color:var(--text-faint,#666);">Cargando…</p>';
-        api('get-event&id=' + id).then(function(d){
+        api('get-event', null, null, { id: id }).then(function(d){
             if (!d || !d.ok) { b.innerHTML = '<p style="font-size:11px;color:#a33;">' + esc((d && d.error) || 'Error') + '</p>'; return; }
             renderDetail(d.event);
         });

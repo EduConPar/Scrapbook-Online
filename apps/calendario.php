@@ -2259,14 +2259,29 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
                ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
 
-    function api(action, body, method) {
+    /* api(action, body, method, params)
+       - action : nombre puro del endpoint, p.ej. 'list-events'
+       - body   : objeto JSON para POST (opcional)
+       - method : 'POST' o nada (GET por defecto)
+       - params : objeto {clave: valor} para query string GET extra.
+                  Usar SIEMPRE este parámetro para añadir id, etc. — no
+                  concatenar al action porque encodeURIComponent escapa
+                  el `&` y el `=` haciendo que el server interprete todo
+                  como un único valor de action. */
+    function api(action, body, method, params) {
         var opts = { credentials: 'same-origin' };
         if (method === 'POST') {
             opts.method = 'POST';
             opts.headers = { 'Content-Type': 'application/json' };
             opts.body = JSON.stringify(body || {});
         }
-        return fetch(API + '?action=' + encodeURIComponent(action), opts).then(function(r){ return r.json(); });
+        var url = API + '?action=' + encodeURIComponent(action);
+        if (params) {
+            Object.keys(params).forEach(function(k){
+                url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+            });
+        }
+        return fetch(url, opts).then(function(r){ return r.json(); });
     }
 
     /* ── Abrir/cerrar ventana ── */
@@ -2445,7 +2460,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         var bodyEl = document.getElementById('event-detail-body');
         bodyEl.innerHTML = '<p style="font-size:11px; color:var(--text-faint, #666);">Cargando…</p>';
         detailEl.style.display = '';
-        api('get-event&id=' + eventId).then(function(d){
+        api('get-event', null, null, { id: eventId }).then(function(d){
             if (!d || !d.ok) {
                 bodyEl.innerHTML = '<p style="font-size:11px; color:#a33;">' + esc((d && d.error) || 'Error') + '</p>';
                 return;
