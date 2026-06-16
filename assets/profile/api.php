@@ -2462,6 +2462,35 @@ case 'submit-report': {
         if (is_array($j) && isset($j['message'])) $detail = ' — ' . $j['message'];
         jsonError('Discord rechazó el reporte (HTTP ' . $code . ')' . $detail, 502);
     }
+
+    /* Si es una sugerencia, añadimos reacciones ✅/❌ con el bot para
+       que los usuarios voten directamente. Se hace tras crear el
+       mensaje (se necesita su id de la respuesta). Falla silenciosa:
+       si el bot no tiene permiso de "Add Reactions" en el canal o
+       hay rate-limit, el reporte ya está publicado, no abortamos la
+       respuesta. */
+    if ($type === 'suggestion') {
+        $msg       = json_decode((string)$resp, true);
+        $messageId = is_array($msg) ? (string)($msg['id'] ?? '') : '';
+        if ($messageId !== '') {
+            foreach (['✅', '❌'] as $emoji) {
+                $rUrl = 'https://discord.com/api/v10/channels/'
+                      . rawurlencode($channelId) . '/messages/'
+                      . rawurlencode($messageId) . '/reactions/'
+                      . rawurlencode($emoji) . '/@me';
+                $rch  = curl_init($rUrl);
+                curl_setopt_array($rch, [
+                    CURLOPT_CUSTOMREQUEST  => 'PUT',
+                    CURLOPT_HTTPHEADER     => [$authHeader, $uaHeader, 'Content-Length: 0'],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 8,
+                ]);
+                curl_exec($rch);
+                curl_close($rch);
+            }
+        }
+    }
+
     jsonResponse(['ok' => true]);
 }
 
