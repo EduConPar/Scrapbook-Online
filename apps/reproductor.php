@@ -3298,12 +3298,41 @@ var addTrackCallback = null;
         .catch(function(e) { alert('Error al guardar: ' + e.message); });
     }
 
+    /* Autosave del editor: tras añadir canciones o importar una
+       playlist completa, escribe automáticamente y propaga los tracks
+       a las estructuras in-memory para que el botón ▶ del editor
+       reproduzca SIN tener que cerrar la ventana y volver a abrirla.
+       - pl.tracks se actualiza con el contenido actual de editList
+         (el botón ▶ del editor lee de pl.tracks, no de editList).
+       - Si la playlist editada coincide con la que ya está cargada en
+         el player, también empujamos los nuevos tracks a `playlist[]`
+         sin reiniciar la reproducción actual.
+       - El POST a save-playlist-item va async — no bloqueamos la UI
+         ni mostramos alert salvo en error. */
+    function autosaveEditor() {
+        if (editingPlIdx < 0) return;
+        var pl = allPlaylists[editingPlIdx];
+        if (!pl) return;
+        pl.tracks = editList.slice();
+        if (pl.id === currentPlaylistId) {
+            playlist.length = 0;
+            pl.tracks.forEach(function(t) { playlist.push(t); });
+        }
+        saveCurrentPlaylist();
+    }
+
     document.getElementById('btn-edit-playlist').addEventListener('click', openEditor);
     document.getElementById('pl-close').addEventListener('click', closeEditor);
     document.getElementById('pl-back').addEventListener('click', showHome);
 
     document.getElementById('pl-add').addEventListener('click', function() {
-        addTrackCallback = function(track) { editList.push(track); renderList(); };
+        addTrackCallback = function(track) {
+            editList.push(track);
+            renderList();
+            /* Autoguarda + propaga a pl.tracks / playlist[] para que
+               la nueva canción se pueda reproducir sin cerrar el editor. */
+            autosaveEditor();
+        };
         openAddDialog();
     });
 
@@ -3413,6 +3442,10 @@ var addTrackCallback = null;
                 var importer = usersInfo[currentUserKey] ? usersInfo[currentUserKey].label : '';
                 data.tracks.forEach(function(t) { editList.push(Object.assign({}, t, { addedBy: importer })); });
                 renderList();
+                /* Autoguarda + propaga a pl.tracks / playlist[] para que
+                   las canciones importadas se puedan reproducir sin
+                   cerrar el editor ni darle a "Guardar". */
+                autosaveEditor();
                 importStat.textContent = '';
                 closeImport();
             })
@@ -3548,6 +3581,10 @@ var addTrackCallback = null;
                     var importer = usersInfo[currentUserKey] ? usersInfo[currentUserKey].label : '';
                     results.forEach(function(t) { editList.push(Object.assign({}, t, { addedBy: importer })); });
                     renderList();
+                    /* Mismo autoguardado que en el import de URL: los
+                       tracks del CSV de Spotify ya quedan listos para
+                       reproducir sin cerrar el editor. */
+                    autosaveEditor();
                     closeSpotifyImport();
                 })
                 .catch(function(e) {
