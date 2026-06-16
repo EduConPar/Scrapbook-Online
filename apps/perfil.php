@@ -4034,6 +4034,16 @@ var PROFILE_USERS = <?php
         document.querySelectorAll('[data-np-userkey]').forEach(function(slot) {
             var k  = slot.getAttribute('data-np-userkey');
             var np = lastNowPlaying[k];
+            var nextText = np ? ((np.title || '') + (np.artist ? ' - ' + np.artist : '')) : '';
+            var prevText = slot.getAttribute('data-np-text') || '';
+            /* IDEMPOTENCIA: applyPresence() (y por tanto este método) se
+               llama desde refreshPresenceDots (cada 20s), renderSocialList
+               y renderFollowedNav. Si el texto que toca pintar es el
+               mismo que ya está pintado, no tocamos nada — sino, cada
+               llamada destruiría el marquee a media vuelta y volvería a
+               empezar, dando la sensación de "se corta a mitad". */
+            if (nextText === prevText) return;
+            slot.setAttribute('data-np-text', nextText);
             /* Para cualquier marquee anterior antes de re-renderizar. El
                stop() también limpia transform inline. */
             if (slot.__npStop) { try { slot.__npStop(); } catch(_){} slot.__npStop = null; }
@@ -4042,12 +4052,11 @@ var PROFILE_USERS = <?php
                 slot.innerHTML = '';
                 return;
             }
-            var text = (np.title || '') + (np.artist ? ' - ' + np.artist : '');
             slot.style.display = '';
             slot.innerHTML =
                 '<span class="pf-np-icon">♪</span>' +
                 '<span class="pf-np-wrap"><span class="pf-np-track">' +
-                    '<span class="pf-np-text">' + escHtml(text) + '</span>' +
+                    '<span class="pf-np-text">' + escHtml(nextText) + '</span>' +
                 '</span></span>';
             /* Espera al primer paint para que clientWidth del wrap esté
                calculado. Para el ANCHO DEL TEXTO usamos el clon en
