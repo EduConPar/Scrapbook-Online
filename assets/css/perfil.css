@@ -492,6 +492,26 @@
     background: #2ecc71;
     animation: pfPresencePulse 1.2s ease-in-out infinite alternate;
 }
+/* Ausente: el usuario está online (heartbeat reciente) pero lleva un
+   tiempo sin interactuar — o tiene la pantalla bloqueada en móvil.
+   Amarillo sin pulse para no llamar la atención como online. Gana en
+   especificidad sobre `.online` por orden + !important. */
+.pf-presence-dot.away,
+.pf-presence-dot.online.away {
+    background: #f1c40f !important;
+    animation: none !important;
+    box-shadow: 0 0 0 2px var(--win-bg, silver),
+                0 0 4px rgba(241, 196, 15, 0.55),
+                inset -1px -1px 0 rgba(0,0,0,0.25) !important;
+}
+.pf-presence-dot.pf-presence-dot-small.away,
+.pf-presence-dot.pf-presence-dot-small.online.away {
+    background: #f1c40f !important;
+    animation: none !important;
+    box-shadow: 0 0 0 1.5px var(--win-bg, silver),
+                0 0 3px rgba(241, 196, 15, 0.55),
+                inset -1px -1px 0 rgba(0,0,0,0.25) !important;
+}
 /* "No molestar": el usuario tiene mute_messages activo. Gana en
    especificidad sobre `.online` por orden + !important para que el
    usuario en DND aunque esté online se vea siempre rojo. */

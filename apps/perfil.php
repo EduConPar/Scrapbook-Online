@@ -3936,11 +3936,14 @@ var PROFILE_USERS = <?php
        Cacheamos el último set para que renderSocialList/renderFollowedNav
        puedan re-aplicar el estado sin esperar al siguiente fetch. */
     var lastOnlineSet = {};
+    var lastAwaySet   = {};
     var lastDndSet    = {};
     function applyPresence() {
         document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
             var k = dot.getAttribute('data-userkey');
             dot.classList.toggle('online', !!lastOnlineSet[k]);
+            /* away gana visualmente sobre online (verde→amarillo). */
+            dot.classList.toggle('away',   !!lastAwaySet[k]);
             dot.classList.toggle('dnd',    !!lastDndSet[k]);
         });
     }
@@ -3962,6 +3965,7 @@ var PROFILE_USERS = <?php
         dot.setAttribute('data-userkey', userKey);
         frame.appendChild(dot);
         if (lastOnlineSet[userKey]) dot.classList.add('online');
+        if (lastAwaySet[userKey])   dot.classList.add('away');
         if (lastDndSet[userKey])    dot.classList.add('dnd');
     }
     window.__attachPresenceDot = attachPresenceDot;
@@ -3976,6 +3980,10 @@ var PROFILE_USERS = <?php
                 if (!d || !d.ok || !Array.isArray(d.online)) return;
                 lastOnlineSet = {};
                 d.online.forEach(function(k) { lastOnlineSet[k] = true; });
+                lastAwaySet = {};
+                if (Array.isArray(d.away)) {
+                    d.away.forEach(function(k) { lastAwaySet[k] = true; });
+                }
                 lastDndSet = {};
                 if (Array.isArray(d.dnd)) {
                     d.dnd.forEach(function(k) { lastDndSet[k] = true; });

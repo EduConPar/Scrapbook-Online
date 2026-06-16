@@ -3118,14 +3118,51 @@ window.notifSystem = (function() {
 /* ── Presencia: heartbeat cada 30s al servidor para marcar al usuario
    actual como online. assets/profile/api.php?action=heartbeat upserta
    user_presence.last_at = NOW(). Otros clientes consultan ?action=presence
-   para pintar el indicador. */
+   para pintar el indicador.
+
+   ESTADO 'AWAY': tras `AWAY_AFTER_MS` sin actividad del usuario
+   (mouse / teclado / scroll / touch) marcamos el state como 'away' y lo
+   enviamos en el siguiente heartbeat. Al detectar cualquier input
+   vuelve a 'online' y se envía un heartbeat inmediato para que el
+   indicador amarillo desaparezca rápido.
+   También: si la pestaña pasa a oculta (cambia de ventana, bloqueo de
+   pantalla, etc.), pasamos a 'away' sin esperar al timer. */
 (function presenceHeartbeat(){
+    var AWAY_AFTER_MS = 5 * 60 * 1000;   /* 5 minutos de inactividad */
+    var currentState  = 'online';
+    var lastActivity  = Date.now();
+    var awayTimer     = null;
+
     function ping(){
-        fetch('assets/profile/api.php?action=heartbeat', {
+        fetch('assets/profile/api.php?action=heartbeat&state=' + encodeURIComponent(currentState), {
             method: 'POST', credentials: 'same-origin'
         }).catch(function(){});
     }
+    function setState(next){
+        if (next === currentState) return;
+        currentState = next;
+        ping();   /* heartbeat inmediato para que se vea sin esperar 30s */
+    }
+    function scheduleAwayCheck(){
+        if (awayTimer) clearTimeout(awayTimer);
+        awayTimer = setTimeout(function(){
+            if (Date.now() - lastActivity >= AWAY_AFTER_MS) setState('away');
+        }, AWAY_AFTER_MS);
+    }
+    function onActivity(){
+        lastActivity = Date.now();
+        if (currentState !== 'online') setState('online');
+        scheduleAwayCheck();
+    }
+    ['mousemove','mousedown','keydown','touchstart','scroll','wheel'].forEach(function(ev){
+        window.addEventListener(ev, onActivity, { passive: true, capture: true });
+    });
+    document.addEventListener('visibilitychange', function(){
+        if (document.hidden) setState('away');
+        else                 onActivity();
+    });
     ping();
+    scheduleAwayCheck();
     setInterval(ping, 30000);
 })();
 

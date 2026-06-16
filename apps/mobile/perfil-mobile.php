@@ -3524,11 +3524,14 @@ function isMutual(uKey) {
    Social. Llamado al cargar y cada 20s. Cachea el último set para que
    los re-renders apliquen el estado sin esperar al fetch. */
 var __pfLastOnline = {};
+var __pfLastAway   = {};
 var __pfLastDnd    = {};
 function applyPresence() {
     document.querySelectorAll('.pf-presence-dot[data-userkey]').forEach(function(dot) {
         var k = dot.getAttribute('data-userkey');
         dot.classList.toggle('online', !!__pfLastOnline[k]);
+        /* away gana sobre online (verde→amarillo). */
+        dot.classList.toggle('away',   !!__pfLastAway[k]);
         dot.classList.toggle('dnd',    !!__pfLastDnd[k]);
     });
 }
@@ -3548,6 +3551,7 @@ function attachPresenceDot(wrap, userKey, small) {
     dot.className = 'pf-presence-dot' + (small ? ' pf-presence-dot-small' : '');
     dot.setAttribute('data-userkey', userKey);
     if (__pfLastOnline[userKey]) dot.classList.add('online');
+    if (__pfLastAway[userKey])   dot.classList.add('away');
     if (__pfLastDnd[userKey])    dot.classList.add('dnd');
     wrap.appendChild(dot);
 }
@@ -3559,6 +3563,10 @@ function refreshPresenceDots() {
             if (!d || !d.ok || !Array.isArray(d.online)) return;
             __pfLastOnline = {};
             d.online.forEach(function(k) { __pfLastOnline[k] = true; });
+            __pfLastAway = {};
+            if (Array.isArray(d.away)) {
+                d.away.forEach(function(k) { __pfLastAway[k] = true; });
+            }
             __pfLastDnd = {};
             if (Array.isArray(d.dnd)) {
                 d.dnd.forEach(function(k) { __pfLastDnd[k] = true; });

@@ -49,15 +49,25 @@ $action  = $_GET['action'] ?? $_POST['action'] ?? '';
 
 /* Auto-migración: tabla user_presence — un row por usuario, last_at
    actualizado vía heartbeat cada 30s desde la shell. Online = last_at
-   en los últimos 60s. */
+   en los últimos 60s. `state` = 'online' | 'away' — el cliente lo
+   manda en cada heartbeat según inactividad / pantalla bloqueada. */
 try {
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS user_presence (
             user_id INT PRIMARY KEY,
             last_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            state   VARCHAR(10) NOT NULL DEFAULT 'online',
             INDEX idx_last_at (last_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
+    /* ALTER idempotente para BDs antiguas que tenían la tabla sin
+       la columna `state`. */
+    try {
+        $hasState = $pdo->query("SHOW COLUMNS FROM user_presence LIKE 'state'")->fetch();
+        if (!$hasState) {
+            $pdo->exec("ALTER TABLE user_presence ADD COLUMN state VARCHAR(10) NOT NULL DEFAULT 'online' AFTER last_at");
+        }
+    } catch (Throwable $_) {}
 } catch (Throwable $e) { /* silencio */ }
 
 /* Auto-migración: tabla chat_mutes — silenciado de notificaciones de un
@@ -1438,13 +1448,25 @@ case 'get-profile-notifs': {
 }
 
 case 'heartbeat': {
-    /* Ping de presencia — la shell desktop/móvil lo manda cada 30s. */
+    /* Ping de presencia — la shell desktop/móvil lo manda cada 30s.
+       state es opcional: 'away' cuando el cliente detectó inactividad
+       o pantalla bloqueada; cualquier otro valor cae a 'online'. */
     $uid = pf_uid($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
-    $pdo->prepare("
-        INSERT INTO user_presence (user_id) VALUES (?)
-        ON DUPLICATE KEY UPDATE last_at = NOW()
-    ")->execute([$uid]);
+    $stateRaw = $_GET['state'] ?? ($_POST['state'] ?? '');
+    $state = ($stateRaw === 'away') ? 'away' : 'online';
+    try {
+        $pdo->prepare("
+            INSERT INTO user_presence (user_id, state) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE last_at = NOW(), state = VALUES(state)
+        ")->execute([$uid, $state]);
+    } catch (Throwable $_) {
+        /* Fallback para BDs cuya migración de `state` aún no corrió. */
+        $pdo->prepare("
+            INSERT INTO user_presence (user_id) VALUES (?)
+            ON DUPLICATE KEY UPDATE last_at = NOW()
+        ")->execute([$uid]);
+    }
     jsonResponse(['ok' => true]);
 }
 
@@ -1455,17 +1477,34 @@ case 'presence': {
        DND = preferencia `mute_messages` activa → indicador rojo en el
        UI en lugar del verde habitual. La app de chat también la usa
        para silenciar el ping de mensajes entrantes en el receptor. */
-    $st = $pdo->query("
-        SELECT u.user_key,
-               UNIX_TIMESTAMP(p.last_at) AS lastAt,
-               (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline
-          FROM user_presence p
-          JOIN usuarios u ON u.id = p.user_id
-    ");
+    /* Tolerante a BDs sin columna `state` (migración pendiente). */
+    try {
+        $st = $pdo->query("
+            SELECT u.user_key,
+                   UNIX_TIMESTAMP(p.last_at) AS lastAt,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline,
+                   p.state AS state
+              FROM user_presence p
+              JOIN usuarios u ON u.id = p.user_id
+        ");
+    } catch (Throwable $_) {
+        $st = $pdo->query("
+            SELECT u.user_key,
+                   UNIX_TIMESTAMP(p.last_at) AS lastAt,
+                   (p.last_at > DATE_SUB(NOW(), INTERVAL 60 SECOND)) AS isOnline,
+                   'online' AS state
+              FROM user_presence p
+              JOIN usuarios u ON u.id = p.user_id
+        ");
+    }
     $online   = [];
+    $away     = [];
     $lastSeen = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        if ((int)$r['isOnline']) $online[] = $r['user_key'];
+        if ((int)$r['isOnline']) {
+            $online[] = $r['user_key'];
+            if (($r['state'] ?? '') === 'away') $away[] = $r['user_key'];
+        }
         $lastSeen[$r['user_key']] = (int)$r['lastAt'];
     }
     /* DND set: user_keys con `mute_messages = true` en user_settings.
@@ -1484,7 +1523,7 @@ case 'presence': {
         ");
         foreach ($st2->fetchAll(PDO::FETCH_COLUMN) as $k) $dnd[] = $k;
     } catch (Throwable $_) {}
-    jsonResponse(['ok' => true, 'online' => $online, 'lastSeen' => $lastSeen, 'dnd' => $dnd]);
+    jsonResponse(['ok' => true, 'online' => $online, 'away' => $away, 'lastSeen' => $lastSeen, 'dnd' => $dnd]);
 }
 
 case 'notif-settings': {

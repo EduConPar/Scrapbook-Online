@@ -4582,14 +4582,42 @@ window.MuShell = (function(){
    30s visible / 90s hidden. La presencia no es time-sensitive en
    background; basta con avisar cada minuto y medio. */
 (function mPresenceHeartbeat(){
+    var AWAY_AFTER_MS = 5 * 60 * 1000;   /* 5 min de inactividad → away */
     var PING_T = null;
     var idleOff = false;
+    /* Estado actual enviado al backend. Cuando se entra en lock /
+       pantalla bloqueada / pestaña hidden, mandamos 'away'. */
+    var currentState = 'online';
+    var lastActivity = Date.now();
+    var awayTimer    = null;
+
     function ping(){
         if (idleOff) return;
-        fetch('assets/profile/api.php?action=heartbeat', {
+        fetch('assets/profile/api.php?action=heartbeat&state=' + encodeURIComponent(currentState), {
             method: 'POST', credentials: 'same-origin'
         }).catch(function(){});
     }
+    function setState(next){
+        if (next === currentState) return;
+        currentState = next;
+        /* Heartbeat inmediato para que el cambio se vea sin esperar al
+           próximo intervalo. */
+        ping();
+    }
+    function scheduleAwayCheck(){
+        if (awayTimer) clearTimeout(awayTimer);
+        awayTimer = setTimeout(function(){
+            if (Date.now() - lastActivity >= AWAY_AFTER_MS) setState('away');
+        }, AWAY_AFTER_MS);
+    }
+    function onActivity(){
+        lastActivity = Date.now();
+        if (currentState !== 'online') setState('online');
+        scheduleAwayCheck();
+    }
+    ['mousemove','mousedown','keydown','touchstart','scroll','wheel','pointerdown'].forEach(function(ev){
+        window.addEventListener(ev, onActivity, { passive: true, capture: true });
+    });
     function startPing(){
         if (PING_T) clearInterval(PING_T);
         if (idleOff) return; /* no rearrancar mientras lock activo */
@@ -4599,13 +4627,24 @@ window.MuShell = (function(){
     function stopPing(){
         if (PING_T) { clearInterval(PING_T); PING_T = null; }
     }
+    /* Pestaña oculta = pantalla apagada / app en background / otra
+       pestaña activa → away. Al volver visible se considera actividad. */
+    document.addEventListener('visibilitychange', function(){
+        if (document.hidden) setState('away');
+        else                 onActivity();
+        startPing();
+    });
+    /* Reproductor avisa con `melon:idle` cuando la pantalla de bloqueo
+       de música se activa. Marcamos away aunque sigamos en pantalla. */
+    window.addEventListener('melon:idle:on',  function(){
+        idleOff = true; setState('away'); stopPing();
+    });
+    window.addEventListener('melon:idle:off', function(){
+        idleOff = false; onActivity(); startPing(); ping();
+    });
     ping();
     startPing();
-    document.addEventListener('visibilitychange', startPing);
-    /* Tier 2 #5: el reproductor avisa con `melon:idle` cuando se
-       bloquea — paramos el heartbeat hasta que vuelva. */
-    window.addEventListener('melon:idle:on',  function(){ idleOff = true;  stopPing(); });
-    window.addEventListener('melon:idle:off', function(){ idleOff = false; startPing(); ping(); });
+    scheduleAwayCheck();
 })();
 
 /* ════════════════════════════════════════════════════════════════
