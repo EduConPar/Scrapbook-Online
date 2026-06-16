@@ -1795,12 +1795,11 @@ body:has(.cal-cell) {
     background: var(--accent, #FF66B2) !important;
     color: var(--accent-text, #fff) !important;
 }
-.ev-part-action {
-    color: var(--accent-deep, #CC4499) !important;
+.ev-part-actionable {
+    cursor: context-menu;
 }
-.ev-part-action:hover {
+.ev-part-actionable:hover {
     background: color-mix(in srgb, var(--accent, #FF66B2) 18%, transparent) !important;
-    border-color: var(--accent, #FF66B2) !important;
 }
 
 /* Friends dialog — overrides kawaii */

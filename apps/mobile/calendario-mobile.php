@@ -1540,11 +1540,11 @@ window.__EV_CFG = {
         var partList = (ev.participants || []).map(function(p){
             var sl = p.status === 'waitlist' ? ' <span class="ev-waitlist-tag">(espera)</span>' : '';
             var canAct = ev.isCreator && p.key !== ev.creatorKey;
-            var actBtn = canAct
-                ? ' <button class="ev-part-action" data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '" aria-label="Opciones">⋮</button>'
+            var cls = canAct ? 'ev-part-item ev-part-actionable' : 'ev-part-item';
+            var dataAttrs = canAct
+                ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '"'
                 : '';
-            return '<li class="ev-part-item"' + (canAct ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '"' : '') + '>' +
-                esc(p.label) + sl + actBtn + '</li>';
+            return '<li class="' + cls + '"' + dataAttrs + '>' + esc(p.label) + sl + '</li>';
         }).join('');
         var waitInfo = ev.waitlistCount > 0
             ? '<div class="ev-detail-meta-row">En lista de espera: <strong>' + ev.waitlistCount + '</strong></div>'
@@ -1660,14 +1660,8 @@ window.__EV_CFG = {
         bodyEl.querySelectorAll('.ev-part-item[data-pkey]').forEach(function(li){
             var key = li.dataset.pkey;
             var status = li.dataset.pstatus;
-            /* Botón ⋮ (principal en móvil — no hay click derecho). */
-            var actBtn = li.querySelector('.ev-part-action');
-            if (actBtn) actBtn.addEventListener('click', function(e){
-                e.preventDefault(); e.stopPropagation();
-                var r = actBtn.getBoundingClientRect();
-                showContextMenu(r.left, r.bottom + 2, participantActions(ev, key, status));
-            });
-            /* Long-press en la fila también abre el menú (UX nativo móvil). */
+            /* Long-press sobre el nombre abre el menú (equivalente
+               al click derecho en móvil). */
             var pressTimer = null;
             li.addEventListener('touchstart', function(e){
                 if (pressTimer) clearTimeout(pressTimer);
@@ -1676,10 +1670,10 @@ window.__EV_CFG = {
                     showContextMenu(t.clientX, t.clientY, participantActions(ev, key, status));
                 }, 500);
             }, { passive: true });
-            ['touchend','touchcancel','touchmove'].forEach(function(ev){
-                li.addEventListener(ev, function(){ if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
+            ['touchend','touchcancel','touchmove'].forEach(function(evName){
+                li.addEventListener(evName, function(){ if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
             });
-            /* Click derecho también funciona en tablets con ratón. */
+            /* Click derecho (tablets con ratón / Bluetooth). */
             li.addEventListener('contextmenu', function(e){
                 e.preventDefault();
                 showContextMenu(e.clientX, e.clientY, participantActions(ev, key, status));

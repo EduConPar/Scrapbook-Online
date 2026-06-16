@@ -2775,13 +2775,15 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         var partList = (ev.participants || []).map(function(p){
             var sLabel = p.status === 'waitlist' ? ' <span class="ev-waitlist-tag">(espera)</span>' : '';
             /* El creador NO es accionable (no puede expulsarse a sí mismo);
-               el resto sí — el listener añade context menu y botón ⋮. */
+               para el resto, el creador puede abrir el menú con
+               CLICK DERECHO sobre el nombre (desktop). */
             var canAct = ev.isCreator && p.key !== ev.creatorKey;
-            var actBtn = canAct
-                ? ' <button class="ev-part-action" data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '" title="Opciones" aria-label="Opciones">⋮</button>'
+            var cls = canAct ? 'ev-part-item ev-part-actionable' : 'ev-part-item';
+            var dataAttrs = canAct
+                ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '" title="Click derecho para opciones"'
                 : '';
-            return '<li class="ev-part-item"' + (canAct ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '"' : '') + '>' +
-                esc(p.label) + sLabel + actBtn + '</li>';
+            return '<li class="' + cls + '"' + dataAttrs + '>' +
+                esc(p.label) + sLabel + '</li>';
         }).join('');
         var actions = '';
         if (ev.isFinished) {
@@ -2956,14 +2958,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         bodyEl.querySelectorAll('.ev-part-item[data-pkey]').forEach(function(li){
             var key = li.dataset.pkey;
             var status = li.dataset.pstatus;
-            /* Botón ⋮: abre menú anclado al botón. */
-            var actBtn = li.querySelector('.ev-part-action');
-            if (actBtn) actBtn.addEventListener('click', function(e){
-                e.preventDefault(); e.stopPropagation();
-                var r = actBtn.getBoundingClientRect();
-                showContextMenu(r.left, r.bottom + 2, participantActions(ev, key, status));
-            });
-            /* Click derecho en cualquier punto de la fila: menú al cursor. */
+            /* Click derecho sobre el nombre del participante: menú al cursor. */
             li.addEventListener('contextmenu', function(e){
                 e.preventDefault();
                 showContextMenu(e.clientX, e.clientY, participantActions(ev, key, status));

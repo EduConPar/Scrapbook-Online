@@ -602,45 +602,36 @@
     text-shadow: none !important;
 }
 
-/* Botón ⋮ en cada fila de participante */
-.ev-part-action {
-    background: transparent;
-    border: 1px solid transparent;
-    cursor: pointer;
-    padding: 1px 4px;
-    font-size: 13px;
-    line-height: 1;
-    color: var(--text-muted, #666);
-    margin-left: 4px;
-    vertical-align: middle;
+/* Participantes accionables por el creador: feedback visual sutil de
+   que el item responde a click derecho / long-press. */
+.ev-part-actionable {
+    cursor: context-menu;
+    padding: 2px 4px;
+    border-radius: 2px;
+    transition: background 100ms ease;
 }
-.ev-part-action:hover {
-    color: var(--accent, #000080);
-    background: color-mix(in srgb, var(--accent, #000080) 14%, transparent);
-    border-color: var(--bezel-dark-2, #808080);
-}
-.ev-part-item[data-pkey] {
-    cursor: default;
-    padding: 2px 0;
-    list-style: disc;
+.ev-part-actionable:hover {
+    background: color-mix(in srgb, var(--accent, #000080) 10%, transparent);
 }
 
-/* ─── MOBILE — sheet centrado Win98 ───
+/* ─── MOBILE — sheet centrado Win98 con altura auto ───
    `mh-window` impone width:100% + height:100% + margin:0 auto. Con un
    simple `inset:8px` no se anula y la ventana se va fuera del viewport.
-   Explicitamos dimensiones + centrado con left/top + translate. */
+   Explicitamos dimensiones + centrado con left/top + translate.
+   `height: auto` ⇒ la ventana SOLO ocupa lo necesario para su contenido,
+   sin espacio en blanco abajo. `max-height` cap para que listas largas
+   no excedan la pantalla — entonces el body con overflow:auto scrollea. */
 .ev-m-window,
 .ev-m-detail-window {
     position: fixed;
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    /* Ocupar casi toda la pantalla del móvil con un margen cómodo. */
     width: calc(100vw - 16px);
-    height: calc(100vh - 16px);
+    height: auto;                   /* ← clave: tamaño según contenido */
     max-width: 480px;
-    max-height: 720px;
-    margin: 0 !important;       /* anula margin:0 auto de mh-window */
+    max-height: calc(100vh - 16px); /* cap para no salirse del viewport */
+    margin: 0 !important;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
