@@ -47,9 +47,10 @@ body.user-selected::before { opacity: 1; }
 
 .window { will-change: transform, opacity; }
 
-/* ── Skin "consola" compartido por select y register ── */
+/* ── Skin "consola" rojo/negro compartido por login y register ── */
 #selectWindow,
-#registerWindow {
+#registerWindow,
+#loginWindow {
     min-width: 200px;
     background: #120808;
     border-color: #3a0000 #0a0000 #0a0000 #3a0000;
@@ -79,20 +80,23 @@ body.user-selected::before { opacity: 1; }
 }
 
 #selectWindow .title-bar,
-#registerWindow .title-bar {
+#registerWindow .title-bar,
+#loginWindow .title-bar {
     background: linear-gradient(to right, #6a0000, #b02020);
     text-shadow: 0 1px 2px rgba(0,0,0,0.6);
     border-bottom: 1px solid #3a0000;
 }
 
 #selectWindow .window-body,
-#registerWindow .window-body {
+#registerWindow .window-body,
+#loginWindow .window-body {
     background: #120808;
     padding: 8px;
 }
 
-/* Inputs y labels del formulario de registro */
-#registerWindow label {
+/* Inputs y labels del formulario de registro / login */
+#registerWindow label,
+#loginWindow label {
     color: #d4a0a0;
     font-size: 11px;
 }
@@ -130,7 +134,9 @@ body.user-selected::before { opacity: 1; }
 
 #registerWindow input[type="text"],
 #registerWindow input[type="password"],
-#registerWindow input[type="file"] {
+#registerWindow input[type="file"],
+#loginWindow input[type="text"],
+#loginWindow input[type="password"] {
     background: #1e0c0c;
     color: #d4a0a0;
     border: 1px solid #0a0000;
@@ -152,7 +158,9 @@ body.user-selected::before { opacity: 1; }
     cursor: pointer;
 }
 #registerWindow input[type="text"]:focus,
-#registerWindow input[type="password"]:focus {
+#registerWindow input[type="password"]:focus,
+#loginWindow input[type="text"]:focus,
+#loginWindow input[type="password"]:focus {
     outline: none;
     background: #2a0c0c;
     color: #fff;
@@ -162,7 +170,8 @@ body.user-selected::before { opacity: 1; }
         inset 2px 2px 4px rgba(0,0,0,0.7),
         0 0 4px rgba(180,0,0,0.4);
 }
-#registerWindow .login-actions .button {
+#registerWindow .login-actions .button,
+#loginWindow .login-actions .button {
     background: #1e0c0c !important;
     color: #d4a0a0 !important;
     border: 1px solid #3a1515 !important;
@@ -171,12 +180,19 @@ body.user-selected::before { opacity: 1; }
         inset 0 1px 0 rgba(255,100,100,0.08),
         0 1px 3px rgba(0,0,0,0.5) !important;
 }
-#registerWindow .login-actions .button:hover {
+#registerWindow .login-actions .button:hover,
+#loginWindow .login-actions .button:hover {
     background: #5a0000 !important;
     color: #fff !important;
     border-color: #a03030 !important;
 }
-#registerWindow .error-text { color: #ff8080; }
+#registerWindow .login-actions .button:active,
+#loginWindow .login-actions .button:active {
+    background: #3a0000 !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5) !important;
+}
+#registerWindow .error-text,
+#loginWindow .error-text { color: #ff8080; }
 
 /* ── Login window (formulario contraseña) ── */
 #loginWindow {
@@ -317,12 +333,9 @@ body.user-selected::before { opacity: 1; }
     margin-top: 6px;
 }
 
-/* Fila del botón "Crear usuario" debajo del formulario. */
-.login-register-row { margin-top: 10px; }
-.login-register-row .button { width: 100%; }
-
 .login-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 14px;

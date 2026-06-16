@@ -399,15 +399,12 @@ foreach (['png','jpg','jpeg','webp','gif'] as $ext) {
                     <?php endif; ?>
                 </div>
                 <div class="login-actions">
-                    <button class="button" type="button" id="changeUser">Cambiar usuario</button>
+                    <button class="button" type="button" id="openRegister">+ Crear usuario</button>
                     <?php $_showDel = $showLogin && $selectedUser !== '' && $selectedUser !== 'user1' && $selectedUser !== 'user2'; ?>
-                    <button class="button" type="button" id="deleteUser" style="display:<?php echo $_showDel ? 'inline-block' : 'none'; ?>;"><img src="assets/img/appIcons/Claro/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;"> Eliminar</button>
+                    <button class="button" type="button" id="deleteUser" style="display:<?php echo $_showDel ? 'inline-block' : 'none'; ?>;"><img src="assets/img/appIcons/Claro/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;"> Eliminar cuenta</button>
                     <button class="button default" type="submit">Ingresar</button>
                 </div>
             </form>
-            <div class="login-register-row">
-                <button class="button" id="openRegister" type="button">+ Crear usuario</button>
-            </div>
         </div>
     </div>
 
@@ -720,22 +717,6 @@ function applyUserInterfaceLogin(cssUrl) {
 }
 
 /* =========================
-   CAMBIAR USUARIO
-========================= */
-
-document.getElementById('changeUser').addEventListener('click', function(){
-    /* Vacía el formulario y vuelve al estado "sin usuario" — el preview,
-       tema y fondo desaparecen y el foco vuelve al campo Usuario. */
-    usernameInput.value = '';
-    var pwd = document.querySelector('input[name="password"]');
-    if (pwd) pwd.value = '';
-    _lastDetectedKey = null;
-    applyDetectedUser(null);
-    if (adPopup) adPopup.style.display = 'none';
-    usernameInput.focus();
-});
-
-/* =========================
    BORRAR USUARIO
 ========================= */
 document.getElementById('deleteUser').addEventListener('click', function() {
@@ -773,6 +754,13 @@ const registerStatus = document.getElementById('registerStatus');
 const registerSubmit = document.getElementById('registerSubmit');
 
 document.getElementById('openRegister').addEventListener('click', function() {
+    /* Limpia el estado de login: vacía el campo usuario, oculta la foto
+       de perfil y devuelve el fondo/tema al default. */
+    usernameInput.value = '';
+    var pwd = document.querySelector('input[name="password"]');
+    if (pwd) pwd.value = '';
+    _lastDetectedKey = null;
+    applyDetectedUser(null);
     loginWindow.classList.remove('visible');
     registerWindow.classList.remove('hidden');
     registerWindow.classList.add('visible');
