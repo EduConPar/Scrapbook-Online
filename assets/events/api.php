@@ -128,7 +128,7 @@ try {
    join/leave/promote/delete editamos (PATCH) el embed para mantener
    los participantes actualizados en vivo. */
 const EV_DISCORD_CHANNEL = '1516472123651133450';
-const EV_PUBLIC_BASE_URL = 'https://melonhubdev.melonhub.es';
+const EV_PUBLIC_BASE_URL = 'https://melonhub.es';
 
 function ev_botToken(): string {
     return trim((string)env('DISCORD_BOT_TOKEN', ''));
@@ -245,7 +245,7 @@ function ev_discordPublish(PDO $pdo, array $event): ?string {
         CURLOPT_HTTPHEADER     => [
             'Authorization: Bot ' . $token,
             'Content-Type: application/json',
-            'User-Agent: MelonHub-Events (https://melonhubdev.melonhub.es, 1.0)',
+            'User-Agent: MelonHub-Events (https://melonhub.es, 1.0)',
         ],
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 15,
