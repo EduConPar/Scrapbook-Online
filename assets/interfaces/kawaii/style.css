@@ -1785,6 +1785,24 @@ body:has(.cal-cell) {
     color: var(--accent-deep, #CC4499) !important;
 }
 
+/* Context menu — overrides kawaii */
+.ev-ctx-menu {
+    box-shadow: none !important;
+    border: 2px solid var(--accent, #FF66B2) !important;
+    background: var(--win-body-bg, var(--win-bg, #E0D4E7)) !important;
+}
+.ev-ctx-menu .button:hover {
+    background: var(--accent, #FF66B2) !important;
+    color: var(--accent-text, #fff) !important;
+}
+.ev-part-action {
+    color: var(--accent-deep, #CC4499) !important;
+}
+.ev-part-action:hover {
+    background: color-mix(in srgb, var(--accent, #FF66B2) 18%, transparent) !important;
+    border-color: var(--accent, #FF66B2) !important;
+}
+
 /* Friends dialog — overrides kawaii */
 #ev-friends-dialog-list {
     box-shadow: none !important;

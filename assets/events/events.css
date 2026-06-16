@@ -570,6 +570,61 @@
     font-family: 'Courier New', 'Consolas', monospace;
 }
 
+/* ────────────────────────────────────────────────────────────────────
+   CONTEXT MENU — popup Win98 estilo "menu" para acciones del creador
+   sobre cada participante (promover / demote / expulsar).
+   ──────────────────────────────────────────────────────────────────── */
+.ev-ctx-menu {
+    background: var(--win-bg, #c0c0c0);
+    color: var(--text, #000);
+    box-shadow:
+        inset -1px -1px 0 var(--bezel-dark-1, #000),
+        inset  1px  1px 0 var(--bezel-light-1, #fff),
+        inset -2px -2px 0 var(--bezel-dark-2, #808080),
+        inset  2px  2px 0 var(--bezel-light-2, #dfdfdf);
+    padding: 3px !important;
+}
+.ev-ctx-menu .button {
+    min-height: 0 !important;
+    min-width: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 1px solid transparent;
+    border-radius: 0;
+    text-shadow: none !important;
+    color: inherit;
+    width: 100%;
+}
+.ev-ctx-menu .button:hover {
+    background: var(--accent, #000080) !important;
+    color: var(--accent-text, #fff) !important;
+    border-color: var(--accent, #000080);
+    text-shadow: none !important;
+}
+
+/* Botón ⋮ en cada fila de participante */
+.ev-part-action {
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    padding: 1px 4px;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text-muted, #666);
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.ev-part-action:hover {
+    color: var(--accent, #000080);
+    background: color-mix(in srgb, var(--accent, #000080) 14%, transparent);
+    border-color: var(--bezel-dark-2, #808080);
+}
+.ev-part-item[data-pkey] {
+    cursor: default;
+    padding: 2px 0;
+    list-style: disc;
+}
+
 /* ─── MOBILE — sheet centrado Win98 ───
    `mh-window` impone width:100% + height:100% + margin:0 auto. Con un
    simple `inset:8px` no se anula y la ventana se va fuera del viewport.

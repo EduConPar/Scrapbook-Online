@@ -2442,6 +2442,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
     /* ── Abrir/cerrar ventana ── */
     function openWindow() {
         winEl.style.display = '';
+        endEditMode();   /* limpiar state de un edit anterior abandonado */
         showTab('list');
         loadEvents();
         loadFriends();
@@ -2666,6 +2667,7 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
 
     /* ── CREAR ── */
     document.getElementById('ev-create-cancel').addEventListener('click', function(){
+        endEditMode();
         showTab('list');
     });
     document.getElementById('ev-create-submit').addEventListener('click', function(){
@@ -2692,7 +2694,10 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         /* Combina fecha (YYYY-MM-DD) + hora del picker (HH:MM) → "YYYY-MM-DD HH:MM:SS" */
         var dateStr = dateRaw + ' ' + timeStr + ':00';
 
-        api('create-event', {
+        /* Modo edición vs creación. */
+        var isEdit = !!STATE.editingId;
+        var endpoint = isEdit ? 'update-event' : 'create-event';
+        var body = {
             title: title,
             description: desc,
             eventDate: dateStr,
@@ -2700,25 +2705,32 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             minParticipants: minP,
             maxParticipants: maxP,
             visibility: vis,
-            invitees: invitees,
-        }, 'POST').then(function(d){
+        };
+        if (isEdit) body.eventId = STATE.editingId;
+        else        body.invitees = invitees;
+
+        api(endpoint, body, 'POST').then(function(d){
             if (!d || !d.ok) {
                 statusEl.className = 'ev-status is-error';
-                statusEl.textContent = (d && d.error) ? d.error : 'Error al crear.';
+                statusEl.textContent = (d && d.error) ? d.error : (isEdit ? 'Error al guardar.' : 'Error al crear.');
                 return;
             }
             statusEl.className = 'ev-status is-success';
-            statusEl.textContent = '✓ Evento creado.';
-            /* Reset form */
-            document.getElementById('ev-create-title').value = '';
-            document.getElementById('ev-create-desc').value = '';
-            document.getElementById('ev-create-date').value = '';
-            document.getElementById('ev-create-duration').value = '60';
-            document.getElementById('ev-create-min').value = '1';
-            document.getElementById('ev-create-max').value = '0';
-            if (timePicker && typeof timePicker.__tpSet === 'function') timePicker.__tpSet('12:00');
-            STATE.selectedInvitees = {};
-            updateInviteCount();
+            statusEl.textContent = isEdit ? '✓ Cambios guardados.' : '✓ Evento creado.';
+            if (!isEdit) {
+                /* Reset form solo en modo creación. */
+                document.getElementById('ev-create-title').value = '';
+                document.getElementById('ev-create-desc').value = '';
+                document.getElementById('ev-create-date').value = '';
+                document.getElementById('ev-create-duration').value = '60';
+                document.getElementById('ev-create-min').value = '1';
+                document.getElementById('ev-create-max').value = '0';
+                if (timePicker && typeof timePicker.__tpSet === 'function') timePicker.__tpSet('12:00');
+                STATE.selectedInvitees = {};
+                updateInviteCount();
+            } else {
+                endEditMode();
+            }
             /* Refrescar lista + recordatorios del calendario. */
             loadEvents();
             if (typeof window.cargarTodo === 'function') window.cargarTodo();
@@ -2762,7 +2774,14 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
             : '';
         var partList = (ev.participants || []).map(function(p){
             var sLabel = p.status === 'waitlist' ? ' <span class="ev-waitlist-tag">(espera)</span>' : '';
-            return '<li>' + esc(p.label) + sLabel + '</li>';
+            /* El creador NO es accionable (no puede expulsarse a sí mismo);
+               el resto sí — el listener añade context menu y botón ⋮. */
+            var canAct = ev.isCreator && p.key !== ev.creatorKey;
+            var actBtn = canAct
+                ? ' <button class="ev-part-action" data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '" title="Opciones" aria-label="Opciones">⋮</button>'
+                : '';
+            return '<li class="ev-part-item"' + (canAct ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '"' : '') + '>' +
+                esc(p.label) + sLabel + actBtn + '</li>';
         }).join('');
         var actions = '';
         if (ev.isFinished) {
@@ -2780,6 +2799,9 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
         }
         var deleteBtn = ev.isCreator
             ? '<button class="button ev-btn-danger" id="ev-detail-delete">Eliminar evento</button>'
+            : '';
+        var editBtn = (ev.isCreator && !ev.isFinished)
+            ? '<button class="button" id="ev-detail-edit">Editar evento</button>'
             : '';
         var inviteBtn = (!ev.isFinished && (ev.isCreator || (ev.visibility === 'public' && ev.myStatus === 'joined')))
             ? '<button class="button" id="ev-detail-invite">Invitar amigos…</button>'
@@ -2799,10 +2821,11 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
                 (partList ? '<ul>' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Nadie todavía.</p>') +
             '</div>' +
             '<div class="ev-detail-actions">' +
-                actions + inviteBtn + deleteBtn +
+                actions + inviteBtn + editBtn + deleteBtn +
             '</div>';
 
         wireDetailActions(ev);
+        wireParticipantContextMenu(ev);
     }
 
     function wireDetailActions(ev) {
@@ -2863,6 +2886,131 @@ document.getElementById('countdown-close').addEventListener('click', cerrarCount
                al API en cuanto se pulsa "Invitar" en cada fila. */
             openFriendsDialog('detail', ev);
         });
+        var ed = document.getElementById('ev-detail-edit');
+        if (ed) ed.addEventListener('click', function(){ startEditEvent(ev); });
+    }
+
+    /* ── CONTEXT MENU ── */
+    var ctxMenuEl = null;
+    function closeContextMenu(){
+        if (ctxMenuEl) { ctxMenuEl.remove(); ctxMenuEl = null; }
+    }
+    function showContextMenu(x, y, items) {
+        closeContextMenu();
+        ctxMenuEl = document.createElement('div');
+        ctxMenuEl.className = 'ev-ctx-menu window';
+        ctxMenuEl.style.cssText =
+            'position:fixed; z-index:9999; left:' + x + 'px; top:' + y + 'px;' +
+            'min-width:160px; padding:2px;';
+        var inner = document.createElement('div');
+        inner.style.cssText = 'display:flex; flex-direction:column; gap:2px;';
+        items.forEach(function(it){
+            var b = document.createElement('button');
+            b.className = 'button';
+            b.style.cssText = 'text-align:left; justify-content:flex-start; padding:4px 10px; font-size:11px;';
+            b.textContent = it.label;
+            if (it.danger) b.style.color = 'var(--error, #a02525)';
+            b.addEventListener('click', function(e){
+                e.stopPropagation();
+                closeContextMenu();
+                it.action();
+            });
+            inner.appendChild(b);
+        });
+        ctxMenuEl.appendChild(inner);
+        document.body.appendChild(ctxMenuEl);
+        /* Ajusta si se sale por la derecha/abajo del viewport. */
+        var r = ctxMenuEl.getBoundingClientRect();
+        if (r.right > window.innerWidth - 4)  ctxMenuEl.style.left = Math.max(4, window.innerWidth - r.width - 4) + 'px';
+        if (r.bottom > window.innerHeight - 4) ctxMenuEl.style.top  = Math.max(4, window.innerHeight - r.height - 4) + 'px';
+        /* Auto-cierre al primer click fuera. */
+        setTimeout(function(){
+            document.addEventListener('click', closeContextMenu, { once: true, capture: true });
+        }, 0);
+    }
+
+    function participantActions(ev, key, status) {
+        var items = [];
+        if (status === 'waitlist') {
+            items.push({ label: 'Promover a participante', action: function(){
+                api('set-participant-status', { eventId: ev.id, userKey: key, status: 'joined' }, 'POST')
+                  .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+            }});
+        } else {
+            items.push({ label: 'Mover a lista de espera', action: function(){
+                api('set-participant-status', { eventId: ev.id, userKey: key, status: 'waitlist' }, 'POST')
+                  .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+            }});
+        }
+        items.push({ label: 'Expulsar del evento', danger: true, action: function(){
+            if (!confirm('¿Expulsar a este participante? Se le borrará el recordatorio del calendario.')) return;
+            api('kick-from-event', { eventId: ev.id, userKey: key }, 'POST')
+              .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+        }});
+        return items;
+    }
+
+    function wireParticipantContextMenu(ev) {
+        if (!ev.isCreator) return;
+        var bodyEl = document.getElementById('event-detail-body');
+        bodyEl.querySelectorAll('.ev-part-item[data-pkey]').forEach(function(li){
+            var key = li.dataset.pkey;
+            var status = li.dataset.pstatus;
+            /* Botón ⋮: abre menú anclado al botón. */
+            var actBtn = li.querySelector('.ev-part-action');
+            if (actBtn) actBtn.addEventListener('click', function(e){
+                e.preventDefault(); e.stopPropagation();
+                var r = actBtn.getBoundingClientRect();
+                showContextMenu(r.left, r.bottom + 2, participantActions(ev, key, status));
+            });
+            /* Click derecho en cualquier punto de la fila: menú al cursor. */
+            li.addEventListener('contextmenu', function(e){
+                e.preventDefault();
+                showContextMenu(e.clientX, e.clientY, participantActions(ev, key, status));
+            });
+        });
+    }
+
+    /* ── EDIT EVENT ──
+       Reusa el form de "Crear evento" en modo edición. STATE.editingId
+       indica al submit handler que hay que PATCH-ear en vez de crear. */
+    function startEditEvent(ev) {
+        STATE.editingId = ev.id;
+        /* Cambia label del submit y del tab. */
+        var submitBtn = document.getElementById('ev-create-submit');
+        if (submitBtn) submitBtn.textContent = 'Guardar cambios';
+        var tabCreate = document.getElementById('events-tab-create');
+        if (tabCreate) tabCreate.textContent = 'Editando evento';
+        /* Popla el form. */
+        document.getElementById('ev-create-title').value = ev.title || '';
+        document.getElementById('ev-create-desc').value  = ev.description || '';
+        var d = ev.eventDate || '';
+        /* "YYYY-MM-DD HH:MM:SS" → date + time pickers. */
+        var datePart = (d.substring(0, 10) || '');
+        var timePart = (d.substring(11, 16) || '00:00');
+        var dateInp = document.getElementById('ev-create-date');
+        if (dateInp) {
+            /* Si buildDatePicker ya envolvió el input, su `value` setter
+               está interceptado y actualiza el display custom. */
+            dateInp.value = datePart;
+        }
+        var timeWrap = document.getElementById('ev-create-time');
+        if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet(timePart);
+        document.getElementById('ev-create-duration').value = ev.durationMin || 60;
+        document.getElementById('ev-create-min').value      = ev.minParticipants || 1;
+        document.getElementById('ev-create-max').value      = ev.maxParticipants || 0;
+        var visRadio = document.querySelector('input[name="ev-visibility"][value="' + (ev.visibility || 'public') + '"]');
+        if (visRadio) visRadio.checked = true;
+        /* Cerrar detail + volver a la ventana principal en tab create. */
+        closeDetail();
+        showTab('create');
+    }
+    function endEditMode() {
+        STATE.editingId = null;
+        var submitBtn = document.getElementById('ev-create-submit');
+        if (submitBtn) submitBtn.textContent = 'Crear evento';
+        var tabCreate = document.getElementById('events-tab-create');
+        if (tabCreate) tabCreate.textContent = 'Crear evento';
     }
 
     /* ── HARO POLLING para invitaciones pendientes ──

@@ -1307,6 +1307,7 @@ window.__EV_CFG = {
     /* ── Open / close ── */
     function openWindow(){
         winEl.style.display = ''; backEl.style.display = '';
+        endEditMode();
         showTab('list'); loadEvents(); loadFriends();
         pfInitTimePicker('ev-m-time', 'ev-m-time-marks',
                          'ev-m-time-hh-hand', 'ev-m-time-mm-hand',
@@ -1469,7 +1470,7 @@ window.__EV_CFG = {
     document.getElementById('ev-m-invite-btn').addEventListener('click', function(){ openFriendsDialog('create', null); });
 
     /* ── Create ── */
-    document.getElementById('ev-m-create-cancel').addEventListener('click', function(){ showTab('list'); });
+    document.getElementById('ev-m-create-cancel').addEventListener('click', function(){ endEditMode(); showTab('list'); });
     document.getElementById('ev-m-create-submit').addEventListener('click', function(){
         var status = document.getElementById('ev-m-create-status');
         status.className = 'ev-status';
@@ -1487,20 +1488,30 @@ window.__EV_CFG = {
         if (!title) { status.className = 'ev-status is-error'; status.textContent = 'Título obligatorio.'; return; }
         if (!dateRaw) { status.className = 'ev-status is-error'; status.textContent = 'Fecha obligatoria.'; return; }
         if (maxP > 0 && maxP < minP) { status.className = 'ev-status is-error'; status.textContent = 'Máx no puede ser menor que mín.'; return; }
-        api('create-event', {
+        var isEdit = !!STATE.editingId;
+        var endpoint = isEdit ? 'update-event' : 'create-event';
+        var body = {
             title: title, description: desc,
             eventDate: dateRaw + ' ' + timeStr + ':00',
             durationMin: durMin, minParticipants: minP, maxParticipants: maxP,
-            visibility: vis, invitees: Object.keys(STATE.selectedInvitees),
-        }, 'POST').then(function(d){
+            visibility: vis,
+        };
+        if (isEdit) body.eventId = STATE.editingId;
+        else        body.invitees = Object.keys(STATE.selectedInvitees);
+        api(endpoint, body, 'POST').then(function(d){
             if (!d || !d.ok) { status.className = 'ev-status is-error'; status.textContent = (d && d.error) || 'Error.'; return; }
-            status.className = 'ev-status is-success'; status.textContent = '✓ Evento creado.';
-            document.getElementById('ev-m-title').value = '';
-            document.getElementById('ev-m-desc').value = '';
-            document.getElementById('ev-m-date').value = '';
-            if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet('12:00');
-            STATE.selectedInvitees = {};
-            updateInviteCount();
+            status.className = 'ev-status is-success';
+            status.textContent = isEdit ? '✓ Cambios guardados.' : '✓ Evento creado.';
+            if (!isEdit) {
+                document.getElementById('ev-m-title').value = '';
+                document.getElementById('ev-m-desc').value = '';
+                document.getElementById('ev-m-date').value = '';
+                if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet('12:00');
+                STATE.selectedInvitees = {};
+                updateInviteCount();
+            } else {
+                endEditMode();
+            }
             loadEvents();
             /* Refrescar grid del calendario si está accesible. */
             if (typeof window.cargarTodo === 'function') window.cargarTodo();
@@ -1528,7 +1539,12 @@ window.__EV_CFG = {
         var cap = ev.maxParticipants > 0 ? (ev.joinedCount+' / '+ev.maxParticipants) : (ev.joinedCount+' (sin límite)');
         var partList = (ev.participants || []).map(function(p){
             var sl = p.status === 'waitlist' ? ' <span class="ev-waitlist-tag">(espera)</span>' : '';
-            return '<li>' + esc(p.label) + sl + '</li>';
+            var canAct = ev.isCreator && p.key !== ev.creatorKey;
+            var actBtn = canAct
+                ? ' <button class="ev-part-action" data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '" aria-label="Opciones">⋮</button>'
+                : '';
+            return '<li class="ev-part-item"' + (canAct ? ' data-pkey="' + esc(p.key) + '" data-pstatus="' + esc(p.status) + '"' : '') + '>' +
+                esc(p.label) + sl + actBtn + '</li>';
         }).join('');
         var waitInfo = ev.waitlistCount > 0
             ? '<div class="ev-detail-meta-row">En lista de espera: <strong>' + ev.waitlistCount + '</strong></div>'
@@ -1542,6 +1558,8 @@ window.__EV_CFG = {
             actions = '<button class="button default" id="ev-m-join" type="button">' + lbl + '</button>';
         }
         var delBtn = ev.isCreator ? '<button class="button ev-btn-danger" id="ev-m-del" type="button">Eliminar</button>' : '';
+        var editBtn = (ev.isCreator && !ev.isFinished)
+            ? '<button class="button" id="ev-m-edit" type="button">Editar</button>' : '';
         var inviteBtn = (!ev.isFinished && (ev.isCreator || (ev.visibility === 'public' && ev.myStatus === 'joined')))
             ? '<button class="button" id="ev-m-invite" type="button">Invitar amigos…</button>' : '';
         b.innerHTML =
@@ -1556,8 +1574,9 @@ window.__EV_CFG = {
             '<div class="ev-detail-participants"><h4>Participantes</h4>' +
                 (partList ? '<ul>' + partList + '</ul>' : '<p style="font-size:11px; color:var(--text-faint, #808080); font-style:italic;">Nadie todavía.</p>') +
             '</div>' +
-            '<div class="ev-detail-actions">' + actions + inviteBtn + delBtn + '</div>';
+            '<div class="ev-detail-actions">' + actions + inviteBtn + editBtn + delBtn + '</div>';
         wireDetail(ev);
+        wireParticipantContextMenu(ev);
     }
     function wireDetail(ev){
         function post(act, body){ return api(act, body, 'POST'); }
@@ -1581,6 +1600,120 @@ window.__EV_CFG = {
             post('delete-event', { eventId: ev.id }).then(function(r){ if (r && r.ok) { closeDetail(); loadEvents(); if (typeof window.cargarTodo === 'function') window.cargarTodo(); } });
         });
         if (inv) inv.addEventListener('click', function(){ openFriendsDialog('detail', ev); });
+        var ed = document.getElementById('ev-m-edit');
+        if (ed) ed.addEventListener('click', function(){ startEditEvent(ev); });
+    }
+
+    /* ── Context menu para el creador (kick / promover / demote) ── */
+    var ctxMenuEl = null;
+    function closeContextMenu(){ if (ctxMenuEl) { ctxMenuEl.remove(); ctxMenuEl = null; } }
+    function showContextMenu(x, y, items) {
+        closeContextMenu();
+        ctxMenuEl = document.createElement('div');
+        ctxMenuEl.className = 'ev-ctx-menu window';
+        ctxMenuEl.style.cssText = 'position:fixed; z-index:9999; left:' + x + 'px; top:' + y + 'px; min-width:170px; padding:2px;';
+        var inner = document.createElement('div');
+        inner.style.cssText = 'display:flex; flex-direction:column; gap:2px;';
+        items.forEach(function(it){
+            var b = document.createElement('button');
+            b.className = 'button';
+            b.type = 'button';
+            b.style.cssText = 'text-align:left; justify-content:flex-start; padding:6px 10px; font-size:12px;';
+            b.textContent = it.label;
+            if (it.danger) b.style.color = 'var(--error, #a02525)';
+            b.addEventListener('click', function(e){ e.stopPropagation(); closeContextMenu(); it.action(); });
+            inner.appendChild(b);
+        });
+        ctxMenuEl.appendChild(inner);
+        document.body.appendChild(ctxMenuEl);
+        var r = ctxMenuEl.getBoundingClientRect();
+        if (r.right  > window.innerWidth  - 4) ctxMenuEl.style.left = Math.max(4, window.innerWidth  - r.width  - 4) + 'px';
+        if (r.bottom > window.innerHeight - 4) ctxMenuEl.style.top  = Math.max(4, window.innerHeight - r.height - 4) + 'px';
+        setTimeout(function(){
+            document.addEventListener('click',     closeContextMenu, { once: true, capture: true });
+            document.addEventListener('touchstart',closeContextMenu, { once: true, capture: true });
+        }, 0);
+    }
+    function participantActions(ev, key, status){
+        var items = [];
+        if (status === 'waitlist') {
+            items.push({ label: 'Promover a participante', action: function(){
+                api('set-participant-status', { eventId: ev.id, userKey: key, status: 'joined' }, 'POST')
+                  .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+            }});
+        } else {
+            items.push({ label: 'Mover a lista de espera', action: function(){
+                api('set-participant-status', { eventId: ev.id, userKey: key, status: 'waitlist' }, 'POST')
+                  .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+            }});
+        }
+        items.push({ label: 'Expulsar del evento', danger: true, action: function(){
+            if (!confirm('¿Expulsar a este participante?')) return;
+            api('kick-from-event', { eventId: ev.id, userKey: key }, 'POST')
+              .then(function(r){ if (r && r.ok) openDetail(ev.id); });
+        }});
+        return items;
+    }
+    function wireParticipantContextMenu(ev) {
+        if (!ev.isCreator) return;
+        var bodyEl = document.getElementById('ev-m-detail-body');
+        bodyEl.querySelectorAll('.ev-part-item[data-pkey]').forEach(function(li){
+            var key = li.dataset.pkey;
+            var status = li.dataset.pstatus;
+            /* Botón ⋮ (principal en móvil — no hay click derecho). */
+            var actBtn = li.querySelector('.ev-part-action');
+            if (actBtn) actBtn.addEventListener('click', function(e){
+                e.preventDefault(); e.stopPropagation();
+                var r = actBtn.getBoundingClientRect();
+                showContextMenu(r.left, r.bottom + 2, participantActions(ev, key, status));
+            });
+            /* Long-press en la fila también abre el menú (UX nativo móvil). */
+            var pressTimer = null;
+            li.addEventListener('touchstart', function(e){
+                if (pressTimer) clearTimeout(pressTimer);
+                var t = e.touches[0];
+                pressTimer = setTimeout(function(){
+                    showContextMenu(t.clientX, t.clientY, participantActions(ev, key, status));
+                }, 500);
+            }, { passive: true });
+            ['touchend','touchcancel','touchmove'].forEach(function(ev){
+                li.addEventListener(ev, function(){ if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
+            });
+            /* Click derecho también funciona en tablets con ratón. */
+            li.addEventListener('contextmenu', function(e){
+                e.preventDefault();
+                showContextMenu(e.clientX, e.clientY, participantActions(ev, key, status));
+            });
+        });
+    }
+
+    /* ── Edit event (móvil) ── */
+    function startEditEvent(ev){
+        STATE.editingId = ev.id;
+        var submitBtn = document.getElementById('ev-m-create-submit');
+        if (submitBtn) submitBtn.textContent = 'Guardar cambios';
+        var tabCreate = document.getElementById('ev-m-tab-create');
+        if (tabCreate) tabCreate.textContent = 'Editando';
+        document.getElementById('ev-m-title').value = ev.title || '';
+        document.getElementById('ev-m-desc').value  = ev.description || '';
+        var d = ev.eventDate || '';
+        document.getElementById('ev-m-date').value = d.substring(0, 10) || '';
+        var timeWrap = document.getElementById('ev-m-time');
+        if (timeWrap && typeof timeWrap.__tpSet === 'function') timeWrap.__tpSet(d.substring(11, 16) || '00:00');
+        document.getElementById('ev-m-duration').value = ev.durationMin || 60;
+        document.getElementById('ev-m-min').value      = ev.minParticipants || 1;
+        document.getElementById('ev-m-max').value      = ev.maxParticipants || 0;
+        var visRadio = document.querySelector('input[name="ev-m-vis"][value="' + (ev.visibility || 'public') + '"]');
+        if (visRadio) visRadio.checked = true;
+        closeDetail();
+        showTab('create');
+    }
+    function endEditMode(){
+        STATE.editingId = null;
+        var submitBtn = document.getElementById('ev-m-create-submit');
+        if (submitBtn) submitBtn.textContent = 'Crear evento';
+        var tabCreate = document.getElementById('ev-m-tab-create');
+        if (tabCreate) tabCreate.textContent = 'Crear';
     }
 
     /* Deep link Discord: el shell móvil dejó calOpenEvent en sessionStorage

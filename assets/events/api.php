@@ -123,12 +123,13 @@ try {
    join/leave/promote/delete editamos (PATCH) el embed para mantener
    los participantes actualizados en vivo. */
 const EV_DISCORD_CHANNEL = '1516472123651133450';
+const EV_PUBLIC_BASE_URL = 'https://melonhubdev.melonhub.es';
 
 function ev_botToken(): string {
     return trim((string)env('DISCORD_BOT_TOKEN', ''));
 }
 
-function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $waitlist, ?string $creatorAvatarRel = null): array {
+function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $waitlist, ?string $avatarUrl = null): array {
     /* Fecha localizada compacta. event_date es DATETIME → usamos epoch
        en el embed (Discord lo renderiza con timezone del visor) +
        fallback con fecha plain por si el lector no lo resuelve. */
@@ -142,13 +143,14 @@ function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $wai
     $waitStr = $waitlist > 0 ? (' (+' . $waitlist . ' en espera)') : '';
     $partLine = $joined . ' / ' . $maxStr . $waitStr;
 
-    $melonUrl  = 'https://melonhubdev.melonhub.es/?openEvent=' . (int)$event['id'];
+    $melonUrl  = EV_PUBLIC_BASE_URL . '/?openEvent=' . (int)$event['id'];
 
     $author = ['name' => $creatorLabel];
-    if ($creatorAvatarRel) {
-        /* attachment:// si subimos el avatar como adjunto. */
-        $author['icon_url'] = $creatorAvatarRel;
-    }
+    /* URL pública del avatar → Discord la fetchea ONCE y la cachea.
+       Mismo URL para POST y PATCH ⇒ avatar consistente en toda la
+       vida del mensaje. Sin attachments multipart ⇒ no quedan
+       archivos sueltos al editar. */
+    if ($avatarUrl) $author['icon_url'] = $avatarUrl;
 
     /* Descripción: bullet con título grande arriba (Discord no acepta
        headings markdown en embeds — usamos negrita). El link "Unirse"
@@ -178,27 +180,21 @@ function ev_buildEmbed(array $event, string $creatorLabel, int $joined, int $wai
     ];
 }
 
-/* Lee creator label + avatar fs path para el embed (multipart). */
+/* Lee creator label + URL pública del avatar (sin multipart). */
 function ev_creatorInfo(PDO $pdo, int $creatorId): array {
-    global $loginUsers;
     $stmt = $pdo->prepare("SELECT user_key, label FROM usuarios WHERE id = ?");
     $stmt->execute([$creatorId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     $label = $row['label'] ?? ($row['user_key'] ?? 'Usuario');
-    $avatarFs = null; $avatarMime = ''; $avatarExt = '';
+    $avatarUrl = null;
     if (function_exists('getUserImage') && $row) {
         $rel = getUserImage($row['label'] ?? '');
         if ($rel) {
-            $cand = dirname(__DIR__, 2) . '/' . $rel;
-            if (is_file($cand)) {
-                $avatarFs = $cand;
-                $avatarExt = strtolower(pathinfo($cand, PATHINFO_EXTENSION));
-                $map = ['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png','gif'=>'image/gif','webp'=>'image/webp'];
-                $avatarMime = $map[$avatarExt] ?? 'image/png';
-            }
+            /* URL absoluta pública → Discord la fetchea + cachea. */
+            $avatarUrl = EV_PUBLIC_BASE_URL . '/' . ltrim($rel, '/');
         }
     }
-    return ['label' => $label, 'fs' => $avatarFs, 'mime' => $avatarMime, 'ext' => $avatarExt];
+    return ['label' => $label, 'avatarUrl' => $avatarUrl];
 }
 
 /* Cuenta joined / waitlist actuales del evento. */
@@ -213,31 +209,31 @@ function ev_counts(PDO $pdo, int $eventId): array {
     return ['joined' => $j, 'waitlist' => $w];
 }
 
-/* POST inicial del embed → devuelve message_id o null en error. */
+/* POST inicial del embed → devuelve message_id o null en error.
+   Sin multipart: el avatar va como URL pública en author.icon_url —
+   Discord la fetchea y la cachea. Misma URL se usa en los PATCH ⇒
+   el avatar persiste consistente durante toda la vida del mensaje. */
 function ev_discordPublish(PDO $pdo, array $event): ?string {
     if (($event['visibility'] ?? '') !== 'public') return null;
     $token = ev_botToken();
     if ($token === '') return null;
 
-    $ci      = ev_creatorInfo($pdo, (int)$event['creator_id']);
-    $counts  = ev_counts($pdo, (int)$event['id']);
-    $iconUrl = $ci['fs'] ? ('attachment://avatar.' . $ci['ext']) : null;
-    $embed   = ev_buildEmbed($event, $ci['label'], $counts['joined'], $counts['waitlist'], $iconUrl);
+    $ci     = ev_creatorInfo($pdo, (int)$event['creator_id']);
+    $counts = ev_counts($pdo, (int)$event['id']);
+    $embed  = ev_buildEmbed($event, $ci['label'], $counts['joined'], $counts['waitlist'], $ci['avatarUrl']);
 
     $payload = ['embeds' => [$embed], 'allowed_mentions' => ['parse' => []]];
     $url     = 'https://discord.com/api/v10/channels/' . rawurlencode(EV_DISCORD_CHANNEL) . '/messages';
-    $auth    = 'Authorization: Bot ' . $token;
-    $ua      = 'User-Agent: MelonHub-Events (https://melonhub.es, 1.0)';
 
-    $postFields = ['payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
-    if ($ci['fs']) {
-        $postFields['files[0]'] = new CURLFile($ci['fs'], $ci['mime'], 'avatar.' . $ci['ext']);
-    }
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $postFields,
-        CURLOPT_HTTPHEADER     => [$auth, $ua],
+        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bot ' . $token,
+            'Content-Type: application/json',
+            'User-Agent: MelonHub-Events (https://melonhubdev.melonhub.es, 1.0)',
+        ],
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 15,
         CURLOPT_FOLLOWLOCATION => true,
@@ -250,8 +246,7 @@ function ev_discordPublish(PDO $pdo, array $event): ?string {
     return (string)$j['id'];
 }
 
-/* PATCH del embed con participantes actuales. Idempotente — si no hay
-   message_id (evento privado o publicación falló) no hace nada. */
+/* PATCH del embed con participantes actuales. Idempotente. */
 function ev_discordUpdate(PDO $pdo, int $eventId): void {
     $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
     $stmt->execute([$eventId]);
@@ -264,18 +259,14 @@ function ev_discordUpdate(PDO $pdo, int $eventId): void {
 
     $ci     = ev_creatorInfo($pdo, (int)$event['creator_id']);
     $counts = ev_counts($pdo, (int)$event['id']);
-    /* En el PATCH NO podemos re-subir el avatar (no es multipart);
-       reusamos el icon_url null → Discord cae al author sin icono. */
-    $embed  = ev_buildEmbed($event, $ci['label'], $counts['joined'], $counts['waitlist'], null);
+    /* Mismo avatarUrl que el POST → el embed conserva el icono del
+       author en cada update. Discord cachea la imagen al primer fetch. */
+    $embed  = ev_buildEmbed($event, $ci['label'], $counts['joined'], $counts['waitlist'], $ci['avatarUrl']);
 
     $url  = 'https://discord.com/api/v10/channels/' . rawurlencode(EV_DISCORD_CHANNEL)
           . '/messages/' . rawurlencode($msgId);
-    /* `attachments: []` es CRÍTICO: sin este campo, Discord desliga el
-       avatar adjunto del POST original y lo renderiza como un archivo
-       suelto encima del embed en cada PATCH. Pasando un array vacío le
-       indicamos explícitamente "no quiero ningún attachment" → el embed
-       queda limpio, sin avatar (lo cual es aceptable; el creador sigue
-       saliendo por nombre en el author del embed). */
+    /* `attachments: []` por si quedaron archivos sueltos de versiones
+       anteriores que sí usaban multipart — los limpia. */
     $body = json_encode([
         'embeds'      => [$embed],
         'attachments' => [],
@@ -771,25 +762,45 @@ case 'delete-event': {
     $b = jsonBody();
     $eid = (int)($b['eventId'] ?? 0);
     if (!$eid) jsonError('eventId requerido');
-    $stmt = $pdo->prepare("SELECT creator_id, discord_message_id FROM events WHERE id = ?");
+    /* Lee título + creator + msg para poder limpiar TODO. */
+    $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
     $stmt->execute([$eid]);
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $creatorId = (int)($row['creator_id'] ?? 0);
-    if (!$creatorId) jsonError('Evento no encontrado', 404);
-    if ($creatorId !== $uid) jsonError('Solo el creador puede eliminar el evento', 403);
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) jsonError('Evento no encontrado', 404);
+    if ((int)$event['creator_id'] !== $uid) jsonError('Solo el creador puede eliminar el evento', 403);
 
-    /* Borra el mensaje del bot en Discord (si lo había). */
-    ev_discordDelete($row['discord_message_id'] ?? null);
+    /* 1) Borra el mensaje del bot en Discord (si lo había). */
+    ev_discordDelete($event['discord_message_id'] ?? null);
 
-    /* Borrar los recordatorios del calendario de todos los participantes. */
+    /* 2) Borra el recordatorio del calendario de TODOS los participantes.
+       Dos pasadas para máxima robustez:
+         a) Por recordatorio_id guardado en event_participants (rápido,
+            cubre el caso normal).
+         b) Por título "Evento: <titulo>" como safety-net — limpia
+            cualquier recordatorio huérfano si en algún punto se perdió
+            el recordatorio_id (race condition, fila vieja, etc.). */
+    $title = 'Evento: ' . mb_substr((string)$event['title'], 0, 100);
     $stmt = $pdo->prepare("SELECT user_id, recordatorio_id FROM event_participants WHERE event_id = ?");
     $stmt->execute([$eid]);
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
-        ev_removeCalendarReminder($pdo, $p['recordatorio_id'] ? (int)$p['recordatorio_id'] : null, (int)$p['user_id']);
+        $puid = (int)$p['user_id'];
+        /* a) Por id */
+        ev_removeCalendarReminder($pdo, $p['recordatorio_id'] ? (int)$p['recordatorio_id'] : null, $puid);
+        /* b) Fallback por título — borra cualquier otro recordatorio
+              de este evento que se haya quedado huérfano. */
+        try {
+            $del = $pdo->prepare("DELETE FROM recordatorios
+                                  WHERE usuario_id = ?
+                                    AND (pareja_id = 0 OR pareja_id IS NULL)
+                                    AND titulo = ?
+                                    AND fecha = ?");
+            $del->execute([$puid, $title, (string)$event['event_date']]);
+        } catch (Throwable $_) {}
     }
+    /* 3) Borra rows del evento en orden FK-safe. */
     $pdo->prepare("DELETE FROM event_participants WHERE event_id = ?")->execute([$eid]);
-    $pdo->prepare("DELETE FROM event_invites WHERE event_id = ?")->execute([$eid]);
-    $pdo->prepare("DELETE FROM events WHERE id = ?")->execute([$eid]);
+    $pdo->prepare("DELETE FROM event_invites      WHERE event_id = ?")->execute([$eid]);
+    $pdo->prepare("DELETE FROM events             WHERE id       = ?")->execute([$eid]);
     jsonResponse(['ok' => true]);
 }
 
@@ -803,6 +814,156 @@ case 'list-mutual-friends': {
     $stmt = $pdo->prepare("SELECT user_key AS `key`, label AS label FROM usuarios WHERE id IN ($placeholders) ORDER BY label");
     $stmt->execute($ids);
     jsonResponse(['ok' => true, 'friends' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []]);
+}
+
+case 'update-event': {
+    /* Edición del evento por el creador. Solo se actualizan los
+       campos enviados; el resto se preserva. Si la fecha cambia, se
+       refrescan los recordatorios de TODOS los participantes. */
+    $uid = ev_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $eid = (int)($b['eventId'] ?? 0);
+    if (!$eid) jsonError('eventId requerido');
+
+    $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
+    $stmt->execute([$eid]);
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) jsonError('Evento no encontrado', 404);
+    if ((int)$event['creator_id'] !== $uid) jsonError('Solo el creador puede editar', 403);
+
+    /* Cogemos valores entrantes o caemos al actual. */
+    $title = trim((string)($b['title'] ?? $event['title']));
+    if ($title === '' || mb_strlen($title) > 120) jsonError('Título inválido');
+    $desc = trim((string)($b['description'] ?? $event['description']));
+    $eventDate = trim((string)($b['eventDate'] ?? $event['event_date']));
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}(?::\d{2})?)?$/', $eventDate)) jsonError('Fecha inválida');
+    if (strlen($eventDate) === 10) $eventDate .= ' 00:00:00';
+    elseif (strlen($eventDate) === 16) $eventDate .= ':00';
+    $durationMin = max(15, min(60 * 24 * 7, (int)($b['durationMin'] ?? $event['duration_min'])));
+    $minP = max(1, min(10000, (int)($b['minParticipants'] ?? $event['min_participants'])));
+    $maxP = max(0, min(10000, (int)($b['maxParticipants'] ?? $event['max_participants'])));
+    if ($maxP > 0 && $maxP < $minP) jsonError('Máximo no puede ser menor que mínimo');
+    $visibility = (($b['visibility'] ?? $event['visibility']) === 'private') ? 'private' : 'public';
+
+    $pdo->prepare("UPDATE events
+                   SET title=?, description=?, event_date=?, duration_min=?,
+                       min_participants=?, max_participants=?, visibility=?
+                   WHERE id=?")
+        ->execute([$title, $desc, $eventDate, $durationMin, $minP, $maxP, $visibility, $eid]);
+
+    /* Refresca recordatorios de todos los participantes si la fecha o
+       el título cambiaron. */
+    if ($eventDate !== $event['event_date']
+        || $title    !== $event['title']
+        || $desc     !== $event['description']) {
+        $newTitle = 'Evento: ' . mb_substr($title, 0, 100);
+        $stmt = $pdo->prepare("SELECT recordatorio_id FROM event_participants
+                               WHERE event_id = ? AND recordatorio_id IS NOT NULL");
+        $stmt->execute([$eid]);
+        $u = $pdo->prepare("UPDATE recordatorios SET titulo=?, fecha=?, descripcion=? WHERE id=?");
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $rid) {
+            try { $u->execute([$newTitle, $eventDate, $desc, (int)$rid]); } catch (Throwable $_) {}
+        }
+    }
+
+    /* Lógica Discord: visibility transitions */
+    $oldMsgId = $event['discord_message_id'] ?? null;
+    if ($event['visibility'] === 'public' && $visibility === 'private') {
+        /* public → private: borra el mensaje y limpia el id. */
+        ev_discordDelete($oldMsgId);
+        $pdo->prepare("UPDATE events SET discord_message_id = NULL WHERE id = ?")->execute([$eid]);
+    } elseif ($event['visibility'] === 'private' && $visibility === 'public') {
+        /* private → public: publica un nuevo mensaje. */
+        $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
+        $stmt->execute([$eid]);
+        $newEvent = $stmt->fetch(PDO::FETCH_ASSOC);
+        $msgId = ev_discordPublish($pdo, $newEvent);
+        if ($msgId) $pdo->prepare("UPDATE events SET discord_message_id = ? WHERE id = ?")
+                       ->execute([$msgId, $eid]);
+    } else {
+        /* Mismo tipo de visibility: si era public, PATCH el embed. */
+        if ($visibility === 'public') ev_discordUpdate($pdo, $eid);
+    }
+    jsonResponse(['ok' => true]);
+}
+
+case 'kick-from-event': {
+    /* El creador expulsa a un participante (joined o waitlist). */
+    $uid = ev_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $eid = (int)($b['eventId'] ?? 0);
+    $kickKey = (string)($b['userKey'] ?? '');
+    if (!$eid || $kickKey === '') jsonError('Datos inválidos');
+    $stmt = $pdo->prepare("SELECT creator_id FROM events WHERE id = ?");
+    $stmt->execute([$eid]);
+    $creatorId = (int)($stmt->fetchColumn() ?: 0);
+    if (!$creatorId) jsonError('Evento no encontrado', 404);
+    if ($creatorId !== $uid) jsonError('Solo el creador puede expulsar', 403);
+    $kickUid = ev_uid($pdo, $kickKey);
+    if (!$kickUid) jsonError('Usuario inválido');
+    if ($kickUid === $uid) jsonError('No puedes expulsarte a ti mismo');
+
+    $stmt = $pdo->prepare("SELECT recordatorio_id, status FROM event_participants WHERE event_id = ? AND user_id = ?");
+    $stmt->execute([$eid, $kickUid]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) jsonResponse(['ok' => true]);
+
+    ev_removeCalendarReminder($pdo, $row['recordatorio_id'] ? (int)$row['recordatorio_id'] : null, $kickUid);
+    $pdo->prepare("DELETE FROM event_participants WHERE event_id = ? AND user_id = ?")
+        ->execute([$eid, $kickUid]);
+    /* Si era joined libera plaza → promover el primero de waitlist. */
+    if ($row['status'] === 'joined') ev_promoteFromWaitlist($pdo, $eid);
+    ev_discordUpdate($pdo, $eid);
+    jsonResponse(['ok' => true]);
+}
+
+case 'set-participant-status': {
+    /* El creador mueve a un participante entre joined ↔ waitlist.
+       NO dispara auto-promoción de waitlist — el creador controla. */
+    $uid = ev_uid($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $eid = (int)($b['eventId'] ?? 0);
+    $targetKey = (string)($b['userKey'] ?? '');
+    $newStatus = (string)($b['status'] ?? '');
+    if (!$eid || $targetKey === '' || !in_array($newStatus, ['joined', 'waitlist'], true)) {
+        jsonError('Datos inválidos');
+    }
+    $stmt = $pdo->prepare("SELECT * FROM events WHERE id = ?");
+    $stmt->execute([$eid]);
+    $event = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$event) jsonError('Evento no encontrado', 404);
+    if ((int)$event['creator_id'] !== $uid) jsonError('Solo el creador puede mover participantes', 403);
+    $targetUid = ev_uid($pdo, $targetKey);
+    if (!$targetUid) jsonError('Usuario inválido');
+
+    $stmt = $pdo->prepare("SELECT recordatorio_id, status FROM event_participants WHERE event_id = ? AND user_id = ?");
+    $stmt->execute([$eid, $targetUid]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) jsonError('El usuario no participa', 404);
+    if ($row['status'] === $newStatus) jsonResponse(['ok' => true]); /* no-op */
+
+    if ($newStatus === 'joined') {
+        /* Promoción: añadimos recordatorio si no lo tiene. */
+        $rid = $row['recordatorio_id']
+            ? (int)$row['recordatorio_id']
+            : ev_addCalendarReminder($pdo, $targetUid, $event);
+        $pdo->prepare("UPDATE event_participants
+                       SET status='joined', recordatorio_id=?
+                       WHERE event_id=? AND user_id=?")
+            ->execute([$rid, $eid, $targetUid]);
+    } else {
+        /* Democión: quitamos recordatorio. */
+        ev_removeCalendarReminder($pdo, $row['recordatorio_id'] ? (int)$row['recordatorio_id'] : null, $targetUid);
+        $pdo->prepare("UPDATE event_participants
+                       SET status='waitlist', recordatorio_id=NULL
+                       WHERE event_id=? AND user_id=?")
+            ->execute([$eid, $targetUid]);
+    }
+    ev_discordUpdate($pdo, $eid);
+    jsonResponse(['ok' => true]);
 }
 
 default:
