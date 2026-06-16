@@ -1732,6 +1732,18 @@ function userLabelByKey(key) {
 
 /* ─── Carga playlists ───────────────────────────────────────────── */
 function loadPlaylists() {
+    /* Antes de recargar, capturamos qué playlists estaban abiertas
+       (clase .open) por su `pl.id`. Tras renderPlaylists() las
+       restauramos — sin esto, añadir una canción o importar una
+       playlist provocaba que TODAS se colapsaran y el usuario tenía
+       que volver a abrirlas (= "salir y volver a entrar"). */
+    var openIds = [];
+    document.querySelectorAll('.mu-playlist.open').forEach(function(el){
+        var idx = parseInt(el.dataset.plIdx, 10);
+        if (PLAYLISTS && PLAYLISTS[idx] && PLAYLISTS[idx].id) {
+            openIds.push(String(PLAYLISTS[idx].id));
+        }
+    });
     return fetch(API_MUSIC + '?action=get-playlists', { credentials: 'same-origin' })
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -1739,6 +1751,19 @@ function loadPlaylists() {
             document.getElementById('mu-pl-count').textContent =
                 PLAYLISTS.length + ' playlist' + (PLAYLISTS.length === 1 ? '' : 's');
             renderPlaylists();
+            /* Re-aplica la clase .open a las playlists que ya lo estaban
+               antes del repaint (matching por pl.id, no por índice — el
+               orden puede cambiar al añadir una nueva playlist). */
+            if (openIds.length) {
+                var openSet = {};
+                openIds.forEach(function(id){ openSet[id] = true; });
+                PLAYLISTS.forEach(function(pl, i){
+                    if (openSet[String(pl.id)]) {
+                        var el = document.querySelector('.mu-playlist[data-pl-idx="' + i + '"]');
+                        if (el) el.classList.add('open');
+                    }
+                });
+            }
             /* Embebida → restaurar highlight desde el estado del shell.
                Localizamos el track actual buscando su videoId en las
                PLAYLISTS recién cargadas. */
