@@ -420,7 +420,21 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             max-height: 88vh;
             display: flex; flex-direction: column;
         }
-        #mh-cl-body h1 { font-size: 16px; margin: 0 0 10px; }
+        /* H1 = título de versión. Bezel hundido Win98 con fondo accent
+           para que cada versión se vea como cabecera de sección
+           inequívoca. */
+        #mh-cl-body h1 {
+            font-size: 17px;
+            margin: 0 0 14px;
+            padding: 10px 12px;
+            background: var(--accent, #000080);
+            color: var(--accent-text, #fff);
+            box-shadow:
+                inset  1px  1px var(--bezel-dark-1, #0a0a0a),
+                inset -1px -1px var(--bezel-light-1, #fff),
+                inset  2px  2px var(--bezel-dark-2, grey),
+                inset -2px -2px var(--bezel-light-2, #dfdfdf);
+        }
         #mh-cl-body h2 { font-size: 14px; margin: 14px 0 8px; border-bottom: 1px solid var(--border, #808080); padding-bottom: 3px; }
         #mh-cl-body h3 { font-size: 12px; margin: 10px 0 4px; color: var(--text-muted, #444); }
         #mh-cl-body p  { margin: 0 0 8px; }
@@ -430,7 +444,14 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         #mh-cl-body pre { background: rgba(0,0,0,0.08); padding: 8px; overflow-x: auto; }
         #mh-cl-body pre code { background: transparent; padding: 0; }
         #mh-cl-body a { color: var(--accent, #000080); }
-        #mh-cl-body hr { border: 0; border-top: 1px solid var(--border, #808080); margin: 18px 0; }
+        /* HR = divisor doble Win98 (línea oscura + clara debajo) con
+           margen amplio para airear las versiones. */
+        #mh-cl-body hr {
+            border: 0;
+            border-top: 2px solid var(--bezel-dark-1, #0a0a0a);
+            border-bottom: 2px solid var(--bezel-light-1, #fff);
+            margin: 32px 0;
+        }
         #mh-rep-window { width: 100%; max-width: 380px; max-height: 92vh; display: flex; flex-direction: column; }
         #mh-rep-window .window-body { padding: 12px; overflow-y: auto; }
         #mh-rep-window input[type="text"], #mh-rep-window textarea {

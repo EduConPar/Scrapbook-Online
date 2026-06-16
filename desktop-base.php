@@ -541,7 +541,7 @@ window.DesktopState.whenReady = function(cb){
 </div>
 
 <!-- MODAL Reportes (bug/sugerencia → Discord) -->
-<div class="window" id="reports-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:420px;max-height:80vh;">
+<div class="window" id="reports-modal" data-no-auto-z style="display:none;flex-direction:column;position:fixed;width:420px;height:560px;min-width:320px;min-height:280px;">
     <div class="title-bar">
         <div class="title-bar-text">Reportes</div>
         <div class="title-bar-controls">
@@ -580,9 +580,16 @@ window.DesktopState.whenReady = function(cb){
         <label style="font-size:11px;display:block;">Descripción
             <textarea id="report-body" maxlength="1900" rows="6" style="width:100%;display:block;margin-top:4px;resize:vertical;font-family:inherit;font-size:12px;box-sizing:border-box;padding:4px 6px;"></textarea>
         </label>
-        <label style="font-size:11px;display:block;">Imágenes (opcional, máx 4)
-            <input id="report-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:block;margin-top:4px;font-size:11px;">
-        </label>
+        <div style="font-size:11px;">Imágenes (opcional, máx 4)</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+            <!-- Input file nativo OCULTO. El botón Win98 de abajo lo
+                 dispara con .click() — así el control sigue el estilo
+                 de la interfaz seleccionada en lugar del look nativo
+                 del navegador. -->
+            <input id="report-files" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none;">
+            <button type="button" class="button" id="report-files-browse">Examinar...</button>
+            <span id="report-files-name" style="font-size:11px;color:var(--text-faint,#666);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Sin archivos</span>
+        </div>
         <div id="report-files-list" style="font-size:10px;color:var(--text-faint,#666);min-height:12px;"></div>
         <p id="report-status" style="margin:6px 0 0;font-size:11px;min-height:14px;"></p>
         <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:4px;">
@@ -1464,7 +1471,11 @@ document.addEventListener('click', function() {
 (function(){
     var style = document.createElement('style');
     style.textContent =
-        '#changelog-body h1{font-size:16px;margin:0 0 10px;}' +
+        /* H1 = título de versión. Bezel hundido Win98 con fondo accent
+           para que cada versión se vea como una "cabecera de sección"
+           inequívoca. Padding generoso. */
+        '#changelog-body h1{font-size:17px;margin:0 0 14px;padding:10px 12px;background:var(--accent,#000080);color:var(--accent-text,#fff);' +
+            'box-shadow:inset 1px 1px var(--bezel-dark-1,#0a0a0a),inset -1px -1px var(--bezel-light-1,#fff),inset 2px 2px var(--bezel-dark-2,grey),inset -2px -2px var(--bezel-light-2,#dfdfdf);}' +
         '#changelog-body h2{font-size:14px;margin:14px 0 8px;border-bottom:1px solid var(--border,#808080);padding-bottom:3px;}' +
         '#changelog-body h3{font-size:12px;margin:10px 0 4px;color:var(--text-muted,#444);}' +
         '#changelog-body p{margin:0 0 8px;}' +
@@ -1474,7 +1485,9 @@ document.addEventListener('click', function() {
         '#changelog-body pre{background:rgba(0,0,0,0.08);padding:8px;overflow-x:auto;}' +
         '#changelog-body pre code{background:transparent;padding:0;}' +
         '#changelog-body a{color:var(--accent,#000080);}' +
-        '#changelog-body hr{border:0;border-top:1px solid var(--border,#808080);margin:18px 0;}';
+        /* HR = divisor doble Win98 entre versiones (línea oscura + línea
+           clara debajo) con margen amplio para airear. */
+        '#changelog-body hr{border:0;border-top:2px solid var(--bezel-dark-1,#0a0a0a);border-bottom:2px solid var(--bezel-light-1,#fff);margin:32px 0;}';
     document.head.appendChild(style);
 })();
 
@@ -1504,6 +1517,8 @@ document.addEventListener('click', function() {
     function reset(){
         titleEl.value = ''; bodyEl.value = ''; filesEl.value = '';
         listEl.textContent = '';
+        if (typeof updateFileNameSummary === 'function') updateFileNameSummary(0);
+        else if (fileName) fileName.textContent = 'Sin archivos';
         setType('bug');
         setStat(''); okBtn.disabled = false;
     }
@@ -1524,16 +1539,28 @@ document.addEventListener('click', function() {
         b.addEventListener('click', function(){ setType(b.dataset.type); });
     });
 
+    /* Browse button dispara el input file oculto. El span junto al
+       botón muestra el resumen del archivo (1 nombre o "N archivos"). */
+    var browseBtn = document.getElementById('report-files-browse');
+    var fileName  = document.getElementById('report-files-name');
+    if (browseBtn) browseBtn.addEventListener('click', function(){ filesEl.click(); });
+    function updateFileNameSummary(n){
+        if (!fileName) return;
+        if (!n) { fileName.textContent = 'Sin archivos'; return; }
+        if (n === 1) { fileName.textContent = filesEl.files[0].name; return; }
+        fileName.textContent = n + ' archivos seleccionados';
+    }
     filesEl.addEventListener('change', function(){
         var n = filesEl.files ? filesEl.files.length : 0;
-        if (!n) { listEl.textContent = ''; return; }
+        if (!n) { listEl.textContent = ''; updateFileNameSummary(0); return; }
         if (n > 4) {
             setStat('Máximo 4 imágenes.', 'var(--error-text,#c00)');
-            filesEl.value = ''; listEl.textContent = ''; return;
+            filesEl.value = ''; listEl.textContent = ''; updateFileNameSummary(0); return;
         }
         var names = [];
         for (var i = 0; i < n; i++) names.push(filesEl.files[i].name);
         listEl.textContent = names.join(', ');
+        updateFileNameSummary(n);
     });
 
     function submit(){
@@ -2667,8 +2694,11 @@ window.notifSystem = (function() {
     setup('music-player', true);
     /* Modales pequeños — arrastrables por su title-bar pero sin resize. */
     setup('change-password-modal', true);
-    setup('reports-modal',         true);
-    setup('changelog-modal',       true);
+    /* Reports y Changelog → resizable (segundo arg false). El usuario
+       puede agrandar para leer cómodamente entradas largas o pegar más
+       contexto en un reporte. */
+    setup('reports-modal',         false);
+    setup('changelog-modal',       false);
     setup('folder-create-modal',   true);
     setup('folder-delete-modal',   true);
 })();

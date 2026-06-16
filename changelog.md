@@ -55,3 +55,19 @@
 - Añadida la capacidad de pasar y pinchar en links en el chat.
 - Añadido que, al pasar el link de una imagen, salga la imagen de la que se ha pasado el link en el chat.
 - Ahora al darle al botón de la campana con la ventana de notificaciones abierta, esta se cierra.
+
+## Bugs y mejoras
+
+- Solucionado un bug que hacía que la ventana de añadir álbum a playlist no tuviera el estilo de la interfaz seleccionada.
+- Mejorada la función de búsqueda de álbumes para hacerla más rápida.
+- Solucionado un bug que al añadir un álbum desde su página a tu perfil te ponía la foto de la canción que estaba sonando en el reproductor en lugar de la del álbum.
+- Optimizado el uso de batería de la pantalla de bloqueo de la versión de móvil.
+- Solucionado un bug que hacía que si el usuario se ponía una foto desde la página de descarga de la app de móvil esa foto no se guardaba correctamente.
+- Solucionado un error que hacía que al entrar en melonhub.es desde móviles se quedara colgada la app.
+- Solucionado un error que hacía que al tener la sesión cerrada y entrar en la app móvil, esta no cargara.
+- Arreglado un bug que hacía que la foto de perfil del usuario no apareciera en la app de perfil móvil.
+- Solucionado un bug que hacía que al pulsar una notificación de mensaje no te llevara al chat de la persona.
+- Arreglado el bug que hacía que al darle repetidamente a publicar un post se publicara varias veces el mismo post.
+- Añadido scroll a los posts en móvil.
+- Arreglado un bug que hacía que al salir del navegador te devolviera a una página incorrecta y te diera un error diciendo que no existía la página.
+- Arreglado el bug que no te dejaba publicar en el canal de arte de Discord desde la Melon Hub.
