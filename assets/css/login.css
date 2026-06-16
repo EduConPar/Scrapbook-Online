@@ -91,16 +91,17 @@ body:not(.user-selected) #loginWindow .title-bar {
 }
 
 #selectWindow .window-body,
-#registerWindow .window-body,
-body:not(.user-selected) #loginWindow .window-body {
+#registerWindow .window-body {
     background: #120808;
     padding: 8px;
 }
 
-/* Padding consistente del login en ambos estados (rojo base y tema del
-   usuario). Sin esto, el tema deja el window-body sin padding y la
-   ventana queda más pequeña que la roja. */
-#loginWindow .window-body { padding: 8px; }
+/* Login rojo: solo fondo, SIN padding extra → mismo tamaño que con el
+   tema del usuario (cuyo window-body no lleva padding, solo el margin de
+   98.css). Antes el padding:8px hacía la ventana roja más grande. */
+body:not(.user-selected) #loginWindow .window-body {
+    background: #120808;
+}
 
 /* Inputs y labels del formulario de registro / login */
 #registerWindow label,
