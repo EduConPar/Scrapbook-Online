@@ -3976,7 +3976,15 @@ var PROFILE_USERS = <?php
     function pfMarqueeScroll(el, parent, speed, pauseMs) {
         el.style.transform = 'translateX(0)';
         var pos = 0, last = null, fromRight = false, raf = null, timer = null;
-        var W = el.offsetWidth, C = parent.clientWidth;
+        /* scrollWidth devuelve el ancho REAL del contenido del track,
+           ignorando cualquier clip del padre (.pf-np-wrap tiene
+           `overflow:hidden` + `flex:1` y eso puede hacer que
+           `offsetWidth` del inline-block reporte la caja recortada en
+           lugar del ancho del texto). Si el contenido se midiera
+           menor de lo real, el warp dispararía demasiado pronto y el
+           texto se cortaría a mitad antes de salir por la izquierda. */
+        var W = Math.max(el.scrollWidth, el.offsetWidth);
+        var C = parent.clientWidth;
         if (W <= C) return function(){};
         function tick(ts) {
             if (!last) last = ts;

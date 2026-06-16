@@ -516,7 +516,13 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
-    /* Clipping rectangulo fijo: el track de dentro puede ser más ancho. */
+    /* Clipping rectangulo fijo: el track de dentro puede ser más ancho.
+       display:block fuerza un BFC propio sobre el span (no fiarse del
+       "blockify" implícito por ser flex-item) para que el inline-block
+       de dentro mida su contenido natural y no se vea restringido al
+       ancho del padre — esto provocaba que el marquee terminara su
+       ciclo a mitad del texto en algunos navegadores. */
+    display: block;
 }
 .pf-np-track {
     display: inline-block;
