@@ -879,14 +879,26 @@ var PROFILE_USERS = <?php
        showReviewView. Si no se encuentra tras N intentos, se rinde
        en silencio (la reseña pudo haberse borrado entre la notif y
        el click). */
-    function _perfilOpenReviewWhenReady(cat, title, mtype) {
+    function _perfilOpenReviewWhenReady(cat, title, mtype, ownerKey) {
         if (!cat || !title) return;
+        /* Dueño esperado de la reseña = el reseñador (el perfil que estamos
+           abriendo). Por defecto, el usuario de este iframe standalone. */
+        var expectedOwner = ownerKey || window.__PERFIL_VIEWING_KEY || null;
         var attempts = 0;
-        var maxAttempts = 40;   /* ~4 segundos a 100ms */
+        var maxAttempts = 60;   /* ~6 segundos a 100ms (viewOtherUser es async) */
         var titleNorm = String(title).toLowerCase().trim();
         var navigated = false;
         var tick = function(){
             attempts++;
+            /* CLAVE: esperar a que las `lists` sean las del DUEÑO de la
+               reseña. En el arranque, loadLists() carga primero MIS listas
+               y viewOtherUser las reemplaza de forma asíncrona. Sin esta
+               guarda, el primer tick leía MIS listas y mostraba MI reseña
+               del item en vez de la del reseñador (bug "primera vez"). */
+            if (expectedOwner && (typeof viewingUser === 'undefined' || viewingUser !== expectedOwner)) {
+                if (attempts < maxAttempts) return setTimeout(tick, 100);
+                return;
+            }
             if (typeof lists === 'undefined' || !lists || !lists[cat]) {
                 if (attempts < maxAttempts) return setTimeout(tick, 100);
                 return;
@@ -958,7 +970,7 @@ var PROFILE_USERS = <?php
                         var rc = q.get('reviewCat');
                         var rt = q.get('reviewTitle');
                         var rm = q.get('reviewMtype') || '';
-                        if (rc && rt) _perfilOpenReviewWhenReady(rc, rt, rm);
+                        if (rc && rt) _perfilOpenReviewWhenReady(rc, rt, rm, asKey);
                     } catch (_) {}
                 }
             });

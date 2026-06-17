@@ -821,6 +821,9 @@ function sendWrappedLog(track, listenedS, playlistId) {
    Endpoints: assets/listen/api.php?action=<...>
 ═════════════════════════════════════════════════════════════════════ */
 const LT_URL = 'assets/listen/api.php';
+/* Umbral de re-sincronización del guest (segundos). Por debajo de esto NO
+   se hace seek: evita micro-saltos atrás/alante por desfases pequeños. */
+const LT_SEEK_THRESHOLD_S = 2;
 let LT_ROLE         = null;     /* 'host' | 'guest' | null */
 let LT_SESSION_ID   = null;
 let LT_GUEST_POLL_T = null;
@@ -928,44 +931,63 @@ async function ltGuestPoll() {
         return;
     }
     const s = r.session;
-    /* Banner del guest eliminado — solo notif al unirse. */
-    /* Aplicar estado al player. */
     if (!ytPlayer || !s.video_id) return;
+
+    const isPlaying = parseInt(s.is_playing, 10) === 1;
+    /* Posición REAL estimada del host AHORA: su último current_time_s más
+       el tiempo transcurrido desde que lo posteó (solo si está sonando).
+       Esta compensación es la clave para que el seek apunte a donde el
+       host está de verdad y no a un valor viejo. */
+    const elapsed = isPlaying
+        ? Math.max(0, (parseInt(r.server_time, 10) || 0) - (parseInt(s.updated_at_epoch, 10) || 0))
+        : 0;
+    const hostT = (parseInt(s.current_time_s, 10) || 0) + elapsed;
+
+    /* Cambio de pista → cargar ya en la posición estimada del host. */
     let curVid = '';
     try {
         const d = ytPlayer.getVideoData && ytPlayer.getVideoData();
         if (d) curVid = d.video_id || '';
     } catch (_) {}
     if (curVid !== s.video_id) {
-        try { ytPlayer.loadVideoById(s.video_id, parseInt(s.current_time_s, 10) || 0); } catch (_) {}
-        /* Actualizamos el mini-player UI manualmente (cover + texto). */
+        try { ytPlayer.loadVideoById(s.video_id, hostT); } catch (_) {}
+        /* Actualizamos el mini-player UI manualmente (cover + texto).
+           IMPORTANTE: actualizamos los elementos EXISTENTES por textContent,
+           NO reemplazamos el innerHTML de #player-info. Reemplazarlo
+           destruía los nodos #player-title/#player-artist que updateTrackUI
+           tiene cacheados (consts playerTitle/playerArtist) → al salir de la
+           sesión y poner otra canción, updateTrackUI escribía en nodos
+           desconectados y el título se quedaba con el de la escucha conjunta. */
         try {
             const coverEl = document.getElementById('player-cover');
             if (coverEl) {
-                /* Usamos el cover_url del host si lo tiene, si no fallback
-                   al thumbnail genérico de YouTube. */
                 coverEl.src = s.cover_url
                     || 'https://i.ytimg.com/vi/' + s.video_id + '/mqdefault.jpg';
             }
-            document.getElementById('player-info').innerHTML =
-                '<div id="player-title">' + (s.track_title || '') + '</div>' +
-                '<div id="player-artist">' + (s.track_artist || '') + '</div>' +
-                '<div id="player-addedby">🎧 Sesión conjunta</div>';
+            const titleEl  = document.getElementById('player-title');
+            const artistEl = document.getElementById('player-artist');
+            const addedEl  = document.getElementById('player-addedby');
+            if (titleEl)  titleEl.textContent  = s.track_title  || '';
+            if (artistEl) artistEl.textContent = s.track_artist || '';
+            if (addedEl)  { addedEl.innerHTML = ''; addedEl.textContent = '🎧 Sesión conjunta'; addedEl.style.display = ''; }
         } catch (_) {}
         return;
     }
-    /* Drift correction. */
+
+    /* Corrección de drift con banda muerta: solo re-sincronizamos si la
+       diferencia supera el umbral. Desfases pequeños se ignoran → sin
+       saltos nerviosos. */
     let myT = 0;
     try { myT = ytPlayer.getCurrentTime() || 0; } catch (_) {}
-    const hostT = parseInt(s.current_time_s, 10) || 0;
-    if (Math.abs(myT - hostT) > 3) {
+    if (Math.abs(myT - hostT) > LT_SEEK_THRESHOLD_S) {
         try { ytPlayer.seekTo(hostT, true); } catch (_) {}
     }
-    /* Play/pause sync. */
+
+    /* Sync play/pause. */
     try {
         const ps = ytPlayer.getPlayerState();
-        if (parseInt(s.is_playing, 10) === 1 && ps !== 1) ytPlayer.playVideo();
-        if (parseInt(s.is_playing, 10) === 0 && ps === 1) ytPlayer.pauseVideo();
+        if (isPlaying && ps !== 1) ytPlayer.playVideo();
+        else if (!isPlaying && ps === 1) ytPlayer.pauseVideo();
     } catch (_) {}
 }
 
@@ -2454,6 +2476,13 @@ function onYouTubeIframeAPIReady()
                     btnPlay.textContent = '►';
                     clearInterval(progressInterval);
                     publishNowPlaying(false, true);
+                }
+                /* Si soy host de una sesión conjunta, propago play/pausa al
+                   instante (sin esperar al heartbeat de 5s) para que los
+                   guests reaccionen rápido. */
+                if (LT_ROLE === 'host'
+                    && (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.PAUSED)) {
+                    ltHostBroadcastDebounced();
                 }
                 if (e.data === YT.PlayerState.ENDED) {
                     if (autoplayRandom && playlist.length > 1) {

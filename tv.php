@@ -839,10 +839,14 @@ function createPlayer() {
                     } else if (e.data === YT_PLAYING && BUFFER_STARTED) {
                         var buffered = now() - BUFFER_STARTED;
                         BUFFER_STARTED = 0;
-                        /* Si el buffer fue >1.5s, programamos resync
-                           agresivo: la próxima ejecución de syncPlayer
-                           usará umbral 0 en vez del normal de 2s. */
-                        if (buffered > 1500) POST_BUFFER_RESYNC = true;
+                        /* Resync agresivo SOLO si el buffer fue largo y NO
+                           lo provocó nuestro propio seek reciente. Los
+                           buffers tras un seek son esperados; tratarlos
+                           como "atraso" disparaba otro seek → buffer →
+                           seek… = micro-cortes en bucle. */
+                        if (buffered > 1500 && (now() - LAST_SEEK_TS) > 2500) {
+                            POST_BUFFER_RESYNC = true;
+                        }
                     }
                     if (!STATE.isPlaying) return;
                     if (e.data === YT_CUED || e.data === YT_UNSTARTED) {
@@ -927,9 +931,31 @@ function syncPlayer() {
        seguimos en modo visual hasta que el móvil pase a la siguiente. */
     if (EMBED_BLOCKED) return;
 
-    /* Misma pista: play/pause son baratos, los hacemos siempre. */
     var ps = -1;
     try { ps = ytPlayer.getPlayerState(); } catch (_) {}
+
+    /* Posición esperada del móvil AHORA = última snapshot + tiempo
+       transcurrido. */
+    var dur      = (typeof STATE.duration === 'number' && STATE.duration > 0) ? STATE.duration : 0;
+    var elapsed  = (now() - STATE.serverTs) / 1000;
+    var expected = STATE.serverPos + elapsed;
+
+    /* CLAVE anti-bucle: si `expected` supera la duración, la canción ya
+       debería haber terminado. Cuando el móvil deja de emitir (pantalla
+       bloqueada, app en 2º plano → los timers JS se estrangulan) la
+       snapshot se CONGELA y `expected` se dispara sin fin. Antes, al
+       terminar el vídeo, la detección de atasco forzaba playVideo() que
+       REBOBINA desde 0 → se reproducía un tramo en bucle y nunca se
+       cambiaba de pista. Ahora, si se pasó del final: dejamos el vídeo
+       quieto (pausado) y esperamos a que llegue la siguiente pista
+       (cambio de videoId en el poll). Nada de replays ni seeks. */
+    if (dur > 0 && expected >= dur - 0.5) {
+        if (ps === YT_PLAYING) { try { ytPlayer.pauseVideo(); } catch (_) {} }
+        STUCK_SINCE = 0;
+        return;
+    }
+
+    /* Misma pista: play/pause son baratos, los hacemos siempre. */
     if (STATE.isPlaying && ps !== YT_PLAYING && ps !== YT_BUFFERING) {
         try { ytPlayer.playVideo(); } catch (_) {}
     } else if (!STATE.isPlaying && ps === YT_PLAYING) {
@@ -958,7 +984,7 @@ function syncPlayer() {
             try {
                 ytPlayer.cueVideoById({
                     videoId: currentVideoId,
-                    startSeconds: Math.max(0, Math.floor(STATE.serverPos || 0))
+                    startSeconds: Math.max(0, Math.floor(expected))
                 });
                 setTimeout(function(){
                     if (ytPlayer) { try { ytPlayer.playVideo(); } catch (_) {} }
@@ -977,26 +1003,21 @@ function syncPlayer() {
        2. El estado del player ya no está buffering (seekear en mitad
           de un buffer empeora el corte).
        3. Pasaron >3s desde el último seek/load (deja al buffer estabilizarse).
-          Antes 5s — bajado para corregir drift más rápido.
-       4. La diferencia con el servidor es notable (>2s) — antes 8s era
-          muy laxo y permitía desincronización audible. 2s mantiene
-          alineación percibida sin cortar el audio constantemente.
-       Después de un buffer >1.5s, el TV se sabe atrasado: corregimos
-       independientemente del cooldown con umbral 1s. */
+       4. La diferencia con el servidor supera el umbral (banda muerta de
+          2s → ignora desfases pequeños y evita micro-cortes).
+       Después de un buffer >1.5s (no provocado por nuestro propio seek),
+       el TV se sabe atrasado: corregimos con umbral 1s. El target se
+       limita a la duración para no seekear más allá del final. */
     if (!STATE.isPlaying) return;
     if (ps === YT_BUFFERING) return;
 
-    var elapsed  = (now() - STATE.serverTs) / 1000;
-    var expected = STATE.serverPos + elapsed;
-    var actual   = 0;
+    var target = dur > 0 ? Math.min(expected, dur - 0.5) : expected;
+    var actual = 0;
     try { actual = ytPlayer.getCurrentTime() || 0; } catch (_) {}
-    var diff = Math.abs(actual - expected);
+    var diff = Math.abs(actual - target);
 
     var threshold;
     if (POST_BUFFER_RESYNC) {
-        /* Justo después de un buffer largo el TV ESTÁ atrasado por
-           definición — corregimos con umbral más bajo y saltamos
-           cooldown del seek. */
         threshold = 1;
         POST_BUFFER_RESYNC = false;
     } else {
@@ -1005,7 +1026,7 @@ function syncPlayer() {
     }
 
     if (diff > threshold) {
-        try { ytPlayer.seekTo(expected, true); } catch (_) {}
+        try { ytPlayer.seekTo(target, true); } catch (_) {}
         LAST_SEEK_TS = now();
     }
 }

@@ -274,8 +274,13 @@ if ($action === 'poll') {
     /* Refresh last_seen_at del guest. */
     $pdo->prepare("UPDATE listening_participants SET last_seen_at = NOW() WHERE session_id = ? AND user_id = ?")
         ->execute([(int)$guest['id'], $userId]);
-    /* Re-fetch para asegurar datos al día. */
-    $st = $pdo->prepare("SELECT * FROM listening_sessions WHERE id = ? AND closed_at IS NULL");
+    /* Re-fetch para asegurar datos al día. Incluimos updated_at y "ahora"
+       como epoch calculados POR LA BD (mismo reloj/zona horaria) para que
+       el guest pueda estimar la posición real del host = current_time_s +
+       (server_time - updated_at_epoch). Sin esto se sincroniza contra un
+       valor obsoleto y aparecían micro-saltos. */
+    $st = $pdo->prepare("SELECT *, UNIX_TIMESTAMP(updated_at) AS updated_at_epoch, UNIX_TIMESTAMP() AS server_now
+                           FROM listening_sessions WHERE id = ? AND closed_at IS NULL");
     $st->execute([(int)$guest['id']]);
     $cur = $st->fetch(PDO::FETCH_ASSOC);
     if (!$cur) {
@@ -288,7 +293,7 @@ if ($action === 'poll') {
         'session'      => $cur,
         'host_label'   => getHostLabel($pdo, (int)$cur['host_user_id']),
         'participants' => countActiveParticipants($pdo, (int)$cur['id']),
-        'server_time'  => time(),
+        'server_time'  => (int)$cur['server_now'],
     ]);
     exit;
 }

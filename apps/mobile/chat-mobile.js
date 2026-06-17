@@ -481,6 +481,39 @@ const TRASH_ICON_HTML = '<img src="../../assets/img/appIcons/trashIcon.png" alt=
    ahí y la imagen al cargar empuja solo un poco — eso evita que un
    GIF que carga tarde te lance hacia abajo cuando ya scrolleaste
    arriba a leer. */
+/* Construye las partes mutables de un mensaje + una "firma" (sig) de los
+   campos que pueden cambiar entre polls (ticks/editado/eliminado/texto).
+   La sig permite saltarse nodos que NO han cambiado → no se tocan sus
+   <img>/GIFs y no hay reflow. */
+function chMsgParts(m) {
+    const isMine = (m.from === USER_KEY);
+    const isDel  = !!m.deleted;
+    let cls = 'ch-msg ' + (isMine ? 'is-mine' : 'is-them');
+    if (isDel) cls += ' is-deleted';
+    const time = formatTime(m.sentAt);
+    const body = isDel
+        ? '<span class="ch-msg-text">' + TRASH_ICON_HTML + 'Mensaje eliminado</span>'
+        : '<span class="ch-msg-text">' + renderMessageBody(m.text) + '</span>';
+    const editedTag = (m.edited && !isDel) ? '<span class="ch-msg-edited">(editado)</span>' : '';
+    let ticks = '';
+    if (isMine && !isDel) {
+        if (m.read)            ticks = '<span class="ch-ticks is-read" title="Leído">✓✓</span>';
+        else if (m.delivered)  ticks = '<span class="ch-ticks is-delivered" title="Entregado">✓✓</span>';
+        else                   ticks = '<span class="ch-ticks is-sent" title="Enviado">✓</span>';
+    }
+    const html = body + '<span class="ch-msg-meta">' + ticks + editedTag + '<span>' + time + '</span></span>';
+    const sig = [isDel ? 1 : 0, m.edited ? 1 : 0, m.read ? 1 : 0, m.delivered ? 1 : 0,
+                 isDel ? '' : (m.text || '')].join('|');
+    return { isMine, isDel, cls, html, sig };
+}
+
+/* Render INCREMENTAL. Antes se reconstruía todo el feed con innerHTML en
+   cada poll: eso recreaba los <img> (GIFs/imágenes recargaban desde cero
+   → la altura colapsaba y reflowaba) y, al reemplazar innerHTML, se perdía
+   la posición de scroll → al llegar un mensaje nuevo el chat saltaba
+   arriba. Ahora reconciliamos: conservamos los nodos existentes (no se
+   recargan imágenes), añadimos solo los mensajes nuevos al final y
+   actualizamos in situ únicamente los que cambian de estado. */
 function renderFeed(messages, initial) {
     const feed = document.getElementById('ch-feed');
     if (!messages.length) {
@@ -488,45 +521,62 @@ function renderFeed(messages, initial) {
         return;
     }
     const wasAtBottom = (feed.scrollHeight - feed.scrollTop - feed.clientHeight) < 60;
-    feed.innerHTML = messages.map(m => {
-        const isMine = (m.from === USER_KEY);
-        const isDel  = !!m.deleted;
-        let cls = 'ch-msg ' + (isMine ? 'is-mine' : 'is-them');
-        if (isDel) cls += ' is-deleted';
-        const time = formatTime(m.sentAt);
-        const body = isDel
-            ? '<span class="ch-msg-text">' + TRASH_ICON_HTML + 'Mensaje eliminado</span>'
-            : '<span class="ch-msg-text">' + renderMessageBody(m.text) + '</span>';
-        const editedTag = (m.edited && !isDel)
-            ? '<span class="ch-msg-edited">(editado)</span>'
-            : '';
-        let ticks = '';
-        if (isMine && !isDel) {
-            if (m.read) {
-                ticks = '<span class="ch-ticks is-read" title="Leído">✓✓</span>';
-            } else if (m.delivered) {
-                ticks = '<span class="ch-ticks is-delivered" title="Entregado">✓✓</span>';
-            } else {
-                ticks = '<span class="ch-ticks is-sent" title="Enviado">✓</span>';
-            }
+
+    /* Quita el placeholder de "sin mensajes" si estaba puesto. */
+    const emptyEl = feed.querySelector('.ch-feed-empty');
+    if (emptyEl) emptyEl.remove();
+
+    /* Mapa de nodos existentes por id de mensaje. */
+    const existing = {};
+    feed.querySelectorAll('.ch-msg').forEach(function(el){
+        existing[el.getAttribute('data-msg-id')] = el;
+    });
+
+    const seen = {};
+    let prevNode = null;
+    messages.forEach(function(m){
+        const id = String(m.id);
+        seen[id] = true;
+        const p = chMsgParts(m);
+        let el = existing[id];
+        if (!el) {
+            /* Mensaje nuevo → crear nodo e insertarlo en orden. */
+            el = document.createElement('div');
+            el.className = p.cls;
+            el.setAttribute('data-msg-id', id);
+            el.setAttribute('data-mine', p.isMine ? '1' : '0');
+            el.setAttribute('data-deleted', p.isDel ? '1' : '0');
+            el.setAttribute('data-sig', p.sig);
+            el.innerHTML = p.html;
+            if (prevNode && prevNode.nextSibling) feed.insertBefore(el, prevNode.nextSibling);
+            else if (prevNode)                    feed.appendChild(el);
+            else if (feed.firstChild)             feed.insertBefore(el, feed.firstChild);
+            else                                  feed.appendChild(el);
+            if (p.isMine && !p.isDel) attachMsgLongPress(el);
+        } else if (el.getAttribute('data-sig') !== p.sig) {
+            /* Cambió un campo mutable (ticks/editado/eliminado/texto) →
+               actualizamos SOLO este nodo. El resto (con imágenes) queda
+               intacto. El listener de long-press persiste en el nodo. */
+            el.className = p.cls;
+            el.setAttribute('data-deleted', p.isDel ? '1' : '0');
+            el.setAttribute('data-sig', p.sig);
+            el.innerHTML = p.html;
         }
-        return '<div class="' + cls + '" data-msg-id="' + m.id +
-                '" data-mine="' + (isMine ? '1' : '0') +
-                '" data-deleted="' + (isDel ? '1' : '0') + '">' +
-            body +
-            '<span class="ch-msg-meta">' + ticks + editedTag + '<span>' + time + '</span></span>' +
-        '</div>';
-    }).join('');
-    /* Long-press en MIS mensajes no eliminados → menú edit/delete. */
-    feed.querySelectorAll('.ch-msg.is-mine:not(.is-deleted)').forEach(el => attachMsgLongPress(el));
+        prevNode = el;
+    });
+
+    /* Elimina nodos de mensajes que ya no existen (poco habitual). */
+    Object.keys(existing).forEach(function(id){
+        if (!seen[id]) existing[id].remove();
+    });
+
     if (wasAtBottom) {
         feed.scrollTop = feed.scrollHeight;
-        /* Solo en el render INICIAL (apertura del chat) registramos pin
-           handlers para mantener el scroll al fondo mientras las
-           imágenes/GIFs cargan. Grace de 3s para no pegar tirones si el
-           user empieza a scrollear inmediatamente. En polls posteriores,
-           NO registramos pin: una imagen que carga tarde no debe lanzar
-           al user al fondo cuando ya scrolleó arriba a leer. */
+        /* Solo en el render INICIAL registramos pin handlers para mantener
+           el scroll al fondo mientras las imágenes/GIFs cargan. Grace de 3s
+           para no pegar tirones si el user empieza a scrollear. En polls
+           posteriores NO pineamos: una imagen que carga tarde no debe
+           lanzar al user al fondo cuando ya scrolleó arriba a leer. */
         if (initial) {
             const startTime = Date.now();
             const GRACE_MS  = 3000;
@@ -569,6 +619,9 @@ function attachMsgLongPress(el) {
 }
 
 function openMsgMenu(msgEl) {
+    /* Un mensaje que pasó a eliminado conserva su listener de long-press
+       (actualizamos el nodo in situ, no lo recreamos). No abrir el menú. */
+    if (msgEl.dataset.deleted === '1') return;
     const msgId = +msgEl.dataset.msgId;
     const text  = (msgEl.querySelector('.ch-msg-text')?.textContent) || '';
     const bd = document.getElementById('ch-msg-backdrop');

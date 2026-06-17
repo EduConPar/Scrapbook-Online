@@ -2104,6 +2104,8 @@ window.MuShell = (function(){
         if (e.data === 0) next();
         broadcast({ type: 'mushell:state', state: e.data, idx: CUR_IDX });
         publishNowPlaying(playing, true);
+        /* Host de sesión conjunta: propaga play/pausa al instante. */
+        if (LT_ROLE === 'host' && (e.data === 1 || e.data === 2)) ltHostBroadcastDebounced();
     }
 
     /* Publica el track actual al endpoint save-now-playing para que
@@ -2298,6 +2300,9 @@ window.MuShell = (function(){
        host. Backend compartido en assets/listen/api.php.
        ════════════════════════════════════════════════════════════════ */
     var LT_URL = 'assets/listen/api.php';
+    /* Umbral de re-sync del guest (s): por debajo no se hace seek, evita
+       micro-saltos atrás/alante por desfases pequeños. */
+    var LT_SEEK_THRESHOLD_S = 2;
     var LT_ROLE = null;
     var LT_SESSION_ID = null;
     var LT_GUEST_POLL_T = null;
@@ -2423,13 +2428,24 @@ window.MuShell = (function(){
         }
         var s = r.session;
         if (!YT_PLAYER || !s.video_id) return;
+
+        var isPlaying = parseInt(s.is_playing, 10) === 1;
+        /* Posición real estimada del host AHORA = último current_time_s +
+           tiempo transcurrido desde que lo posteó (solo si suena). Sin
+           esta compensación se sincroniza contra un valor obsoleto y
+           aparecían micro-saltos. */
+        var elapsed = isPlaying
+            ? Math.max(0, (parseInt(r.server_time, 10) || 0) - (parseInt(s.updated_at_epoch, 10) || 0))
+            : 0;
+        var hostT = (parseInt(s.current_time_s, 10) || 0) + elapsed;
+
         var curVid = '';
         try {
             var d = YT_PLAYER.getVideoData && YT_PLAYER.getVideoData();
             if (d) curVid = d.video_id || '';
         } catch (_) {}
         if (curVid !== s.video_id) {
-            try { YT_PLAYER.loadVideoById(s.video_id, parseInt(s.current_time_s, 10) || 0); } catch (_) {}
+            try { YT_PLAYER.loadVideoById(s.video_id, hostT); } catch (_) {}
             /* Actualiza UI del widget: label + título visible cuando se abre fullscreen. */
             try {
                 var fa = document.getElementById('mu-full-title');
@@ -2439,16 +2455,18 @@ window.MuShell = (function(){
             } catch (_) {}
             return;
         }
+
+        /* Corrección de drift con banda muerta: solo seek si supera el
+           umbral → sin saltos nerviosos por desfases pequeños. */
         var myT = 0;
         try { myT = YT_PLAYER.getCurrentTime() || 0; } catch (_) {}
-        var hostT = parseInt(s.current_time_s, 10) || 0;
-        if (Math.abs(myT - hostT) > 3) {
+        if (Math.abs(myT - hostT) > LT_SEEK_THRESHOLD_S) {
             try { YT_PLAYER.seekTo(hostT, true); } catch (_) {}
         }
         try {
             var ps = YT_PLAYER.getPlayerState();
-            if (parseInt(s.is_playing, 10) === 1 && ps !== 1) YT_PLAYER.playVideo();
-            if (parseInt(s.is_playing, 10) === 0 && ps === 1) YT_PLAYER.pauseVideo();
+            if (isPlaying && ps !== 1) YT_PLAYER.playVideo();
+            else if (!isPlaying && ps === 1) YT_PLAYER.pauseVideo();
         } catch (_) {}
     }
 
