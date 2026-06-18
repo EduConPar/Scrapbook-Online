@@ -3343,6 +3343,7 @@ var addTrackCallback = null;
             '<div class="title-bar"><div class="title-bar-text">Corregir álbum</div>' +
                 '<div class="title-bar-controls"><button aria-label="Close" data-act="close"></button></div></div>' +
             '<div class="window-body" style="padding:10px;">' +
+                '<p style="margin:0 0 8px;font-size:10px;line-height:1.45;opacity:0.85;">El álbum asignado automáticamente puede ser incorrecto. Ayuda a la comunidad corrigiéndolo para que no vuelva a ocurrir.</p>' +
                 '<p style="margin:0 0 6px;font-size:11px;">Álbum correcto para "<b class="ra-song"></b>":</p>' +
                 '<input type="text" class="ra-input" autocomplete="off" placeholder="Escribe el nombre del álbum…" style="width:100%;box-sizing:border-box;">' +
                 '<div class="ra-results" style="margin-top:6px;max-height:240px;overflow-y:auto;"></div>' +
