@@ -96,3 +96,20 @@
 - Solucionado un bug que no dejaba importar playlist de youtube
 - Solucionado un bug en que la ventana de otros perfiles no se acomodaban a su tamaño
 - Solucionado un bug en que la ventana de otros perfiles no se podia resizear en todas sus esquinas
+
+---
+
+# Alfa 0.1.5
+
+## Nuevas funciones y cambios
+- Cambiado el sistema de login de una lista con todos los usuarios a dos campos para introducir nombre de usuario y contraseña
+- Añadida una funcion para corregir las canciones a las que se les haya asignado un album incorrecto. La informacion se guardara para la posteridad y cuando otra persona añada esta cancion el album sera el corregido
+- Añadida opcion para cambiar el minuto de la cancion tocando la barra de progreso en el movil
+
+## Bugs y mejoras
+- Mejorada la escucha compartida para evitar cortes en la musica
+- Arreglado un bug que hacia que pasado un rato transmitiendo musica en tv, la transmision se colgara y pusiera el tramo de una cancion en bucle hasta reiniciar la app de movil
+- Mejorada la transmision a tv para evitar cortes en la musica
+- Arreglado un bug en el que, al abrir una reseña desde la seccion de notificaciones de perfil, se te ponia tu reseña en lugar de la de esa persona
+- Arreglado un bug que hacia que, al mandar un gif o imagen en un chat y luego mandar un mensaje, el chat no bajara
+- Arreglado un bug en el que el reproductor tenia 2 menus distintos
