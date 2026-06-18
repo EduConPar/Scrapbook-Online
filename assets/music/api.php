@@ -24,6 +24,7 @@
    POST  ?action=yt-search-batch      { tracks[] }
    POST  ?action=import-playlist      { url }
    POST  ?action=save-now-playing     { videoId, title, artist, plName, position, duration, isPlaying }
+   POST  ?action=report-album         { videoId, albumName, artist? }  (corrige el álbum de una canción)
    GET   ?action=get-now-playing
 
    ALMACENAMIENTO: 100% SQL.
@@ -681,6 +682,36 @@ case 'find-album': {
     $videoId = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($_GET['videoId'] ?? ''));
     if (strlen($videoId) !== 11) $videoId = '';
     if ($title === '') jsonError('title requerido');
+
+    /* ── Override manual (reporte de álbum incorrecto) ──
+       Si alguien corrigió el álbum de este videoId vía `report-album`,
+       ese álbum GANA SIEMPRE sobre la cascada automática. Es global (por
+       videoId) y persistente, así la canción muestra el álbum correcto en
+       cualquier playlist y para todos los usuarios. */
+    if ($videoId !== '') {
+        try {
+            $ovStmt = $pdo->prepare("SELECT source, album_key, album_name, album_artist, album_image, album_url
+                                       FROM song_album_overrides WHERE video_id = ?");
+            $ovStmt->execute([$videoId]);
+            $ov = $ovStmt->fetch(PDO::FETCH_ASSOC);
+            if ($ov) {
+                jsonResponse([
+                    'notFound'       => false,
+                    'source'         => $ov['source'],
+                    'albumKey'       => $ov['album_key'],
+                    'spotifyAlbumId' => '',
+                    'albumName'      => $ov['album_name'],
+                    'albumArtist'    => $ov['album_artist'],
+                    'matchArtist'    => $ov['album_artist'],
+                    'albumImage'     => $ov['album_image'],
+                    'albumUrl'       => $ov['album_url'],
+                    'isSingle'       => false,
+                    'matchTitle'     => '',
+                    'isOverride'     => true,
+                ]);
+            }
+        } catch (Throwable $e) { /* tabla aún no existe → sin override */ }
+    }
 
     /* ── Cache key NORMALIZADA agresiva ──
        Antes era `md5(lower(title) . '|' . lower(artist))` — variantes
@@ -1448,8 +1479,163 @@ case 'get-now-playing': {
     jsonResponse($payload);
 }
 
+/* ─── Corregir el álbum de una canción ──────────────────────────────
+   El usuario reporta que el álbum auto-detectado de un track es
+   incorrecto e introduce el NOMBRE del álbum correcto. Buscamos ese
+   álbum por nombre (+ el artista de la canción como pista) en iTunes y
+   Deezer, y guardamos la corrección por videoId. A partir de entonces
+   `find-album` devuelve SIEMPRE este álbum para esa canción, en
+   cualquier playlist y para todos los usuarios. */
+case 'report-album': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $videoId   = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($b['videoId'] ?? ''));
+    if (strlen($videoId) !== 11) jsonError('videoId inválido');
+    $albumName = trim((string)($b['albumName'] ?? ''));
+    $artist    = trim((string)($b['artist'] ?? ''));
+    if ($albumName === '') jsonError('Falta el nombre del álbum');
+
+    require_once __DIR__ . '/itunes-helpers.php';
+    require_once __DIR__ . '/deezer-helpers.php';
+    $match = _resolveAlbumByName($albumName, $artist);
+    if (!$match) {
+        jsonError('No se encontró un álbum con ese nombre. Escríbelo más exacto (puedes incluir el artista).', 404);
+    }
+
+    $albumKey = $match['source'] . ':' . $match['albumId'];
+    $pdo->exec("CREATE TABLE IF NOT EXISTS song_album_overrides (
+        video_id     VARCHAR(11) PRIMARY KEY,
+        source       VARCHAR(10)  NOT NULL,
+        album_id     VARCHAR(40)  NOT NULL,
+        album_key    VARCHAR(60)  NOT NULL,
+        album_name   VARCHAR(255) NOT NULL DEFAULT '',
+        album_artist VARCHAR(255) NOT NULL DEFAULT '',
+        album_image  VARCHAR(500) NOT NULL DEFAULT '',
+        album_url    VARCHAR(500) NOT NULL DEFAULT '',
+        created_by   INT NULL,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) DEFAULT CHARSET=utf8mb4");
+    $pdo->prepare("INSERT INTO song_album_overrides
+        (video_id, source, album_id, album_key, album_name, album_artist, album_image, album_url, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE source=VALUES(source), album_id=VALUES(album_id), album_key=VALUES(album_key),
+            album_name=VALUES(album_name), album_artist=VALUES(album_artist), album_image=VALUES(album_image),
+            album_url=VALUES(album_url), created_by=VALUES(created_by)")
+        ->execute([$videoId, $match['source'], $match['albumId'], $albumKey,
+                   $match['name'], $match['artist'], $match['image'], '', $uid]);
+
+    jsonResponse(['ok' => true, 'album' => [
+        'notFound'       => false,
+        'source'         => $match['source'],
+        'albumKey'       => $albumKey,
+        'spotifyAlbumId' => '',
+        'albumName'      => $match['name'],
+        'albumArtist'    => $match['artist'],
+        'matchArtist'    => $match['artist'],
+        'albumImage'     => $match['image'],
+        'albumUrl'       => '',
+        'isSingle'       => false,
+        'matchTitle'     => '',
+        'isOverride'     => true,
+    ]]);
+}
+
 default:
     jsonError('Acción no válida: ' . $action, 400);
+}
+
+/* Busca un álbum por NOMBRE (+ artista opcional como pista) en iTunes y
+   luego Deezer. Devuelve ['source','albumId','name','artist','image'] del
+   mejor match, o null. Usado por `report-album` para resolver la
+   corrección que escribe el usuario. */
+function _resolveAlbumByName(string $name, string $artist): ?array {
+    $name = trim($name);
+    if ($name === '') return null;
+
+    $norm = function (string $s): string {
+        $s = mb_strtolower($s);
+        if (class_exists('Transliterator')) {
+            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+            if ($tr) { $r = $tr->transliterate($s); if ($r !== null) $s = $r; }
+        }
+        $s = preg_replace('/[^a-z0-9]+/u', ' ', $s);
+        return trim(preg_replace('/\s+/', ' ', (string)$s));
+    };
+    $nName   = $norm($name);
+    $nArtist = $norm($artist);
+    if ($nName === '') return null;
+
+    /* Puntúa un candidato: el nombre DEBE coincidir (exacto o substring);
+       si coincide también el artista, sube. Sin coincidencia de nombre →
+       descartado (-1). */
+    $score = function (string $candName, string $candArtist) use ($norm, $nName, $nArtist): int {
+        $cN = $norm($candName);
+        if ($cN === '') return -1;
+        $s = 0;
+        if ($cN === $nName)                                          $s += 100;
+        elseif (str_contains($cN, $nName) || str_contains($nName, $cN)) $s += 60;
+        else return -1;
+        if ($nArtist !== '') {
+            $cA = $norm($candArtist);
+            if ($cA === $nArtist)                                            $s += 40;
+            elseif ($cA !== '' && (str_contains($cA, $nArtist) || str_contains($nArtist, $cA))) $s += 20;
+        }
+        return $s;
+    };
+
+    $term = $artist !== '' ? ($name . ' ' . $artist) : $name;
+    $ctx  = stream_context_create(['http' => [
+        'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+
+    $bestScore = -1; $best = null;
+
+    /* iTunes — entity=album. */
+    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($term) . '&entity=album&limit=15', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
+            $sc = $score((string)($r['collectionName'] ?? ''), (string)($r['artistName'] ?? ''));
+            if ($sc > $bestScore) {
+                $img = (string)($r['artworkUrl100'] ?? '');
+                if ($img) $img = str_replace('100x100', '600x600', $img);
+                $best = [
+                    'source'  => 'itunes',
+                    'albumId' => (string)($r['collectionId'] ?? ''),
+                    'name'    => (string)($r['collectionName'] ?? ''),
+                    'artist'  => (string)($r['artistName'] ?? ''),
+                    'image'   => $img,
+                ];
+                $bestScore = $sc;
+            }
+        }
+    }
+
+    /* Deezer — solo si iTunes no dio un match perfecto de nombre. */
+    if ($bestScore < 100) {
+        $raw = @file_get_contents('https://api.deezer.com/search/album?q=' . rawurlencode($term) . '&limit=15', false, $ctx);
+        if ($raw) {
+            $d = json_decode($raw, true);
+            if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
+                $sc = $score((string)($r['title'] ?? ''), (string)($r['artist']['name'] ?? ''));
+                if ($sc > $bestScore) {
+                    $best = [
+                        'source'  => 'deezer',
+                        'albumId' => (string)($r['id'] ?? ''),
+                        'name'    => (string)($r['title'] ?? ''),
+                        'artist'  => (string)($r['artist']['name'] ?? ''),
+                        'image'   => (string)($r['cover_xl'] ?? ($r['cover_big'] ?? '')),
+                    ];
+                    $bestScore = $sc;
+                }
+            }
+        }
+    }
+
+    if (!$best || $best['albumId'] === '') return null;
+    return $best;
 }
 
 /* Fallback de album-tracks cuando el albumKey original es spotify:* y

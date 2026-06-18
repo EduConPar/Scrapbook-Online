@@ -3260,6 +3260,19 @@ var addTrackCallback = null;
         });
         ctxMenu.appendChild(addPl);
 
+        /* Corregir el álbum auto-detectado de esta canción: el usuario
+           escribe el NOMBRE del álbum correcto y se guarda por videoId
+           (global y persistente) → la canción muestra ese álbum en
+           cualquier playlist. */
+        var fixAlbum = document.createElement('div');
+        fixAlbum.className = 'pl-menu-item';
+        fixAlbum.textContent = '💿 Corregir álbum…';
+        fixAlbum.addEventListener('click', function() {
+            ctxMenu.style.display = 'none';
+            reportWrongAlbum(track);
+        });
+        ctxMenu.appendChild(fixAlbum);
+
         var addProfile = document.createElement('div');
         addProfile.className = 'pl-menu-item';
         addProfile.textContent = '🎵 Añadir a mi perfil';
@@ -3314,6 +3327,46 @@ var addTrackCallback = null;
         ctxMenu.style.left = Math.min(ex, window.innerWidth  - cw - 8) + 'px';
         ctxMenu.style.top  = Math.min(ey, window.innerHeight - ch - 8) + 'px';
     }
+    /* Reporta el álbum incorrecto de una canción: pide el NOMBRE del
+       álbum correcto, lo envía a report-album (que lo resuelve en
+       iTunes/Deezer y lo guarda por videoId), limpia la cache local de
+       ese videoId y re-resuelve el álbum del track actual. */
+    function reportWrongAlbum(track) {
+        if (!track || !track.videoId) return;
+        var ask = window.win98Prompt || function(msg, def, ok){ var v = window.prompt(msg, def || ''); if (v != null) ok(v); };
+        ask('Escribe el nombre del álbum correcto para "' + (track.title || 'esta canción') + '":', '', function(name){
+            name = (name || '').trim();
+            if (!name) return;
+            fetch('assets/music/api.php?action=report-album', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoId: track.videoId, albumName: name, artist: track.artist || '' })
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok) {
+                    var msg = (d && d.error) || 'No se pudo corregir el álbum';
+                    if (window.notifSystem) notifSystem.show({ type: 'error', title: 'Álbum no corregido', message: msg });
+                    else alert(msg);
+                    return;
+                }
+                /* Limpia cache local por videoId y re-resuelve si es el track actual. */
+                try { var c = _loadAlbumCache(); delete c[track.videoId]; _saveAlbumCache(); } catch (_) {}
+                var cur = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+                if (cur && cur.videoId === track.videoId && typeof resolveAndShowAlbum === 'function') {
+                    resolveAndShowAlbum(cur);
+                }
+                if (window.notifSystem) {
+                    notifSystem.show({ type: 'success', title: 'Álbum corregido',
+                        message: (d.album && d.album.albumName) ? ('Ahora: ' + d.album.albumName) : 'Guardado correctamente' });
+                }
+            })
+            .catch(function(){
+                if (window.notifSystem) notifSystem.show({ type: 'error', title: 'Error de red', message: 'No se pudo guardar la corrección' });
+            });
+        }, null, 'Corregir álbum');
+    }
+
     /* Exposición global → permite triggear el mismo menú desde el
        mini-player (no solo desde los rows de la lista). */
     window.openTrackCtxMenu = showTrackCtxMenu;
