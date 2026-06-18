@@ -1694,22 +1694,31 @@ function _searchAlbumsByName(string $name, string $artist, int $limit = 40): arr
     $nArtist = $norm($artist);
     if ($nName === '') return [];
 
-    /* Score SUAVE (no descarta): la API ya filtró por relevancia, solo
-       reordenamos subiendo coincidencias exactas/substring de nombre y
-       artista. */
+    /* Score SUAVE — NO descarta nada (los que no casan salen al final).
+       Prioridad:
+         1º (SIEMPRE lo que más puntúa): que el TÍTULO del álbum coincida
+            con lo que escribió el usuario (exacto > empieza por > contiene).
+         2º: que el ARTISTA del álbum coincida con el artista actualmente
+            asignado a la canción.
+       Los rangos garantizan que cualquier coincidencia de título (mín.
+       300) pese más que cualquier coincidencia de artista (máx. 100). */
     $score = function (string $candName, string $candArtist) use ($norm, $nName, $nArtist): int {
         $cN = $norm($candName); $s = 0;
-        if ($cN === $nName)                                              $s += 100;
-        elseif ($cN !== '' && (str_contains($cN, $nName) || str_contains($nName, $cN))) $s += 50;
+        if ($cN === $nName)                                  $s += 1000;
+        elseif ($cN !== '' && str_starts_with($cN, $nName))  $s += 600;
+        elseif ($cN !== '' && (str_contains($cN, $nName) || str_contains($nName, $cN))) $s += 300;
         if ($nArtist !== '') {
             $cA = $norm($candArtist);
-            if ($cA === $nArtist)                                                $s += 40;
-            elseif ($cA !== '' && (str_contains($cA, $nArtist) || str_contains($nArtist, $cA))) $s += 20;
+            if ($cA === $nArtist)                                                $s += 100;
+            elseif ($cA !== '' && (str_contains($cA, $nArtist) || str_contains($nArtist, $cA))) $s += 40;
         }
         return $s;
     };
 
-    $term = $artist !== '' ? ($name . ' ' . $artist) : $name;
+    /* Buscamos SOLO por título. Si metiéramos el artista en el término,
+       las APIs filtrarían por él y ocultarían álbumes con el título
+       correcto de otros artistas. El artista solo se usa para ordenar. */
+    $term = $name;
     $ctx  = stream_context_create(['http' => [
         'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
     ]]);
