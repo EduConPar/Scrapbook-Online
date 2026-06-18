@@ -3080,6 +3080,7 @@ var addTrackCallback = null;
                así que tracks vistos antes pintan instantáneo. */
             var albumSpan = document.createElement('span');
             albumSpan.className = 'pl-item-album-text';
+            albumSpan.dataset.videoId = track.videoId || '';
             t2.appendChild(albumSpan);
             if (typeof _resolveAlbumForRow === 'function') {
                 _resolveAlbumForRow(track, albumSpan);
@@ -3379,10 +3380,21 @@ var addTrackCallback = null;
                     else alert(msg);
                     return;
                 }
-                try { var c = _loadAlbumCache(); delete c[track.videoId]; _saveAlbumCache(); } catch (_) {}
+                /* Guarda la corrección en la cache local por videoId
+                   (autoritativa) para repintar al instante sin re-fetch. */
+                if (d.album) { try { _albumCacheSet(track.videoId, d.album); } catch (_) {} }
+                else { try { var c = _loadAlbumCache(); delete c[track.videoId]; _saveAlbumCache(); } catch (_) {} }
+                /* Mini-player. */
                 var cur = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
                 if (cur && cur.videoId === track.videoId && typeof resolveAndShowAlbum === 'function') {
                     resolveAndShowAlbum(cur);
+                }
+                /* Filas del editor con ese videoId → actualiza el nombre del
+                   álbum que aparece en la lista. */
+                if (typeof plList !== 'undefined' && plList && typeof _resolveAlbumForRow === 'function') {
+                    plList.querySelectorAll('.pl-item-album-text').forEach(function(span){
+                        if (span.dataset.videoId === track.videoId) _resolveAlbumForRow(track, span);
+                    });
                 }
                 if (window.notifSystem) {
                     notifSystem.show({ type: 'success', title: 'Álbum corregido',
@@ -5887,6 +5899,10 @@ function relTime(sentAt) {
         el.addEventListener('contextmenu', function(e) {
             const tr = getCurTrackForCtx();
             if (!tr) return;
+            /* Evita que el evento siga burbujeando a contenedores con su
+               propio handler de contextmenu (p.ej. #player-cover-wrap →
+               #player-content) y mostrara el menú dos veces. */
+            e.stopPropagation();
             if (typeof window.openTrackCtxMenu === 'function') {
                 window.openTrackCtxMenu(e, tr);
             }

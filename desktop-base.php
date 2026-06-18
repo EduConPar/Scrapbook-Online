@@ -2424,6 +2424,15 @@ window.notifSystem = (function() {
 (function() {
     var playerMain = document.getElementById('player-main');
     if (!playerMain) return;
+    /* RETIRADO: el menú contextual del reproductor lo gestiona ahora
+       reproductor.php (window.openTrackCtxMenu / showTrackCtxMenu), que
+       cubre toda la ventana e incluye "Corregir álbum". Tener este menú
+       AQUÍ además provocaba (1) dos menús a la vez al click derecho en la
+       carátula —el listener de la carátula mostraba el suyo y el evento
+       burbujeaba hasta #player-main mostrando este—, y (2) su picker
+       enviaba {playlistId, tracks} sin id/name → 400 en save-playlist-item.
+       Se desactiva por completo. */
+    return;
 
     var ctxMenu = document.createElement('div');
     ctxMenu.className = 'window';
