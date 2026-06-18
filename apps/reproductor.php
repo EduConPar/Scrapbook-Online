@@ -3327,20 +3327,49 @@ var addTrackCallback = null;
         ctxMenu.style.left = Math.min(ex, window.innerWidth  - cw - 8) + 'px';
         ctxMenu.style.top  = Math.min(ey, window.innerHeight - ch - 8) + 'px';
     }
-    /* Reporta el álbum incorrecto de una canción: pide el NOMBRE del
-       álbum correcto, lo envía a report-album (que lo resuelve en
-       iTunes/Deezer y lo guarda por videoId), limpia la cache local de
-       ese videoId y re-resuelve el álbum del track actual. */
+    /* Diálogo para corregir el álbum de una canción: el usuario escribe el
+       nombre y aparecen abajo, en vivo, álbumes que matchean (iTunes +
+       Deezer). Al elegir uno se guarda por videoId vía report-album. */
     function reportWrongAlbum(track) {
         if (!track || !track.videoId) return;
-        var ask = window.win98Prompt || function(msg, def, ok){ var v = window.prompt(msg, def || ''); if (v != null) ok(v); };
-        ask('Escribe el nombre del álbum correcto para "' + (track.title || 'esta canción') + '":', '', function(name){
-            name = (name || '').trim();
-            if (!name) return;
+
+        var bd = document.createElement('div');
+        bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:100000;display:flex;align-items:center;justify-content:center;';
+        var win = document.createElement('div');
+        win.className = 'window';
+        win.style.cssText = 'width:380px;max-width:92vw;';
+        win.innerHTML =
+            '<div class="title-bar"><div class="title-bar-text">Corregir álbum</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" data-act="close"></button></div></div>' +
+            '<div class="window-body" style="padding:10px;">' +
+                '<p style="margin:0 0 6px;font-size:11px;">Álbum correcto para "<b class="ra-song"></b>":</p>' +
+                '<input type="text" class="ra-input" autocomplete="off" placeholder="Escribe el nombre del álbum…" style="width:100%;box-sizing:border-box;">' +
+                '<div class="ra-results" style="margin-top:6px;max-height:240px;overflow-y:auto;"></div>' +
+                '<div class="ra-hint" style="font-size:10px;opacity:0.7;margin-top:6px;">Escribe y elige un resultado. (Enter usa el texto tal cual.)</div>' +
+                '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">' +
+                    '<button class="button" data-act="cancel">Cancelar</button>' +
+                '</div>' +
+            '</div>';
+        win.querySelector('.ra-song').textContent = track.title || 'esta canción';
+        bd.appendChild(win);
+        document.body.appendChild(bd);
+
+        var input     = win.querySelector('.ra-input');
+        var resultsEl = win.querySelector('.ra-results');
+        setTimeout(function(){ input.focus(); }, 30);
+
+        function close(){ document.removeEventListener('keydown', onKey, true); bd.remove(); }
+        function onKey(e){ if (e.key === 'Escape') { e.preventDefault(); close(); } }
+        document.addEventListener('keydown', onKey, true);
+        win.querySelector('[data-act="close"]').addEventListener('click', close);
+        win.querySelector('[data-act="cancel"]').addEventListener('click', close);
+        bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+
+        function submit(payload) {
             fetch('assets/music/api.php?action=report-album', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoId: track.videoId, albumName: name, artist: track.artist || '' })
+                body: JSON.stringify(Object.assign({ videoId: track.videoId, artist: track.artist || '' }, payload))
             })
             .then(function(r){ return r.json(); })
             .then(function(d){
@@ -3350,7 +3379,6 @@ var addTrackCallback = null;
                     else alert(msg);
                     return;
                 }
-                /* Limpia cache local por videoId y re-resuelve si es el track actual. */
                 try { var c = _loadAlbumCache(); delete c[track.videoId]; _saveAlbumCache(); } catch (_) {}
                 var cur = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
                 if (cur && cur.videoId === track.videoId && typeof resolveAndShowAlbum === 'function') {
@@ -3360,11 +3388,63 @@ var addTrackCallback = null;
                     notifSystem.show({ type: 'success', title: 'Álbum corregido',
                         message: (d.album && d.album.albumName) ? ('Ahora: ' + d.album.albumName) : 'Guardado correctamente' });
                 }
+                close();
             })
             .catch(function(){
                 if (window.notifSystem) notifSystem.show({ type: 'error', title: 'Error de red', message: 'No se pudo guardar la corrección' });
             });
-        }, null, 'Corregir álbum');
+        }
+
+        function renderResults(list) {
+            resultsEl.innerHTML = '';
+            (list || []).forEach(function(a){
+                var row = document.createElement('div');
+                row.className = 'pl-menu-item';
+                row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;cursor:pointer;';
+                var img = document.createElement('img');
+                img.src = a.image || '';
+                img.alt = '';
+                img.style.cssText = 'width:34px;height:34px;object-fit:cover;flex:0 0 34px;background:#222;';
+                img.onerror = function(){ this.style.visibility = 'hidden'; };
+                var txt = document.createElement('div');
+                txt.style.cssText = 'min-width:0;flex:1;';
+                var nm = document.createElement('div');
+                nm.textContent = a.name || '';
+                nm.style.cssText = 'font-size:11px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                var ar = document.createElement('div');
+                ar.textContent = a.artist || '';
+                ar.style.cssText = 'font-size:10px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+                txt.appendChild(nm); txt.appendChild(ar);
+                row.appendChild(img); row.appendChild(txt);
+                row.addEventListener('click', function(){
+                    submit({ albumKey: a.albumKey, albumName: a.name || '', albumArtist: a.artist || '', albumImage: a.image || '' });
+                });
+                resultsEl.appendChild(row);
+            });
+        }
+
+        var searchT = null, lastQ = null;
+        function doSearch() {
+            var q = input.value.trim();
+            if (q === lastQ) return;
+            lastQ = q;
+            if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+            fetch('assets/music/api.php?action=search-albums&q=' + encodeURIComponent(q) + '&artist=' + encodeURIComponent(track.artist || ''))
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if (input.value.trim() !== q) return;   /* respuesta obsoleta */
+                    renderResults(d && d.ok ? d.results : []);
+                })
+                .catch(function(){});
+        }
+        input.addEventListener('input', function(){ clearTimeout(searchT); searchT = setTimeout(doSearch, 300); });
+        input.addEventListener('keydown', function(e){
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var v = input.value.trim();
+                if (v) submit({ albumName: v });   /* fallback texto libre */
+            }
+        });
     }
 
     /* Exposición global → permite triggear el mismo menú desde el

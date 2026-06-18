@@ -24,7 +24,8 @@
    POST  ?action=yt-search-batch      { tracks[] }
    POST  ?action=import-playlist      { url }
    POST  ?action=save-now-playing     { videoId, title, artist, plName, position, duration, isPlaying }
-   POST  ?action=report-album         { videoId, albumName, artist? }  (corrige el álbum de una canción)
+   GET   ?action=search-albums&q=...&artist=...  (autocompletado de álbumes)
+   POST  ?action=report-album         { videoId, albumName|albumKey, artist? }  (corrige el álbum)
    GET   ?action=get-now-playing
 
    ALMACENAMIENTO: 100% SQL.
@@ -1479,28 +1480,62 @@ case 'get-now-playing': {
     jsonResponse($payload);
 }
 
+/* ─── Autocompletado de álbumes ─────────────────────────────────────
+   Mientras el usuario escribe el nombre del álbum correcto, devolvemos
+   candidatos (iTunes + Deezer) para que elija con un clic. */
+case 'search-albums': {
+    require_once __DIR__ . '/itunes-helpers.php';
+    require_once __DIR__ . '/deezer-helpers.php';
+    $q      = trim((string)($_GET['q']      ?? ''));
+    $artist = trim((string)($_GET['artist'] ?? ''));
+    if (mb_strlen($q) < 2) jsonResponse(['ok' => true, 'results' => []]);
+    jsonResponse(['ok' => true, 'results' => _searchAlbumsByName($q, $artist, 8)]);
+}
+
 /* ─── Corregir el álbum de una canción ──────────────────────────────
    El usuario reporta que el álbum auto-detectado de un track es
-   incorrecto e introduce el NOMBRE del álbum correcto. Buscamos ese
-   álbum por nombre (+ el artista de la canción como pista) en iTunes y
-   Deezer, y guardamos la corrección por videoId. A partir de entonces
-   `find-album` devuelve SIEMPRE este álbum para esa canción, en
-   cualquier playlist y para todos los usuarios. */
+   incorrecto e introduce el NOMBRE del álbum correcto (o elige una
+   sugerencia). Guardamos la corrección por videoId. A partir de
+   entonces `find-album` devuelve SIEMPRE este álbum para esa canción,
+   en cualquier playlist y para todos los usuarios. */
 case 'report-album': {
     $uid = uidByKey($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
     $b = jsonBody();
     $videoId   = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($b['videoId'] ?? ''));
     if (strlen($videoId) !== 11) jsonError('videoId inválido');
-    $albumName = trim((string)($b['albumName'] ?? ''));
-    $artist    = trim((string)($b['artist'] ?? ''));
-    if ($albumName === '') jsonError('Falta el nombre del álbum');
-
+    $artist = trim((string)($b['artist'] ?? ''));
     require_once __DIR__ . '/itunes-helpers.php';
     require_once __DIR__ . '/deezer-helpers.php';
-    $match = _resolveAlbumByName($albumName, $artist);
+
+    /* Dos modos:
+         a) El usuario eligió una sugerencia → llega `albumKey` (itunes:ID /
+            deezer:ID) + nombre/artista/imagen ya conocidos. Match directo.
+         b) Texto libre → `albumName` y lo resolvemos por nombre. */
+    $match = null;
+    $albumKeyIn = trim((string)($b['albumKey'] ?? ''));
+    if ($albumKeyIn !== '' && preg_match('~^(itunes|deezer):(\d+)$~', $albumKeyIn, $mk)) {
+        $src = $mk[1]; $aid = $mk[2];
+        $nm  = trim((string)($b['albumName']   ?? ''));
+        $art = trim((string)($b['albumArtist'] ?? ''));
+        $img = trim((string)($b['albumImage']  ?? ''));
+        if ($nm === '' || $img === '') {
+            $meta = $src === 'itunes' ? itunesGetAlbumTracks($aid) : deezerGetAlbumTracks($aid);
+            if ($meta) {
+                if ($nm  === '') $nm  = (string)($meta['name']   ?? '');
+                if ($art === '') $art = (string)($meta['artist'] ?? '');
+                if ($img === '') $img = (string)($meta['image']  ?? '');
+            }
+        }
+        if ($nm !== '') $match = ['source' => $src, 'albumId' => $aid, 'name' => $nm, 'artist' => $art, 'image' => $img];
+    }
     if (!$match) {
-        jsonError('No se encontró un álbum con ese nombre. Escríbelo más exacto (puedes incluir el artista).', 404);
+        $albumName = trim((string)($b['albumName'] ?? ''));
+        if ($albumName === '') jsonError('Falta el nombre del álbum');
+        $match = _resolveAlbumByName($albumName, $artist);
+        if (!$match) {
+            jsonError('No se encontró un álbum con ese nombre. Escríbelo más exacto (puedes incluir el artista).', 404);
+        }
     }
 
     $albumKey = $match['source'] . ':' . $match['albumId'];
@@ -1636,6 +1671,98 @@ function _resolveAlbumByName(string $name, string $artist): ?array {
 
     if (!$best || $best['albumId'] === '') return null;
     return $best;
+}
+
+/* Devuelve una LISTA de álbumes candidatos para autocompletado, buscando
+   por nombre (+ artista como pista) en iTunes y Deezer. Cada item:
+   ['source','albumId','albumKey','name','artist','image']. Ordenados por
+   relevancia (coincidencia de nombre/artista) y deduplicados. */
+function _searchAlbumsByName(string $name, string $artist, int $limit = 8): array {
+    $name = trim($name);
+    if ($name === '') return [];
+
+    $norm = function (string $s): string {
+        $s = mb_strtolower($s);
+        if (class_exists('Transliterator')) {
+            $tr = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+            if ($tr) { $r = $tr->transliterate($s); if ($r !== null) $s = $r; }
+        }
+        $s = preg_replace('/[^a-z0-9]+/u', ' ', $s);
+        return trim(preg_replace('/\s+/', ' ', (string)$s));
+    };
+    $nName   = $norm($name);
+    $nArtist = $norm($artist);
+    if ($nName === '') return [];
+
+    /* Score SUAVE (no descarta): la API ya filtró por relevancia, solo
+       reordenamos subiendo coincidencias exactas/substring de nombre y
+       artista. */
+    $score = function (string $candName, string $candArtist) use ($norm, $nName, $nArtist): int {
+        $cN = $norm($candName); $s = 0;
+        if ($cN === $nName)                                              $s += 100;
+        elseif ($cN !== '' && (str_contains($cN, $nName) || str_contains($nName, $cN))) $s += 50;
+        if ($nArtist !== '') {
+            $cA = $norm($candArtist);
+            if ($cA === $nArtist)                                                $s += 40;
+            elseif ($cA !== '' && (str_contains($cA, $nArtist) || str_contains($nArtist, $cA))) $s += 20;
+        }
+        return $s;
+    };
+
+    $term = $artist !== '' ? ($name . ' ' . $artist) : $name;
+    $ctx  = stream_context_create(['http' => [
+        'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+
+    $out = [];   /* albumKey => [item + _score] */
+    $add = function(array $item, int $sc) use (&$out) {
+        $k = $item['albumKey'];
+        if (!isset($out[$k]) || $sc > $out[$k]['_score']) { $item['_score'] = $sc; $out[$k] = $item; }
+    };
+
+    /* iTunes. */
+    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($term) . '&entity=album&limit=15', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
+            $id = (string)($r['collectionId'] ?? '');
+            if ($id === '') continue;
+            $img = (string)($r['artworkUrl100'] ?? '');
+            if ($img) $img = str_replace('100x100', '300x300', $img);
+            $add([
+                'source'   => 'itunes',
+                'albumId'  => $id,
+                'albumKey' => 'itunes:' . $id,
+                'name'     => (string)($r['collectionName'] ?? ''),
+                'artist'   => (string)($r['artistName'] ?? ''),
+                'image'    => $img,
+            ], $score((string)($r['collectionName'] ?? ''), (string)($r['artistName'] ?? '')));
+        }
+    }
+
+    /* Deezer. */
+    $raw = @file_get_contents('https://api.deezer.com/search/album?q=' . rawurlencode($term) . '&limit=15', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
+            $id = (string)($r['id'] ?? '');
+            if ($id === '') continue;
+            $add([
+                'source'   => 'deezer',
+                'albumId'  => $id,
+                'albumKey' => 'deezer:' . $id,
+                'name'     => (string)($r['title'] ?? ''),
+                'artist'   => (string)($r['artist']['name'] ?? ''),
+                'image'    => (string)($r['cover_medium'] ?? ($r['cover_big'] ?? '')),
+            ], $score((string)($r['title'] ?? ''), (string)($r['artist']['name'] ?? '')));
+        }
+    }
+
+    $items = array_values($out);
+    usort($items, function($a, $b) { return $b['_score'] <=> $a['_score']; });
+    $items = array_slice($items, 0, $limit);
+    foreach ($items as &$it) unset($it['_score']);
+    return $items;
 }
 
 /* Fallback de album-tracks cuando el albumKey original es spotify:* y
