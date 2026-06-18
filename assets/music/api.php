@@ -1489,7 +1489,7 @@ case 'search-albums': {
     $q      = trim((string)($_GET['q']      ?? ''));
     $artist = trim((string)($_GET['artist'] ?? ''));
     if (mb_strlen($q) < 2) jsonResponse(['ok' => true, 'results' => []]);
-    jsonResponse(['ok' => true, 'results' => _searchAlbumsByName($q, $artist, 8)]);
+    jsonResponse(['ok' => true, 'results' => _searchAlbumsByName($q, $artist, 40)]);
 }
 
 /* ─── Corregir el álbum de una canción ──────────────────────────────
@@ -1677,7 +1677,7 @@ function _resolveAlbumByName(string $name, string $artist): ?array {
    por nombre (+ artista como pista) en iTunes y Deezer. Cada item:
    ['source','albumId','albumKey','name','artist','image']. Ordenados por
    relevancia (coincidencia de nombre/artista) y deduplicados. */
-function _searchAlbumsByName(string $name, string $artist, int $limit = 8): array {
+function _searchAlbumsByName(string $name, string $artist, int $limit = 40): array {
     $name = trim($name);
     if ($name === '') return [];
 
@@ -1721,7 +1721,7 @@ function _searchAlbumsByName(string $name, string $artist, int $limit = 8): arra
     };
 
     /* iTunes. */
-    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($term) . '&entity=album&limit=15', false, $ctx);
+    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($term) . '&entity=album&limit=50', false, $ctx);
     if ($raw) {
         $d = json_decode($raw, true);
         if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
@@ -1741,7 +1741,7 @@ function _searchAlbumsByName(string $name, string $artist, int $limit = 8): arra
     }
 
     /* Deezer. */
-    $raw = @file_get_contents('https://api.deezer.com/search/album?q=' . rawurlencode($term) . '&limit=15', false, $ctx);
+    $raw = @file_get_contents('https://api.deezer.com/search/album?q=' . rawurlencode($term) . '&limit=50', false, $ctx);
     if ($raw) {
         $d = json_decode($raw, true);
         if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
