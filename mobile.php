@@ -883,6 +883,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             overflow: hidden;
             padding: 2px;
             box-sizing: border-box;
+            cursor: pointer;
+            touch-action: none;   /* permite arrastrar para buscar sin scrollear */
         }
         .mu-full-progress-fill {
             height: 100%;
@@ -2703,14 +2705,17 @@ window.MuShell = (function(){
         startProgressTimer();
     }
     var __NP_TICK = 0;
+    var _muScrub = false;   /* true mientras el usuario arrastra la barra */
     function tickProgress() {
         if (!YT_READY || !YT_PLAYER) return;
         var cur = 0, tot = 0;
         try { cur = YT_PLAYER.getCurrentTime() || 0; tot = YT_PLAYER.getDuration() || 0; } catch (_) {}
         var hidden = (document.visibilityState === 'hidden');
         /* DOM updates SOLO cuando visible — si está oculto no hay nada
-           que repintar, evitamos style recalcs y layout invalidations. */
-        if (!hidden) {
+           que repintar, evitamos style recalcs y layout invalidations.
+           Durante el arrastre (_muScrub) NO repintamos progreso para no
+           pisar la previsualización del dedo. */
+        if (!hidden && !_muScrub) {
             var pct = tot > 0 ? Math.min(100, (cur / tot) * 100) : 0;
             var fillEl = document.getElementById('mu-full-progress-fill');
             if (fillEl) fillEl.style.width = pct + '%';
@@ -2743,6 +2748,49 @@ window.MuShell = (function(){
             publishNowPlaying(playing);
         }
     }
+
+    /* ── Tap / arrastre sobre la barra de progreso → busca ese punto ── */
+    (function(){
+        var bar = document.getElementById('mu-full-progress');
+        if (!bar) return;
+        function ratioFromX(clientX){
+            var rect = bar.getBoundingClientRect();
+            if (rect.width <= 0) return 0;
+            var r = (clientX - rect.left) / rect.width;
+            return Math.max(0, Math.min(1, r));
+        }
+        function preview(r){
+            var fill = document.getElementById('mu-full-progress-fill');
+            if (fill) fill.style.width = (r * 100) + '%';
+            var tot = (YT_PLAYER && YT_PLAYER.getDuration) ? (YT_PLAYER.getDuration() || 0) : 0;
+            var c1 = document.getElementById('mu-full-time-cur');
+            if (c1 && tot > 0) c1.textContent = fmt(r * tot);
+        }
+        function commit(r){
+            if (!YT_PLAYER || !YT_PLAYER.getDuration) return;
+            var tot = YT_PLAYER.getDuration() || 0;
+            if (tot <= 0) return;
+            try { YT_PLAYER.seekTo(r * tot, true); } catch (_) {}
+        }
+        bar.addEventListener('pointerdown', function(e){
+            _muScrub = true;
+            try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+            preview(ratioFromX(e.clientX));
+            e.preventDefault();
+        });
+        bar.addEventListener('pointermove', function(e){
+            if (!_muScrub) return;
+            preview(ratioFromX(e.clientX));
+        });
+        function end(e){
+            if (!_muScrub) return;
+            _muScrub = false;
+            try { bar.releasePointerCapture(e.pointerId); } catch (_) {}
+            commit(ratioFromX(e.clientX));
+        }
+        bar.addEventListener('pointerup', end);
+        bar.addEventListener('pointercancel', end);
+    })();
 
     /* ── Fullscreen player ── */
     function openFullscreen() {

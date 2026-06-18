@@ -1014,6 +1014,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             overflow: hidden;
             padding: 2px;
             box-sizing: border-box;
+            cursor: pointer;
+            touch-action: none;   /* permite arrastrar para buscar sin scrollear */
         }
         .mu-full-progress-fill {
             height: 100%;
@@ -2089,6 +2091,7 @@ function muFmt(sec) {
     var s = sec % 60;
     return m + ':' + (s < 10 ? '0' + s : s);
 }
+var _muScrub = false;   /* true mientras el usuario arrastra la barra */
 function muTickProgress() {
     if (!YT_READY || !YT_PLAYER) return;
     var cur = 0, tot = 0;
@@ -2098,13 +2101,16 @@ function muTickProgress() {
     } catch (_) {}
     var pct = tot > 0 ? Math.min(100, (cur / tot) * 100) : 0;
     var curStr = muFmt(cur), totStr = muFmt(tot);
-    /* Fullscreen */
-    var f1 = document.getElementById('mu-full-progress-fill');
-    var f2 = document.getElementById('mu-full-time-cur');
-    var f3 = document.getElementById('mu-full-time-tot');
-    if (f1) f1.style.width = pct + '%';
-    if (f2) f2.textContent = curStr;
-    if (f3) f3.textContent = totStr;
+    /* Fullscreen — durante el arrastre NO repintamos para no pisar la
+       previsualización del dedo. */
+    if (!_muScrub) {
+        var f1 = document.getElementById('mu-full-progress-fill');
+        var f2 = document.getElementById('mu-full-time-cur');
+        var f3 = document.getElementById('mu-full-time-tot');
+        if (f1) f1.style.width = pct + '%';
+        if (f2) f2.textContent = curStr;
+        if (f3) f3.textContent = totStr;
+    }
     /* Lock screen */
     var l1 = document.getElementById('mu-lock-progress-fill');
     var l2 = document.getElementById('mu-lock-time-cur');
@@ -2116,6 +2122,49 @@ function muTickProgress() {
 /* Alias retro-compat: el resto del código aún llama Start/Stop. */
 function muFullStartProgressTimer() { muStartProgressTimer(); }
 function muFullStopProgressTimer()  { muStopProgressTimer();  }
+
+/* ── Tap / arrastre sobre la barra de progreso → busca ese punto ── */
+(function(){
+    var bar = document.getElementById('mu-full-progress');
+    if (!bar) return;
+    function ratioFromX(clientX){
+        var rect = bar.getBoundingClientRect();
+        if (rect.width <= 0) return 0;
+        var r = (clientX - rect.left) / rect.width;
+        return Math.max(0, Math.min(1, r));
+    }
+    function preview(r){
+        var fill = document.getElementById('mu-full-progress-fill');
+        if (fill) fill.style.width = (r * 100) + '%';
+        var tot = (YT_PLAYER && YT_PLAYER.getDuration) ? (YT_PLAYER.getDuration() || 0) : 0;
+        var c1 = document.getElementById('mu-full-time-cur');
+        if (c1 && tot > 0) c1.textContent = muFmt(r * tot);
+    }
+    function commit(r){
+        if (!YT_PLAYER || !YT_PLAYER.getDuration) return;
+        var tot = YT_PLAYER.getDuration() || 0;
+        if (tot <= 0) return;
+        try { YT_PLAYER.seekTo(r * tot, true); } catch (_) {}
+    }
+    bar.addEventListener('pointerdown', function(e){
+        _muScrub = true;
+        try { bar.setPointerCapture(e.pointerId); } catch (_) {}
+        preview(ratioFromX(e.clientX));
+        e.preventDefault();
+    });
+    bar.addEventListener('pointermove', function(e){
+        if (!_muScrub) return;
+        preview(ratioFromX(e.clientX));
+    });
+    function end(e){
+        if (!_muScrub) return;
+        _muScrub = false;
+        try { bar.releasePointerCapture(e.pointerId); } catch (_) {}
+        commit(ratioFromX(e.clientX));
+    }
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+})();
 /* Marquee tipo ticker: si el texto no cabe en su wrap, duplica el
    span dentro del track y anima el track una distancia igual a
    (ancho del texto + gap). El clon llega exactamente a la posición
@@ -2958,6 +3007,7 @@ function muOpenTrackMenu(pi, ti) {
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
         { act: 'addPl',      label: '📋 Añadir a otra playlist' },
+        { act: 'fixAlbum',   label: '💿 Corregir álbum' },
         { act: 'remove',     label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la playlist', danger: true }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -2981,6 +3031,7 @@ function muOpenTrackMenu(pi, ti) {
             m.close();
             if (act === 'addProfile') addTrackToProfile(pi, ti);
             if (act === 'addPl')      muOpenAddCurrentToPlaylist(tr);
+            if (act === 'fixAlbum')   muReportWrongAlbum(tr);
             if (act === 'remove') {
                 muConfirm('¿Quitar "' + (tr.title || 'esta canción') + '" de la playlist?', function(){
                     removeTrackFromPlaylist(pi, ti);
@@ -2988,6 +3039,83 @@ function muOpenTrackMenu(pi, ti) {
             }
         });
     });
+}
+
+/* ─── CORREGIR ÁLBUM (móvil) ────────────────────────────────────────
+   El álbum auto-detectado de una canción puede ser incorrecto. El
+   usuario escribe el nombre del álbum correcto, aparecen candidatos en
+   vivo (iTunes/Deezer vía search-albums) y al elegir uno se guarda por
+   videoId (report-album). Afecta a todas las playlists y usuarios. */
+function muReportWrongAlbum(tr) {
+    if (!tr || !tr.videoId) return;
+    var body =
+        '<p class="modal-msg" style="font-size:10px;line-height:1.45;opacity:0.85;margin:0 0 8px;">' +
+            'El álbum asignado automáticamente puede ser incorrecto. Ayuda a la comunidad corrigiéndolo para que no vuelva a ocurrir.' +
+        '</p>' +
+        '<p class="modal-msg" style="margin:0 0 6px;">Álbum correcto para "' + esc(tr.title || 'esta canción') + '":</p>' +
+        '<input type="text" class="mu-ra-input" autocomplete="off" placeholder="Escribe el nombre del álbum…" style="width:100%;box-sizing:border-box;">' +
+        '<div class="mu-ra-results" style="margin-top:6px;max-height:46vh;overflow-y:auto;"></div>' +
+        '<div class="modal-actions"><button class="button" type="button" data-act="cancel">Cerrar</button></div>';
+
+    var m = muOpenModal({ title: 'Corregir álbum', body: body });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    var input     = m.body.querySelector('.mu-ra-input');
+    var resultsEl = m.body.querySelector('.mu-ra-results');
+    setTimeout(function(){ try { input.focus(); } catch (_) {} }, 50);
+
+    function submit(payload) {
+        apiPost('report-album', Object.assign({ videoId: tr.videoId, artist: tr.artist || '' }, payload))
+            .then(function(res){
+                if (!res.ok || !res.data || !res.data.ok) {
+                    muAlert((res.data && res.data.error) || 'No se pudo corregir el álbum');
+                    return;
+                }
+                var alb = res.data.album;
+                /* Guarda en cache local y repinta filas + player. */
+                try { _muAlbumCacheSet(tr.videoId, alb); } catch (_) {}
+                if (typeof _muPaintAlbumForVid === 'function') {
+                    _muPaintAlbumForVid(tr.videoId, _muNormalizeAlbumPayload(alb));
+                }
+                m.close();
+                muAlert((alb && alb.albumName) ? ('Álbum corregido: ' + alb.albumName) : 'Álbum corregido', 'Hecho');
+            });
+    }
+
+    function renderResults(list) {
+        resultsEl.innerHTML = '';
+        (list || []).forEach(function(a){
+            var row = document.createElement('div');
+            row.className = 'mu-modal-list-item';
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+            var safeImg  = esc(a.image || '');
+            var safeName = esc(a.name || '');
+            var safeArt  = esc(a.artist || '');
+            row.innerHTML =
+                '<img src="' + safeImg + '" alt="" style="width:36px;height:36px;object-fit:cover;flex:0 0 36px;background:#222;" ' +
+                    'onerror="this.style.visibility=\'hidden\'">' +
+                '<div style="min-width:0;flex:1;">' +
+                    '<div style="font-size:12px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + safeName + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + safeArt + '</div>' +
+                '</div>';
+            row.addEventListener('click', function(){
+                submit({ albumKey: a.albumKey, albumName: a.name || '', albumArtist: a.artist || '', albumImage: a.image || '' });
+            });
+            resultsEl.appendChild(row);
+        });
+    }
+
+    var searchT = null, lastQ = null;
+    function doSearch() {
+        var q = (input.value || '').trim();
+        if (q === lastQ) return;
+        lastQ = q;
+        if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+        apiGet('search-albums', { q: q, artist: tr.artist || '' }).then(function(res){
+            if ((input.value || '').trim() !== q) return;   /* respuesta obsoleta */
+            renderResults(res.ok && res.data ? res.data.results : []);
+        });
+    }
+    input.addEventListener('input', function(){ clearTimeout(searchT); searchT = setTimeout(doSearch, 300); });
 }
 
 /* Quita la canción `ti` de la playlist `pi` y guarda con save-playlist-item.
