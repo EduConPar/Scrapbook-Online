@@ -391,6 +391,10 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             <label for="create-pl-name">Nombre de la playlist</label>
             <input type="text" id="create-pl-name" placeholder="Mi playlist">
         </div>
+        <div class="field-row-stacked" style="margin-top:8px;">
+            <label for="create-pl-image">Imagen (URL, opcional)</label>
+            <input type="url" id="create-pl-image" placeholder="https://…">
+        </div>
         <div class="field-row" style="justify-content: flex-end; gap: 4px; margin-top: 8px;">
             <button class="button" id="create-pl-cancel">Cancelar</button>
             <button class="button" id="create-pl-submit">Crear</button>
@@ -3733,10 +3737,12 @@ var addTrackCallback = null;
     (function() {
         var createDlg    = document.getElementById('create-playlist-dialog');
         var createInput  = document.getElementById('create-pl-name');
+        var createImage  = document.getElementById('create-pl-image');
         var createSubmit = document.getElementById('create-pl-submit');
 
         function openCreateDlg() {
             createInput.value = '';
+            if (createImage) createImage.value = '';
             createDlg.style.display = 'block';
             setTimeout(function() { createInput.focus(); createInput.select(); }, 50);
         }
@@ -3749,8 +3755,9 @@ var addTrackCallback = null;
         function doCreate() {
             var name = createInput.value.trim();
             if (!name) return;
+            var img = createImage ? createImage.value.trim() : '';
             closeCreateDlg();
-            var newPl = { id: 'pl_' + Date.now(), name: name, tracks: [], collaborators: [] };
+            var newPl = { id: 'pl_' + Date.now(), name: name, image: img, tracks: [], collaborators: [] };
             fetch('assets/music/api.php?action=save-playlist-item', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -4289,6 +4296,9 @@ var addTrackCallback = null;
         .then(function(r){ return r.json(); })
         .then(function(d){
             var albums = (d && d.ok && d.albums) ? d.albums : [];
+            /* Dedup por nombre+año y solo con imagen. */
+            albums = dedupeBy(albums, function(a){ return _n(a.name) + '|' + (a.year||''); }, function(a){ return !!a.image; })
+                        .filter(function(a){ return !!a.image; });
             var html = '<div id="pl-artist-back">← Volver a la búsqueda</div>' +
                        '<div class="pl-sr-group-title">' + esc(name) + ' — álbumes</div>';
             if (!albums.length) { html += '<div class="pl-sr-msg">No se encontraron álbumes.</div>'; }
@@ -4316,8 +4326,29 @@ var addTrackCallback = null;
         });
     }
 
+    /* Normaliza para comparar nombres (dedup). */
+    function _n(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+    /* Quita duplicados por clave; si se pasa hasImg, prefiere la entrada
+       que SÍ tiene imagen. */
+    function dedupeBy(list, keyFn, hasImg){
+        var idx = {}, out = [];
+        (list || []).forEach(function(it){
+            var k = keyFn(it); if (!k) return;
+            if (!(k in idx)) { idx[k] = out.length; out.push(it); }
+            else if (hasImg && !hasImg(out[idx[k]]) && hasImg(it)) { out[idx[k]] = it; }
+        });
+        return out;
+    }
+
     function renderResults(q, songs, albums, artists){
         if (input.value.trim() !== q) return;   /* respuesta obsoleta */
+        /* Dedup por nombre (las fuentes iTunes/Deezer/YouTube repiten) y
+           garantía de imagen: álbumes y artistas sin imagen se descartan
+           (las canciones siempre tienen miniatura de YouTube). */
+        var hasImg = function(x){ return !!(x && x.image); };
+        songs   = dedupeBy(songs,   function(s){ return _n(s.title) + '|' + _n(s.artist); });
+        albums  = dedupeBy(albums,  function(a){ return _n(a.name) + '|' + _n(a.artist); }, hasImg).filter(hasImg);
+        artists = dedupeBy(artists, function(a){ return _n(a.name); }, hasImg).filter(hasImg);
         var html = '';
         if (artists && artists.length){
             html += '<div class="pl-sr-group-title">Artistas</div>';
