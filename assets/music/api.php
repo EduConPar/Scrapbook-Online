@@ -1702,11 +1702,16 @@ case 'artist-albums': {
                 if ($id === '' || isset($seen[$id])) continue; $seen[$id] = 1;
                 $img = (string)($r['artworkUrl100'] ?? '');
                 if ($img) $img = str_replace('100x100', '300x300', $img);
+                /* iTunes no da record_type → lo inferimos del nº de pistas:
+                   1-2 = single, 3-6 = EP, resto = álbum. */
+                $tc = (int)($r['trackCount'] ?? 0);
+                $type = $tc <= 2 ? 'single' : ($tc <= 6 ? 'ep' : 'album');
                 $albums[] = [
                     'albumKey' => 'itunes:' . $id,
                     'name'     => (string)($r['collectionName'] ?? ''),
                     'image'    => $img,
                     'year'     => substr((string)($r['releaseDate'] ?? ''), 0, 4),
+                    'type'     => $type,
                 ];
             }
         }
@@ -1717,11 +1722,14 @@ case 'artist-albums': {
             if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
                 $id = (string)($r['id'] ?? '');
                 if ($id === '' || isset($seen[$id])) continue; $seen[$id] = 1;
+                $rt = strtolower((string)($r['record_type'] ?? 'album'));
+                $type = in_array($rt, ['single', 'ep'], true) ? $rt : 'album';
                 $albums[] = [
                     'albumKey' => 'deezer:' . $id,
                     'name'     => (string)($r['title'] ?? ''),
                     'image'    => (string)($r['cover_medium'] ?? ($r['cover_big'] ?? '')),
                     'year'     => substr((string)($r['release_date'] ?? ''), 0, 4),
+                    'type'     => $type,
                 ];
             }
         }

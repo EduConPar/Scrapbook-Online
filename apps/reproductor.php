@@ -373,6 +373,11 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             <div class="aw-section-title">Popular</div>
             <div id="artist-window-top"></div>
             <div class="aw-section-title">Discografía</div>
+            <div id="artist-window-tabs">
+                <button class="aw-tab is-active" type="button" data-tab="popular">Popular releases</button>
+                <button class="aw-tab" type="button" data-tab="album">Álbumes</button>
+                <button class="aw-tab" type="button" data-tab="single">Singles y EPs</button>
+            </div>
             <div id="artist-window-albums"></div>
         </div>
     </div>
@@ -828,6 +833,36 @@ function playArtistTrackByName(title, artist) {
         if (res.length) melonPlaySong({ videoId: res[0].videoId, title: title, artist: artist || res[0].artist, duration: res[0].duration });
     }).catch(function(){});
 }
+/* Estado de la discografía (compartido con las pestañas). */
+var _awAlbums = [], _awArtistName = '', _awTab = 'popular';
+function _awBuildAlbumCard(a) {
+    var card = document.createElement('div'); card.className = 'pl-sr-album-card';
+    var img = document.createElement('img'); img.src = a.image || ''; img.alt = '';
+    img.onerror = function(){ this.style.visibility = 'hidden'; };
+    var nm = document.createElement('div'); nm.className = 'pl-sr-name';
+    nm.textContent = a.name + (a.year ? (' (' + a.year + ')') : '');
+    card.appendChild(img); card.appendChild(nm);
+    card.addEventListener('click', function(){
+        if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name);
+        melonRecordRecent('album', a.albumKey, a.name, a.image, _awArtistName || '');
+    });
+    return card;
+}
+function _awApplyTab() {
+    var el = document.getElementById('artist-window-albums');
+    if (!el) return;
+    var list = _awAlbums;
+    if (_awTab === 'album')       list = _awAlbums.filter(function(a){ return (a.type || 'album') === 'album'; });
+    else if (_awTab === 'single') list = _awAlbums.filter(function(a){ return a.type === 'single' || a.type === 'ep'; });
+    /* 'popular' → todas. */
+    document.querySelectorAll('#artist-window-tabs .aw-tab').forEach(function(b){
+        b.classList.toggle('is-active', b.dataset.tab === _awTab);
+    });
+    if (!list.length) { el.innerHTML = '<div class="pl-sr-msg">Nada en esta sección.</div>'; return; }
+    var grid = document.createElement('div'); grid.className = 'pl-sr-albums-grid';
+    list.forEach(function(a){ grid.appendChild(_awBuildAlbumCard(a)); });
+    el.innerHTML = ''; el.appendChild(grid);
+}
 function openArtistWindow(name) {
     name = (name || '').replace(/\s*-\s*topic$/i, '').trim();
     if (!name || name === '—') return;
@@ -877,22 +912,9 @@ function openArtistWindow(name) {
         var albums = (d && d.ok && d.albums) ? d.albums : [];
         var seen = {}, list = [];
         albums.forEach(function(a){ if (!a.image) return; var k = _n(a.name) + '|' + (a.year||''); if (seen[k]) return; seen[k] = 1; list.push(a); });
+        _awAlbums = list; _awArtistName = artistName || ''; _awTab = 'popular';
         if (!list.length) { albEl.innerHTML = '<div class="pl-sr-msg">No se encontraron álbumes.</div>'; return; }
-        var grid = document.createElement('div'); grid.className = 'pl-sr-albums-grid';
-        list.forEach(function(a){
-            var card = document.createElement('div'); card.className = 'pl-sr-album-card';
-            var img = document.createElement('img'); img.src = a.image || ''; img.alt = '';
-            img.onerror = function(){ this.style.visibility = 'hidden'; };
-            var nm = document.createElement('div'); nm.className = 'pl-sr-name';
-            nm.textContent = a.name + (a.year ? (' (' + a.year + ')') : '');
-            card.appendChild(img); card.appendChild(nm);
-            card.addEventListener('click', function(){
-                if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name);
-                melonRecordRecent('album', a.albumKey, a.name, a.image, artistName || '');
-            });
-            grid.appendChild(card);
-        });
-        albEl.innerHTML = ''; albEl.appendChild(grid);
+        _awApplyTab();
     }
 
     fetch('assets/music/api.php?action=search-artists&q=' + encodeURIComponent(name))
@@ -924,6 +946,10 @@ window.openArtistWindow = openArtistWindow;
 (function(){
     var c = document.getElementById('artist-window-close');
     if (c) c.addEventListener('click', closeArtistWindow);
+    /* Pestañas de la discografía. */
+    document.querySelectorAll('#artist-window-tabs .aw-tab').forEach(function(b){
+        b.addEventListener('click', function(){ _awTab = b.dataset.tab; _awApplyTab(); });
+    });
     /* Click en el artista de la cabecera del visor de álbum → su ventana. */
     var av = document.getElementById('album-viewer-artist');
     if (av) {
