@@ -88,9 +88,39 @@ function isNumericId($v): bool {
 
 /* Carga las playlists del usuario con sus tracks + colaboradores en una
    estructura compatible con el formato JSON antiguo. */
+/* Crea la tabla de escuchas recientes (idempotente). */
+function _ensureRecentTable(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    $pdo->exec("CREATE TABLE IF NOT EXISTS music_recent (
+        user_id   INT NOT NULL,
+        item_type VARCHAR(12)  NOT NULL,
+        item_key  VARCHAR(160) NOT NULL,
+        name      VARCHAR(255) NOT NULL DEFAULT '',
+        artist    VARCHAR(255) NOT NULL DEFAULT '',
+        image     VARCHAR(500) NOT NULL DEFAULT '',
+        played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, item_type, item_key),
+        INDEX idx_user_time (user_id, played_at)
+    ) DEFAULT CHARSET=utf8mb4");
+}
+
+/* Añade la columna image_url a `playlists` si no existe (idempotente). */
+function _ensurePlaylistImageCol(PDO $pdo): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $has = $pdo->query("SHOW COLUMNS FROM playlists LIKE 'image_url'")->fetch();
+        if (!$has) $pdo->exec("ALTER TABLE playlists ADD COLUMN image_url VARCHAR(500) NULL");
+    } catch (Throwable $e) { /* sin permiso o ya existe */ }
+}
+
 function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
+    _ensurePlaylistImageCol($pdo);
     /* Propias */
-    $stmt = $pdo->prepare("SELECT p.id, p.name, ? AS owner
+    $stmt = $pdo->prepare("SELECT p.id, p.name, COALESCE(p.image_url,'') AS image, ? AS owner
                            FROM playlists p
                            WHERE p.owner_id = ?
                            ORDER BY p.id ASC");
@@ -98,7 +128,7 @@ function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
     $ownRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     /* Compartidas (collab) */
-    $stmt = $pdo->prepare("SELECT p.id, p.name, ou.user_key AS owner, ou.label AS sharedLabel
+    $stmt = $pdo->prepare("SELECT p.id, p.name, COALESCE(p.image_url,'') AS image, ou.user_key AS owner, ou.label AS sharedLabel
                            FROM playlist_collaborators c
                            JOIN playlists p ON c.playlist_id = p.id
                            JOIN usuarios ou ON p.owner_id    = ou.id
@@ -152,6 +182,7 @@ function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
         $result[] = [
             'id'            => $pid,
             'name'          => $r['name'],
+            'image'         => $r['image'] ?? '',
             'owner'         => $r['owner'],
             'collaborators' => $collabsByPl[$pid] ?? [],
             'tracks'        => $tracksByPl[$pid]  ?? [],
@@ -162,6 +193,7 @@ function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
         $result[] = [
             'id'           => $pid,
             'name'         => $r['name'],
+            'image'        => $r['image'] ?? '',
             'owner'        => $r['owner'],
             'sharedFrom'   => $r['owner'],
             'sharedLabel'  => $r['sharedLabel'],
@@ -224,15 +256,55 @@ case 'get-playlists': {
     jsonResponse(loadPlaylistsForUser($pdo, $uid, $userKey));
 }
 
+/* Registra una escucha reciente (canción / álbum / playlist). */
+case 'record-recent': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    $b = jsonBody();
+    $type = (string)($b['type'] ?? '');
+    $key  = trim((string)($b['key'] ?? ''));
+    if (!in_array($type, ['song', 'album', 'playlist'], true) || $key === '') {
+        jsonResponse(['ok' => false]);
+    }
+    _ensureRecentTable($pdo);
+    $name   = mb_substr(trim((string)($b['name']   ?? '')), 0, 255);
+    $artist = mb_substr(trim((string)($b['artist'] ?? '')), 0, 255);
+    $image  = mb_substr(trim((string)($b['image']  ?? '')), 0, 500);
+    $pdo->prepare("INSERT INTO music_recent (user_id, item_type, item_key, name, artist, image)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON DUPLICATE KEY UPDATE name=VALUES(name), artist=VALUES(artist),
+                       image=VALUES(image), played_at=NOW()")
+        ->execute([$uid, $type, mb_substr($key, 0, 160), $name, $artist, $image]);
+    jsonResponse(['ok' => true]);
+}
+
+/* Devuelve las últimas escuchas recientes del usuario. */
+case 'get-recent': {
+    $uid = uidByKey($pdo, $userKey);
+    if (!$uid) jsonError('Usuario no encontrado', 500);
+    _ensureRecentTable($pdo);
+    $stmt = $pdo->prepare("SELECT item_type AS type, item_key AS `key`, name, artist, image
+                           FROM music_recent WHERE user_id = ?
+                           ORDER BY played_at DESC LIMIT 24");
+    $stmt->execute([$uid]);
+    jsonResponse(['ok' => true, 'items' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+}
+
 case 'save-playlist-item': {
     $uid = uidByKey($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
     $b = jsonBody();
     if (!isset($b['id'], $b['name'])) jsonError('Datos incompletos');
 
+    _ensurePlaylistImageCol($pdo);
     $name       = substr(strip_tags($b['name']), 0, 100);
     $sharedFrom = isset($b['sharedFrom']) ? preg_replace('/[^A-Za-z0-9_-]/', '', $b['sharedFrom']) : null;
     $tracks     = sanitizeTracks($b['tracks'] ?? []);
+    /* Imagen opcional de la playlist. null = no enviada (no tocar);
+       '' = quitar; URL http(s) = poner. */
+    $image = array_key_exists('image', $b) ? trim((string)$b['image']) : null;
+    if ($image !== null && $image !== '' && !preg_match('#^https?://#i', $image)) $image = '';
+    if (is_string($image)) $image = mb_substr($image, 0, 500);
 
     /* Caso A: el cliente edita una playlist compartida (colaborador). */
     if ($sharedFrom) {
@@ -260,8 +332,13 @@ case 'save-playlist-item': {
         if ($stmt->fetch()) {
             $pdo->beginTransaction();
             try {
-                $pdo->prepare("UPDATE playlists SET name = ? WHERE id = ?")
-                    ->execute([$name, $playlistId]);
+                if ($image !== null) {
+                    $pdo->prepare("UPDATE playlists SET name = ?, image_url = ? WHERE id = ?")
+                        ->execute([$name, ($image !== '' ? $image : null), $playlistId]);
+                } else {
+                    $pdo->prepare("UPDATE playlists SET name = ? WHERE id = ?")
+                        ->execute([$name, $playlistId]);
+                }
                 replacePlaylistTracks($pdo, $playlistId, $tracks);
                 $pdo->commit();
             } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
@@ -274,8 +351,8 @@ case 'save-playlist-item': {
     /* Caso C: playlist nueva (id "pl_xxx" del cliente o no encontrada). */
     $pdo->beginTransaction();
     try {
-        $pdo->prepare("INSERT INTO playlists (owner_id, name) VALUES (?, ?)")
-            ->execute([$uid, $name]);
+        $pdo->prepare("INSERT INTO playlists (owner_id, name, image_url) VALUES (?, ?, ?)")
+            ->execute([$uid, $name, (($image !== null && $image !== '') ? $image : null)]);
         $playlistId = (int)$pdo->lastInsertId();
         replacePlaylistTracks($pdo, $playlistId, $tracks);
         $pdo->commit();

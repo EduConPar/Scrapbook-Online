@@ -775,6 +775,80 @@
     color: var(--text-muted);
 }
 
+/* ── Distribución tipo "Spotify": secciones + cuadrícula de tarjetas ── */
+.pl-section-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--text);
+    margin: 8px 2px 6px;
+}
+.pl-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.pl-card {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.pl-card-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--surface-deep, #1e1e1e);
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: inset -1px -1px var(--bezel-dark-1, #0a0a0a), inset 1px 1px var(--bezel-light-1, #fff);
+}
+.pl-card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl-card-cover--empty::after {
+    content: '\266A';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; color: var(--text-faint, #888);
+}
+.pl-card-cover--round { border-radius: 50%; }
+.pl-card-play {
+    position: absolute;
+    right: 6px; bottom: 6px;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent, #1db954);
+    color: var(--accent-text, #fff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity .12s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+.pl-card-cover:hover .pl-card-play { opacity: 1; }
+.pl-card-name {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text);
+    margin-top: 4px;
+    cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-card-sub { font-size: 10px; color: var(--text-faint); }
+.pl-card-btns {
+    display: flex;
+    gap: 2px;
+    margin-top: 3px;
+}
+.pl-recent-box { margin-bottom: 8px; }
+
+#pl-image-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+#pl-image-row label { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+#pl-image-input { flex: 1; font-size: 11px; }
+
 #pl-name-row {
     display: flex;
     align-items: center;
