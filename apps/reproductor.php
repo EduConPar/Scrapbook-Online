@@ -350,6 +350,30 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
+<!-- ARTIST WINDOW — todos los álbumes de un artista. -->
+<div class="window" id="artist-window">
+    <div class="title-bar" id="artist-window-titlebar">
+        <div class="title-bar-text">
+            <img src="assets/img/appIcons/musicaIcon.png" alt="" class="album-viewer-titlebar-icon">
+            Artista
+        </div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="artist-window-close"></button>
+        </div>
+    </div>
+    <div class="window-body" id="artist-window-body">
+        <div id="artist-window-banner">
+            <div id="artist-window-banner-name">Artista</div>
+        </div>
+        <div id="artist-window-content">
+            <div class="aw-section-title">Popular</div>
+            <div id="artist-window-top"></div>
+            <div class="aw-section-title">Discografía</div>
+            <div id="artist-window-albums"></div>
+        </div>
+    </div>
+</div>
+
 <!-- ADD TRACK DIALOG -->
 <div class="window" id="add-track-dialog">
     <div class="title-bar">
@@ -775,6 +799,133 @@ function melonPlaySong(tr) {
     melonRecordRecent('song', tr.videoId, tr.title || '',
         'https://i.ytimg.com/vi/' + tr.videoId + '/mqdefault.jpg', tr.artist || '');
 }
+
+/* ── Ventana de ARTISTA (todos sus álbumes) ──────────────────────────
+   Abierta al hacer click en el nombre del artista (reproductor, lista de
+   playlist o visor de álbum). Resuelve el nombre → artista (search-artists),
+   carga sus álbumes (artist-albums) y los muestra; click en un álbum abre
+   su visor. */
+var _artistWinToken = 0;
+function closeArtistWindow() {
+    var w = document.getElementById('artist-window');
+    if (!w) return;
+    if (window.taskbarManager) { try { taskbarManager.unregister('artist-window'); } catch (_) {} }
+    w.style.display = 'none';
+    _artistWinToken++;
+}
+function _awEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+/* Reproduce una canción del "Popular" resolviéndola a YouTube por nombre. */
+function playArtistTrackByName(title, artist) {
+    var q = (title + ' ' + (artist || '')).trim();
+    fetch('assets/music/api.php?action=yt-search&q=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        var res = (d && d.results) || [];
+        if (res.length) melonPlaySong({ videoId: res[0].videoId, title: title, artist: artist || res[0].artist, duration: res[0].duration });
+    }).catch(function(){});
+}
+function openArtistWindow(name) {
+    name = (name || '').replace(/\s*-\s*topic$/i, '').trim();
+    if (!name || name === '—') return;
+    var win = document.getElementById('artist-window');
+    if (!win) return;
+    var banner = document.getElementById('artist-window-banner');
+    var bName  = document.getElementById('artist-window-banner-name');
+    var topEl  = document.getElementById('artist-window-top');
+    var albEl  = document.getElementById('artist-window-albums');
+    var token  = ++_artistWinToken;
+    bName.textContent = name;
+    banner.style.backgroundImage = '';
+    topEl.innerHTML = '<div class="pl-sr-msg">Cargando…</div>';
+    albEl.innerHTML = '';
+    /* El body vuelve arriba al abrir otro artista. */
+    var body = document.getElementById('artist-window-body'); if (body) body.scrollTop = 0;
+    if (window.taskbarManager) {
+        if (taskbarManager.isRegistered('artist-window')) taskbarManager.restore('artist-window');
+        else taskbarManager.register('artist-window', 'Artista', '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
+    } else { win.style.display = 'flex'; }
+
+    var _n = function(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); };
+
+    function renderTop(d, artistName) {
+        var tracks = (d && d.tracks) || [];
+        if (!tracks.length) { topEl.innerHTML = '<div class="pl-sr-msg">Sin canciones populares.</div>'; return; }
+        var html = '';
+        tracks.forEach(function(t, i){
+            html += '<div class="aw-top-row" data-title="'+_awEsc(t.title)+'" data-artist="'+_awEsc(t.artist||artistName)+'">' +
+                        '<span class="aw-top-num">'+(i+1)+'</span>' +
+                        '<img class="aw-top-thumb" src="'+_awEsc(t.image||'')+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
+                        '<span class="aw-top-title">'+_awEsc(t.title)+'</span>' +
+                        '<span class="aw-top-dur">'+(t.duration?formatTime(t.duration):'')+'</span>' +
+                    '</div>';
+        });
+        topEl.innerHTML = html;
+        topEl.querySelectorAll('.aw-top-row').forEach(function(row){
+            row.addEventListener('click', function(){ playArtistTrackByName(row.dataset.title, row.dataset.artist); });
+        });
+    }
+
+    function renderAlbums(d, artistName) {
+        var albums = (d && d.ok && d.albums) ? d.albums : [];
+        var seen = {}, list = [];
+        albums.forEach(function(a){ if (!a.image) return; var k = _n(a.name) + '|' + (a.year||''); if (seen[k]) return; seen[k] = 1; list.push(a); });
+        if (!list.length) { albEl.innerHTML = '<div class="pl-sr-msg">No se encontraron álbumes.</div>'; return; }
+        var grid = document.createElement('div'); grid.className = 'pl-sr-albums-grid';
+        list.forEach(function(a){
+            var card = document.createElement('div'); card.className = 'pl-sr-album-card';
+            var img = document.createElement('img'); img.src = a.image || ''; img.alt = '';
+            img.onerror = function(){ this.style.visibility = 'hidden'; };
+            var nm = document.createElement('div'); nm.className = 'pl-sr-name';
+            nm.textContent = a.name + (a.year ? (' (' + a.year + ')') : '');
+            card.appendChild(img); card.appendChild(nm);
+            card.addEventListener('click', function(){
+                if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name);
+                melonRecordRecent('album', a.albumKey, a.name, a.image, artistName || '');
+            });
+            grid.appendChild(card);
+        });
+        albEl.innerHTML = ''; albEl.appendChild(grid);
+    }
+
+    fetch('assets/music/api.php?action=search-artists&q=' + encodeURIComponent(name))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        if (token !== _artistWinToken) return;
+        var arts = (d && d.ok && d.results) || [];
+        var nn = _n(name), chosen = null;
+        arts.forEach(function(a){ if (!chosen && _n(a.name) === nn && a.image) chosen = a; });
+        if (!chosen) arts.forEach(function(a){ if (!chosen && _n(a.name) === nn) chosen = a; });
+        if (!chosen) chosen = arts[0];
+        if (!chosen) { topEl.innerHTML = '<div class="pl-sr-msg">No se encontró el artista.</div>'; return; }
+        bName.textContent = chosen.name;
+        var big = chosen.imageBig || chosen.image;
+        if (big) banner.style.backgroundImage = "url('" + big.replace(/'/g, "%27") + "')";
+        Promise.all([
+            fetch('assets/music/api.php?action=artist-top&name=' + encodeURIComponent(chosen.name)).then(function(r){ return r.json(); }).catch(function(){ return null; }),
+            fetch('assets/music/api.php?action=artist-albums&source=' + encodeURIComponent(chosen.source) + '&artistId=' + encodeURIComponent(chosen.artistId)).then(function(r){ return r.json(); }).catch(function(){ return null; })
+        ]).then(function(res){
+            if (token !== _artistWinToken) return;
+            renderTop(res[0], chosen.name);
+            renderAlbums(res[1], chosen.name);
+        });
+    })
+    .catch(function(){ if (token === _artistWinToken) { topEl.innerHTML = '<div class="pl-sr-msg">Error cargando el artista.</div>'; } });
+}
+window.openArtistWindow = openArtistWindow;
+(function(){
+    var c = document.getElementById('artist-window-close');
+    if (c) c.addEventListener('click', closeArtistWindow);
+    /* Click en el artista de la cabecera del visor de álbum → su ventana. */
+    var av = document.getElementById('album-viewer-artist');
+    if (av) {
+        av.classList.add('artist-link');
+        av.addEventListener('click', function(){
+            var a = (av.textContent || '').trim();
+            if (a && typeof openArtistWindow === 'function') openArtistWindow(a);
+        });
+    }
+})();
+
 let ytPlayer = null;
 let progressInterval  = null;
 let autoplayRandom    = false;
@@ -1392,6 +1543,15 @@ const playerWindow  = document.getElementById('music-player');
 const playerCover   = document.getElementById('player-cover');
 const playerTitle   = document.getElementById('player-title');
 const playerArtist  = document.getElementById('player-artist');
+/* Click en el nombre del artista del reproductor → ventana del artista. */
+if (playerArtist) {
+    playerArtist.classList.add('artist-link');
+    playerArtist.addEventListener('click', function(){
+        var t = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+        var a = t && t.artist;
+        if (a && typeof openArtistWindow === 'function') openArtistWindow(a);
+    });
+}
 const playerProg    = document.getElementById('player-progress');
 const playerCurrent = document.getElementById('player-current');
 const playerDur     = document.getElementById('player-duration');
@@ -3285,6 +3445,15 @@ var addTrackCallback = null;
             var artistSpan = document.createElement('span');
             artistSpan.className = 'pl-item-artist-text';
             artistSpan.textContent = track.artist || '—';
+            if (track.artist) {
+                artistSpan.classList.add('artist-link');
+                (function(art){
+                    artistSpan.addEventListener('click', function(ev){
+                        ev.stopPropagation();
+                        if (typeof openArtistWindow === 'function') openArtistWindow(art);
+                    });
+                })(track.artist);
+            }
             t2.appendChild(artistSpan);
             /* Span del álbum: vacío al renderizar, se rellena async via
                find-album. Click → abre el viewer del álbum. Se usa el

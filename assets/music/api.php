@@ -1618,7 +1618,7 @@ case 'search-artists': {
             $nm = (string)($r['artistName'] ?? '');
             if ($id === '' || $nm === '') continue;
             $k = 'itunes:' . $id; if (isset($seen[$k])) continue; $seen[$k] = 1;
-            $out[] = ['source' => 'itunes', 'artistId' => $id, 'name' => $nm, 'image' => ''];
+            $out[] = ['source' => 'itunes', 'artistId' => $id, 'name' => $nm, 'image' => '', 'imageBig' => ''];
             $itunesIdx[$id] = count($out) - 1;
         }
     }
@@ -1645,8 +1645,11 @@ case 'search-artists': {
             if (!is_array($dd)) continue;
             foreach (($dd['results'] ?? []) as $rr) {
                 if (($rr['wrapperType'] ?? '') !== 'collection') continue;
-                $img = (string)($rr['artworkUrl100'] ?? '');
-                if ($img) { $img = str_replace('100x100', '300x300', $img); $out[$itunesIdx[$aid]]['image'] = $img; }
+                $art = (string)($rr['artworkUrl100'] ?? '');
+                if ($art) {
+                    $out[$itunesIdx[$aid]]['image']    = str_replace('100x100', '300x300', $art);
+                    $out[$itunesIdx[$aid]]['imageBig'] = str_replace('100x100', '1000x1000', $art);
+                }
                 break;
             }
         }
@@ -1666,6 +1669,7 @@ case 'search-artists': {
                 'artistId' => $id,
                 'name'     => $nm,
                 'image'    => (string)($r['picture_medium'] ?? ($r['picture'] ?? '')),
+                'imageBig' => (string)($r['picture_xl'] ?? ($r['picture_big'] ?? ($r['picture_medium'] ?? ''))),
             ];
         }
     }
@@ -1720,6 +1724,40 @@ case 'artist-albums': {
         }
     }
     jsonResponse(['ok' => true, 'albums' => $albums]);
+}
+
+/* ─── Top tracks de un ARTISTA (Deezer, por nombre) ─────────────────
+   Para la sección "Popular" de la ventana de artista. Devuelve
+   {title, artist, duration, image}. Se reproducen resolviendo a YouTube
+   en el cliente al hacer click. */
+case 'artist-top': {
+    $name = trim((string)($_GET['name'] ?? ''));
+    if ($name === '') jsonResponse(['ok' => true, 'tracks' => []]);
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+    $artistId = '';
+    $raw = @file_get_contents('https://api.deezer.com/search/artist?q=' . rawurlencode($name) . '&limit=1', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d) && !empty($d['data'][0]['id'])) $artistId = (string)$d['data'][0]['id'];
+    }
+    $tracks = [];
+    if ($artistId !== '') {
+        $raw = @file_get_contents('https://api.deezer.com/artist/' . $artistId . '/top?limit=5', false, $ctx);
+        if ($raw) {
+            $d = json_decode($raw, true);
+            if (is_array($d)) foreach (($d['data'] ?? []) as $t) {
+                $tracks[] = [
+                    'title'    => (string)($t['title'] ?? ''),
+                    'artist'   => (string)($t['artist']['name'] ?? $name),
+                    'duration' => (int)($t['duration'] ?? 0),
+                    'image'    => (string)($t['album']['cover_medium'] ?? ($t['album']['cover'] ?? '')),
+                ];
+            }
+        }
+    }
+    jsonResponse(['ok' => true, 'tracks' => $tracks]);
 }
 
 /* ─── Corregir el álbum de una canción ──────────────────────────────
