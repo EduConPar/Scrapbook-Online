@@ -1786,10 +1786,20 @@ function _applyAlbumState(payload) {
             playerTitle.title = 'Reproducir álbum completo: ' + _currentAlbum.albumName;
         }
         /* La carátula del reproductor pasa a ser la del ÁLBUM (no la
-           miniatura de YouTube) cuando se resuelve. */
-        if (_currentAlbum.image && playerCover) {
-            playerCover.crossOrigin = 'anonymous';
-            playerCover.src = _currentAlbum.image;
+           miniatura de YouTube) cuando se resuelve. Si el álbum está
+           vinculado pero sin imagen, la sacamos de album-tracks. */
+        if (playerCover) {
+            if (_currentAlbum.image) {
+                playerCover.crossOrigin = 'anonymous';
+                playerCover.src = _currentAlbum.image;
+            } else if (_currentAlbum.albumKey && typeof _albumCoverFromKey === 'function') {
+                var _curVid = (typeof playlist !== 'undefined' && playlist[currentTrack]) ? playlist[currentTrack].videoId : null;
+                _albumCoverFromKey(_currentAlbum.albumKey, function(img){
+                    /* Solo si seguimos en la misma canción. */
+                    var v = (typeof playlist !== 'undefined' && playlist[currentTrack]) ? playlist[currentTrack].videoId : null;
+                    if (v === _curVid) { playerCover.crossOrigin = 'anonymous'; playerCover.src = img; }
+                });
+            }
         }
     } else if (playerTitle) {
         playerTitle.title = '';
@@ -2535,8 +2545,13 @@ function _resolveAlbumForRow(track, albumSpan, thumbImg) {
             albumSpan.style.display = 'none';
             return;
         }
-        /* Miniatura de la fila = carátula del álbum (no la de YouTube). */
-        if (thumbImg && norm.albumImage) thumbImg.src = norm.albumImage;
+        /* Miniatura de la fila = carátula del álbum (no la de YouTube).
+           Si el álbum está vinculado pero find-album no trajo imagen,
+           la sacamos de album-tracks. */
+        if (thumbImg) {
+            if (norm.albumImage) thumbImg.src = norm.albumImage;
+            else if (norm.albumKey) _albumCoverFromKey(norm.albumKey, function(img){ thumbImg.src = img; });
+        }
         /* Sin separador textual: la división visual la da el
            border-left + padding del CSS (.pl-item-album-text). */
         albumSpan.textContent = norm.albumName;
@@ -2585,6 +2600,19 @@ function _resolveAlbumForRow(track, albumSpan, thumbImg) {
         .catch(() => { /* offline / endpoint caído → no se muestra nada */ }));
 }
 
+/* Obtiene la carátula de un álbum por su albumKey (itunes:/deezer:) vía
+   album-tracks, cacheada en memoria. Fallback cuando find-album devolvió
+   el álbum vinculado pero sin albumImage (p.ej. overrides sin imagen). */
+var _albumCoverByKey = {};
+function _albumCoverFromKey(albumKey, cb) {
+    if (!albumKey || typeof cb !== 'function') return;
+    if (_albumCoverByKey[albumKey]) { cb(_albumCoverByKey[albumKey]); return; }
+    fetch('assets/music/api.php?action=album-tracks&key=' + encodeURIComponent(albumKey))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){ if (d && d.image) { _albumCoverByKey[albumKey] = d.image; cb(d.image); } })
+        .catch(function(){});
+}
+
 /* Pone en `imgEl` la carátula del álbum de la canción (find-album), con
    fallback a lo que ya tuviera. Reutiliza la cache local compartida.
    Usado por los resultados de búsqueda y los recientes de canción. */
@@ -2592,7 +2620,9 @@ function _resolveSongThumb(track, imgEl) {
     if (!track || !track.videoId || !imgEl) return;
     function apply(data) {
         var norm = (typeof _normalizeAlbumPayload === 'function') ? _normalizeAlbumPayload(data, track) : (data && !data.notFound ? data : null);
-        if (norm && norm.albumImage) imgEl.src = norm.albumImage;
+        if (!norm) return;
+        if (norm.albumImage) imgEl.src = norm.albumImage;
+        else if (norm.albumKey) _albumCoverFromKey(norm.albumKey, function(img){ imgEl.src = img; });
     }
     var cached = _albumCacheGet(track.videoId);
     if (cached !== undefined) { apply(cached); return; }
