@@ -1693,7 +1693,7 @@ function updateTrackUI(index)
    rama sintética. Esos resultados quedaban locked en cliente y
    bloqueaban que las nuevas búsquedas (con la cascada del backend)
    intentaran resolver el álbum real. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache:v5';
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v6';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;
@@ -2572,8 +2572,10 @@ function _resolveAlbumForRow(track, albumSpan, thumbImg) {
         };
     }
 
+    /* Solo usamos la cache si normaliza a un álbum REAL; entradas viejas
+       (p.ej. albumKey spotify:* legacy) se ignoran y se re-resuelven. */
     const cached = _albumCacheGet(vId);
-    if (cached !== undefined) { paint(cached); return; }
+    if (cached !== undefined && _normalizeAlbumPayload(cached, track)) { paint(cached); return; }
 
     const params = new URLSearchParams({
         title:   track.title || '',
@@ -2625,7 +2627,7 @@ function _resolveSongThumb(track, imgEl) {
         else if (norm.albumKey) _albumCoverFromKey(norm.albumKey, function(img){ imgEl.src = img; });
     }
     var cached = _albumCacheGet(track.videoId);
-    if (cached !== undefined) { apply(cached); return; }
+    if (cached !== undefined && _normalizeAlbumPayload(cached, track)) { apply(cached); return; }
     var p = new URLSearchParams({ title: track.title || '', artist: track.artist || '', videoId: track.videoId });
     _albumQueueRun(function(){
         return fetch('assets/music/api.php?action=find-album&' + p.toString())
@@ -2668,13 +2670,14 @@ function resolveAndShowAlbum(track) {
     _applyAlbumState(null);
     if (!track || !track.title) return;
 
-    /* Cache hit por videoId. */
+    /* Cache hit por videoId — SOLO si normaliza a un álbum real. Las
+       entradas viejas (albumKey spotify:* legacy) se ignoran y se
+       re-resuelven contra iTunes/Deezer (que sí traen carátula). */
     const vId = track.videoId;
     const cached = _albumCacheGet(vId);
-    if (cached !== undefined) {
-        /* Cache puede ser legacy notFound — normalizamos para que igual
-           produzca un álbum sintético clickable. */
-        _applyAlbumState(_normalizeAlbumPayload(cached, track));
+    const cachedNorm = (cached !== undefined) ? _normalizeAlbumPayload(cached, track) : null;
+    if (cachedNorm) {
+        _applyAlbumState(cachedNorm);
         return;
     }
 
