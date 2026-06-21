@@ -68,6 +68,9 @@ $hasPlayer = true;
 
 require_once __DIR__ . '/assets/themes/theme-helpers.php';
 require_once __DIR__ . '/assets/php/active-interface.php';
+/* Flag de build solo-dev (define MELON_DEV_BUILD). En main vale false →
+   las funciones exclusivas de dev no se renderizan. */
+require_once __DIR__ . '/assets/dev-build.php';
 
 /* INTERFAZ POR USUARIO:
    La interfaz activa se guarda en BD como SLUG directa
@@ -708,6 +711,18 @@ window.DesktopState.whenReady = function(cb){
         ?></div>
         <span>Tienda</span>
     </div>
+    <?php if (defined('MELON_DEV_BUILD') && MELON_DEV_BUILD): ?>
+    <!-- Icono de mascotas (SOLO DEV — gated por MELON_DEV_BUILD). -->
+    <div class="desktop-icon" id="mascota-desktop-icon">
+        <div class="desktop-icon-img"><?php
+            $_mascotaIcon = 'assets/img/appIcons/mascotaIcon.png';
+            echo _appIconExists($_mascotaIcon)
+                ? '<img src="' . $_mascotaIcon . '" style="width:48px;height:48px;object-fit:contain;image-rendering:pixelated;" alt="">'
+                : desktopIcon('mascota', '🐾');
+        ?></div>
+        <span>Mascota</span>
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- CALENDAR WINDOW -->
@@ -3894,6 +3909,8 @@ window.notifSystem = (function() {
     /* Exponer global para que la pueda llamar el propio iframe (tras
        acciones internas como hatch dev) y el resto del desktop. */
     window.refreshMascotaWindow = refreshMascotaWindow;
+    /* Expuesto para la sección solo-dev (icono de mascotas del escritorio). */
+    window.openMascotaWindow = openMascotaWindow;
 
     document.getElementById('mascota-close').addEventListener('click', function () {
         taskbarManager.unregister('mascota-window');
@@ -3938,6 +3955,8 @@ window.notifSystem = (function() {
         taskbarManager.unregister('wrapped-window');
         wrappedFrame.src = '';
     }
+    /* Expuesto para la sección solo-dev (banner "Abrir Melon Wrapped"). */
+    window.openWrappedWindow = openWrappedWindow;
 
     wrappedCloseEl.addEventListener('click', closeWrappedWindow);
     /* El iframe del wrapped puede pedir cerrarse vía postMessage. */
@@ -4280,6 +4299,14 @@ window.notifSystem = (function() {
 })();
 <?php endif; ?>
 </script>
+
+<?php
+/* Sección exclusiva de DEV (banner Wrapped + marca de agua "Dev Build").
+   Solo se incluye si MELON_DEV_BUILD es true (en main es false → nada). */
+if (defined('MELON_DEV_BUILD') && MELON_DEV_BUILD) {
+    include __DIR__ . '/assets/dev/dev-desktop.php';
+}
+?>
 
 </body>
 </html>

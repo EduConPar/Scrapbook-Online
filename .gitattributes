@@ -1,0 +1,4 @@
+# El flag de build solo-dev NUNCA debe sobrescribirse al fusionar dev→main.
+# El driver "ours" hace que, en un merge, se conserve la versión de la rama
+# ACTUAL (main mantiene su FALSE; dev mantiene su TRUE).
+assets/dev-build.php merge=ours
