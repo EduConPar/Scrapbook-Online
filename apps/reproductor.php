@@ -363,7 +363,11 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
     <div class="window-body" id="artist-window-body">
         <div id="artist-window-banner">
-            <div id="artist-window-banner-name">Artista</div>
+            <img id="artist-window-avatar" src="" alt="">
+            <div id="artist-window-banner-info">
+                <div id="artist-window-banner-name">Artista</div>
+                <div id="artist-window-listeners"></div>
+            </div>
         </div>
         <div id="artist-window-content">
             <div class="aw-section-title">Popular</div>
@@ -829,13 +833,16 @@ function openArtistWindow(name) {
     if (!name || name === '—') return;
     var win = document.getElementById('artist-window');
     if (!win) return;
-    var banner = document.getElementById('artist-window-banner');
-    var bName  = document.getElementById('artist-window-banner-name');
-    var topEl  = document.getElementById('artist-window-top');
-    var albEl  = document.getElementById('artist-window-albums');
-    var token  = ++_artistWinToken;
+    var avatar   = document.getElementById('artist-window-avatar');
+    var bName    = document.getElementById('artist-window-banner-name');
+    var listenEl = document.getElementById('artist-window-listeners');
+    var topEl    = document.getElementById('artist-window-top');
+    var albEl    = document.getElementById('artist-window-albums');
+    var token    = ++_artistWinToken;
+    var fmtNum = function(n){ return (parseInt(n,10) || 0).toLocaleString('es-ES'); };
     bName.textContent = name;
-    banner.style.backgroundImage = '';
+    if (avatar) avatar.src = '';
+    if (listenEl) listenEl.textContent = '';
     topEl.innerHTML = '<div class="pl-sr-msg">Cargando…</div>';
     albEl.innerHTML = '';
     /* El body vuelve arriba al abrir otro artista. */
@@ -856,6 +863,7 @@ function openArtistWindow(name) {
                         '<span class="aw-top-num">'+(i+1)+'</span>' +
                         '<img class="aw-top-thumb" src="'+_awEsc(t.image||'')+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
                         '<span class="aw-top-title">'+_awEsc(t.title)+'</span>' +
+                        '<span class="aw-top-plays">'+(t.rank?fmtNum(t.rank):'')+'</span>' +
                         '<span class="aw-top-dur">'+(t.duration?formatTime(t.duration):'')+'</span>' +
                     '</div>';
         });
@@ -899,7 +907,8 @@ function openArtistWindow(name) {
         if (!chosen) { topEl.innerHTML = '<div class="pl-sr-msg">No se encontró el artista.</div>'; return; }
         bName.textContent = chosen.name;
         var big = chosen.imageBig || chosen.image;
-        if (big) banner.style.backgroundImage = "url('" + big.replace(/'/g, "%27") + "')";
+        if (avatar && big) avatar.src = big;
+        if (listenEl) listenEl.textContent = chosen.fans ? (fmtNum(chosen.fans) + ' oyentes') : '';
         Promise.all([
             fetch('assets/music/api.php?action=artist-top&name=' + encodeURIComponent(chosen.name)).then(function(r){ return r.json(); }).catch(function(){ return null; }),
             fetch('assets/music/api.php?action=artist-albums&source=' + encodeURIComponent(chosen.source) + '&artistId=' + encodeURIComponent(chosen.artistId)).then(function(r){ return r.json(); }).catch(function(){ return null; })
@@ -1751,6 +1760,12 @@ function _applyAlbumState(payload) {
             playerTitle.classList.add('has-album');
             playerTitle.title = 'Reproducir álbum completo: ' + _currentAlbum.albumName;
         }
+        /* La carátula del reproductor pasa a ser la del ÁLBUM (no la
+           miniatura de YouTube) cuando se resuelve. */
+        if (_currentAlbum.image && playerCover) {
+            playerCover.crossOrigin = 'anonymous';
+            playerCover.src = _currentAlbum.image;
+        }
     } else if (playerTitle) {
         playerTitle.title = '';
     }
@@ -2482,7 +2497,7 @@ function _albumQueueRun(jobFn) {
     _albumNextSlot();
 }
 
-function _resolveAlbumForRow(track, albumSpan) {
+function _resolveAlbumForRow(track, albumSpan, thumbImg) {
     if (!track || !track.videoId) return;
     const vId = track.videoId;
 
@@ -2495,6 +2510,8 @@ function _resolveAlbumForRow(track, albumSpan) {
             albumSpan.style.display = 'none';
             return;
         }
+        /* Miniatura de la fila = carátula del álbum (no la de YouTube). */
+        if (thumbImg && norm.albumImage) thumbImg.src = norm.albumImage;
         /* Sin separador textual: la división visual la da el
            border-left + padding del CSS (.pl-item-album-text). */
         albumSpan.textContent = norm.albumName;
@@ -3464,7 +3481,7 @@ var addTrackCallback = null;
             albumSpan.dataset.videoId = track.videoId || '';
             t2.appendChild(albumSpan);
             if (typeof _resolveAlbumForRow === 'function') {
-                _resolveAlbumForRow(track, albumSpan);
+                _resolveAlbumForRow(track, albumSpan, thumbImg);
             }
             if (track.addedBy) {
                 var addedBySpan = document.createElement('span');
@@ -3775,7 +3792,10 @@ var addTrackCallback = null;
                    álbum que aparece en la lista. */
                 if (typeof plList !== 'undefined' && plList && typeof _resolveAlbumForRow === 'function') {
                     plList.querySelectorAll('.pl-item-album-text').forEach(function(span){
-                        if (span.dataset.videoId === track.videoId) _resolveAlbumForRow(track, span);
+                        if (span.dataset.videoId !== track.videoId) return;
+                        var row = span.closest('.pl-item');
+                        var th  = row ? row.querySelector('.pl-item-thumb-wrap img') : null;
+                        _resolveAlbumForRow(track, span, th);
                     });
                 }
                 if (window.notifSystem) {

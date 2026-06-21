@@ -1670,6 +1670,9 @@ case 'search-artists': {
                 'name'     => $nm,
                 'image'    => (string)($r['picture_medium'] ?? ($r['picture'] ?? '')),
                 'imageBig' => (string)($r['picture_xl'] ?? ($r['picture_big'] ?? ($r['picture_medium'] ?? ''))),
+                /* Deezer no da "oyentes mensuales"; usamos nº de fans como
+                   aproximación (no hay banner del artista en la API). */
+                'fans'     => (int)($r['nb_fan'] ?? 0),
             ];
         }
     }
@@ -1753,6 +1756,10 @@ case 'artist-top': {
                     'artist'   => (string)($t['artist']['name'] ?? $name),
                     'duration' => (int)($t['duration'] ?? 0),
                     'image'    => (string)($t['album']['cover_medium'] ?? ($t['album']['cover'] ?? '')),
+                    /* `rank` de Deezer = índice de popularidad (no son
+                       reproducciones reales de Spotify, pero sirve de proxy
+                       para la columna de "reproducciones"). */
+                    'rank'     => (int)($t['rank'] ?? 0),
                 ];
             }
         }
