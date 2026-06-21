@@ -3044,6 +3044,16 @@ var addTrackCallback = null;
         edit.textContent = '✎ Editar';
         edit.addEventListener('click', function(){ menu.style.display = 'none'; openEditPlaylistDialog(idx); });
         menu.appendChild(edit);
+
+        var addOther = document.createElement('div');
+        addOther.className = 'pl-menu-item';
+        addOther.textContent = '➕ Añadir a otra playlist';
+        addOther.addEventListener('click', function(ev){
+            if (ev && ev.stopPropagation) ev.stopPropagation();   /* no cerrar el menú */
+            buildAddToOtherMenu(menu, pl);
+        });
+        menu.appendChild(addOther);
+
         var del = document.createElement('div');
         del.className = 'pl-menu-item';
         del.textContent = pl.sharedFrom ? '⊗ Abandonar' : '✕ Eliminar';
@@ -3053,6 +3063,74 @@ var addTrackCallback = null;
         var mw = menu.offsetWidth, mh = menu.offsetHeight;
         menu.style.left = Math.min(e.clientX, window.innerWidth  - mw - 8) + 'px';
         menu.style.top  = Math.min(e.clientY, window.innerHeight - mh - 8) + 'px';
+    }
+
+    /* Rellena el menú con la lista de OTRAS playlists destino. Al elegir
+       una, copia todas las canciones de `srcPl` en ella. */
+    function buildAddToOtherMenu(menu, srcPl) {
+        menu.innerHTML = '';
+        var head = document.createElement('div');
+        head.className = 'pl-menu-item';
+        head.style.opacity = '0.7';
+        head.style.cursor = 'default';
+        head.textContent = 'Añadir "' + srcPl.name + '" a…';
+        menu.appendChild(head);
+        var targets = allPlaylists.filter(function(p){ return p.id !== srcPl.id; });
+        if (!targets.length) {
+            var none = document.createElement('div');
+            none.className = 'pl-menu-item'; none.style.opacity = '0.7'; none.style.cursor = 'default';
+            none.textContent = 'No hay otras playlists';
+            menu.appendChild(none);
+        } else {
+            targets.forEach(function(tp){
+                var it = document.createElement('div');
+                it.className = 'pl-menu-item';
+                it.textContent = (tp.sharedFrom ? '[+] ' : '') + tp.name;
+                it.addEventListener('click', function(){
+                    menu.style.display = 'none';
+                    mergePlaylistInto(srcPl, tp);
+                });
+                menu.appendChild(it);
+            });
+        }
+        /* Reposiciona por si la nueva altura se sale de la pantalla. */
+        menu.style.display = 'block';
+        var top = parseFloat(menu.style.top) || 0;
+        menu.style.top = Math.max(8, Math.min(top, window.innerHeight - menu.offsetHeight - 8)) + 'px';
+    }
+
+    /* Copia todas las canciones de srcPl en targetPl (sin duplicar por
+       videoId) y guarda la playlist destino. */
+    function mergePlaylistInto(srcPl, targetPl) {
+        var merged = (targetPl.tracks || []).slice();
+        var seen = {};
+        merged.forEach(function(t){ if (t.videoId) seen[t.videoId] = 1; });
+        var added = 0;
+        (srcPl.tracks || []).forEach(function(t){
+            if (t.videoId && seen[t.videoId]) return;
+            merged.push({ videoId: t.videoId, title: t.title, artist: t.artist || '', duration: t.duration || 0 });
+            if (t.videoId) seen[t.videoId] = 1;
+            added++;
+        });
+        var payload = { id: targetPl.id, name: targetPl.name, tracks: merged };
+        if (targetPl.sharedFrom) payload.sharedFrom = targetPl.sharedFrom;
+        else payload.image = targetPl.image || '';
+        fetch('assets/music/api.php?action=save-playlist-item', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+        .then(function(d){
+            if (d.error) { alert(d.error); return; }
+            targetPl.tracks = merged;
+            if (window.notifSystem) {
+                window.notifSystem.show({ type: 'success', title: 'Añadido a "' + targetPl.name + '"',
+                    message: added + ' canción(es) añadida(s).', autoDismissAfter: 3500 });
+            } else {
+                alert(added + ' canción(es) añadida(s) a "' + targetPl.name + '".');
+            }
+        })
+        .catch(function(e){ alert('Error al añadir: ' + e.message); });
     }
 
     /* Tarjeta de playlist: click en el item → ENTRAR (como un álbum);
