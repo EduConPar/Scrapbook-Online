@@ -2585,6 +2585,26 @@ function _resolveAlbumForRow(track, albumSpan, thumbImg) {
         .catch(() => { /* offline / endpoint caído → no se muestra nada */ }));
 }
 
+/* Pone en `imgEl` la carátula del álbum de la canción (find-album), con
+   fallback a lo que ya tuviera. Reutiliza la cache local compartida.
+   Usado por los resultados de búsqueda y los recientes de canción. */
+function _resolveSongThumb(track, imgEl) {
+    if (!track || !track.videoId || !imgEl) return;
+    function apply(data) {
+        var norm = (typeof _normalizeAlbumPayload === 'function') ? _normalizeAlbumPayload(data, track) : (data && !data.notFound ? data : null);
+        if (norm && norm.albumImage) imgEl.src = norm.albumImage;
+    }
+    var cached = _albumCacheGet(track.videoId);
+    if (cached !== undefined) { apply(cached); return; }
+    var p = new URLSearchParams({ title: track.title || '', artist: track.artist || '', videoId: track.videoId });
+    _albumQueueRun(function(){
+        return fetch('assets/music/api.php?action=find-album&' + p.toString())
+            .then(function(r){ return (r.status === 503) ? null : (r.ok ? r.json() : null); })
+            .then(function(d){ if (!d) return; var norm = _normalizeAlbumPayload(d, track); if (norm) _albumCacheSet(track.videoId, norm); apply(d); })
+            .catch(function(){});
+    });
+}
+
 /* Filtra el payload del backend: solo aceptamos respuestas con un
    spotifyAlbumId REAL. Si el backend devolvió notFound o algo raro,
    retornamos null y el caller trata la canción como "sin álbum"
@@ -3404,7 +3424,12 @@ var addTrackCallback = null;
                 var cover = document.createElement('div'); cover.className = 'pl-card-cover';
                 var src = it.image || (it.type === 'song' && it.key ? ('https://i.ytimg.com/vi/' + it.key + '/mqdefault.jpg') : '');
                 if (src) { var im = document.createElement('img'); im.src = src; im.alt = '';
-                    im.onerror = function(){ cover.classList.add('pl-card-cover--empty'); im.remove(); }; cover.appendChild(im); }
+                    im.onerror = function(){ cover.classList.add('pl-card-cover--empty'); im.remove(); }; cover.appendChild(im);
+                    /* Canción → usa la carátula del álbum si se resuelve. */
+                    if (it.type === 'song' && it.key && typeof _resolveSongThumb === 'function') {
+                        _resolveSongThumb({ videoId: it.key, title: it.name, artist: it.artist }, im);
+                    }
+                }
                 else cover.classList.add('pl-card-cover--empty');
                 var nm = document.createElement('div'); nm.className = 'pl-card-name'; nm.textContent = it.name || ''; nm.title = it.name || '';
                 var sub = document.createElement('div'); sub.className = 'pl-card-sub';
@@ -4691,6 +4716,13 @@ var addTrackCallback = null;
         if (!html) html = '<div class="pl-sr-msg">Sin resultados.</div>';
         results.innerHTML = html;
         showResults();
+        /* Sube las miniaturas de canción de YouTube → carátula del álbum. */
+        if (typeof _resolveSongThumb === 'function') {
+            results.querySelectorAll('.pl-sr-row[data-type="song"]').forEach(function(row){
+                var img = row.querySelector('.pl-sr-thumb');
+                if (img) _resolveSongThumb({ videoId: row.dataset.vid, title: row.dataset.title, artist: row.dataset.artist }, img);
+            });
+        }
     }
 
     var lastResults = { songs:[], albums:[], artists:[], q:'' };

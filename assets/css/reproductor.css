@@ -858,6 +858,19 @@
     color: var(--accent-text, #fff);
     border-color: var(--accent, #1db954);
 }
+
+/* ── Marco Win98 (biselado) para las carátulas/miniaturas ── */
+.pl-sr-thumb,
+.aw-top-thumb,
+.pl-sr-album-card img,
+#album-viewer-cover,
+#player-cover {
+    box-shadow:
+        -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+         1px  1px 0 var(--bezel-light-1, #ffffff),
+        -2px -2px 0 var(--bezel-dark-2, #808080),
+         2px  2px 0 var(--bezel-light-2, #dfdfdf);
+}
 .aw-section-title {
     font-size: 15px;
     font-weight: bold;
