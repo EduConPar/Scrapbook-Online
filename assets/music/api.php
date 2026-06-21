@@ -1606,8 +1606,11 @@ case 'search-artists': {
         'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
     ]]);
     $seen = []; $out = [];
-    /* iTunes — entity=musicArtist (no trae imagen → usamos placeholder). */
-    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($q) . '&entity=musicArtist&limit=12', false, $ctx);
+    /* iTunes — entity=musicArtist NO trae imagen del artista. La sacamos
+       después de la carátula de su primer álbum (en paralelo) para que
+       ningún artista quede sin imagen y no se descarte luego. */
+    $itunesIdx = [];   /* artistId => índice en $out */
+    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($q) . '&entity=musicArtist&limit=10', false, $ctx);
     if ($raw) {
         $d = json_decode($raw, true);
         if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
@@ -1616,7 +1619,38 @@ case 'search-artists': {
             if ($id === '' || $nm === '') continue;
             $k = 'itunes:' . $id; if (isset($seen[$k])) continue; $seen[$k] = 1;
             $out[] = ['source' => 'itunes', 'artistId' => $id, 'name' => $nm, 'image' => ''];
+            $itunesIdx[$id] = count($out) - 1;
         }
+    }
+    /* Enriquecimiento de imágenes iTunes: carátula del primer álbum de
+       cada artista, en paralelo con curl_multi. */
+    if ($itunesIdx && function_exists('curl_multi_init')) {
+        $mh = curl_multi_init(); $hs = [];
+        foreach ($itunesIdx as $aid => $_i) {
+            $ch = curl_init('https://itunes.apple.com/lookup?id=' . $aid . '&entity=album&limit=1');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6,
+                CURLOPT_SSL_VERIFYPEER => false, CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_ENCODING => '', CURLOPT_HTTPHEADER => ['User-Agent: MelonHub/1.0'],
+            ]);
+            curl_multi_add_handle($mh, $ch); $hs[$aid] = $ch;
+        }
+        $active = null;
+        do { $st = curl_multi_exec($mh, $active); if ($active) curl_multi_select($mh, 1.0); } while ($active && $st == CURLM_OK);
+        foreach ($hs as $aid => $ch) {
+            $body = curl_multi_getcontent($ch);
+            curl_multi_remove_handle($mh, $ch);
+            if (!$body) continue;
+            $dd = json_decode($body, true);
+            if (!is_array($dd)) continue;
+            foreach (($dd['results'] ?? []) as $rr) {
+                if (($rr['wrapperType'] ?? '') !== 'collection') continue;
+                $img = (string)($rr['artworkUrl100'] ?? '');
+                if ($img) { $img = str_replace('100x100', '300x300', $img); $out[$itunesIdx[$aid]]['image'] = $img; }
+                break;
+            }
+        }
+        curl_multi_close($mh);
     }
     /* Deezer — trae imagen del artista. */
     $raw = @file_get_contents('https://api.deezer.com/search/artist?q=' . rawurlencode($q) . '&limit=12', false, $ctx);
