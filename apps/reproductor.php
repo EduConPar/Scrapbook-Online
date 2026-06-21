@@ -252,6 +252,13 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     <div class="window-body" id="pl-body">
         <!-- HOME VIEW -->
         <div id="pl-home">
+            <div id="pl-search-row">
+                <input type="text" id="pl-search-input" autocomplete="off"
+                       placeholder="Buscar canciones, álbumes o artistas…">
+            </div>
+            <!-- Resultados de búsqueda (canciones / álbumes / artistas) y
+                 página de artista. Oculto mientras no hay búsqueda. -->
+            <div id="pl-search-results" style="display:none;"></div>
             <div id="pl-home-list"></div>
             <div id="pl-home-footer">
                 <button class="button" id="pl-create">+ Crear playlist</button>
@@ -281,6 +288,15 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             </div>
         </div>
     </div>
+    <!-- Handles de resize (mismo patrón que el album-viewer). -->
+    <div class="av-resize av-resize-n"  data-edge="n"></div>
+    <div class="av-resize av-resize-s"  data-edge="s"></div>
+    <div class="av-resize av-resize-w"  data-edge="w"></div>
+    <div class="av-resize av-resize-e"  data-edge="e"></div>
+    <div class="av-resize av-resize-nw" data-edge="nw"></div>
+    <div class="av-resize av-resize-ne" data-edge="ne"></div>
+    <div class="av-resize av-resize-sw" data-edge="sw"></div>
+    <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
 <!-- ALBUM VIEWER — ventana de previsualización de un álbum.
@@ -4080,6 +4096,217 @@ var addTrackCallback = null;
         })
         .catch(function() {});
     }, 15000);
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   BÚSQUEDA EN EL MENÚ DE PLAYLISTS (canciones / álbumes / artistas)
+   + tamaño fijo redimensionable del menú.
+   - Canción  → se reproduce al instante.
+   - Álbum    → abre el viewer del álbum.
+   - Artista  → página con todos sus álbumes (→ viewer al click).
+   ════════════════════════════════════════════════════════════════════ */
+(function(){
+    var input    = document.getElementById('pl-search-input');
+    var results  = document.getElementById('pl-search-results');
+    var homeList = document.getElementById('pl-home-list');
+    var homeFoot = document.getElementById('pl-home-footer');
+    var editBtn  = document.getElementById('btn-edit-playlist');
+    if (!input || !results) return;
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function fmtDur(sec){ sec=parseInt(sec,10)||0; if(!sec) return ''; var m=Math.floor(sec/60), s=sec%60; return m+':'+(s<10?'0'+s:s); }
+
+    function showPlaylists(){
+        results.style.display = 'none';
+        results.innerHTML = '';
+        if (homeList) homeList.style.display = '';
+        if (homeFoot) homeFoot.style.display = '';
+    }
+    function showResults(){
+        if (homeList) homeList.style.display = 'none';
+        if (homeFoot) homeFoot.style.display = 'none';
+        results.style.display = 'block';
+    }
+
+    /* Reproduce una sola canción reemplazando la cola actual. */
+    function playSong(tr){
+        if (!tr || !tr.videoId || typeof playlist === 'undefined') return;
+        playlist.length = 0;
+        playlist.push({ videoId: tr.videoId, title: tr.title||'', artist: tr.artist||'', duration: tr.duration||0 });
+        currentTrack = 0;
+        currentPlaylistId = null;
+        if (typeof updateTrackUI === 'function') updateTrackUI(0);
+        if (typeof updatePlayerTitle === 'function') updatePlayerTitle('Búsqueda');
+        try { if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(tr.videoId); } catch(_){}
+    }
+    function openAlbum(key, name){ if (typeof openAlbumViewer === 'function') openAlbumViewer(key, name); }
+
+    /* Página de artista: todos sus álbumes. */
+    function openArtist(source, artistId, name){
+        showResults();
+        results.innerHTML = '<div id="pl-artist-back">← Volver a la búsqueda</div>' +
+                            '<div class="pl-sr-msg">Cargando álbumes de ' + esc(name) + '…</div>';
+        var back = results.querySelector('#pl-artist-back');
+        if (back) back.addEventListener('click', function(){ runSearch(true); });
+        fetch('assets/music/api.php?action=artist-albums&source=' + encodeURIComponent(source) + '&artistId=' + encodeURIComponent(artistId))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+            var albums = (d && d.ok && d.albums) ? d.albums : [];
+            var html = '<div id="pl-artist-back">← Volver a la búsqueda</div>' +
+                       '<div class="pl-sr-group-title">' + esc(name) + ' — álbumes</div>';
+            if (!albums.length) { html += '<div class="pl-sr-msg">No se encontraron álbumes.</div>'; }
+            else {
+                html += '<div class="pl-sr-albums-grid">';
+                albums.forEach(function(a){
+                    html += '<div class="pl-sr-album-card" data-key="'+esc(a.albumKey)+'" data-name="'+esc(a.name)+'">' +
+                                '<img src="'+esc(a.image||'')+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
+                                '<div class="pl-sr-name">'+esc(a.name)+(a.year?(' ('+esc(a.year)+')'):'')+'</div>' +
+                            '</div>';
+                });
+                html += '</div>';
+            }
+            results.innerHTML = html;
+            var b = results.querySelector('#pl-artist-back');
+            if (b) b.addEventListener('click', function(){ runSearch(true); });
+            results.querySelectorAll('.pl-sr-album-card').forEach(function(card){
+                card.addEventListener('click', function(){ openAlbum(card.dataset.key, card.dataset.name); });
+            });
+        })
+        .catch(function(){
+            results.innerHTML = '<div id="pl-artist-back">← Volver</div><div class="pl-sr-msg">Error cargando álbumes.</div>';
+            var b = results.querySelector('#pl-artist-back');
+            if (b) b.addEventListener('click', function(){ runSearch(true); });
+        });
+    }
+
+    function renderResults(q, songs, albums, artists){
+        if (input.value.trim() !== q) return;   /* respuesta obsoleta */
+        var html = '';
+        if (artists && artists.length){
+            html += '<div class="pl-sr-group-title">Artistas</div>';
+            artists.forEach(function(a){
+                html += '<div class="pl-sr-row" data-type="artist" data-source="'+esc(a.source)+'" data-id="'+esc(a.artistId)+'" data-name="'+esc(a.name)+'">' +
+                            '<img class="pl-sr-thumb is-artist" src="'+esc(a.image||'')+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
+                            '<div class="pl-sr-info"><div class="pl-sr-name">'+esc(a.name)+'</div><div class="pl-sr-sub">Artista</div></div>' +
+                        '</div>';
+            });
+        }
+        if (albums && albums.length){
+            html += '<div class="pl-sr-group-title">Álbumes</div>';
+            albums.forEach(function(a){
+                html += '<div class="pl-sr-row" data-type="album" data-key="'+esc(a.albumKey)+'" data-name="'+esc(a.name)+'">' +
+                            '<img class="pl-sr-thumb" src="'+esc(a.image||'')+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
+                            '<div class="pl-sr-info"><div class="pl-sr-name">'+esc(a.name)+'</div><div class="pl-sr-sub">'+esc(a.artist||'Álbum')+'</div></div>' +
+                        '</div>';
+            });
+        }
+        if (songs && songs.length){
+            html += '<div class="pl-sr-group-title">Canciones</div>';
+            songs.forEach(function(s){
+                var thumb = 'https://i.ytimg.com/vi/' + encodeURIComponent(s.videoId) + '/default.jpg';
+                html += '<div class="pl-sr-row" data-type="song" data-vid="'+esc(s.videoId)+'" data-title="'+esc(s.title)+'" data-artist="'+esc(s.artist)+'" data-dur="'+(parseInt(s.duration,10)||0)+'">' +
+                            '<img class="pl-sr-thumb" src="'+thumb+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
+                            '<div class="pl-sr-info"><div class="pl-sr-name">'+esc(s.title)+'</div><div class="pl-sr-sub">'+esc(s.artist||'')+(fmtDur(s.duration)?(' · '+fmtDur(s.duration)):'')+'</div></div>' +
+                        '</div>';
+            });
+        }
+        if (!html) html = '<div class="pl-sr-msg">Sin resultados.</div>';
+        results.innerHTML = html;
+        showResults();
+    }
+
+    var lastResults = { songs:[], albums:[], artists:[], q:'' };
+    function runSearch(useCache){
+        var q = input.value.trim();
+        if (q.length < 2) { showPlaylists(); return; }
+        if (useCache && lastResults.q === q) {
+            renderResults(q, lastResults.songs, lastResults.albums, lastResults.artists);
+            return;
+        }
+        showResults();
+        results.innerHTML = '<div class="pl-sr-msg">Buscando…</div>';
+        var gp = function(action){
+            return fetch('assets/music/api.php?action=' + action + '&q=' + encodeURIComponent(q))
+                .then(function(r){ return r.json(); }).catch(function(){ return null; });
+        };
+        Promise.all([ gp('yt-search'), gp('search-albums'), gp('search-artists') ]).then(function(res){
+            if (input.value.trim() !== q) return;
+            var songs   = (res[0] && res[0].results) || [];
+            var albums  = (res[1] && res[1].results) || [];
+            var artists = (res[2] && res[2].results) || [];
+            lastResults = { songs:songs, albums:albums, artists:artists, q:q };
+            renderResults(q, songs, albums, artists);
+        });
+    }
+
+    var t = null;
+    input.addEventListener('input', function(){
+        clearTimeout(t);
+        if (input.value.trim().length < 2) { showPlaylists(); return; }
+        t = setTimeout(function(){ runSearch(false); }, 350);
+    });
+
+    results.addEventListener('click', function(e){
+        var row = e.target.closest('.pl-sr-row');
+        if (!row) return;
+        var type = row.dataset.type;
+        if (type === 'song') {
+            playSong({ videoId: row.dataset.vid, title: row.dataset.title, artist: row.dataset.artist, duration: parseInt(row.dataset.dur,10)||0 });
+        } else if (type === 'album') {
+            openAlbum(row.dataset.key, row.dataset.name);
+        } else if (type === 'artist') {
+            openArtist(row.dataset.source, row.dataset.id, row.dataset.name);
+        }
+    });
+
+    /* Al abrir el menú: limpia la búsqueda (mostrar playlists). */
+    if (editBtn) editBtn.addEventListener('click', function(){ input.value=''; showPlaylists(); });
+
+    /* ── Tamaño fijo redimensionable del menú (persistente) ── */
+    (function(){
+        var win = document.getElementById('playlist-editor');
+        if (!win) return;
+        var handles = win.querySelectorAll('.av-resize');
+        if (!handles.length) return;
+        var MIN_W=320, MIN_H=300, KEY='reproductor:pl-editor-size';
+        function applySaved(){
+            try {
+                var s = JSON.parse(localStorage.getItem(KEY)||'null');
+                if (s && s.w && s.h) { win.style.width=s.w+'px'; win.style.height=s.h+'px'; }
+            } catch(_){}
+        }
+        applySaved();
+        if (editBtn) editBtn.addEventListener('click', applySaved);
+        var pid=-1, edge='', sx=0, sy=0, sw=0, sh=0, sl=0, st=0, active=null;
+        function down(e){
+            e.preventDefault(); e.stopPropagation();
+            active=e.currentTarget; edge=active.dataset.edge||''; pid=e.pointerId;
+            try{ active.setPointerCapture(pid); }catch(_){}
+            var r=win.getBoundingClientRect();
+            win.style.left=r.left+'px'; win.style.top=r.top+'px'; win.style.transform='none';
+            sx=e.clientX; sy=e.clientY; sw=win.offsetWidth; sh=win.offsetHeight; sl=r.left; st=r.top;
+        }
+        function move(e){
+            if (e.pointerId!==pid) return;
+            var dx=e.clientX-sx, dy=e.clientY-sy, nw=sw, nh=sh, nl=sl, nt=st;
+            if (edge.indexOf('e')!==-1) nw=Math.max(MIN_W, sw+dx);
+            if (edge.indexOf('w')!==-1){ nw=Math.max(MIN_W, sw-dx); nl=sl+(sw-nw); }
+            if (edge.indexOf('s')!==-1) nh=Math.max(MIN_H, sh+dy);
+            if (edge.indexOf('n')!==-1){ nh=Math.max(MIN_H, sh-dy); nt=st+(sh-nh); }
+            win.style.width=nw+'px'; win.style.height=nh+'px'; win.style.left=nl+'px'; win.style.top=nt+'px';
+        }
+        function up(e){
+            if (e.pointerId!==pid) return;
+            pid=-1;
+            try{ localStorage.setItem(KEY, JSON.stringify({ w:win.offsetWidth, h:win.offsetHeight })); }catch(_){}
+        }
+        handles.forEach(function(h){
+            h.addEventListener('pointerdown', down);
+            h.addEventListener('pointermove', move);
+            h.addEventListener('pointerup', up);
+            h.addEventListener('pointercancel', up);
+        });
+    })();
 })();
 
 function relTime(sentAt) {

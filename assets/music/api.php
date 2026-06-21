@@ -1492,6 +1492,125 @@ case 'search-albums': {
     jsonResponse(['ok' => true, 'results' => _searchAlbumsByName($q, $artist, 40)]);
 }
 
+/* ─── Búsqueda de CANCIONES en YouTube ──────────────────────────────
+   Devuelve una lista de resultados (videoId + título + canal + duración)
+   para una query libre. Reutiliza el parser de candidatos de búsqueda. */
+case 'yt-search': {
+    require_once __DIR__ . '/spotify-helpers.php';
+    $q = trim((string)($_GET['q'] ?? ''));
+    if (mb_strlen($q) < 2) jsonResponse(['ok' => true, 'results' => []]);
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 10, 'ignore_errors' => true,
+        'header'  => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\nAccept-Language: en-US,en;q=0.9\r\n",
+    ]]);
+    $html = @file_get_contents('https://www.youtube.com/results?search_query=' . urlencode($q), false, $ctx);
+    $out  = [];
+    if ($html) {
+        foreach (ytExtractCandidates($html, 12) as $c) {
+            if (empty($c['videoId'])) continue;
+            $artist = isset($c['channel']) ? trim((string)preg_replace('/\s*-\s*topic$/i', '', $c['channel'])) : '';
+            $out[] = [
+                'videoId'  => $c['videoId'],
+                'title'    => (string)($c['title'] ?? ''),
+                'artist'   => $artist,
+                'duration' => (int)($c['duration'] ?? 0),
+            ];
+        }
+    }
+    jsonResponse(['ok' => true, 'results' => $out]);
+}
+
+/* ─── Búsqueda de ARTISTAS (iTunes + Deezer) ────────────────────────
+   Devuelve {source, artistId, name, image}. */
+case 'search-artists': {
+    $q = trim((string)($_GET['q'] ?? ''));
+    if (mb_strlen($q) < 2) jsonResponse(['ok' => true, 'results' => []]);
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+    $seen = []; $out = [];
+    /* iTunes — entity=musicArtist (no trae imagen → usamos placeholder). */
+    $raw = @file_get_contents('https://itunes.apple.com/search?term=' . rawurlencode($q) . '&entity=musicArtist&limit=12', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
+            $id = (string)($r['artistId'] ?? '');
+            $nm = (string)($r['artistName'] ?? '');
+            if ($id === '' || $nm === '') continue;
+            $k = 'itunes:' . $id; if (isset($seen[$k])) continue; $seen[$k] = 1;
+            $out[] = ['source' => 'itunes', 'artistId' => $id, 'name' => $nm, 'image' => ''];
+        }
+    }
+    /* Deezer — trae imagen del artista. */
+    $raw = @file_get_contents('https://api.deezer.com/search/artist?q=' . rawurlencode($q) . '&limit=12', false, $ctx);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
+            $id = (string)($r['id'] ?? '');
+            $nm = (string)($r['name'] ?? '');
+            if ($id === '' || $nm === '') continue;
+            $k = 'deezer:' . $id; if (isset($seen[$k])) continue; $seen[$k] = 1;
+            $out[] = [
+                'source'   => 'deezer',
+                'artistId' => $id,
+                'name'     => $nm,
+                'image'    => (string)($r['picture_medium'] ?? ($r['picture'] ?? '')),
+            ];
+        }
+    }
+    jsonResponse(['ok' => true, 'results' => $out]);
+}
+
+/* ─── Álbumes de un ARTISTA ─────────────────────────────────────────
+   Dado {source, artistId} devuelve sus álbumes {albumKey, name, image,
+   year} para la página de artista. */
+case 'artist-albums': {
+    $source   = strtolower(preg_replace('/[^a-z]/i', '', (string)($_GET['source'] ?? '')));
+    $artistId = preg_replace('/[^0-9]/', '', (string)($_GET['artistId'] ?? ''));
+    if ($artistId === '' || !in_array($source, ['itunes', 'deezer'], true)) {
+        jsonError('source/artistId inválidos');
+    }
+    $ctx = stream_context_create(['http' => [
+        'timeout' => 8, 'ignore_errors' => true, 'header' => "User-Agent: MelonHub/1.0\r\n",
+    ]]);
+    $albums = []; $seen = [];
+    if ($source === 'itunes') {
+        $raw = @file_get_contents('https://itunes.apple.com/lookup?id=' . $artistId . '&entity=album&limit=100', false, $ctx);
+        if ($raw) {
+            $d = json_decode($raw, true);
+            if (is_array($d)) foreach (($d['results'] ?? []) as $r) {
+                if (($r['wrapperType'] ?? '') !== 'collection') continue;
+                $id = (string)($r['collectionId'] ?? '');
+                if ($id === '' || isset($seen[$id])) continue; $seen[$id] = 1;
+                $img = (string)($r['artworkUrl100'] ?? '');
+                if ($img) $img = str_replace('100x100', '300x300', $img);
+                $albums[] = [
+                    'albumKey' => 'itunes:' . $id,
+                    'name'     => (string)($r['collectionName'] ?? ''),
+                    'image'    => $img,
+                    'year'     => substr((string)($r['releaseDate'] ?? ''), 0, 4),
+                ];
+            }
+        }
+    } else { /* deezer */
+        $raw = @file_get_contents('https://api.deezer.com/artist/' . $artistId . '/albums?limit=100', false, $ctx);
+        if ($raw) {
+            $d = json_decode($raw, true);
+            if (is_array($d)) foreach (($d['data'] ?? []) as $r) {
+                $id = (string)($r['id'] ?? '');
+                if ($id === '' || isset($seen[$id])) continue; $seen[$id] = 1;
+                $albums[] = [
+                    'albumKey' => 'deezer:' . $id,
+                    'name'     => (string)($r['title'] ?? ''),
+                    'image'    => (string)($r['cover_medium'] ?? ($r['cover_big'] ?? '')),
+                    'year'     => substr((string)($r['release_date'] ?? ''), 0, 4),
+                ];
+            }
+        }
+    }
+    jsonResponse(['ok' => true, 'albums' => $albums]);
+}
+
 /* ─── Corregir el álbum de una canción ──────────────────────────────
    El usuario reporta que el álbum auto-detectado de un track es
    incorrecto e introduce el NOMBRE del álbum correcto (o elige una

@@ -413,10 +413,98 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    /* Tamaño FIJO por defecto al abrir; el usuario puede redimensionarlo
+       por los bordes (handles .av-resize) y el tamaño se conserva. */
     width: 440px;
-    max-height: 85vh;
+    height: 70vh;
+    min-width: 320px;
+    min-height: 300px;
+    max-width: 96vw;
+    max-height: 92vh;
     z-index: 2000;
 }
+
+/* ── Barra de búsqueda del menú de playlists ── */
+#pl-search-row {
+    flex-shrink: 0;
+    margin-bottom: 6px;
+}
+#pl-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 11px;
+}
+#pl-search-results {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.pl-sr-group-title {
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-faint);
+    padding: 6px 4px 2px;
+    position: sticky;
+    top: 0;
+    background: var(--win-body-bg, #c0c0c0);
+}
+.pl-sr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+}
+.pl-sr-row:hover { background: var(--accent, #000080); color: var(--accent-text, #fff); }
+.pl-sr-thumb {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    object-fit: cover;
+    background: var(--inset-bg, #222);
+    image-rendering: auto;
+}
+.pl-sr-thumb.is-artist { border-radius: 50%; }
+.pl-sr-info { min-width: 0; flex: 1; }
+.pl-sr-name {
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pl-sr-sub {
+    font-size: 10px;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pl-sr-msg { padding: 8px 4px; font-size: 11px; color: var(--text-muted); }
+#pl-artist-back {
+    margin: 2px 0 6px;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--link-text, #00f);
+}
+.pl-sr-albums-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 8px;
+    padding: 4px;
+}
+.pl-sr-album-card { cursor: pointer; text-align: center; }
+.pl-sr-album-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
+    background: var(--inset-bg, #222);
+    display: block;
+}
+.pl-sr-album-card .pl-sr-name { white-space: normal; font-size: 10px; margin-top: 2px; }
 
 /* Album viewer: ventana de previsualización del álbum. Mismo patrón
    visual que playlist-editor. Resizeable por la esquina inferior
