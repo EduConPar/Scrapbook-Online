@@ -398,6 +398,30 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
 </div>
 
+<!-- EDIT PLAYLIST DIALOG (nombre + imagen) -->
+<div class="window" id="edit-playlist-dialog">
+    <div class="title-bar">
+        <div class="title-bar-text">✎ Editar playlist</div>
+        <div class="title-bar-controls">
+            <button aria-label="Close" id="edit-pl-close"></button>
+        </div>
+    </div>
+    <div class="window-body">
+        <div class="field-row-stacked">
+            <label for="edit-pl-name">Nombre</label>
+            <input type="text" id="edit-pl-name" placeholder="Nombre de la playlist">
+        </div>
+        <div class="field-row-stacked" style="margin-top:8px;">
+            <label for="edit-pl-image">Imagen (URL)</label>
+            <input type="url" id="edit-pl-image" placeholder="https://…">
+        </div>
+        <div class="field-row" style="justify-content: flex-end; gap: 4px; margin-top: 8px;">
+            <button class="button" id="edit-pl-cancel">Cancelar</button>
+            <button class="button" id="edit-pl-save">Guardar</button>
+        </div>
+    </div>
+</div>
+
 <!-- IMPORT PLAYLIST DIALOG -->
 <div class="window" id="import-playlist-dialog">
     <div class="title-bar">
@@ -2999,7 +3023,36 @@ var addTrackCallback = null;
         }
     }
 
-    /* Tarjeta de playlist (imagen + nombre + acciones). */
+    /* Menú contextual de una tarjeta de playlist (click derecho). */
+    function showPlaylistCardMenu(e, pl, idx) {
+        var menu = document.getElementById('pl-card-ctx');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'pl-card-ctx';
+            menu.className = 'window';
+            menu.style.cssText = 'display:none;position:fixed;z-index:2100;padding:2px 0;min-width:150px;';
+            document.body.appendChild(menu);
+            document.addEventListener('click', function(){ menu.style.display = 'none'; });
+        }
+        menu.innerHTML = '';
+        var edit = document.createElement('div');
+        edit.className = 'pl-menu-item';
+        edit.textContent = '✎ Editar';
+        edit.addEventListener('click', function(){ menu.style.display = 'none'; openEditPlaylistDialog(idx); });
+        menu.appendChild(edit);
+        var del = document.createElement('div');
+        del.className = 'pl-menu-item';
+        del.textContent = pl.sharedFrom ? '⊗ Abandonar' : '✕ Eliminar';
+        del.addEventListener('click', function(){ menu.style.display = 'none'; deletePlaylist(pl, idx); });
+        menu.appendChild(del);
+        menu.style.display = 'block';
+        var mw = menu.offsetWidth, mh = menu.offsetHeight;
+        menu.style.left = Math.min(e.clientX, window.innerWidth  - mw - 8) + 'px';
+        menu.style.top  = Math.min(e.clientY, window.innerHeight - mh - 8) + 'px';
+    }
+
+    /* Tarjeta de playlist: click en el item → ENTRAR (como un álbum);
+       ▶ → reproducir; click derecho → menú (Editar / Eliminar). */
     function buildPlaylistCard(pl, idx) {
         var card = document.createElement('div');
         card.className = 'pl-card';
@@ -3015,26 +3068,34 @@ var addTrackCallback = null;
             cover.classList.add('pl-card-cover--empty');
         }
         var play = document.createElement('div'); play.className = 'pl-card-play'; play.textContent = '▶';
+        play.title = 'Reproducir';
+        play.addEventListener('click', function(e){ e.stopPropagation(); playPlaylist(pl); });
         cover.appendChild(play);
-        cover.title = 'Reproducir';
-        cover.addEventListener('click', function(){ playPlaylist(pl); });
 
         var name = document.createElement('div');
         name.className = 'pl-card-name';
         name.textContent = (pl.sharedFrom ? '[+] ' : '') + pl.name;
         name.title = pl.name;
-        name.addEventListener('click', function(){ showEditorView(idx); });
 
-        var btns = document.createElement('div');
-        btns.className = 'pl-card-btns';
-        var editBtn = makeBtn('☰', 'pl-action-btn', function(e){ if(e&&e.stopPropagation) e.stopPropagation(); showEditorView(idx); });
-        editBtn.title = 'Ver / editar';
-        var delBtn  = makeBtn(pl.sharedFrom ? '⊗' : '✕', 'pl-action-btn', function(e){ if(e&&e.stopPropagation) e.stopPropagation(); deletePlaylist(pl, idx); });
-        delBtn.title = pl.sharedFrom ? 'Abandonar' : 'Eliminar';
-        btns.appendChild(editBtn); btns.appendChild(delBtn);
-
-        card.appendChild(cover); card.appendChild(name); card.appendChild(btns);
+        card.appendChild(cover); card.appendChild(name);
+        card.addEventListener('click', function(){ showEditorView(idx); });
+        card.addEventListener('contextmenu', function(e){ e.preventDefault(); showPlaylistCardMenu(e, pl, idx); });
         return card;
+    }
+
+    /* Diálogo "Editar": nombre + imagen de la playlist. */
+    function openEditPlaylistDialog(idx) {
+        var pl = allPlaylists[idx];
+        if (!pl) return;
+        if (pl.sharedFrom) { alert('No puedes editar una playlist compartida por otra persona.'); return; }
+        var dlg   = document.getElementById('edit-playlist-dialog');
+        var nameI = document.getElementById('edit-pl-name');
+        var imgI  = document.getElementById('edit-pl-image');
+        nameI.value = pl.name || '';
+        imgI.value  = pl.image || '';
+        dlg.dataset.idx = idx;
+        dlg.style.display = 'block';
+        setTimeout(function(){ nameI.focus(); nameI.select(); }, 50);
     }
 
     /* Sección "Escuchas recientes" (canciones, álbumes, playlists). */
@@ -3613,6 +3674,32 @@ var addTrackCallback = null;
     document.getElementById('btn-edit-playlist').addEventListener('click', openEditor);
     document.getElementById('pl-close').addEventListener('click', closeEditor);
     document.getElementById('pl-back').addEventListener('click', showHome);
+
+    /* ── Diálogo "Editar playlist" (nombre + imagen) ── */
+    (function(){
+        var dlg   = document.getElementById('edit-playlist-dialog');
+        if (!dlg) return;
+        function close(){ dlg.style.display = 'none'; }
+        var cb = document.getElementById('edit-pl-close');  if (cb) cb.addEventListener('click', close);
+        var cc = document.getElementById('edit-pl-cancel'); if (cc) cc.addEventListener('click', close);
+        var sv = document.getElementById('edit-pl-save');
+        if (sv) sv.addEventListener('click', function(){
+            var idx = parseInt(dlg.dataset.idx, 10);
+            var pl  = allPlaylists[idx];
+            if (!pl || pl.sharedFrom) { close(); return; }
+            var newName = document.getElementById('edit-pl-name').value.trim();
+            var newImg  = document.getElementById('edit-pl-image').value.trim();
+            if (newName) pl.name = newName;
+            pl.image = newImg;
+            fetch('assets/music/api.php?action=save-playlist-item', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: pl.id, name: pl.name, image: pl.image, tracks: pl.tracks })
+            })
+            .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+            .then(function(d){ if (d.error) { alert(d.error); return; } close(); renderHome(); })
+            .catch(function(e){ alert('Error al guardar: ' + e.message); });
+        });
+    })();
 
     document.getElementById('pl-add').addEventListener('click', function() {
         addTrackCallback = function(track) {

@@ -882,7 +882,8 @@
     border: 1px solid var(--border);
 }
 
-#create-playlist-dialog {
+#create-playlist-dialog,
+#edit-playlist-dialog {
     display: none;
     position: fixed;
     top: 50%;
