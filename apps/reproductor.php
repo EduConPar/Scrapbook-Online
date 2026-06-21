@@ -363,7 +363,6 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
     </div>
     <div class="window-body" id="artist-window-body">
         <div id="artist-window-banner">
-            <img id="artist-window-avatar" src="" alt="">
             <div id="artist-window-banner-info">
                 <div id="artist-window-banner-name">Artista</div>
                 <div id="artist-window-listeners"></div>
@@ -868,7 +867,7 @@ function openArtistWindow(name) {
     if (!name || name === '—') return;
     var win = document.getElementById('artist-window');
     if (!win) return;
-    var avatar   = document.getElementById('artist-window-avatar');
+    var banner   = document.getElementById('artist-window-banner');
     var bName    = document.getElementById('artist-window-banner-name');
     var listenEl = document.getElementById('artist-window-listeners');
     var topEl    = document.getElementById('artist-window-top');
@@ -876,7 +875,7 @@ function openArtistWindow(name) {
     var token    = ++_artistWinToken;
     var fmtNum = function(n){ return (parseInt(n,10) || 0).toLocaleString('es-ES'); };
     bName.textContent = name;
-    if (avatar) avatar.src = '';
+    if (banner) banner.style.backgroundImage = '';
     if (listenEl) listenEl.textContent = '';
     topEl.innerHTML = '<div class="pl-sr-msg">Cargando…</div>';
     albEl.innerHTML = '';
@@ -929,7 +928,7 @@ function openArtistWindow(name) {
         if (!chosen) { topEl.innerHTML = '<div class="pl-sr-msg">No se encontró el artista.</div>'; return; }
         bName.textContent = chosen.name;
         var big = chosen.imageBig || chosen.image;
-        if (avatar && big) avatar.src = big;
+        if (banner && big) banner.style.backgroundImage = "url('" + big.replace(/'/g, "%27") + "')";
         if (listenEl) listenEl.textContent = chosen.fans ? (fmtNum(chosen.fans) + ' oyentes') : '';
         Promise.all([
             fetch('assets/music/api.php?action=artist-top&name=' + encodeURIComponent(chosen.name)).then(function(r){ return r.json(); }).catch(function(){ return null; }),
@@ -3509,6 +3508,24 @@ var addTrackCallback = null;
             if (typeof _resolveAlbumForRow === 'function') {
                 _resolveAlbumForRow(track, albumSpan, thumbImg);
             }
+            /* Click en el título → abre el álbum de la canción. Si ya se
+               resolvió (albumSpan tiene dataset), lo abre directo; si no,
+               hace un find-album al vuelo. */
+            t1.classList.add('pl-item-title-link');
+            (function(tr, aSpan){
+                t1.addEventListener('click', function(ev){
+                    ev.stopPropagation();
+                    var id = aSpan.dataset.albumId, nm = aSpan.dataset.albumName;
+                    if (id && typeof openAlbumViewer === 'function') { openAlbumViewer(id, nm); return; }
+                    var p = new URLSearchParams({ title: tr.title || '', artist: tr.artist || '', videoId: tr.videoId || '' });
+                    fetch('assets/music/api.php?action=find-album&' + p.toString())
+                        .then(function(r){ return r.ok ? r.json() : null; })
+                        .then(function(d){
+                            var norm = (typeof _normalizeAlbumPayload === 'function') ? _normalizeAlbumPayload(d, tr) : (d && !d.notFound ? d : null);
+                            if (norm && norm.albumKey && typeof openAlbumViewer === 'function') openAlbumViewer(norm.albumKey, norm.albumName);
+                        }).catch(function(){});
+                });
+            })(track, albumSpan);
             if (track.addedBy) {
                 var addedBySpan = document.createElement('span');
                 addedBySpan.className = 'pl-item-addedby';
@@ -4716,7 +4733,9 @@ var addTrackCallback = null;
         } else if (type === 'album') {
             openAlbum(row.dataset.key, row.dataset.name, row.dataset.image, row.dataset.artist);
         } else if (type === 'artist') {
-            openArtist(row.dataset.source, row.dataset.id, row.dataset.name);
+            /* Vista MODERNA del artista (banner + populares + discografía),
+               no la rejilla antigua dentro del menú. */
+            if (typeof openArtistWindow === 'function') openArtistWindow(row.dataset.name);
         }
     });
 
