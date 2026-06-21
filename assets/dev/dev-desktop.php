@@ -21,8 +21,7 @@ if (!defined('MELON_DEV_BUILD') || !MELON_DEV_BUILD) return;
     #dev-wrapped-banner {
         position: fixed;
         top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
+        right: 10px;                  /* pegado a la parte derecha */
         z-index: 480;                 /* sobre los iconos, bajo las ventanas */
         display: flex;
         align-items: center;
@@ -41,10 +40,11 @@ if (!defined('MELON_DEV_BUILD') || !MELON_DEV_BUILD) return;
         transition: transform .08s ease, filter .08s ease;
     }
     #dev-wrapped-banner:hover  { filter: brightness(1.1); }
-    #dev-wrapped-banner:active { transform: translateX(-50%) translateY(1px); }
+    #dev-wrapped-banner:active { transform: translateY(1px); }
     #dev-wrapped-banner .dev-wrapped-emoji { font-size: 15px; line-height: 1; }
 
-    /* Marca de agua "Melon Hub Dev Build" abajo, con poca opacidad. */
+    /* Marca de agua "Melon Hub Dev Build" abajo centrada, con poca
+       opacidad. */
     #dev-build-watermark {
         position: fixed;
         bottom: 38px;                 /* por encima de la taskbar */
@@ -79,13 +79,20 @@ if (!defined('MELON_DEV_BUILD') || !MELON_DEV_BUILD) return;
             if (typeof window.openWrappedWindow === 'function') window.openWrappedWindow(true);
         });
     }
-    /* Icono de mascotas del escritorio (estático, solo-dev) → abre la
-       ventana de gestión de la mascota. El doble-tap en tablet ya se
-       sintetiza globalmente como dblclick sobre .desktop-icon. */
+    /* Icono de mascotas del escritorio (estático, solo-dev) → SPAWNEA la
+       mascota en pantalla (huevo o bicho) y muestra el botón flotante ☰
+       (desde el que se abre la gestión). Antes esto lo hacía el icono que
+       se retiró; sin él la mascota nunca aparecía. El doble-tap en tablet
+       ya se sintetiza globalmente como dblclick sobre .desktop-icon. */
     var pet = document.getElementById('mascota-desktop-icon');
     if (pet) {
         pet.addEventListener('dblclick', function(){
-            if (typeof window.openMascotaWindow === 'function') window.openMascotaWindow();
+            if (window.MascotaEngine && typeof window.MascotaEngine.spawn === 'function') {
+                window.MascotaEngine.spawn();
+            } else if (typeof window.openMascotaWindow === 'function') {
+                /* Fallback: si el engine no cargó, al menos abre la gestión. */
+                window.openMascotaWindow();
+            }
         });
     }
 })();
