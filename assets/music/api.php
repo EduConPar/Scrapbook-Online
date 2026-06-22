@@ -117,6 +117,50 @@ function _ensurePlaylistImageCol(PDO $pdo): void {
     } catch (Throwable $e) { /* sin permiso o ya existe */ }
 }
 
+/* Devuelve un mapa videoId(original) => ['newVideoId','title','artist'] con
+   las correcciones manuales (song_album_overrides) para los videoIds dados.
+   Solo trae los campos; el caller decide cuáles aplicar (los vacíos = sin
+   cambio). Best-effort: si la tabla no existe todavía → []. */
+function _fetchSongOverrideMap(PDO $pdo, array $videoIds): array {
+    $videoIds = array_values(array_unique(array_filter($videoIds)));
+    if (!$videoIds) return [];
+    try {
+        $place = implode(',', array_fill(0, count($videoIds), '?'));
+        $stmt = $pdo->prepare("SELECT video_id, new_video_id, song_title, song_artist
+                               FROM song_album_overrides WHERE video_id IN ($place)");
+        $stmt->execute($videoIds);
+        $map = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(string)$r['video_id']] = [
+                'newVideoId' => (string)($r['new_video_id'] ?? ''),
+                'title'      => (string)($r['song_title']   ?? ''),
+                'artist'     => (string)($r['song_artist']  ?? ''),
+            ];
+        }
+        return $map;
+    } catch (Throwable $e) { return []; }
+}
+
+/* Aplica las correcciones (título/artista/link de YouTube) a una lista de
+   tracks (cada uno con 'videoId','title','artist'). Sustituye in-place y
+   devuelve la lista. Usado al cargar/importar para que la canción se vea
+   SIEMPRE con sus valores corregidos en cualquier playlist. */
+function _applySongOverrides(PDO $pdo, array $tracks): array {
+    if (!$tracks) return $tracks;
+    $map = _fetchSongOverrideMap($pdo, array_column($tracks, 'videoId'));
+    if (!$map) return $tracks;
+    foreach ($tracks as &$t) {
+        $vid = (string)($t['videoId'] ?? '');
+        if ($vid === '' || !isset($map[$vid])) continue;
+        $ov = $map[$vid];
+        if ($ov['title']  !== '') $t['title']  = $ov['title'];
+        if ($ov['artist'] !== '') $t['artist'] = $ov['artist'];
+        if ($ov['newVideoId'] !== '' && strlen($ov['newVideoId']) === 11) $t['videoId'] = $ov['newVideoId'];
+    }
+    unset($t);
+    return $tracks;
+}
+
 function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
     _ensurePlaylistImageCol($pdo);
     /* Propias */
@@ -157,6 +201,24 @@ function loadPlaylistsForUser(PDO $pdo, int $uid, string $userKey): array {
             unset($tr['playlist_id']);
             $tr['duration'] = (int)$tr['duration'];
             $tracksByPl[$pid][] = $tr;
+        }
+    }
+
+    /* Aplica las correcciones manuales (título/artista/link de YouTube)
+       globalmente, en UN solo query para todos los videoIds implicados. */
+    if (!empty($tracksByPl)) {
+        $allVids = [];
+        foreach ($tracksByPl as $list) foreach ($list as $tr) $allVids[] = $tr['videoId'];
+        $ovMap = _fetchSongOverrideMap($pdo, $allVids);
+        if ($ovMap) foreach ($tracksByPl as $pid => $list) {
+            foreach ($list as $i => $tr) {
+                $vid = (string)$tr['videoId'];
+                if (!isset($ovMap[$vid])) continue;
+                $ov = $ovMap[$vid];
+                if ($ov['title']  !== '') $tracksByPl[$pid][$i]['title']  = $ov['title'];
+                if ($ov['artist'] !== '') $tracksByPl[$pid][$i]['artist'] = $ov['artist'];
+                if ($ov['newVideoId'] !== '' && strlen($ov['newVideoId']) === 11) $tracksByPl[$pid][$i]['videoId'] = $ov['newVideoId'];
+            }
         }
     }
 
@@ -547,8 +609,14 @@ case 'add-track': {
     $artist = substr(strip_tags($b['artist'] ?? ''), 0, 200);
     $pdo->prepare("INSERT INTO music_extras (user_id, video_id, title, artist) VALUES (?, ?, ?, ?)")
         ->execute([$uid, $videoId, $title, $artist]);
+    /* Si esta canción tiene una corrección manual (título/artista/link),
+       la devolvemos ya corregida para que entre así en la playlist. */
+    $corrected = _applySongOverrides($pdo, [[
+        'videoId' => $videoId, 'title' => $title, 'artist' => $artist,
+    ]]);
+    $t = $corrected[0] ?? ['videoId' => $videoId, 'title' => $title, 'artist' => $artist];
     jsonResponse(['ok' => true, 'track' => [
-        'title' => $title, 'artist' => $artist, 'videoId' => $videoId,
+        'title' => $t['title'], 'artist' => $t['artist'], 'videoId' => $t['videoId'],
     ]]);
 }
 
@@ -700,6 +768,10 @@ case 'yt-search-batch': {
             'duration' => $it['duration'],
         ];
     }
+    /* Aplica las correcciones manuales (título/artista/link) a los tracks
+       resueltos: al importar de Spotify/Tidal/etc. la canción entra ya con
+       sus valores corregidos. */
+    $results = _applySongOverrides($pdo, $results);
     jsonResponse(['tracks' => $results]);
 }
 
@@ -734,7 +806,10 @@ case 'spotify-track': {
         ['title' => $title, 'artist' => $artist, 'duration' => $duration]
     );
     if (!$videoId) jsonError('No se encontró el vídeo en YouTube', 502);
-    jsonResponse(['title' => $title, 'artist' => $artist, 'duration' => $duration, 'videoId' => $videoId]);
+    $t = _applySongOverrides($pdo, [[
+        'videoId' => $videoId, 'title' => $title, 'artist' => $artist, 'duration' => $duration,
+    ]])[0];
+    jsonResponse(['title' => $t['title'], 'artist' => $t['artist'], 'duration' => $t['duration'], 'videoId' => $t['videoId']]);
 }
 
 /* Busca el álbum al que pertenece una canción usando Spotify Search.
@@ -768,9 +843,14 @@ case 'find-album': {
        cualquier playlist y para todos los usuarios. */
     if ($videoId !== '') {
         try {
+            /* Buscamos por el videoId ORIGINAL o por el nuevo (new_video_id):
+               si la canción ya se cargó con el link corregido, su videoId
+               actual es el nuevo y aun así debe encontrar su override. */
             $ovStmt = $pdo->prepare("SELECT source, album_id, album_key, album_name, album_artist, album_image, album_url
-                                       FROM song_album_overrides WHERE video_id = ?");
-            $ovStmt->execute([$videoId]);
+                                       FROM song_album_overrides
+                                      WHERE video_id = ? OR new_video_id = ?
+                                      LIMIT 1");
+            $ovStmt->execute([$videoId, $videoId]);
             $ov = $ovStmt->fetch(PDO::FETCH_ASSOC);
             if ($ov) {
                 $ovKey = (string)($ov['album_key'] ?? '');
@@ -1104,11 +1184,17 @@ case 'tidal-track': {
         ['title' => $meta['title'], 'artist' => $meta['artist'], 'duration' => (int)($meta['duration'] ?? 0)]
     );
     if (!$video) jsonError('No se encontró el vídeo en YouTube', 502);
-    jsonResponse([
+    $t = _applySongOverrides($pdo, [[
+        'videoId'  => $video['videoId'],
         'title'    => $meta['title'],
         'artist'   => $meta['artist'],
         'duration' => $video['duration'] ?: $meta['duration'],
-        'videoId'  => $video['videoId'],
+    ]])[0];
+    jsonResponse([
+        'title'    => $t['title'],
+        'artist'   => $t['artist'],
+        'duration' => $t['duration'],
+        'videoId'  => $t['videoId'],
     ]);
 }
 
@@ -1450,6 +1536,9 @@ case 'import-playlist': {
         ];
     }
     if (empty($tracks)) jsonError('No se encontraron canciones válidas en la playlist', 404);
+    /* Correcciones manuales: la playlist de YouTube importada entra con los
+       títulos/artistas/links corregidos por la comunidad. */
+    $tracks = _applySongOverrides($pdo, $tracks);
     jsonResponse(['tracks' => $tracks]);
 }
 
@@ -1873,29 +1962,50 @@ case 'artist-top': {
     jsonResponse(['ok' => true, 'tracks' => $tracks]);
 }
 
-/* ─── Corregir el álbum de una canción ──────────────────────────────
-   El usuario reporta que el álbum auto-detectado de un track es
-   incorrecto e introduce el NOMBRE del álbum correcto (o elige una
-   sugerencia). Guardamos la corrección por videoId. A partir de
-   entonces `find-album` devuelve SIEMPRE este álbum para esa canción,
-   en cualquier playlist y para todos los usuarios. */
+/* ─── Corregir una canción ──────────────────────────────────────────
+   El usuario corrige los datos de un track: álbum, título, artista y/o
+   el link de YouTube (videoId). Todo se guarda por videoId (original) en
+   `song_album_overrides`. A partir de entonces:
+     - `find-album` devuelve SIEMPRE el álbum corregido para esa canción.
+     - al cargar/importar playlists se sustituyen título/artista/videoId.
+   Es global (todos los usuarios) y persistente. El álbum es OPCIONAL:
+   se puede corregir solo el título, el artista o el link. */
 case 'report-album': {
     $uid = uidByKey($pdo, $userKey);
     if (!$uid) jsonError('Usuario no encontrado', 500);
     $b = jsonBody();
     $videoId   = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($b['videoId'] ?? ''));
     if (strlen($videoId) !== 11) jsonError('videoId inválido');
-    $artist    = trim((string)($b['artist'] ?? ''));
     $songTitle = mb_substr(trim((string)($b['title'] ?? '')), 0, 255);
+    $artist    = mb_substr(trim((string)($b['artist'] ?? '')), 0, 255);
+
+    /* Nuevo link de YouTube → extraemos el videoId. Acepta URL completa
+       (watch?v=, youtu.be/, /shorts/, /embed/) o el id de 11 chars. */
+    $newVideoId = '';
+    $linkIn = trim((string)($b['newVideoId'] ?? $b['videoLink'] ?? ''));
+    if ($linkIn !== '') {
+        if (preg_match('~(?:v=|youtu\.be/|/shorts/|/embed/)([A-Za-z0-9_-]{11})~', $linkIn, $vm)) {
+            $newVideoId = $vm[1];
+        } elseif (preg_match('~^[A-Za-z0-9_-]{11}$~', $linkIn)) {
+            $newVideoId = $linkIn;
+        } else {
+            jsonError('El link de YouTube no es válido.');
+        }
+        /* Si el id "nuevo" coincide con el original, no es un cambio. */
+        if ($newVideoId === $videoId) $newVideoId = '';
+    }
+
     require_once __DIR__ . '/itunes-helpers.php';
     require_once __DIR__ . '/deezer-helpers.php';
 
-    /* Dos modos:
+    /* Álbum (OPCIONAL). Dos modos:
          a) El usuario eligió una sugerencia → llega `albumKey` (itunes:ID /
-            deezer:ID) + nombre/artista/imagen ya conocidos. Match directo.
-         b) Texto libre → `albumName` y lo resolvemos por nombre. */
+            deezer:ID) + nombre/artista/imagen. Match directo.
+         b) Texto libre → `albumName` y lo resolvemos por nombre.
+       Si no se aporta ni albumKey ni albumName, NO se corrige el álbum. */
     $match = null;
     $albumKeyIn = trim((string)($b['albumKey'] ?? ''));
+    $albumName  = trim((string)($b['albumName'] ?? ''));
     if ($albumKeyIn !== '' && preg_match('~^(itunes|deezer):(\d+)$~', $albumKeyIn, $mk)) {
         $src = $mk[1]; $aid = $mk[2];
         $nm  = trim((string)($b['albumName']   ?? ''));
@@ -1910,17 +2020,21 @@ case 'report-album': {
             }
         }
         if ($nm !== '') $match = ['source' => $src, 'albumId' => $aid, 'name' => $nm, 'artist' => $art, 'image' => $img];
-    }
-    if (!$match) {
-        $albumName = trim((string)($b['albumName'] ?? ''));
-        if ($albumName === '') jsonError('Falta el nombre del álbum');
+    } elseif ($albumName !== '') {
         $match = _resolveAlbumByName($albumName, $artist);
         if (!$match) {
             jsonError('No se encontró un álbum con ese nombre. Escríbelo más exacto (puedes incluir el artista).', 404);
         }
     }
 
-    $albumKey = $match['source'] . ':' . $match['albumId'];
+    /* Sin álbum: campos de álbum vacíos (corrección de solo metadatos). */
+    $aSource = $match['source']  ?? '';
+    $aId     = $match['albumId'] ?? '';
+    $aKey    = $match ? ($match['source'] . ':' . $match['albumId']) : '';
+    $aName   = $match['name']   ?? '';
+    $aArtist = $match['artist'] ?? '';
+    $aImage  = $match['image']  ?? '';
+
     $pdo->exec("CREATE TABLE IF NOT EXISTS song_album_overrides (
         video_id     VARCHAR(11) PRIMARY KEY,
         source       VARCHAR(10)  NOT NULL,
@@ -1932,46 +2046,59 @@ case 'report-album': {
         album_url    VARCHAR(500) NOT NULL DEFAULT '',
         song_title   VARCHAR(255) NOT NULL DEFAULT '',
         song_artist  VARCHAR(255) NOT NULL DEFAULT '',
+        new_video_id VARCHAR(11)  NOT NULL DEFAULT '',
         created_by   INT NULL,
         created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) DEFAULT CHARSET=utf8mb4");
     /* Columnas para tablas ya existentes (idempotente). */
-    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_title'")->fetch())  $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_title VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
-    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_artist'")->fetch()) $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_artist VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_title'")->fetch())   $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_title VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_artist'")->fetch())  $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_artist VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'new_video_id'")->fetch()) $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN new_video_id VARCHAR(11) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
     $pdo->prepare("INSERT INTO song_album_overrides
-        (video_id, source, album_id, album_key, album_name, album_artist, album_image, album_url, song_title, song_artist, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (video_id, source, album_id, album_key, album_name, album_artist, album_image, album_url, song_title, song_artist, new_video_id, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE source=VALUES(source), album_id=VALUES(album_id), album_key=VALUES(album_key),
             album_name=VALUES(album_name), album_artist=VALUES(album_artist), album_image=VALUES(album_image),
-            album_url=VALUES(album_url), song_title=VALUES(song_title), song_artist=VALUES(song_artist), created_by=VALUES(created_by)")
-        ->execute([$videoId, $match['source'], $match['albumId'], $albumKey,
-                   $match['name'], $match['artist'], $match['image'], '', $songTitle, $artist, $uid]);
+            album_url=VALUES(album_url), song_title=VALUES(song_title), song_artist=VALUES(song_artist),
+            new_video_id=VALUES(new_video_id), created_by=VALUES(created_by)")
+        ->execute([$videoId, $aSource, $aId, $aKey,
+                   $aName, $aArtist, $aImage, '', $songTitle, $artist, $newVideoId, $uid]);
 
-    /* Corrige también la imagen en "escuchados recientemente" (global, por
-       videoId) para que la carátula corregida aparezca ahí al instante. */
-    if (!empty($match['image'])) {
-        try {
-            _ensureRecentTable($pdo);
-            $pdo->prepare("UPDATE music_recent SET image = ? WHERE item_type = 'song' AND item_key = ?")
-                ->execute([$match['image'], $videoId]);
-        } catch (Throwable $e) { /* tabla puede no existir aún */ }
-    }
+    /* Refleja la corrección al instante en "escuchados recientemente"
+       (global, por videoId): imagen del álbum + título/artista corregidos. */
+    try {
+        _ensureRecentTable($pdo);
+        $sets = []; $vals = [];
+        if ($aImage   !== '') { $sets[] = 'image = ?';  $vals[] = $aImage;   }
+        if ($songTitle !== '') { $sets[] = 'name = ?';   $vals[] = $songTitle; }
+        if ($artist    !== '') { $sets[] = 'artist = ?'; $vals[] = $artist;    }
+        if ($sets) {
+            $vals[] = $videoId;
+            $pdo->prepare("UPDATE music_recent SET " . implode(', ', $sets) . " WHERE item_type = 'song' AND item_key = ?")
+                ->execute($vals);
+        }
+    } catch (Throwable $e) { /* tabla puede no existir aún */ }
 
-    jsonResponse(['ok' => true, 'album' => [
-        'notFound'       => false,
-        'source'         => $match['source'],
-        'albumKey'       => $albumKey,
-        'spotifyAlbumId' => '',
-        'albumName'      => $match['name'],
-        'albumArtist'    => $match['artist'],
-        'matchArtist'    => $match['artist'],
-        'albumImage'     => $match['image'],
-        'albumUrl'       => '',
-        'isSingle'       => false,
-        'matchTitle'     => '',
-        'isOverride'     => true,
-    ]]);
+    jsonResponse(['ok' => true,
+        'newVideoId' => $newVideoId,
+        'title'      => $songTitle,
+        'artist'     => $artist,
+        'album'      => $match ? [
+            'notFound'       => false,
+            'source'         => $aSource,
+            'albumKey'       => $aKey,
+            'spotifyAlbumId' => '',
+            'albumName'      => $aName,
+            'albumArtist'    => $aArtist,
+            'matchArtist'    => $aArtist,
+            'albumImage'     => $aImage,
+            'albumUrl'       => '',
+            'isSingle'       => false,
+            'matchTitle'     => '',
+            'isOverride'     => true,
+        ] : null,
+    ]);
 }
 
 default:

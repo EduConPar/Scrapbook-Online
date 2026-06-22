@@ -380,6 +380,15 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             <div id="artist-window-albums"></div>
         </div>
     </div>
+    <!-- Resize handles por los 4 lados + 4 esquinas (mismo patrón que el album-viewer). -->
+    <div class="av-resize av-resize-n"  data-edge="n"></div>
+    <div class="av-resize av-resize-s"  data-edge="s"></div>
+    <div class="av-resize av-resize-w"  data-edge="w"></div>
+    <div class="av-resize av-resize-e"  data-edge="e"></div>
+    <div class="av-resize av-resize-nw" data-edge="nw"></div>
+    <div class="av-resize av-resize-ne" data-edge="ne"></div>
+    <div class="av-resize av-resize-sw" data-edge="sw"></div>
+    <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
 <!-- ADD TRACK DIALOG -->
@@ -456,6 +465,14 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             <button class="button" id="edit-pl-save">Guardar</button>
         </div>
     </div>
+    <div class="av-resize av-resize-n"  data-edge="n"></div>
+    <div class="av-resize av-resize-s"  data-edge="s"></div>
+    <div class="av-resize av-resize-w"  data-edge="w"></div>
+    <div class="av-resize av-resize-e"  data-edge="e"></div>
+    <div class="av-resize av-resize-nw" data-edge="nw"></div>
+    <div class="av-resize av-resize-ne" data-edge="ne"></div>
+    <div class="av-resize av-resize-sw" data-edge="sw"></div>
+    <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
 <!-- IMPORT PLAYLIST DIALOG -->
@@ -717,6 +734,14 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
             <button class="button" id="lt-end-btn" style="display:none;">Cerrar sesión</button>
         </div>
     </div>
+    <div class="av-resize av-resize-n"  data-edge="n"></div>
+    <div class="av-resize av-resize-s"  data-edge="s"></div>
+    <div class="av-resize av-resize-w"  data-edge="w"></div>
+    <div class="av-resize av-resize-e"  data-edge="e"></div>
+    <div class="av-resize av-resize-nw" data-edge="nw"></div>
+    <div class="av-resize av-resize-ne" data-edge="ne"></div>
+    <div class="av-resize av-resize-sw" data-edge="sw"></div>
+    <div class="av-resize av-resize-se" data-edge="se"></div>
 </div>
 
 <script>
@@ -942,6 +967,110 @@ function openArtistWindow(name) {
     .catch(function(){ if (token === _artistWinToken) { topEl.innerHTML = '<div class="pl-sr-msg">Error cargando el artista.</div>'; } });
 }
 window.openArtistWindow = openArtistWindow;
+
+/* Re-renderiza la ventana del artista si está abierta. Se llama tras
+   corregir una canción para que las populares/carátulas reflejen al
+   instante los datos corregidos (artist-top aplica los overrides en el
+   backend). Usa el nombre del artista mostrado en la cabecera. */
+window.refreshArtistWindowIfOpen = function() {
+    var win = document.getElementById('artist-window');
+    if (!win || win.style.display === 'none') return;
+    var bName = document.getElementById('artist-window-banner-name');
+    var name  = bName ? bName.textContent.trim() : '';
+    if (name && name !== 'Artista') openArtistWindow(name);
+};
+
+/* ── Drag + resize reutilizable para ventanas del reproductor ──
+   Arrastra por su .title-bar y redimensiona por los handles .av-resize
+   (8 lados/esquinas). Mismo patrón Pointer-Events que el album-viewer.
+   Convierte el centrado por transform en left/top absolutos al primer
+   gesto para mover/redimensionar sin saltos. Idempotente por ventana. */
+function _winDragResize(winId, minW, minH) {
+    var win = document.getElementById(winId);
+    if (!win || win.dataset.dragResizeWired) return;
+    win.dataset.dragResizeWired = '1';
+    var MIN_W = minW || 260, MIN_H = minH || 180;
+
+    function fixPos() {
+        var r = win.getBoundingClientRect();
+        win.style.left = r.left + 'px';
+        win.style.top  = r.top  + 'px';
+        win.style.transform = 'none';
+        return r;
+    }
+
+    /* ── Drag por la title-bar ── */
+    var titlebar = win.querySelector('.title-bar');
+    if (titlebar) {
+        var dragging = false, ox = 0, oy = 0, dpid = -1;
+        titlebar.addEventListener('pointerdown', function(e){
+            if (e.target.closest('.title-bar-controls') || e.target.tagName === 'BUTTON') return;
+            dragging = true; dpid = e.pointerId;
+            try { titlebar.setPointerCapture(dpid); } catch (_) {}
+            var r = fixPos();
+            ox = e.clientX - r.left; oy = e.clientY - r.top;
+        });
+        titlebar.addEventListener('pointermove', function(e){
+            if (!dragging || e.pointerId !== dpid) return;
+            var nl = Math.max(0, Math.min(e.clientX - ox, window.innerWidth  - 60));
+            var nt = Math.max(0, Math.min(e.clientY - oy, window.innerHeight - 24));
+            win.style.left = nl + 'px'; win.style.top = nt + 'px';
+        });
+        var dend = function(e){
+            if (e && e.pointerId !== dpid) return;
+            dragging = false;
+            try { titlebar.releasePointerCapture(e ? e.pointerId : dpid); } catch (_) {}
+            dpid = -1;
+        };
+        titlebar.addEventListener('pointerup', dend);
+        titlebar.addEventListener('pointercancel', dend);
+    }
+
+    /* ── Resize por los handles .av-resize ── */
+    var handles = win.querySelectorAll('.av-resize');
+    if (handles.length) {
+        var rpid = -1, edge = '', sx = 0, sy = 0, sw = 0, sh = 0, sl = 0, st = 0, ah = null;
+        var rdown = function(e){
+            e.preventDefault(); e.stopPropagation();
+            ah = e.currentTarget; edge = ah.dataset.edge || ''; rpid = e.pointerId;
+            try { ah.setPointerCapture(rpid); } catch (_) {}
+            var r = fixPos();
+            sx = e.clientX; sy = e.clientY; sw = win.offsetWidth; sh = win.offsetHeight; sl = r.left; st = r.top;
+        };
+        var rmove = function(e){
+            if (e.pointerId !== rpid) return;
+            var dx = e.clientX - sx, dy = e.clientY - sy, nw = sw, nh = sh, nl = sl, nt = st;
+            if (edge.indexOf('e') !== -1) nw = Math.max(MIN_W, sw + dx);
+            if (edge.indexOf('w') !== -1) { nw = Math.max(MIN_W, sw - dx); nl = sl + (sw - nw); }
+            if (edge.indexOf('s') !== -1) nh = Math.max(MIN_H, sh + dy);
+            if (edge.indexOf('n') !== -1) { nh = Math.max(MIN_H, sh - dy); nt = st + (sh - nh); }
+            nw = Math.min(nw, window.innerWidth  - 16);
+            nh = Math.min(nh, window.innerHeight - 16);
+            nl = Math.max(8, Math.min(nl, window.innerWidth  - nw - 8));
+            nt = Math.max(8, Math.min(nt, window.innerHeight - nh - 8));
+            win.style.width = nw + 'px'; win.style.height = nh + 'px';
+            win.style.left = nl + 'px'; win.style.top = nt + 'px';
+        };
+        var rup = function(e){
+            if (e && e.pointerId !== rpid) return;
+            try { ah && ah.releasePointerCapture(e ? e.pointerId : rpid); } catch (_) {}
+            rpid = -1; ah = null; edge = '';
+        };
+        handles.forEach(function(h){
+            h.addEventListener('pointerdown',   rdown);
+            h.addEventListener('pointermove',   rmove);
+            h.addEventListener('pointerup',     rup);
+            h.addEventListener('pointercancel', rup);
+        });
+    }
+}
+/* Ventanas del reproductor que no pasan por el WindowManager del desktop
+   → arrastrables + redimensionables aquí. (album-viewer y playlist-editor
+   ya tienen su propio wiring; el resto va por el WindowManager.) */
+_winDragResize('artist-window', 300, 260);
+_winDragResize('edit-playlist-dialog', 260, 180);
+_winDragResize('lt-modal', 260, 200);
+
 (function(){
     var c = document.getElementById('artist-window-close');
     if (c) c.addEventListener('click', closeArtistWindow);
@@ -3760,13 +3889,12 @@ var addTrackCallback = null;
         });
         ctxMenu.appendChild(addPl);
 
-        /* Corregir el álbum auto-detectado de esta canción: el usuario
-           escribe el NOMBRE del álbum correcto y se guarda por videoId
-           (global y persistente) → la canción muestra ese álbum en
-           cualquier playlist. */
+        /* Corregir los datos de esta canción: título, artista, álbum y/o
+           el link de YouTube. Se guarda por videoId (global y persistente)
+           → la canción se ve corregida en cualquier playlist y al importar. */
         var fixAlbum = document.createElement('div');
         fixAlbum.className = 'pl-menu-item';
-        fixAlbum.textContent = '💿 Corregir álbum…';
+        fixAlbum.textContent = 'Corregir…';
         fixAlbum.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
             reportWrongAlbum(track);
@@ -3827,37 +3955,57 @@ var addTrackCallback = null;
         ctxMenu.style.left = Math.min(ex, window.innerWidth  - cw - 8) + 'px';
         ctxMenu.style.top  = Math.min(ey, window.innerHeight - ch - 8) + 'px';
     }
-    /* Diálogo para corregir el álbum de una canción: el usuario escribe el
-       nombre y aparecen abajo, en vivo, álbumes que matchean (iTunes +
-       Deezer). Al elegir uno se guarda por videoId vía report-album. */
+    /* Diálogo para CORREGIR una canción: el usuario puede ajustar el
+       título, el artista, el link de YouTube y/o el álbum. Todo se guarda
+       por videoId vía report-album (global y persistente) → la canción se
+       ve con esos valores en cualquier playlist y al volver a importarla.
+       El álbum se busca en vivo (iTunes + Deezer) mientras se escribe; al
+       elegir un resultado queda "seleccionado" y se envía con el resto al
+       pulsar Guardar (ya no auto-envía). */
     function reportWrongAlbum(track) {
         if (!track || !track.videoId) return;
+
+        /* Álbum elegido (opcional). null = no se toca el álbum. */
+        var chosenAlbum = null;
 
         var bd = document.createElement('div');
         bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:100000;display:flex;align-items:center;justify-content:center;';
         var win = document.createElement('div');
         win.className = 'window';
-        win.style.cssText = 'width:380px;max-width:92vw;';
+        win.style.cssText = 'width:420px;max-width:94vw;max-height:90vh;display:flex;flex-direction:column;';
         win.innerHTML =
-            '<div class="title-bar"><div class="title-bar-text">Corregir álbum</div>' +
+            '<div class="title-bar" data-ra-titlebar><div class="title-bar-text">Corregir canción</div>' +
                 '<div class="title-bar-controls"><button aria-label="Close" data-act="close"></button></div></div>' +
-            '<div class="window-body" style="padding:10px;">' +
-                '<p style="margin:0 0 8px;font-size:10px;line-height:1.45;opacity:0.85;">El álbum asignado automáticamente puede ser incorrecto. Ayuda a la comunidad corrigiéndolo para que no vuelva a ocurrir.</p>' +
-                '<p style="margin:0 0 6px;font-size:11px;">Álbum correcto para "<b class="ra-song"></b>":</p>' +
-                '<input type="text" class="ra-input" autocomplete="off" placeholder="Escribe el nombre del álbum…" style="width:100%;box-sizing:border-box;">' +
-                '<div class="ra-results" style="margin-top:6px;max-height:240px;overflow-y:auto;"></div>' +
-                '<div class="ra-hint" style="font-size:10px;opacity:0.7;margin-top:6px;">Escribe y elige un resultado. (Enter usa el texto tal cual.)</div>' +
-                '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">' +
+            '<div class="window-body" style="padding:10px;flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto;">' +
+                '<p style="margin:0 0 10px;font-size:10px;line-height:1.45;opacity:0.85;">Corrige los datos de esta canción. Se guardan para siempre: cuando la añadas a otra playlist o la importes, se usarán estos valores.</p>' +
+                '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:2px;">Título</label>' +
+                '<input type="text" class="ra-title" autocomplete="off" placeholder="Título de la canción" style="width:100%;box-sizing:border-box;margin-bottom:8px;">' +
+                '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:2px;">Artista</label>' +
+                '<input type="text" class="ra-artist" autocomplete="off" placeholder="Nombre del artista" style="width:100%;box-sizing:border-box;margin-bottom:8px;">' +
+                '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:2px;">Link de YouTube</label>' +
+                '<input type="text" class="ra-link" autocomplete="off" placeholder="Pega un enlace de YouTube (opcional)" style="width:100%;box-sizing:border-box;margin-bottom:8px;">' +
+                '<label style="font-size:11px;font-weight:bold;display:block;margin-bottom:2px;">Álbum</label>' +
+                '<input type="text" class="ra-input" autocomplete="off" placeholder="Escribe el nombre del álbum (opcional)…" style="width:100%;box-sizing:border-box;">' +
+                '<div class="ra-chosen" style="display:none;align-items:center;gap:8px;margin-top:6px;padding:4px 6px;border:1px solid var(--border,#444);"></div>' +
+                '<div class="ra-results" style="margin-top:6px;flex:1;min-height:0;overflow-y:auto;"></div>' +
+                '<div class="ra-hint" style="font-size:10px;opacity:0.7;margin-top:6px;">Para el álbum, escribe y elige un resultado de la lista.</div>' +
+                '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;flex-shrink:0;">' +
                     '<button class="button" data-act="cancel">Cancelar</button>' +
+                    '<button class="button" data-act="save">Guardar</button>' +
                 '</div>' +
             '</div>';
-        win.querySelector('.ra-song').textContent = track.title || 'esta canción';
         bd.appendChild(win);
         document.body.appendChild(bd);
 
+        var titleIn  = win.querySelector('.ra-title');
+        var artistIn = win.querySelector('.ra-artist');
+        var linkIn   = win.querySelector('.ra-link');
         var input     = win.querySelector('.ra-input');
         var resultsEl = win.querySelector('.ra-results');
-        setTimeout(function(){ input.focus(); }, 30);
+        var chosenEl  = win.querySelector('.ra-chosen');
+        titleIn.value  = track.title  || '';
+        artistIn.value = track.artist || '';
+        setTimeout(function(){ titleIn.focus(); titleIn.select(); }, 30);
 
         function close(){ document.removeEventListener('keydown', onKey, true); bd.remove(); }
         function onKey(e){ if (e.key === 'Escape') { e.preventDefault(); close(); } }
@@ -3866,23 +4014,62 @@ var addTrackCallback = null;
         win.querySelector('[data-act="cancel"]').addEventListener('click', close);
         bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
 
-        function submit(payload) {
+        /* Pinta el álbum elegido y permite quitarlo. */
+        function renderChosen() {
+            if (!chosenAlbum) { chosenEl.style.display = 'none'; chosenEl.innerHTML = ''; return; }
+            chosenEl.style.display = 'flex';
+            chosenEl.innerHTML = '';
+            var img = document.createElement('img');
+            img.src = chosenAlbum.image || '';
+            img.style.cssText = 'width:34px;height:34px;object-fit:cover;flex:0 0 34px;background:#222;';
+            img.onerror = function(){ this.style.visibility = 'hidden'; };
+            var txt = document.createElement('div');
+            txt.style.cssText = 'min-width:0;flex:1;';
+            txt.innerHTML = '<div style="font-size:11px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>' +
+                            '<div style="font-size:10px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>';
+            txt.children[0].textContent = chosenAlbum.name || '';
+            txt.children[1].textContent = chosenAlbum.artist || '';
+            var rm = document.createElement('button');
+            rm.className = 'button'; rm.textContent = 'Quitar'; rm.style.flexShrink = '0';
+            rm.addEventListener('click', function(){ chosenAlbum = null; renderChosen(); });
+            chosenEl.appendChild(img); chosenEl.appendChild(txt); chosenEl.appendChild(rm);
+        }
+
+        function submit() {
+            var payload = {
+                videoId: track.videoId,
+                title:   titleIn.value.trim(),
+                artist:  artistIn.value.trim(),
+                videoLink: linkIn.value.trim()
+            };
+            if (chosenAlbum) {
+                payload.albumKey    = chosenAlbum.albumKey || '';
+                payload.albumName   = chosenAlbum.name   || '';
+                payload.albumArtist = chosenAlbum.artist || '';
+                payload.albumImage  = chosenAlbum.image  || '';
+            }
             fetch('assets/music/api.php?action=report-album', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(Object.assign({ videoId: track.videoId, artist: track.artist || '', title: track.title || '' }, payload))
+                body: JSON.stringify(payload)
             })
             .then(function(r){ return r.json(); })
             .then(function(d){
                 if (!d || !d.ok) {
-                    var msg = (d && d.error) || 'No se pudo corregir el álbum';
-                    if (window.notifSystem) notifSystem.show({ type: 'error', title: 'Álbum no corregido', message: msg });
+                    var msg = (d && d.error) || 'No se pudo guardar la corrección';
+                    if (window.notifSystem) notifSystem.show({ type: 'error', title: 'No corregido', message: msg });
                     else alert(msg);
                     return;
                 }
-                /* Guarda la corrección en la cache local por videoId
+                /* Si cambió el link de YouTube, el videoId vigente de la
+                   canción pasa a ser el nuevo: aplicamos in-memory para que
+                   el resto de la UI (mini-player, filas) use el id correcto. */
+                var effectiveVid = (d.newVideoId && d.newVideoId.length === 11) ? d.newVideoId : track.videoId;
+                if (d.title)  track.title  = d.title;
+                if (d.artist) track.artist = d.artist;
+                /* Guarda la corrección de álbum en la cache local por videoId
                    (autoritativa) para repintar al instante sin re-fetch. */
-                if (d.album) { try { _albumCacheSet(track.videoId, d.album); } catch (_) {} }
+                if (d.album) { try { _albumCacheSet(effectiveVid, d.album); _albumCacheSet(track.videoId, d.album); } catch (_) {} }
                 else { try { var c = _loadAlbumCache(); delete c[track.videoId]; _saveAlbumCache(); } catch (_) {} }
                 /* Mini-player. */
                 var cur = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
@@ -3899,9 +4086,12 @@ var addTrackCallback = null;
                         _resolveAlbumForRow(track, span, th);
                     });
                 }
+                /* Si la ventana del artista está abierta, refréscala para que
+                   muestre la carátula/datos corregidos al instante. */
+                if (typeof window.refreshArtistWindowIfOpen === 'function') window.refreshArtistWindowIfOpen();
                 if (window.notifSystem) {
-                    notifSystem.show({ type: 'success', title: 'Álbum corregido',
-                        message: (d.album && d.album.albumName) ? ('Ahora: ' + d.album.albumName) : 'Guardado correctamente' });
+                    notifSystem.show({ type: 'success', title: 'Canción corregida',
+                        message: (d.album && d.album.albumName) ? ('Álbum: ' + d.album.albumName) : 'Guardado correctamente' });
                 }
                 close();
             })
@@ -3909,6 +4099,7 @@ var addTrackCallback = null;
                 if (window.notifSystem) notifSystem.show({ type: 'error', title: 'Error de red', message: 'No se pudo guardar la corrección' });
             });
         }
+        win.querySelector('[data-act="save"]').addEventListener('click', submit);
 
         function renderResults(list) {
             resultsEl.innerHTML = '';
@@ -3932,7 +4123,13 @@ var addTrackCallback = null;
                 txt.appendChild(nm); txt.appendChild(ar);
                 row.appendChild(img); row.appendChild(txt);
                 row.addEventListener('click', function(){
-                    submit({ albumKey: a.albumKey, albumName: a.name || '', albumArtist: a.artist || '', albumImage: a.image || '' });
+                    /* Selecciona el álbum (no envía aún): se manda con el
+                       resto de campos al pulsar Guardar. */
+                    chosenAlbum = { albumKey: a.albumKey, name: a.name || '', artist: a.artist || '', image: a.image || '' };
+                    renderChosen();
+                    input.value = '';
+                    resultsEl.innerHTML = '';
+                    lastQ = null;
                 });
                 resultsEl.appendChild(row);
             });
@@ -3944,7 +4141,7 @@ var addTrackCallback = null;
             if (q === lastQ) return;
             lastQ = q;
             if (q.length < 2) { resultsEl.innerHTML = ''; return; }
-            fetch('assets/music/api.php?action=search-albums&q=' + encodeURIComponent(q) + '&artist=' + encodeURIComponent(track.artist || ''))
+            fetch('assets/music/api.php?action=search-albums&q=' + encodeURIComponent(q) + '&artist=' + encodeURIComponent(artistIn.value.trim() || track.artist || ''))
                 .then(function(r){ return r.json(); })
                 .then(function(d){
                     if (input.value.trim() !== q) return;   /* respuesta obsoleta */
@@ -3954,11 +4151,7 @@ var addTrackCallback = null;
         }
         input.addEventListener('input', function(){ clearTimeout(searchT); searchT = setTimeout(doSearch, 300); });
         input.addEventListener('keydown', function(e){
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                var v = input.value.trim();
-                if (v) submit({ albumName: v });   /* fallback texto libre */
-            }
+            if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchT); doSearch(); }
         });
     }
 
