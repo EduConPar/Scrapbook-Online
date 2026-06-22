@@ -3064,7 +3064,7 @@ function muReportWrongAlbum(tr) {
     setTimeout(function(){ try { input.focus(); } catch (_) {} }, 50);
 
     function submit(payload) {
-        apiPost('report-album', Object.assign({ videoId: tr.videoId, artist: tr.artist || '' }, payload))
+        apiPost('report-album', Object.assign({ videoId: tr.videoId, artist: tr.artist || '', title: tr.title || '' }, payload))
             .then(function(res){
                 if (!res.ok || !res.data || !res.data.ok) {
                     muAlert((res.data && res.data.error) || 'No se pudo corregir el álbum');

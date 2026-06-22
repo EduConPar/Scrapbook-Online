@@ -1772,6 +1772,24 @@ case 'artist-top': {
             }
         }
     }
+    /* Aplica las correcciones manuales (overrides) por título+artista:
+       si el usuario corrigió el álbum de una de estas canciones, usamos
+       su carátula corregida en lugar de la de Deezer. */
+    if ($tracks) {
+        try {
+            $norm = function($s){ $s = mb_strtolower((string)$s); $s = preg_replace('/[^a-z0-9]+/u', ' ', $s); return trim((string)preg_replace('/\s+/', ' ', $s)); };
+            $ovStmt = $pdo->query("SELECT song_title, song_artist, album_image FROM song_album_overrides WHERE song_title <> '' AND album_image <> ''");
+            $ovMap = [];
+            if ($ovStmt) foreach ($ovStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
+                $ovMap[$norm($ov['song_title']) . '|' . $norm($ov['song_artist'])] = $ov['album_image'];
+            }
+            if ($ovMap) foreach ($tracks as &$t) {
+                $k = $norm($t['title']) . '|' . $norm($t['artist']);
+                if (isset($ovMap[$k])) $t['image'] = $ovMap[$k];
+            }
+            unset($t);
+        } catch (Throwable $e) { /* tabla puede no existir */ }
+    }
     jsonResponse(['ok' => true, 'tracks' => $tracks]);
 }
 
@@ -1787,7 +1805,8 @@ case 'report-album': {
     $b = jsonBody();
     $videoId   = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($b['videoId'] ?? ''));
     if (strlen($videoId) !== 11) jsonError('videoId inválido');
-    $artist = trim((string)($b['artist'] ?? ''));
+    $artist    = trim((string)($b['artist'] ?? ''));
+    $songTitle = mb_substr(trim((string)($b['title'] ?? '')), 0, 255);
     require_once __DIR__ . '/itunes-helpers.php';
     require_once __DIR__ . '/deezer-helpers.php';
 
@@ -1831,18 +1850,33 @@ case 'report-album': {
         album_artist VARCHAR(255) NOT NULL DEFAULT '',
         album_image  VARCHAR(500) NOT NULL DEFAULT '',
         album_url    VARCHAR(500) NOT NULL DEFAULT '',
+        song_title   VARCHAR(255) NOT NULL DEFAULT '',
+        song_artist  VARCHAR(255) NOT NULL DEFAULT '',
         created_by   INT NULL,
         created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) DEFAULT CHARSET=utf8mb4");
+    /* Columnas para tablas ya existentes (idempotente). */
+    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_title'")->fetch())  $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_title VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
+    try { if (!$pdo->query("SHOW COLUMNS FROM song_album_overrides LIKE 'song_artist'")->fetch()) $pdo->exec("ALTER TABLE song_album_overrides ADD COLUMN song_artist VARCHAR(255) NOT NULL DEFAULT ''"); } catch (Throwable $e) {}
     $pdo->prepare("INSERT INTO song_album_overrides
-        (video_id, source, album_id, album_key, album_name, album_artist, album_image, album_url, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (video_id, source, album_id, album_key, album_name, album_artist, album_image, album_url, song_title, song_artist, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE source=VALUES(source), album_id=VALUES(album_id), album_key=VALUES(album_key),
             album_name=VALUES(album_name), album_artist=VALUES(album_artist), album_image=VALUES(album_image),
-            album_url=VALUES(album_url), created_by=VALUES(created_by)")
+            album_url=VALUES(album_url), song_title=VALUES(song_title), song_artist=VALUES(song_artist), created_by=VALUES(created_by)")
         ->execute([$videoId, $match['source'], $match['albumId'], $albumKey,
-                   $match['name'], $match['artist'], $match['image'], '', $uid]);
+                   $match['name'], $match['artist'], $match['image'], '', $songTitle, $artist, $uid]);
+
+    /* Corrige también la imagen en "escuchados recientemente" (global, por
+       videoId) para que la carátula corregida aparezca ahí al instante. */
+    if (!empty($match['image'])) {
+        try {
+            _ensureRecentTable($pdo);
+            $pdo->prepare("UPDATE music_recent SET image = ? WHERE item_type = 'song' AND item_key = ?")
+                ->execute([$match['image'], $videoId]);
+        } catch (Throwable $e) { /* tabla puede no existir aún */ }
+    }
 
     jsonResponse(['ok' => true, 'album' => [
         'notFound'       => false,

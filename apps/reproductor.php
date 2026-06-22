@@ -3870,7 +3870,7 @@ var addTrackCallback = null;
             fetch('assets/music/api.php?action=report-album', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(Object.assign({ videoId: track.videoId, artist: track.artist || '' }, payload))
+                body: JSON.stringify(Object.assign({ videoId: track.videoId, artist: track.artist || '', title: track.title || '' }, payload))
             })
             .then(function(r){ return r.json(); })
             .then(function(d){
