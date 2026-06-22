@@ -274,6 +274,10 @@ $youtubePlaylist = array_merge($youtubePlaylist, $stmt->fetchAll(PDO::FETCH_ASSO
                 <label for="pl-image-input">Imagen</label>
                 <input type="url" id="pl-image-input" placeholder="URL de imagen (opcional)">
             </div>
+            <div id="pl-editor-search-row">
+                <input type="text" id="pl-editor-search-input" autocomplete="off"
+                       placeholder="Filtrar canciones de esta playlist…">
+            </div>
             <div id="pl-list"></div>
             <div id="pl-footer">
                 <button class="button" id="pl-add">+ Añadir</button>
@@ -3318,6 +3322,8 @@ var addTrackCallback = null;
     var allPlaylists = [];
     var editingPlIdx = -1;
     var dragSrc      = null;
+    var editFilter   = '';   /* texto del buscador de la playlist abierta */
+    var plEditorSearch = document.getElementById('pl-editor-search-input');
 
     function openEditor() {
         if (taskbarManager.isRegistered('playlist-editor')) {
@@ -3351,6 +3357,8 @@ var addTrackCallback = null;
         editList = pl.tracks.map(function(t) {
             return { title: t.title, artist: t.artist || '', videoId: t.videoId, duration: t.duration || 0, addedBy: t.addedBy || '' };
         });
+        editFilter = '';
+        if (plEditorSearch) plEditorSearch.value = '';
         plHome.style.display       = 'none';
         plEditorView.style.display = 'flex';
         plTitleText.textContent    = '▶ Ver playlist';
@@ -3637,18 +3645,33 @@ var addTrackCallback = null;
 
     window.updatePlaylistPlayingHighlight = function(playlistId, trackIndex) {
         if (!allPlaylists[editingPlIdx] || allPlaylists[editingPlIdx].id !== playlistId) return;
-        document.querySelectorAll('#pl-list .pl-item').forEach(function(row, i) {
-            row.classList.toggle('pl-item--playing', i === trackIndex);
+        /* Usa el índice REAL de la fila (dataset.index), no el posicional:
+           con el filtro activo las filas visibles son un subconjunto. */
+        document.querySelectorAll('#pl-list .pl-item').forEach(function(row) {
+            row.classList.toggle('pl-item--playing', parseInt(row.dataset.index, 10) === trackIndex);
         });
     };
 
     function renderList() {
         plList.innerHTML = '';
         var isCurrentPl = allPlaylists[editingPlIdx] && allPlaylists[editingPlIdx].id === currentPlaylistId;
+        /* Filtro del buscador de la playlist: solo se ocultan filas que no
+           coinciden; el índice `i` sigue siendo el real dentro de editList,
+           así que al darle play se sigue encolando la playlist completa.
+           Mientras se filtra desactivamos el drag (reordenar con filas
+           ocultas daría índices confusos). */
+        var q = (editFilter || '').trim().toLowerCase();
+        var filtering = q.length > 0;
+        var shown = 0;
         editList.forEach(function(track, i) {
+            if (filtering) {
+                var hay = ((track.title || '') + ' ' + (track.artist || '')).toLowerCase();
+                if (hay.indexOf(q) === -1) return;
+            }
+            shown++;
             var row = document.createElement('div');
             row.className = 'pl-item' + (isCurrentPl && i === currentTrack ? ' pl-item--playing' : '');
-            row.draggable = true;
+            row.draggable = !filtering;
             row.dataset.index = i;
 
             var handle = document.createElement('div');
@@ -3727,12 +3750,15 @@ var addTrackCallback = null;
             (function(trackIndex) {
                 var playTrackBtn = makeBtn('▶', 'pl-action-btn', function() {
                     var pl = allPlaylists[editingPlIdx];
-                    if (!pl || !pl.tracks.length) return;
+                    if (!pl || !editList.length) return;
                     currentPlaylistId = pl.id;
                     currentPlaylistHasCollabs = !!(pl.sharedFrom || (pl.collaborators && pl.collaborators.length > 0));
                     MelonPlayerState.setPlaylist(pl.id, trackIndex);
+                    /* Encola SIEMPRE la playlist completa (editList, el estado
+                       en vivo de lo que se ve), no solo lo filtrado: al darle
+                       play a una canción el resto queda en cola igual. */
                     playlist.length = 0;
-                    pl.tracks.forEach(function(t) { playlist.push(t); });
+                    editList.forEach(function(t) { playlist.push(t); });
                     currentTrack = trackIndex;
                     updateTrackUI(trackIndex);
                     updatePlayerTitle(pl.name);
@@ -3740,7 +3766,7 @@ var addTrackCallback = null;
                         ytPlayer.loadVideoById(playlist[trackIndex].videoId);
                     }
                 });
-                playTrackBtn.title = 'Reproducir desde aquí';
+                playTrackBtn.title = 'Reproducir (encola el resto de la playlist)';
                 btnsDiv.appendChild(playTrackBtn);
             })(i);
             btnsDiv.appendChild(makeBtn('✎', 'pl-action-btn', function() { startEdit(row, infoDiv, btnsDiv, i); }));
@@ -3778,6 +3804,12 @@ var addTrackCallback = null;
             row.appendChild(btnsDiv);
             plList.appendChild(row);
         });
+        if (filtering && shown === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'pl-filter-empty';
+            empty.textContent = 'No hay canciones que coincidan con "' + (editFilter || '').trim() + '".';
+            plList.appendChild(empty);
+        }
     }
 
     /* ──── Context menu: añadir a otra playlist ──── */
@@ -4239,6 +4271,15 @@ var addTrackCallback = null;
     document.getElementById('btn-edit-playlist').addEventListener('click', openEditor);
     document.getElementById('pl-close').addEventListener('click', closeEditor);
     document.getElementById('pl-back').addEventListener('click', showHome);
+
+    /* Buscador/filtro de la playlist abierta: re-renderiza la lista
+       aplicando el filtro por título/artista. */
+    if (plEditorSearch) {
+        plEditorSearch.addEventListener('input', function() {
+            editFilter = plEditorSearch.value || '';
+            renderList();
+        });
+    }
 
     /* ── Diálogo "Editar playlist" (nombre + imagen) ── */
     (function(){
