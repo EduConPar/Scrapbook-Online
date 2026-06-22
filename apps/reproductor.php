@@ -1693,7 +1693,7 @@ function updateTrackUI(index)
    rama sintética. Esos resultados quedaban locked en cliente y
    bloqueaban que las nuevas búsquedas (con la cascada del backend)
    intentaran resolver el álbum real. */
-const ALBUM_CACHE_KEY = 'reproductor:album-cache:v6';
+const ALBUM_CACHE_KEY = 'reproductor:album-cache:v7';
 let _albumCacheMem = null;
 function _loadAlbumCache() {
     if (_albumCacheMem) return _albumCacheMem;

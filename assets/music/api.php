@@ -768,25 +768,76 @@ case 'find-album': {
        cualquier playlist y para todos los usuarios. */
     if ($videoId !== '') {
         try {
-            $ovStmt = $pdo->prepare("SELECT source, album_key, album_name, album_artist, album_image, album_url
+            $ovStmt = $pdo->prepare("SELECT source, album_id, album_key, album_name, album_artist, album_image, album_url
                                        FROM song_album_overrides WHERE video_id = ?");
             $ovStmt->execute([$videoId]);
             $ov = $ovStmt->fetch(PDO::FETCH_ASSOC);
             if ($ov) {
-                jsonResponse([
-                    'notFound'       => false,
-                    'source'         => $ov['source'],
-                    'albumKey'       => $ov['album_key'],
-                    'spotifyAlbumId' => '',
-                    'albumName'      => $ov['album_name'],
-                    'albumArtist'    => $ov['album_artist'],
-                    'matchArtist'    => $ov['album_artist'],
-                    'albumImage'     => $ov['album_image'],
-                    'albumUrl'       => $ov['album_url'],
-                    'isSingle'       => false,
-                    'matchTitle'     => '',
-                    'isOverride'     => true,
-                ]);
+                $ovKey = (string)($ov['album_key'] ?? '');
+                $ovImg = (string)($ov['album_image'] ?? '');
+                $ovOk  = (strpos($ovKey, 'itunes:') === 0 || strpos($ovKey, 'deezer:') === 0);
+
+                /* Overrides legacy (creados en la era Spotify) llevan
+                   album_key = spotify:* o imagen vacía. El cliente RECHAZA
+                   las keys spotify:* → el reproductor se quedaba con la
+                   miniatura de YouTube (síntoma típico en artistas
+                   corregidos muchas veces, p.ej. Lemon Demon). Aquí los
+                   re-resolvemos en vivo contra iTunes/Deezer y refrescamos
+                   la fila para que la corrección vuelva a ser válida. */
+                if (!$ovOk || $ovImg === '') {
+                    require_once __DIR__ . '/itunes-helpers.php';
+                    require_once __DIR__ . '/deezer-helpers.php';
+                    $fix = null;
+                    /* Si la key sigue siendo válida pero solo falta imagen,
+                       sácala de la metadata del álbum. */
+                    if ($ovOk) {
+                        [$src, $aid] = explode(':', $ovKey, 2);
+                        $meta = $src === 'itunes' ? itunesGetAlbumTracks($aid) : deezerGetAlbumTracks($aid);
+                        if ($meta && !empty($meta['image'])) {
+                            $fix = ['source' => $src, 'albumId' => $aid,
+                                    'name' => (string)($ov['album_name'] ?: ($meta['name'] ?? '')),
+                                    'artist' => (string)($ov['album_artist'] ?: ($meta['artist'] ?? '')),
+                                    'image' => (string)$meta['image']];
+                        }
+                    }
+                    /* Key inservible (spotify:* / vacía) → re-resolver por
+                       nombre de álbum + artista guardados. */
+                    if (!$fix && (string)$ov['album_name'] !== '') {
+                        $fix = _resolveAlbumByName((string)$ov['album_name'], (string)$ov['album_artist']);
+                    }
+                    if ($fix) {
+                        $newKey = $fix['source'] . ':' . $fix['albumId'];
+                        try {
+                            $pdo->prepare("UPDATE song_album_overrides
+                                SET source = ?, album_id = ?, album_key = ?, album_name = ?, album_artist = ?, album_image = ?
+                                WHERE video_id = ?")
+                                ->execute([$fix['source'], $fix['albumId'], $newKey, $fix['name'], $fix['artist'], $fix['image'], $videoId]);
+                        } catch (Throwable $e) {}
+                        $ov['source'] = $fix['source']; $ov['album_key'] = $newKey;
+                        $ov['album_name'] = $fix['name']; $ov['album_artist'] = $fix['artist'];
+                        $ovImg = $fix['image']; $ovKey = $newKey; $ovOk = true;
+                    }
+                }
+
+                /* Solo devolvemos el override si quedó con una key válida
+                   (itunes:/deezer:). Si no se pudo arreglar, caemos a la
+                   cascada automática en vez de servir un payload roto. */
+                if ($ovOk) {
+                    jsonResponse([
+                        'notFound'       => false,
+                        'source'         => $ov['source'],
+                        'albumKey'       => $ovKey,
+                        'spotifyAlbumId' => '',
+                        'albumName'      => $ov['album_name'],
+                        'albumArtist'    => $ov['album_artist'],
+                        'matchArtist'    => $ov['album_artist'],
+                        'albumImage'     => $ovImg,
+                        'albumUrl'       => (string)($ov['album_url'] ?? ''),
+                        'isSingle'       => false,
+                        'matchTitle'     => '',
+                        'isOverride'     => true,
+                    ]);
+                }
             }
         } catch (Throwable $e) { /* tabla aún no existe → sin override */ }
     }
@@ -1779,13 +1830,22 @@ case 'artist-top': {
         try {
             $norm = function($s){ $s = mb_strtolower((string)$s); $s = preg_replace('/[^a-z0-9]+/u', ' ', $s); return trim((string)preg_replace('/\s+/', ' ', $s)); };
             $ovStmt = $pdo->query("SELECT song_title, song_artist, album_image FROM song_album_overrides WHERE song_title <> '' AND album_image <> ''");
-            $ovMap = [];
+            $ovs = [];
             if ($ovStmt) foreach ($ovStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
-                $ovMap[$norm($ov['song_title']) . '|' . $norm($ov['song_artist'])] = $ov['album_image'];
+                $ovs[] = ['t' => $norm($ov['song_title']), 'a' => $norm($ov['song_artist']), 'img' => $ov['album_image']];
             }
-            if ($ovMap) foreach ($tracks as &$t) {
-                $k = $norm($t['title']) . '|' . $norm($t['artist']);
-                if (isset($ovMap[$k])) $t['image'] = $ovMap[$k];
+            if ($ovs) foreach ($tracks as &$t) {
+                $tt = $norm($t['title']); $ta = $norm($t['artist']);
+                if ($tt === '') continue;
+                foreach ($ovs as $ov) {
+                    if ($ov['t'] === '') continue;
+                    /* Título de Deezer (limpio) vs el guardado (ruidoso,
+                       de YouTube): aceptamos si uno contiene al otro.
+                       El artista debe coincidir si ambos lo tienen. */
+                    $titleHit  = ($ov['t'] === $tt) || str_contains($ov['t'], $tt) || str_contains($tt, $ov['t']);
+                    $artistHit = ($ov['a'] === '' || $ta === '' || $ov['a'] === $ta || str_contains($ov['a'], $ta) || str_contains($ta, $ov['a']));
+                    if ($titleHit && $artistHit) { $t['image'] = $ov['img']; break; }
+                }
             }
             unset($t);
         } catch (Throwable $e) { /* tabla puede no existir */ }
