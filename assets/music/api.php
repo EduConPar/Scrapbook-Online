@@ -1829,10 +1829,30 @@ case 'artist-top': {
     if ($tracks) {
         try {
             $norm = function($s){ $s = mb_strtolower((string)$s); $s = preg_replace('/[^a-z0-9]+/u', ' ', $s); return trim((string)preg_replace('/\s+/', ' ', $s)); };
-            $ovStmt = $pdo->query("SELECT song_title, song_artist, album_image FROM song_album_overrides WHERE song_title <> '' AND album_image <> ''");
+            /* Traemos los overrides con imagen. Para los antiguos (sin
+               song_title, creados antes de guardar el título), puenteamos
+               con el nombre/artista que quedó en `music_recent` para ese
+               videoId — así una corrección hecha en el reproductor también
+               se refleja en las populares del artista. */
+            $rows = [];
+            try {
+                $rows = $pdo->query(
+                    "SELECT o.song_title, o.song_artist, o.album_image,
+                            (SELECT r.name   FROM music_recent r  WHERE r.item_type='song' AND r.item_key=o.video_id LIMIT 1) AS recent_name,
+                            (SELECT r2.artist FROM music_recent r2 WHERE r2.item_type='song' AND r2.item_key=o.video_id LIMIT 1) AS recent_artist
+                       FROM song_album_overrides o
+                      WHERE o.album_image <> ''"
+                )->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {
+                /* music_recent puede no existir → consulta simple. */
+                $rows = $pdo->query("SELECT song_title, song_artist, album_image FROM song_album_overrides WHERE album_image <> ''")->fetchAll(PDO::FETCH_ASSOC);
+            }
             $ovs = [];
-            if ($ovStmt) foreach ($ovStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
-                $ovs[] = ['t' => $norm($ov['song_title']), 'a' => $norm($ov['song_artist']), 'img' => $ov['album_image']];
+            foreach ($rows as $ov) {
+                $title  = ($ov['song_title']  ?? '') !== '' ? $ov['song_title']  : ($ov['recent_name']   ?? '');
+                $artistOv = ($ov['song_artist'] ?? '') !== '' ? $ov['song_artist'] : ($ov['recent_artist'] ?? '');
+                if (trim((string)$title) === '') continue;
+                $ovs[] = ['t' => $norm($title), 'a' => $norm($artistOv), 'img' => $ov['album_image']];
             }
             if ($ovs) foreach ($tracks as &$t) {
                 $tt = $norm($t['title']); $ta = $norm($t['artist']);
