@@ -859,18 +859,30 @@
     border-color: var(--accent, #1db954);
 }
 
-/* ── Marco Win98 (biselado) para las carátulas/miniaturas ── */
+/* ── Marco Win98 (biselado) ESCALADO: cuanto más grande la imagen, más
+   grueso el marco. El grosor lo controla --fw y las dos capas del bisel
+   se derivan de él (--fwh = capa interior, --fw = exterior). El default
+   se fija por tamaño de cada tipo de imagen abajo (las carátulas son de
+   tamaño fijo). NOTA: la del reproductor se enmarca en su wrapper
+   (#player-cover-wrap) porque el <img> interior va recortado. ── */
 .pl-sr-thumb,
 .aw-top-thumb,
 .pl-sr-album-card img,
 #album-viewer-cover,
-#player-cover {
+#player-cover-wrap {
+    --fw: 2px;
+    --fwh: calc(var(--fw) / 2);
     box-shadow:
-        -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
-         1px  1px 0 var(--bezel-light-1, #ffffff),
-        -2px -2px 0 var(--bezel-dark-2, #808080),
-         2px  2px 0 var(--bezel-light-2, #dfdfdf);
+        calc(var(--fwh) * -1) calc(var(--fwh) * -1) 0 var(--bezel-dark-1, #0a0a0a),
+         var(--fwh)            var(--fwh)           0 var(--bezel-light-1, #ffffff),
+        calc(var(--fw)  * -1) calc(var(--fw)  * -1) 0 var(--bezel-dark-2, #808080),
+         var(--fw)             var(--fw)            0 var(--bezel-light-2, #dfdfdf);
 }
+/* Defaults por tamaño: miniaturas pequeñas 2px (arriba); carátulas
+   medianas/grandes, marco más grueso. */
+#player-cover-wrap,
+#album-viewer-cover   { --fw: 3px; }   /* 72-80px */
+.pl-sr-album-card img { --fw: 4px; }   /* tarjetas de la cuadrícula */
 .aw-section-title {
     font-size: 15px;
     font-weight: bold;
