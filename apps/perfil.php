@@ -548,6 +548,46 @@ if ($_perfilStandalone) {
     </div>
 </div>
 
+<!-- EPISODES WINDOW (capítulos de una serie, compartidos) -->
+<div class="window" id="profile-episodes-window" style="display:none;flex-direction:column;position:fixed;z-index:10003;width:540px;max-width:95vw;height:72vh;max-height:80vh;">
+    <div class="title-bar" style="flex-shrink:0;">
+        <div class="title-bar-text" id="profile-episodes-title">Capítulos</div>
+        <div class="title-bar-controls"><button aria-label="Close" id="profile-episodes-close"></button></div>
+    </div>
+    <div class="window-body" style="padding:0;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
+        <div id="profile-episodes-list" style="flex:1;min-height:0;overflow-y:auto;padding:8px;"></div>
+        <div id="profile-episodes-addbar" style="flex-shrink:0;border-top:1px solid var(--border);padding:8px;display:none;">
+            <div style="font-size:11px;font-weight:bold;margin-bottom:4px;">Añadir capítulo</div>
+            <input type="text" id="ep-add-title" placeholder="Título del capítulo" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
+            <input type="text" id="ep-add-image" placeholder="Imagen de preview (URL horizontal)" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input type="number" id="ep-add-dur" placeholder="min" min="0" style="width:80px;box-sizing:border-box;">
+                <button class="button default" id="ep-add-btn">+ Añadir capítulo</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EPISODE REVIEW POPUP (reseña de un capítulo) -->
+<div class="window" id="profile-episode-review" style="display:none;flex-direction:column;position:fixed;z-index:10004;width:300px;">
+    <div class="title-bar" style="flex-shrink:0;">
+        <div class="title-bar-text" id="profile-episode-review-title">Reseña del capítulo</div>
+        <div class="title-bar-controls"><button aria-label="Close" id="profile-episode-review-close"></button></div>
+    </div>
+    <div class="window-body" style="padding:10px 12px 12px;">
+        <div style="font-size:11px;margin-bottom:3px;">Puntuación</div>
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+            <div id="profile-episode-review-stars" style="font-size:24px;letter-spacing:4px;"></div>
+            <span id="profile-episode-review-num" style="font-size:13px;margin-left:8px;font-weight:bold;"></span>
+        </div>
+        <textarea id="profile-episode-review-comment" rows="3" style="width:100%;box-sizing:border-box;resize:none;" placeholder="Comentario (opcional)"></textarea>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
+            <button class="button" id="profile-episode-review-cancel">Cancelar</button>
+            <button class="button default" id="profile-episode-review-save">Guardar</button>
+        </div>
+    </div>
+</div>
+
 <!-- PROFILE NOTIFICATIONS WINDOW -->
 <!-- flex-direction:column + body flex:1 + min-height:0 → al resizear
      la ventana, el body se encoge con ella y aparece scroll en lugar
@@ -708,6 +748,10 @@ if ($_perfilStandalone) {
         <div id="profile-review-rt-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <label id="profile-review-rt-label" for="profile-review-rt" style="font-size:11px;margin-bottom:3px;">Duración (min)</label>
             <input type="number" id="profile-review-rt" min="0" step="1" style="width:120px;box-sizing:border-box;" placeholder="0">
+        </div>
+        <!-- Series: en lugar de un número, un botón a la ventana de capítulos. -->
+        <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
         </div>
         <div style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
         <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
@@ -1262,6 +1306,13 @@ var PROFILE_USERS = <?php
                                     if (!lists[cat][idx].completedAt) {
                                         lists[cat][idx].completedAt = Math.floor(Date.now() / 1000);
                                     }
+                                    /* Serie completada → marca todos sus capítulos como vistos. */
+                                    if (cat === 'series' && lists[cat][idx].title) {
+                                        fetch('assets/profile/api.php?action=complete-series-episodes', {
+                                            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ seriesTitle: lists[cat][idx].title })
+                                        }).catch(function(){});
+                                    }
                                     saveCategory(cat);
                                     renderCatView(cat);
                                     renderCatEncurso(cat);
@@ -1637,16 +1688,27 @@ var PROFILE_USERS = <?php
         var rtRow   = document.getElementById('profile-review-rt-row');
         var rtEl    = document.getElementById('profile-review-rt');
         var rtLbl   = document.getElementById('profile-review-rt-label');
-        var RW_RT_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+        var epsRow  = document.getElementById('profile-review-eps-row');
+        var epsBtn  = document.getElementById('profile-review-eps-btn');
+        var RW_RT_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
         titleEl.value = item.title || '';
         imageEl.value = item.image || '';
-        if (RW_RT_LABEL[cat]) {
+        if (cat === 'series') {
+            /* Series → botón a la ventana de capítulos (visto editable si está en curso). */
+            rtRow.style.display = 'none'; rtEl.value = '';
+            epsRow.style.display = 'flex';
+            var newEps = epsBtn.cloneNode(true); epsBtn.parentNode.replaceChild(newEps, epsBtn);
+            newEps.addEventListener('click', function(){
+                openEpisodesWindow(titleEl.value.trim() || item.title || '', item.status === 'in-progress');
+            });
+        } else if (RW_RT_LABEL[cat]) {
             rtLbl.textContent = RW_RT_LABEL[cat];
             rtEl.value = item.runtime ? item.runtime : '';
             rtRow.style.display = '';
+            epsRow.style.display = 'none';
         } else {
-            rtRow.style.display = 'none';
-            rtEl.value = '';
+            rtRow.style.display = 'none'; rtEl.value = '';
+            epsRow.style.display = 'none';
         }
 
         var numEl = document.getElementById('profile-review-stars-num');
@@ -2060,7 +2122,8 @@ var PROFILE_USERS = <?php
     var addRuntimeRow = document.getElementById('profile-add-runtime-row');
     var addRuntimeEl  = document.getElementById('profile-add-runtime');
     var addRuntimeLbl = document.getElementById('profile-add-runtime-label');
-    var ADD_RUNTIME_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+    /* Series no usa número: gestiona capítulos tras crearla (botón Capítulos). */
+    var ADD_RUNTIME_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
 
     /* ── Autocomplete del nombre ──
        Busca titles existentes en la categoría (por otros usuarios) que
@@ -3676,6 +3739,153 @@ var PROFILE_USERS = <?php
         }
     }
 
+    /* ═══ Capítulos de series (compartidos por título) ═══════════════ */
+    var _epSeriesTitle = '', _epCanWatch = false, _epList = [];
+    function epFmtDur(min) {
+        min = parseInt(min, 10) || 0;
+        if (min <= 0) return '';
+        var h = Math.floor(min / 60), m = min % 60;
+        return h > 0 ? (h + ' h' + (m ? ' ' + m + ' min' : '')) : (m + ' min');
+    }
+    function epTotalDurStr() {
+        var t = _epList.reduce(function(a, e){ return a + (e.duration || 0); }, 0);
+        return epFmtDur(t);
+    }
+    function openEpisodesWindow(seriesTitle, canWatch) {
+        if (!seriesTitle) return;
+        _epSeriesTitle = seriesTitle; _epCanWatch = !!canWatch;
+        var win = document.getElementById('profile-episodes-window');
+        document.getElementById('profile-episodes-title').textContent = '🎬 Capítulos · ' + seriesTitle;
+        document.getElementById('profile-episodes-addbar').style.display = '';
+        document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Cargando…</div>';
+        win.style.display = 'flex';
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        fetch('assets/profile/api.php?action=series-episodes&seriesTitle=' + encodeURIComponent(seriesTitle), { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){ _epList = (d && d.episodes) || []; renderEpisodesList(); })
+            .catch(function(){ document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Error.</div>'; });
+    }
+    function renderEpisodesList() {
+        var listEl = document.getElementById('profile-episodes-list');
+        if (!_epList.length) { listEl.innerHTML = '<div class="ep-empty">Sin capítulos todavía. Añade el primero abajo.</div>'; return; }
+        listEl.innerHTML = _epList.map(function(ep, i){
+            var dur = epFmtDur(ep.duration);
+            var avg = (ep.avgStars != null)
+                ? (makeStarsHtml(ep.avgStars, 5) + ' <span class="ep-avg">' + ep.avgStars.toFixed(1) + '</span> <span class="ep-cnt">(' + ep.reviewCount + ')</span>')
+                : '<span class="ep-noavg">Sin reseñas</span>';
+            var watchHtml = _epCanWatch
+                ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
+                : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
+            var revLabel = (ep.myStars != null) ? ('★ ' + ep.myStars) : '✎ Reseñar';
+            return '<div class="ep-row">' +
+                '<div class="ep-thumb">' + (ep.image ? '<img src="' + escHtml(ep.image) + '" alt="">' : '<div class="ep-thumb-ph">🎬</div>') + '</div>' +
+                '<div class="ep-info">' +
+                    '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
+                    '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '<div class="ep-controls">' + watchHtml +
+                        '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
+                        '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+    (function setupEpisodesEvents(){
+        var listEl = document.getElementById('profile-episodes-list');
+        if (!listEl) return;
+        listEl.addEventListener('change', function(e){
+            var cb = e.target.closest('input[data-ep-watch]'); if (!cb) return;
+            var id = parseInt(cb.getAttribute('data-ep-watch'), 10);
+            var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
+            fetch('assets/profile/api.php?action=series-episode-state', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId: id, watched: cb.checked })
+            }).catch(function(){});
+        });
+        listEl.addEventListener('click', function(e){
+            var rev = e.target.closest('[data-ep-review]');
+            if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
+            var rm = e.target.closest('[data-ep-remove]');
+            if (rm) {
+                var rid = parseInt(rm.getAttribute('data-ep-remove'), 10);
+                var rep = _epList.filter(function(x){ return x.id === rid; })[0];
+                confirmFn('¿Quitar el capítulo "' + (rep ? rep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
+                    fetch('assets/profile/api.php?action=delete-series-episode', {
+                        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: rid })
+                    }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== rid; }); renderEpisodesList(); }).catch(function(){});
+                });
+            }
+        });
+        var addBtn = document.getElementById('ep-add-btn');
+        if (addBtn) addBtn.addEventListener('click', function(){
+            var t = document.getElementById('ep-add-title').value.trim(); if (!t) return;
+            var img = document.getElementById('ep-add-image').value.trim();
+            var dur = parseInt(document.getElementById('ep-add-dur').value, 10) || 0;
+            fetch('assets/profile/api.php?action=save-series-episode', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seriesTitle: _epSeriesTitle, title: t, image: img, duration: dur })
+            }).then(function(r){ return r.ok ? r.json() : null; }).then(function(){
+                document.getElementById('ep-add-title').value = '';
+                document.getElementById('ep-add-image').value = '';
+                document.getElementById('ep-add-dur').value = '';
+                openEpisodesWindow(_epSeriesTitle, _epCanWatch);
+            }).catch(function(){});
+        });
+        var closeBtn = document.getElementById('profile-episodes-close');
+        if (closeBtn) closeBtn.addEventListener('click', function(){ document.getElementById('profile-episodes-window').style.display = 'none'; });
+    })();
+
+    /* Reseña individual de un capítulo (popup con estrellas + comentario). */
+    function openEpisodeReview(ep) {
+        var win = document.getElementById('profile-episode-review');
+        document.getElementById('profile-episode-review-title').textContent = '★ ' + ep.title;
+        document.getElementById('profile-episode-review-comment').value = ep.myComment || '';
+        var sel = ep.myStars || 0;
+        var starsEl = document.getElementById('profile-episode-review-stars');
+        var numEl = document.getElementById('profile-episode-review-num');
+        function setDisp(el, val, pos) {
+            if (val >= pos) { el.innerHTML = '★'; el.style.clipPath = ''; }
+            else if (val >= pos - 0.5) { el.innerHTML = '★'; el.style.clipPath = 'inset(0 50% 0 0)'; }
+            else { el.innerHTML = '☆'; el.style.clipPath = ''; }
+        }
+        function draw() {
+            starsEl.innerHTML = ''; numEl.textContent = sel > 0 ? sel : '';
+            for (var n = 1; n <= 5; n++) (function(star){
+                var s = document.createElement('span');
+                s.style.cssText = 'display:inline-block;position:relative;width:1.1em;cursor:pointer;';
+                setDisp(s, sel, star);
+                s.addEventListener('mousemove', function(e){ var hv = (e.offsetX < this.offsetWidth / 2) ? star - 0.5 : star; starsEl.querySelectorAll('span').forEach(function(sp, idx){ setDisp(sp, hv, idx + 1); }); numEl.textContent = hv; });
+                s.addEventListener('mouseout', function(){ starsEl.querySelectorAll('span').forEach(function(sp, idx){ setDisp(sp, sel, idx + 1); }); numEl.textContent = sel > 0 ? sel : ''; });
+                s.addEventListener('click', function(e){ sel = (e.offsetX < this.offsetWidth / 2) ? star - 0.5 : star; draw(); });
+                starsEl.appendChild(s);
+            })(n);
+        }
+        draw();
+        win.style.display = 'flex';
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        var saveBtn = document.getElementById('profile-episode-review-save');
+        var newSave = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(newSave, saveBtn);
+        newSave.addEventListener('click', function(){
+            var comment = document.getElementById('profile-episode-review-comment').value.trim();
+            fetch('assets/profile/api.php?action=series-episode-state', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+            }).then(function(){
+                ep.myStars = sel > 0 ? sel : null; ep.myComment = comment;
+                win.style.display = 'none';
+                openEpisodesWindow(_epSeriesTitle, _epCanWatch);
+            }).catch(function(){});
+        });
+    }
+    (function(){
+        var c = document.getElementById('profile-episode-review-close'); if (c) c.addEventListener('click', function(){ document.getElementById('profile-episode-review').style.display = 'none'; });
+        var cancel = document.getElementById('profile-episode-review-cancel'); if (cancel) cancel.addEventListener('click', function(){ document.getElementById('profile-episode-review').style.display = 'none'; });
+    })();
+    window.profileOpenEpisodes = openEpisodesWindow;
+
     /* Formatea segundos: álbum → "45 min" / "1 h 12 min"; canción → "3:45". */
     function melonFmtDur(sec) {
         sec = Math.round(sec || 0);
@@ -3837,6 +4047,18 @@ var PROFILE_USERS = <?php
                 hrt.textContent = rtLabel;
                 hinfo.appendChild(hrt);
             }
+        }
+        /* Series con capítulos asignados: nº + duración total, clicable →
+           abre la página de capítulos con sus notas. */
+        if (melonCat === 'series' && item.episodeCount && item.episodeCount > 0) {
+            var epDur = item.episodeDuration ? epFmtDur(item.episodeDuration) : '';
+            var epEl = document.createElement('div');
+            epEl.className = 'melon-detail-hruntime melon-detail-link';
+            epEl.style.cursor = 'pointer';
+            epEl.title = 'Ver capítulos y sus notas';
+            epEl.textContent = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos') + (epDur ? ' · ' + epDur : '');
+            epEl.addEventListener('click', function(){ openEpisodesWindow(item.title, false); });
+            hinfo.appendChild(epEl);
         }
         /* Música: nombre de álbum y artista clicables (abren sus ventanas
            en el reproductor) + duración y nº de tracks (álbum) o duración
@@ -5738,6 +5960,7 @@ var PROFILE_USERS = <?php
         var mTitleEl = document.getElementById('profile-review-title');
         var mImageEl = document.getElementById('profile-review-image');
         document.getElementById('profile-review-rt-row').style.display = 'none';
+        document.getElementById('profile-review-eps-row').style.display = 'none';
         mTitleEl.value = item.title || '';
         mImageEl.value = item.image || '';
         var numEl = document.getElementById('profile-review-stars-num');

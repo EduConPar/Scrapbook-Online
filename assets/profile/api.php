@@ -110,6 +110,34 @@ catch (Throwable $e) { /* ya existe */ }
    del mismo título (varios usuarios) es la que se muestra en reseñas. */
 try { $pdo->exec("ALTER TABLE list_items ADD COLUMN runtime INT NULL DEFAULT NULL"); }
 catch (Throwable $e) { /* ya existe */ }
+/* Capítulos de series — COMPARTIDOS por título (series_key = título en
+   minúsculas). Cualquier usuario añade/quita capítulos. La duración va
+   en minutos. El estado (visto + reseña) es POR USUARIO. */
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS series_episodes (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        series_key  VARCHAR(200) NOT NULL,
+        position    INT NOT NULL DEFAULT 0,
+        title       VARCHAR(255) NOT NULL,
+        image       VARCHAR(2000) NULL,
+        duration    INT NULL,            /* minutos */
+        created_by  INT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_series (series_key, position)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS series_episode_state (
+        episode_id  INT NOT NULL,
+        user_id     INT NOT NULL,
+        watched     TINYINT NOT NULL DEFAULT 0,
+        stars       DECIMAL(2,1) NULL,
+        comment     TEXT NULL,
+        reviewed_at TIMESTAMP NULL,
+        PRIMARY KEY (episode_id, user_id),
+        INDEX idx_ep (episode_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
 
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
 function pf_uid(PDO $pdo, string $userKey): ?int {
@@ -2084,6 +2112,116 @@ case 'view-user': {
     ]);
 }
 
+/* ─── Capítulos de series (compartidos por título) ─────────────── */
+
+case 'series-episodes': {
+    $uid = pf_uid($pdo, $userKey);
+    $key = mb_strtolower(trim((string)($_GET['seriesTitle'] ?? '')));
+    if ($key === '') jsonResponse(['ok' => true, 'episodes' => []]);
+    $st = $pdo->prepare("
+        SELECT e.id, e.position, e.title, e.image, e.duration,
+               s.watched AS myWatched, s.stars AS myStars, s.comment AS myComment,
+               (SELECT AVG(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS avgStars,
+               (SELECT COUNT(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS reviewCount
+        FROM series_episodes e
+        LEFT JOIN series_episode_state s ON s.episode_id = e.id AND s.user_id = ?
+        WHERE e.series_key = ?
+        ORDER BY e.position ASC, e.id ASC
+    ");
+    $st->execute([$uid, $key]);
+    $eps = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $eps[] = [
+            'id'          => (int)$r['id'],
+            'title'       => $r['title'],
+            'image'       => $r['image'] ?? '',
+            'duration'    => $r['duration'] !== null ? (int)$r['duration'] : null,
+            'watched'     => (int)($r['myWatched'] ?? 0) === 1,
+            'myStars'     => $r['myStars'] !== null ? (float)$r['myStars'] : null,
+            'myComment'   => (string)($r['myComment'] ?? ''),
+            'avgStars'    => $r['avgStars'] !== null ? round((float)$r['avgStars'], 2) : null,
+            'reviewCount' => (int)($r['reviewCount'] ?? 0),
+        ];
+    }
+    jsonResponse(['ok' => true, 'episodes' => $eps]);
+}
+
+case 'save-series-episode': {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $key   = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    $title = mb_substr(trim((string)($b['title'] ?? '')), 0, 255);
+    if ($key === '' || $title === '') jsonError('Faltan datos');
+    $image = mb_substr(trim((string)($b['image'] ?? '')), 0, 2000);
+    $dur   = (isset($b['duration']) && is_numeric($b['duration']) && (int)$b['duration'] > 0) ? min(100000, (int)$b['duration']) : null;
+    $epId  = (isset($b['id']) && is_numeric($b['id'])) ? (int)$b['id'] : 0;
+    if ($epId > 0) {
+        $pdo->prepare("UPDATE series_episodes SET title=?, image=?, duration=? WHERE id=? AND series_key=?")
+            ->execute([$title, $image, $dur, $epId, $key]);
+    } else {
+        $posStmt = $pdo->prepare("SELECT COALESCE(MAX(position),0)+1 FROM series_episodes WHERE series_key=?");
+        $posStmt->execute([$key]);
+        $pos = (int)$posStmt->fetchColumn();
+        $pdo->prepare("INSERT INTO series_episodes (series_key, position, title, image, duration, created_by) VALUES (?,?,?,?,?,?)")
+            ->execute([$key, $pos, $title, $image, $dur, $uid]);
+        $epId = (int)$pdo->lastInsertId();
+    }
+    jsonResponse(['ok' => true, 'id' => $epId]);
+}
+
+case 'delete-series-episode': {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $b = jsonBody();
+    $epId = (int)($b['id'] ?? 0);
+    if (!$epId) jsonError('Falta id');
+    $pdo->prepare("DELETE FROM series_episodes WHERE id=?")->execute([$epId]);
+    $pdo->prepare("DELETE FROM series_episode_state WHERE episode_id=?")->execute([$epId]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'series-episode-state': {
+    /* Setea visto y/o reseña del usuario para un capítulo (merge parcial). */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $epId = (int)($b['episodeId'] ?? 0);
+    if (!$epId) jsonError('Falta episodeId');
+    $cur = $pdo->prepare("SELECT watched, stars, comment FROM series_episode_state WHERE episode_id=? AND user_id=?");
+    $cur->execute([$epId, $uid]);
+    $row = $cur->fetch(PDO::FETCH_ASSOC) ?: ['watched' => 0, 'stars' => null, 'comment' => null];
+    $watched = array_key_exists('watched', $b) ? (!empty($b['watched']) ? 1 : 0) : (int)$row['watched'];
+    $stars   = $row['stars'] !== null ? (float)$row['stars'] : null;
+    $comment = $row['comment'];
+    if (array_key_exists('stars', $b)) {
+        $s = (float)$b['stars'];
+        $stars   = ($s > 0) ? round($s * 2) / 2 : null;
+        $comment = ($stars !== null) ? mb_substr(trim((string)($b['comment'] ?? $comment ?? '')), 0, 1000) : null;
+    } elseif (array_key_exists('comment', $b)) {
+        $comment = mb_substr(trim((string)$b['comment']), 0, 1000);
+    }
+    $pdo->prepare("INSERT INTO series_episode_state (episode_id, user_id, watched, stars, comment, reviewed_at)
+                   VALUES (?,?,?,?,?, " . ($stars !== null ? "NOW()" : "NULL") . ")
+                   ON DUPLICATE KEY UPDATE watched=VALUES(watched), stars=VALUES(stars), comment=VALUES(comment), reviewed_at=VALUES(reviewed_at)")
+        ->execute([$epId, $uid, $watched, $stars, $comment]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'complete-series-episodes': {
+    /* Marca TODOS los capítulos de la serie como vistos para el usuario. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    if ($key === '') jsonError('Falta seriesTitle');
+    $ids = $pdo->prepare("SELECT id FROM series_episodes WHERE series_key=?");
+    $ids->execute([$key]);
+    $up = $pdo->prepare("INSERT INTO series_episode_state (episode_id, user_id, watched) VALUES (?,?,1)
+                         ON DUPLICATE KEY UPDATE watched=1");
+    foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $eid) $up->execute([(int)$eid, $uid]);
+    jsonResponse(['ok' => true]);
+}
+
 /* ─── Reseñas globales (MelonArchive) ───────────────────── */
 
 case 'melon-reviews': {
@@ -2156,6 +2294,14 @@ case 'melon-reviews': {
         ];
     }
 
+    /* Series: nº de capítulos + duración total (compartidos) por título. */
+    $epMap = [];
+    if ($cat === 'series') {
+        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
+            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'dur' => (int)$er['dur']];
+        }
+    }
+
     $items = [];
     foreach ($groups as $g) {
         usort($g['reviews'], fn($a, $b) => $b['reviewedAt'] - $a['reviewedAt']);
@@ -2164,6 +2310,13 @@ case 'melon-reviews': {
             'avg'   => round($g['totalStars'] / $g['totalReviews'], 2),
             'count' => $g['totalReviews'], 'latestAt' => $g['latestAt'], 'reviews' => $g['reviews'],
         ];
+        if ($cat === 'series') {
+            $lk = mb_strtolower($g['title']);
+            if (isset($epMap[$lk]) && $epMap[$lk]['cnt'] > 0) {
+                $e['episodeCount']    = $epMap[$lk]['cnt'];
+                $e['episodeDuration'] = $epMap[$lk]['dur'];
+            }
+        }
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];
         if (!empty($g['mtype'])) $e['type'] = $g['mtype'];
         /* Consenso de runtime = la moda (valor con más coincidencias entre
