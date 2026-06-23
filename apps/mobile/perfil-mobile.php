@@ -760,6 +760,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-rev-edit-label {
             font-size: 11px; margin: 8px 0 4px; color: var(--text, #000);
         }
+        .pf-rev-edit-runtime {
+            width: 110px; box-sizing: border-box;
+            font-family: inherit; font-size: 13px; padding: 6px 8px;
+        }
         .pf-modal .modal-actions .button.danger {
             margin-right: auto;
         }
@@ -1409,6 +1413,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-melon-detail-hrating { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; color: var(--star-color, #e8b923); font-size: 14px; }
         .pf-melon-detail-havg { font-size: 12px; font-weight: bold; }
         .pf-melon-detail-hcount { font-size: 10px; color: var(--text-faint, #888); }
+        .pf-melon-detail-hruntime { font-size: 11px; color: var(--text-muted, var(--text-faint, #888)); margin-top: 3px; }
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -2358,6 +2363,10 @@ function openReviewEditor(item, origIdx, cat) {
     var cur = (item.review && item.review.stars) ? Math.round(item.review.stars) : 0;
     var curComment = (item.review && item.review.comment) ? item.review.comment : '';
     var hadReview = cur > 0;
+    /* Duración (pelis) / nº de capítulos (series, libros). Música no. */
+    var RUNTIME_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+    var rtLabel = RUNTIME_LABEL[cat];
+    var curRuntime = (item.review && item.review.runtime) ? item.review.runtime : '';
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
@@ -2372,6 +2381,8 @@ function openReviewEditor(item, origIdx, cat) {
             '<div class="window-body">' +
                 '<div class="pf-rev-edit-label">Puntuación</div>' +
                 '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
+                (rtLabel ? '<div class="pf-rev-edit-label">' + rtLabel + '</div>' +
+                           '<input type="number" class="pf-rev-edit-runtime" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0">' : '') +
                 '<div class="pf-rev-edit-label">Comentario</div>' +
                 '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>' +
                 '<div class="modal-actions">' +
@@ -2386,6 +2397,8 @@ function openReviewEditor(item, origIdx, cat) {
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
     commentEl.value = curComment;
+    var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
+    if (runtimeEl) runtimeEl.value = curRuntime;
     var sel = cur;
 
     function renderStars() {
@@ -2419,6 +2432,7 @@ function openReviewEditor(item, origIdx, cat) {
         list[origIdx].review = {
             stars: sel,
             comment: commentEl.value.trim(),
+            runtime: (rtLabel && runtimeEl) ? (parseInt(runtimeEl.value, 10) || 0) : 0,
             reviewedAt: Math.floor(Date.now() / 1000)
         };
         renderActiveList();
@@ -3507,6 +3521,19 @@ function showMelonDetails(item) {
         + '<span class="pf-melon-detail-havg">' + avgTxt + '</span>'
         + '<span class="pf-melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
     hinfo.appendChild(hr);
+    /* Consenso de duración/capítulos (la moda entre las reseñas). */
+    if (item.runtime && item.runtime > 0) {
+        var c = MELON_STATE.cat;
+        var rtTxt = c === 'movies' ? (item.runtime + ' min')
+                  : (c === 'series' || c === 'books') ? (item.runtime + (item.runtime === 1 ? ' capítulo' : ' capítulos'))
+                  : '';
+        if (rtTxt) {
+            var hrt = document.createElement('div');
+            hrt.className = 'pf-melon-detail-hruntime';
+            hrt.textContent = rtTxt;
+            hinfo.appendChild(hrt);
+        }
+    }
     head.appendChild(hinfo);
     (headEl || listEl).appendChild(head);
     (item.reviews || []).forEach(function(rev){

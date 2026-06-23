@@ -317,6 +317,7 @@
 }
 .melon-detail-havg { font-size: 12px; font-weight: bold; }
 .melon-detail-hcount { font-size: 10px; color: var(--text-faint); }
+.melon-detail-hruntime { font-size: 11px; color: var(--text-muted, var(--text-faint)); margin-top: 3px; }
 
 /* Ventana "ver una reseña": carátula + título del item arriba, reseña abajo. */
 #profile-review-view-item {

@@ -694,6 +694,12 @@ if ($_perfilStandalone) {
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
         </div>
+        <!-- Duración (pelis) / nº de capítulos (series, libros). El label
+             y la visibilidad los ajusta showReviewWindow según categoría. -->
+        <div id="profile-review-runtime-row" class="field-row" style="margin-bottom:10px;flex-shrink:0;display:none;align-items:center;gap:6px;">
+            <label id="profile-review-runtime-label" for="profile-review-runtime" style="font-size:11px;">Duración (min)</label>
+            <input type="number" id="profile-review-runtime" min="0" step="1" style="width:90px;box-sizing:border-box;" placeholder="0">
+        </div>
         <div class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
             <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Comentario (opcional)</label>
             <!-- resize:none — el resize:vertical permitía al usuario
@@ -1636,6 +1642,20 @@ var PROFILE_USERS = <?php
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
 
+        /* Campo runtime: minutos (pelis) o nº de capítulos (series/libros). */
+        var runtimeRow = document.getElementById('profile-review-runtime-row');
+        var runtimeEl  = document.getElementById('profile-review-runtime');
+        var runtimeLbl = document.getElementById('profile-review-runtime-label');
+        var RUNTIME_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+        if (RUNTIME_LABEL[cat]) {
+            runtimeLbl.textContent = RUNTIME_LABEL[cat];
+            runtimeEl.value = (item.review && item.review.runtime) ? item.review.runtime : '';
+            runtimeRow.style.display = 'flex';
+        } else {
+            runtimeRow.style.display = 'none';
+            runtimeEl.value = '';
+        }
+
         var numEl = document.getElementById('profile-review-stars-num');
         function setStarDisp(el, val, pos) {
             if (val >= pos) { el.innerHTML = '★'; el.style.clipPath = ''; el.style.opacity = ''; }
@@ -1700,7 +1720,8 @@ var PROFILE_USERS = <?php
             if (!sel) return;
             var i = lists[cat].findIndex(function(x){ return x.id === itemId; });
             if (i === -1) { closeWin(); return; }
-            lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            var rt = RUNTIME_LABEL[cat] ? (parseInt(runtimeEl.value, 10) || 0) : 0;
+            lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), runtime: rt, reviewedAt: Math.floor(Date.now() / 1000) };
             saveCategory(cat);
             notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
             renderCatView(cat);
@@ -3676,6 +3697,20 @@ var PROFILE_USERS = <?php
             + '<span class="melon-detail-havg">' + avgTxt + '</span>'
             + '<span class="melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
         hinfo.appendChild(hrating);
+        /* Consenso de duración/capítulos (la moda entre las reseñas). */
+        if (item.runtime && item.runtime > 0) {
+            var rtLabel = melonCat === 'movies'
+                ? (item.runtime + ' min')
+                : (melonCat === 'series' || melonCat === 'books')
+                    ? (item.runtime + (item.runtime === 1 ? ' capítulo' : ' capítulos'))
+                    : '';
+            if (rtLabel) {
+                var hrt = document.createElement('div');
+                hrt.className = 'melon-detail-hruntime';
+                hrt.textContent = rtLabel;
+                hinfo.appendChild(hrt);
+            }
+        }
         head.appendChild(hinfo);
         headEl.appendChild(head);
         (item.reviews || []).forEach(function(rev) {
@@ -5530,6 +5565,9 @@ var PROFILE_USERS = <?php
         /* id estable para re-resolver el ítem en submit/delete, por si
            lists.music fue reemplazado por un saveCategory intermedio. */
         var itemId = item.id;
+        /* Música no usa el campo de duración/capítulos (lo trae de la API). */
+        var _rtRow = document.getElementById('profile-review-runtime-row');
+        if (_rtRow) _rtRow.style.display = 'none';
         document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
