@@ -575,39 +575,26 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
 
         /* ════ Búsqueda global + vista de artista (overlays fullscreen,
            mismo patrón que #mu-album-fullview). search < artist < album. ════ */
+        /* Los overlays solo posicionan; la ventana interior (.mh-window)
+           aporta el mismo chrome que la pantalla de playlists (borde +
+           title-bar + window-body + panel hundido). El fondo del overlay
+           usa el del escritorio del tema para que, si el viewport supera
+           los 480px, los laterales casen con la pantalla de playlists. */
         #mu-search-view, #mu-artist-view {
             position: fixed; inset: 0;
-            background: var(--win-bg, silver);
-            display: none; flex-direction: column; box-sizing: border-box;
+            background: var(--desktop-bg, var(--win-bg, silver));
+            display: none; box-sizing: border-box;
             padding-top: env(safe-area-inset-top);
-            padding-bottom: env(safe-area-inset-bottom);
         }
         #mu-search-view  { z-index: 71; }
         #mu-artist-view  { z-index: 72; }
-        #mu-search-view.is-open, #mu-artist-view.is-open { display: flex; }
+        #mu-search-view.is-open, #mu-artist-view.is-open { display: block; }
 
-        /* Footer común con botón "Volver" (misma vista que el del visor
-           de álbum). flex-shrink:0 → queda fijo abajo mientras el cuerpo
-           scrollea. */
-        .mu-view-footer {
-            flex-shrink: 0;
-            display: flex;
-            gap: 6px;
-            padding: 8px 8px max(8px, env(safe-area-inset-bottom)) 8px;
-        }
-        .mu-view-footer .button.back-btn {
-            flex: 1;
-            min-height: 34px;
-            font-size: 13px;
-        }
-
-        /* Búsqueda */
-        .mu-sr-searchbar { flex-shrink: 0; padding: 8px; }
+        /* Búsqueda — el searchbar es la toolbar sobre el panel; el panel
+           hundido (.mh-panel) provee scroll, padding y borde interior. */
+        .mu-sr-searchbar { flex-shrink: 0; }
         .mu-sr-searchbar input { width: 100%; box-sizing: border-box; font-size: 15px; padding: 8px; }
-        .mu-sr-results {
-            flex: 1; min-height: 0; overflow-y: auto;
-            -webkit-overflow-scrolling: touch; padding: 0 8px 8px;
-        }
+        .mu-sr-results.mh-panel { min-height: 0; }
         .mu-sr-group-title {
             font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
             color: var(--text-muted, var(--text-faint, #777));
@@ -2681,7 +2668,7 @@ function muOpenNowPlayingMenu() {
     if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
     var tr = QUEUE[CUR_IDX];
     var items = [
-        { act: 'fixAlbum', label: MU_DISC_SVG + 'Corregir' },
+        { act: 'fixAlbum', label: MU_FIX_ICON + 'Corregir' },
         { act: 'addPl',    label: '📋 Añadir a otra playlist' }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -3258,15 +3245,11 @@ function muOpenEditPlaylist(idx) {
     });
 }
 
-/* Icono de disco/vinilo (SVG inline monocromo) para la opción
-   "Corregir". Sin emoji, hereda el color del tema (currentColor). */
-var MU_DISC_SVG =
-    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" ' +
-        'style="vertical-align:-3px;margin-right:6px;" aria-hidden="true">' +
-        '<circle cx="12" cy="12" r="9"/>' +
-        '<circle cx="12" cy="12" r="3.2"/>' +
-        '<circle cx="12" cy="12" r="0.7" fill="currentColor" stroke="none"/>' +
-    '</svg>';
+/* Icono musicaIcon.png para la opción "Corregir" (lo reescribe
+   icon-pack.js según el pack activo). */
+var MU_FIX_ICON =
+    '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" ' +
+        'style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:-3px;margin-right:6px;">';
 
 /* ─── MENÚ CONTEXTUAL DE TRACK (long-press) ────────────────────
    Opciones: añadir la canción a la lista de música del perfil del
@@ -3279,7 +3262,7 @@ function muOpenTrackMenu(pi, ti) {
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
         { act: 'addPl',      label: '📋 Añadir a otra playlist' },
-        { act: 'fixAlbum',   label: MU_DISC_SVG + 'Corregir' },
+        { act: 'fixAlbum',   label: MU_FIX_ICON + 'Corregir' },
         { act: 'remove',     label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la playlist', danger: true }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -4482,16 +4465,21 @@ function muOpenSearch() {
         sv = document.createElement('div');
         sv.id = 'mu-search-view';
         sv.innerHTML =
-            '<div class="window ma-titlebar"><div class="title-bar">' +
-                '<div class="title-bar-text">' +
-                    '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Buscar' +
+            /* Mismo chrome que la pantalla de playlists: ventana con borde
+               (.mh-window) → window-body → panel hundido (.mh-panel) con
+               todos los items dentro + statusbar al pie. */
+            '<div class="window mh-window">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text">' +
+                        '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Buscar' +
+                    '</div>' +
+                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-search-close" type="button"></button></div>' +
                 '</div>' +
-                '<div class="title-bar-controls"><button aria-label="Close" id="mu-search-close" type="button"></button></div>' +
-            '</div></div>' +
-            '<div class="mu-sr-searchbar"><input type="text" id="mu-search-input" autocomplete="off" placeholder="Canciones, álbumes, artistas…"></div>' +
-            '<div class="mu-sr-results" id="mu-search-results"><div class="mu-sr-msg">Escribe para buscar.</div></div>' +
-            '<div class="mu-view-footer">' +
-                '<button class="button back-btn" type="button" data-act="back">‹ Volver</button>' +
+                '<div class="window-body">' +
+                    '<div class="mu-sr-searchbar"><input type="text" id="mu-search-input" autocomplete="off" placeholder="Canciones, álbumes, artistas…"></div>' +
+                    '<div class="mh-panel mu-sr-results" id="mu-search-results"><div class="mu-sr-msg">Escribe para buscar.</div></div>' +
+                    '<div class="mh-statusbar"><button type="button" data-act="back">‹ Volver</button></div>' +
+                '</div>' +
             '</div>';
         document.body.appendChild(sv);
         document.getElementById('mu-search-close').addEventListener('click', muCloseSearch);
@@ -4585,22 +4573,27 @@ function muOpenArtistView(name) {
         av = document.createElement('div');
         av.id = 'mu-artist-view';
         av.innerHTML =
-            '<div class="window ma-titlebar"><div class="title-bar">' +
-                '<div class="title-bar-text" id="mu-aw-titlebar">Artista</div>' +
-                '<div class="title-bar-controls"><button aria-label="Close" id="mu-aw-close" type="button"></button></div>' +
-            '</div></div>' +
-            '<div class="mu-aw-body">' +
-                '<div class="mu-aw-banner" id="mu-aw-banner">' +
-                    '<div class="mu-aw-banner-name" id="mu-aw-name">Artista</div>' +
-                    '<div class="mu-aw-listeners" id="mu-aw-listeners"></div>' +
+            /* Mismo chrome que la pantalla de playlists: ventana con borde
+               (.mh-window) → window-body → panel hundido (.mh-panel) con
+               todo el contenido del artista dentro + statusbar al pie. */
+            '<div class="window mh-window">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text" id="mu-aw-titlebar">Artista</div>' +
+                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-aw-close" type="button"></button></div>' +
                 '</div>' +
-                '<div class="mu-aw-section-title">Popular</div>' +
-                '<div id="mu-aw-top"><div class="mu-sr-msg">Cargando…</div></div>' +
-                '<div class="mu-aw-section-title">Discografía</div>' +
-                '<div class="mu-aw-albums" id="mu-aw-albums"><div class="mu-sr-msg">Cargando…</div></div>' +
-            '</div>' +
-            '<div class="mu-view-footer">' +
-                '<button class="button back-btn" type="button" data-act="back">‹ Volver</button>' +
+                '<div class="window-body">' +
+                    '<div class="mh-panel mu-aw-body">' +
+                        '<div class="mu-aw-banner" id="mu-aw-banner">' +
+                            '<div class="mu-aw-banner-name" id="mu-aw-name">Artista</div>' +
+                            '<div class="mu-aw-listeners" id="mu-aw-listeners"></div>' +
+                        '</div>' +
+                        '<div class="mu-aw-section-title">Popular</div>' +
+                        '<div id="mu-aw-top"><div class="mu-sr-msg">Cargando…</div></div>' +
+                        '<div class="mu-aw-section-title">Discografía</div>' +
+                        '<div class="mu-aw-albums" id="mu-aw-albums"><div class="mu-sr-msg">Cargando…</div></div>' +
+                    '</div>' +
+                    '<div class="mh-statusbar"><button type="button" data-act="back">‹ Volver</button></div>' +
+                '</div>' +
             '</div>';
         document.body.appendChild(av);
         document.getElementById('mu-aw-close').addEventListener('click', muCloseArtistView);

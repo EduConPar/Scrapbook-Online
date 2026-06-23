@@ -3281,14 +3281,11 @@ window.MuShell = (function(){
     }
 
     /* Menú vinilo: 2 acciones (perfil + playlist). */
-    /* Icono de disco/vinilo (SVG inline monocromo, hereda currentColor)
-       para la opción "Corregir". Sin emoji, válido en cualquier tema. */
-    var SHELL_DISC_SVG =
-        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' +
-            '<circle cx="12" cy="12" r="9"/>' +
-            '<circle cx="12" cy="12" r="3.2"/>' +
-            '<circle cx="12" cy="12" r="0.7" fill="currentColor" stroke="none"/>' +
-        '</svg>';
+    /* Icono musicaIcon.png para la opción "Corregir" (lo reescribe
+       icon-pack.js según el pack activo). */
+    var SHELL_FIX_ICON =
+        '<img src="assets/img/appIcons/musicaIcon.png" alt="" ' +
+            'style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
 
     function openVinylMenu(){
         var tr = getCurrentTrack(); if (!tr) return;
@@ -3311,7 +3308,7 @@ window.MuShell = (function(){
                         '<span>Añadir a una playlist</span>' +
                     '</button>' +
                     '<button class="button shell-modal-item" data-act="fix" type="button">' +
-                        '<span class="shell-modal-icon">' + SHELL_DISC_SVG + '</span>' +
+                        '<span class="shell-modal-icon">' + SHELL_FIX_ICON + '</span>' +
                         '<span>Corregir</span>' +
                     '</button>' +
                     '<button class="button shell-modal-item" data-act="listen-together" type="button">' +
