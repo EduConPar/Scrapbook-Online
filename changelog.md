@@ -112,4 +112,24 @@
 - Mejorada la transmision a tv para evitar cortes en la musica
 - Arreglado un bug en el que, al abrir una reseña desde la seccion de notificaciones de perfil, se te ponia tu reseña en lugar de la de esa persona
 - Arreglado un bug que hacia que, al mandar un gif o imagen en un chat y luego mandar un mensaje, el chat no bajara
+
+---
+
+# Alfa 0.1.6
+
+## Nuevas funciones y cambios
+- Se ha cambiado la vista de la ventana de playlist para hacerla mas visual y sencilla
+- Se ha añadido un motor de busqueda a la ventana de playlist donde ahora puedes buscar canciones, artistas y albumes
+- Ahora al darle click al titulo de una cancion dentro de la playlist te lleva a su album
+- Ahora al darle click al artista de una cancion tanto en el reproductor como en la playlist te lleva a su pagina de artista donde se encuentra toda su discografia
+- Las imagenes de la cancion ahora se extraen de su album en lugar del video de youtube del que extraen el audio
+- Se cambio la funcion de "Corregir album" por "Corregir", ahora al darle te permitira editar el titulo, artista, album y link de youtube del que se extrae la musica de una cancion, estos datos se quedaran guardados para cuando otro usuario agregue esa cancion a su playlist
+- Se ha añadido un apartado de duracion para las peliculas y capitulos para series y libros en el apartado de reseñas
+- Se cambio la funcion de "Editar reseña" por "Editar", ahora al darle te permitira editar la imagen, titulo, reseña y duracion en caso de existir
+- Ahora puedes añadir los capitulos de cada una de las series y añadirles una reseña individualmente
+- Ahora en las reseñas de los albumes puedes clicar en el titulo del album o en el artista y te abrira una ventana con el contenido del album o el perfil del artista respectivamente
+- Se ha añadido que en las ventanas de contenido de album aparezca la nota media si alguna de las canciones del album ha sido reseñada
+
+## Bugs y mejoras
+- Arreglado un bug que hacia que al poner una reseña y hacer la ventana mas pequeña, los elementos de la ventana se salieran de esta
 - Arreglado un bug en el que el reproductor tenia 2 menus distintos
