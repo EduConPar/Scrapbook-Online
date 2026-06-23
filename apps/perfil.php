@@ -667,7 +667,6 @@ if ($_perfilStandalone) {
              espacios o un username largo se rompe en vez de empujar
              el contenedor más ancho que la ventana. -->
         <div style="padding:16px 18px 14px;min-width:0;overflow-wrap:anywhere;word-break:break-word;">
-            <div id="profile-review-view-item" style="display:none;"></div>
             <div id="profile-review-view-comment"></div>
             <div id="profile-review-view-header"></div>
         </div>
@@ -1603,31 +1602,6 @@ var PROFILE_USERS = <?php
     function showReviewView(review, item) {
         var win = document.getElementById('profile-review-view');
         var username = (document.getElementById('profile-username') || {}).textContent || 'Usuario';
-        /* Cabecera: carátula + título del item arriba; debajo la reseña. */
-        var itemEl = document.getElementById('profile-review-view-item');
-        if (itemEl) {
-            itemEl.innerHTML = '';
-            if (item && (item.title || item.image)) {
-                var cov = document.createElement('div');
-                cov.className = 'review-view-cover';
-                /* Música = cuadrada; resto = póster vertical. */
-                var _isMusic = !!(item.artist || item.type === 'album' || item.type === 'song' || item.mtype === 'album' || item.mtype === 'song');
-                if (!_isMusic) cov.classList.add('melon-cover-portrait');
-                if (item.image) {
-                    var im = document.createElement('img'); im.src = item.image; im.alt = '';
-                    im.onerror = function() { cov.classList.add('review-view-cover-ph'); cov.textContent = '🍈'; };
-                    cov.appendChild(im);
-                } else {
-                    cov.classList.add('review-view-cover-ph'); cov.textContent = '🍈';
-                }
-                var tt = document.createElement('div'); tt.className = 'review-view-title';
-                tt.textContent = item.title || '';
-                itemEl.appendChild(cov); itemEl.appendChild(tt);
-                itemEl.style.display = 'flex';
-            } else {
-                itemEl.style.display = 'none';
-            }
-        }
         document.getElementById('profile-review-view-comment').textContent = review.comment ? '" ' + review.comment + ' "' : '';
         document.getElementById('profile-review-view-header').innerHTML = '— ' + escHtml(username) + '  —  ' + makeStarsHtml(review.stars, 5) + '<span style="font-size:11px;margin-left:4px;vertical-align:middle;">' + review.stars + '</span>';
         /* Reset al tamaño base definido en el HTML — si el usuario
@@ -3889,21 +3863,22 @@ var PROFILE_USERS = <?php
         head.appendChild(hinfo);
         headEl.appendChild(head);
 
-        /* Carátula: click → añadir el item a mi perfil. Click derecho (solo
-           música) → menú Reproducir / Añadir a playlist / Añadir a mi perfil. */
+        /* Carátula: click → añadir el item a mi perfil. Click derecho →
+           menú: en música Reproducir / Añadir a playlist / Añadir a mi
+           perfil; en el resto solo Añadir a mi perfil. */
         cover.style.cursor = 'pointer';
-        cover.title = (melonCat === 'music') ? 'Click: añadir a mi perfil · Click derecho: más opciones' : 'Añadir a mi perfil';
+        cover.title = 'Click: añadir a mi perfil · Click derecho: más opciones';
         cover.addEventListener('click', function(){ addMelonItemToProfile(melonCat, item); });
-        if (melonCat === 'music') {
-            cover.addEventListener('contextmenu', function(e){
-                e.preventDefault(); e.stopPropagation();
-                showCtxMenu(e.clientX, e.clientY, [
-                    { label: '▶ Reproducir',           action: function(){ if (typeof playMusicItem === 'function') playMusicItem(item); } },
-                    { label: '📋 Añadir a una playlist', action: function(){ melonAddToPlaylist(item, e.clientX, e.clientY); } },
-                    { label: '+ Añadir a mi perfil',     action: function(){ addMelonItemToProfile('music', item); } }
-                ]);
-            });
-        }
+        cover.addEventListener('contextmenu', function(e){
+            e.preventDefault(); e.stopPropagation();
+            var menu = [];
+            if (melonCat === 'music') {
+                menu.push({ label: '▶ Reproducir',           action: function(){ if (typeof playMusicItem === 'function') playMusicItem(item); } });
+                menu.push({ label: '📋 Añadir a una playlist', action: function(){ melonAddToPlaylist(item, e.clientX, e.clientY); } });
+            }
+            menu.push({ label: '+ Añadir a mi perfil', action: function(){ addMelonItemToProfile(melonCat, item); } });
+            showCtxMenu(e.clientX, e.clientY, menu);
+        });
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';

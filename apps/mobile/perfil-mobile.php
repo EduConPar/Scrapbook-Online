@@ -2011,11 +2011,6 @@ function openReviewView(item) {
     var commentHtml = (review.comment && review.comment.trim())
         ? '<div class="pf-review-comment">" ' + esc(review.comment) + ' "</div>'
         : '<div class="pf-review-comment-empty">(Sin comentario)</div>';
-    var _isMusic = !!(item.artist || item.type === 'album' || item.type === 'song' || item.mtype === 'album' || item.mtype === 'song');
-    var _portCls = _isMusic ? '' : ' pf-melon-cover-portrait';
-    var coverHtml = item.image
-        ? '<div class="pf-review-cover' + _portCls + '"><img src="' + esc(item.image) + '" alt=""></div>'
-        : '<div class="pf-review-cover pf-review-cover-ph' + _portCls + '">🍈</div>';
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -2027,9 +2022,6 @@ function openReviewView(item) {
                 '</div>' +
             '</div>' +
             '<div class="window-body">' +
-                '<div class="pf-review-itemhead">' + coverHtml +
-                    '<div class="pf-review-title">' + esc(item.title || '') + '</div>' +
-                '</div>' +
                 commentHtml +
                 '<div class="pf-review-header">' +
                     '— ' + esc(USER_LABEL) + ' &nbsp;—&nbsp; ' +
