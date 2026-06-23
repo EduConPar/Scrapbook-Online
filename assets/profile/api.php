@@ -2146,6 +2146,34 @@ case 'series-episodes': {
     jsonResponse(['ok' => true, 'episodes' => $eps]);
 }
 
+case 'series-episode-reviews': {
+    /* Todas las reseñas (estrellas + comentario) de un capítulo concreto. */
+    $epId = (int)($_GET['episodeId'] ?? 0);
+    if (!$epId) jsonResponse(['ok' => true, 'reviews' => []]);
+    $st = $pdo->prepare("
+        SELECT u.user_key AS userKey, u.label AS userLabel,
+               s.stars AS stars, s.comment AS comment, UNIX_TIMESTAMP(s.reviewed_at) AS reviewedAt
+        FROM series_episode_state s
+        JOIN usuarios u ON u.id = s.user_id
+        WHERE s.episode_id = ? AND s.stars IS NOT NULL
+        ORDER BY s.reviewed_at DESC, s.user_id ASC
+    ");
+    $st->execute([$epId]);
+    $reviews = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $userLabel = $r['userLabel'];
+        $reviews[] = [
+            'user'       => $r['userKey'],
+            'userLabel'  => $userLabel,
+            'userImg'    => function_exists('getUserImage') ? getUserImage($userLabel) : '',
+            'stars'      => (float)$r['stars'],
+            'comment'    => (string)($r['comment'] ?? ''),
+            'reviewedAt' => (int)($r['reviewedAt'] ?? 0),
+        ];
+    }
+    jsonResponse(['ok' => true, 'reviews' => $reviews]);
+}
+
 case 'save-series-episode': {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
     $uid = pf_uid($pdo, $userKey);

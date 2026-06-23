@@ -1424,6 +1424,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-ep-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px; border: 1px solid var(--win-border, #808080); background: var(--win-bg-light, #fff); }
         .pf-ep-thumb { width: 96px; aspect-ratio: 16/9; flex-shrink: 0; background: #000; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; }
         .pf-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-ep-thumb-click { cursor: pointer; }
+        .pf-ep-thumb-click:active { outline: 2px solid var(--star-color, #e8b923); outline-offset: -2px; }
+        .pf-ep-reviews-body { max-height: calc(100vh - 90px); overflow-y: auto; }
         .pf-ep-info { flex: 1; min-width: 0; }
         .pf-ep-title { font-size: 12px; font-weight: bold; color: var(--text, #000); word-break: break-word; line-height: 1.2; }
         .pf-ep-meta { font-size: 10px; color: var(--text-faint, #888); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -2380,24 +2383,27 @@ function epFmtDurM(min) {
     var h = Math.floor(min / 60), m = min % 60;
     return h > 0 ? (h + ' h' + (m ? ' ' + m + ' min' : '')) : (m + ' min');
 }
-function openEpisodesModal(seriesTitle, canWatch) {
+function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     if (!seriesTitle) return;
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
+    /* Desde Melon Reviews: solo lectura — sin barra para añadir. */
+    var addBar = readOnly ? '' :
+        '<div class="pf-ep-addbar">' +
+            '<input type="text" id="pf-ep-title" placeholder="Título del capítulo">' +
+            '<input type="text" id="pf-ep-image" placeholder="Imagen de preview (URL)">' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+                '<input type="number" id="pf-ep-dur" placeholder="min" min="0" inputmode="numeric" style="width:80px;">' +
+                '<button class="button default" id="pf-ep-add" type="button">+ Añadir</button>' +
+            '</div>' +
+        '</div>';
     bd.innerHTML =
         '<div class="window pf-modal pf-episodes-modal">' +
             '<div class="title-bar"><div class="title-bar-text">🎬 Capítulos</div>' +
                 '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
             '<div class="window-body pf-episodes-body">' +
                 '<div class="pf-ep-list" id="pf-ep-list"><div class="ma-status">Cargando…</div></div>' +
-                '<div class="pf-ep-addbar">' +
-                    '<input type="text" id="pf-ep-title" placeholder="Título del capítulo">' +
-                    '<input type="text" id="pf-ep-image" placeholder="Imagen de preview (URL)">' +
-                    '<div style="display:flex;gap:6px;align-items:center;">' +
-                        '<input type="number" id="pf-ep-dur" placeholder="min" min="0" inputmode="numeric" style="width:80px;">' +
-                        '<button class="button default" id="pf-ep-add" type="button">+ Añadir</button>' +
-                    '</div>' +
-                '</div>' +
+                addBar +
             '</div>' +
         '</div>';
     document.body.appendChild(bd);
@@ -2411,10 +2417,21 @@ function openEpisodesModal(seriesTitle, canWatch) {
         listEl.innerHTML = eps.map(function(ep, i){
             var dur = epFmtDurM(ep.duration);
             var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
+            var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
+            /* Solo lectura: miniatura abre las reseñas, sin controles de edición. */
+            if (readOnly) {
+                return '<div class="pf-ep-row">' +
+                    '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
+                    '<div class="pf-ep-info">' +
+                        '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
+                        '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
             var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
             var rev = (ep.myStars != null) ? ('★ ' + ep.myStars) : '✎ Reseñar';
             return '<div class="pf-ep-row">' +
-                '<div class="pf-ep-thumb">' + (ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬') + '</div>' +
+                '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
                 '<div class="pf-ep-info">' +
                     '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
                     '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
@@ -2439,6 +2456,8 @@ function openEpisodesModal(seriesTitle, canWatch) {
         fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
     });
     listEl.addEventListener('click', function(e){
+        var rv = e.target.closest('[data-rev]');
+        if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
         var r = e.target.closest('[data-r]');
         if (r) { var id = parseInt(r.getAttribute('data-r'), 10); var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) openEpReviewModal(ep, load); return; }
         var x = e.target.closest('[data-x]');
@@ -2449,7 +2468,8 @@ function openEpisodesModal(seriesTitle, canWatch) {
             }
         }
     });
-    bd.querySelector('#pf-ep-add').addEventListener('click', function(){
+    var addEl = bd.querySelector('#pf-ep-add');
+    if (addEl) addEl.addEventListener('click', function(){
         var t = bd.querySelector('#pf-ep-title').value.trim(); if (!t) return;
         var img = bd.querySelector('#pf-ep-image').value.trim();
         var dur = parseInt(bd.querySelector('#pf-ep-dur').value, 10) || 0;
@@ -2457,6 +2477,41 @@ function openEpisodesModal(seriesTitle, canWatch) {
             .then(function(){ bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = ''; load(); }).catch(function(){});
     });
     load();
+}
+/* Lista de reseñas de un capítulo (solo lectura). */
+function openEpReviewsModal(ep) {
+    var bd = document.createElement('div');
+    bd.className = 'pf-modal-backdrop';
+    bd.innerHTML =
+        '<div class="window pf-modal">' +
+            '<div class="title-bar"><div class="title-bar-text">★ Reseñas · ' + esc(ep.title || '—') + '</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
+            '<div class="window-body pf-ep-reviews-body"><div class="pf-ep-empty">Cargando…</div></div>' +
+        '</div>';
+    document.body.appendChild(bd);
+    function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    var body = bd.querySelector('.pf-ep-reviews-body');
+    fetch(API + '?action=series-episode-reviews&episodeId=' + ep.id, { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+            var reviews = (d && d.reviews) || [];
+            if (!reviews.length) { body.innerHTML = '<div class="pf-ep-empty">Este capítulo no tiene reseñas todavía.</div>'; return; }
+            body.innerHTML = reviews.map(function(rev){
+                var src = rev.userImg || '';
+                if (src && src.indexOf('/') !== 0 && src.indexOf('http') !== 0 && src.indexOf('../') !== 0) src = '../../' + src;
+                var av = src ? '<img src="' + esc(src) + '" alt="">' : '👤';
+                return '<div class="pf-melon-review-row">' +
+                    '<div class="pf-melon-review-av">' + av + '</div>' +
+                    '<div class="pf-melon-review-info">' +
+                        '<div class="pf-melon-review-hdr"><strong>' + esc(rev.userLabel || '') + '</strong> ' + makeStarsHtml(rev.stars, 5) + ' <span class="pf-melon-review-num">' + rev.stars + '</span></div>' +
+                        (rev.comment ? '<div class="pf-melon-review-comment">" ' + esc(rev.comment) + ' "</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        })
+        .catch(function(){ body.innerHTML = '<div class="pf-ep-empty">Error al cargar reseñas.</div>'; });
 }
 function openEpReviewModal(ep, onSaved) {
     var sel = ep.myStars || 0;
@@ -3772,7 +3827,7 @@ function showMelonDetails(item) {
         if (item.episodeDuration > 0) epTxt += ' · ' + epFmtDurM(item.episodeDuration);
         hep.textContent = '🎬 ' + epTxt;
         hep.style.cursor = 'pointer';
-        hep.addEventListener('click', function(){ openEpisodesModal(item.title, false); });
+        hep.addEventListener('click', function(){ openEpisodesModal(item.title, false, true); });
         hinfo.appendChild(hep);
     }
     /* Música: duración + nº de tracks (álbum) o duración (canción). */
