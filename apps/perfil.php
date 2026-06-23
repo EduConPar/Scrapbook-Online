@@ -540,8 +540,11 @@ if ($_perfilStandalone) {
          esa medida. Si el body supera max-height (definido en
          perfil.css), aparece scroll. Una reseña → body pequeño → ventana
          compacta. Muchas reseñas → ventana al límite + scroll. -->
-    <div class="window-body" style="padding:6px;overflow-y:auto;flex:0 1 auto;">
-        <div id="profile-melon-details-list"></div>
+    <!-- La cabecera (carátula + título + nota) queda FIJA; solo el
+         listado de reseñas scrollea cuando hay muchas. -->
+    <div class="window-body" style="padding:0;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
+        <div id="profile-melon-details-head" style="flex-shrink:0;"></div>
+        <div id="profile-melon-details-list" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px;"></div>
     </div>
 </div>
 
@@ -3632,9 +3635,11 @@ var PROFILE_USERS = <?php
         if (!win) return;
         document.getElementById('profile-melon-details-title').textContent = '⭐ ' + item.title;
         var list = document.getElementById('profile-melon-details-list');
+        var headEl = document.getElementById('profile-melon-details-head');
         list.innerHTML = '';
-        /* Cabecera: carátula + título + (artista) + calificación media
-           junto al número de reseñas. Debajo van las reseñas de usuarios. */
+        headEl.innerHTML = '';
+        /* Cabecera FIJA: carátula + título + (artista) + calificación media
+           junto al número de reseñas. Debajo, en zona scrollable, las reseñas. */
         var head = document.createElement('div');
         head.className = 'melon-detail-header';
         var cover = document.createElement('div');
@@ -3672,7 +3677,7 @@ var PROFILE_USERS = <?php
             + '<span class="melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
         hinfo.appendChild(hrating);
         head.appendChild(hinfo);
-        list.appendChild(head);
+        headEl.appendChild(head);
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';

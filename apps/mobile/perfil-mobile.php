@@ -1327,11 +1327,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             max-height: 75vh;
             display: flex; flex-direction: column;
         }
+        /* Body en columna: la cabecera queda fija y solo el listado de
+           reseñas scrollea. */
         .pf-melon-modal-body {
             flex: 1; min-height: 0;
-            overflow-y: auto;
-            padding: 8px 10px;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            padding: 0;
         }
+        #pf-melon-modal-head { flex-shrink: 0; }
+        #pf-melon-modal-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 8px; }
         .pf-melon-review-row {
             display: flex;
             gap: 8px;
@@ -1378,8 +1383,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             display: flex;
             align-items: center;
             gap: 10px;
-            padding: 4px 6px 10px;
-            margin-bottom: 4px;
+            padding: 8px 10px 10px;
+            margin-bottom: 0;
             border-bottom: 2px solid var(--border, #c0c0c0);
             min-width: 0;
         }
@@ -1548,6 +1553,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     </div>
                 </div>
                 <div class="window-body pf-melon-modal-body">
+                    <div id="pf-melon-modal-head"></div>
                     <div id="pf-melon-modal-list"></div>
                 </div>
             </div>
@@ -3471,10 +3477,13 @@ function showMelonDetails(item) {
     var backdrop = document.getElementById('pf-melon-modal-backdrop');
     var titleEl  = document.getElementById('pf-melon-modal-title');
     var listEl   = document.getElementById('pf-melon-modal-list');
+    var headEl   = document.getElementById('pf-melon-modal-head');
     if (!backdrop || !listEl) return;
     titleEl.textContent = '⭐ ' + item.title;
     listEl.innerHTML = '';
-    /* Cabecera: carátula + título + (artista) + media junto al nº de reseñas. */
+    if (headEl) headEl.innerHTML = '';
+    /* Cabecera FIJA: carátula + título + (artista) + media/nº; debajo,
+       en zona scrollable, las reseñas. */
     var head = document.createElement('div');
     head.className = 'pf-melon-detail-header';
     var cover = document.createElement('div');
@@ -3499,7 +3508,7 @@ function showMelonDetails(item) {
         + '<span class="pf-melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
     hinfo.appendChild(hr);
     head.appendChild(hinfo);
-    listEl.appendChild(head);
+    (headEl || listEl).appendChild(head);
     (item.reviews || []).forEach(function(rev){
         var row = document.createElement('div');
         row.className = 'pf-melon-review-row';
