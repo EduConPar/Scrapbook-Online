@@ -653,7 +653,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             min-width: 0;
         }
         .pf-modal .pf-review-cover {
-            width: 56px; height: 56px; flex-shrink: 0;
+            width: 84px; aspect-ratio: 1 / 1; flex-shrink: 0;
             overflow: hidden; background: var(--input-bg, #000);
             display: flex; align-items: center; justify-content: center;
             box-shadow:
@@ -663,8 +663,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                  2px  2px 0 var(--bezel-light-2, #dfdfdf);
             margin: 2px;
         }
+        /* Pelis/series/libros/juegos → póster vertical. */
+        .pf-modal .pf-review-cover.pf-melon-cover-portrait { aspect-ratio: 2 / 3; }
         .pf-modal .pf-review-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .pf-modal .pf-review-cover.pf-review-cover-ph { font-size: 26px; }
+        .pf-modal .pf-review-cover.pf-review-cover-ph { font-size: 28px; }
         .pf-modal .pf-review-title {
             font-size: 15px;
             font-weight: bold;
@@ -1330,24 +1332,22 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             overflow-y: auto;
             padding: 8px 10px;
         }
-        /* Reseñas estilo Letterboxd: avatar circular + "Reseña de X" +
-           comentario destacado debajo + fecha. */
         .pf-melon-review-row {
             display: flex;
-            gap: 10px;
-            padding: 12px 2px;
-            align-items: flex-start;
-            border-bottom: 1px solid var(--border, #c0c0c0);
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px dotted var(--text-faint, #aaa);
         }
         .pf-melon-review-row:last-child { border-bottom: none; }
         .pf-melon-review-av {
-            width: 38px; height: 38px;
+            width: 32px; height: 32px;
             flex-shrink: 0;
             background: var(--inset-bg, #fff);
             display: flex; align-items: center; justify-content: center;
             overflow: hidden;
-            border-radius: 50%;
-            border: 1px solid var(--border, #c0c0c0);
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff);
         }
         .pf-melon-review-av img {
             width: 100%; height: 100%;
@@ -1356,36 +1356,23 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-melon-review-info { flex: 1; min-width: 0; }
         .pf-melon-review-hdr {
             font-size: 12px;
-            color: var(--text-faint, #888);
-            display: flex; align-items: center; gap: 5px;
+            color: var(--text, #000);
+            display: flex; align-items: center; gap: 4px;
             flex-wrap: wrap;
         }
-        .pf-melon-review-by { color: var(--text-faint, #888); }
-        .pf-melon-review-hdr strong { font-size: 13px; color: var(--text, #000); }
-        .pf-melon-review-stars { color: var(--star-color, #e8b923); font-size: 11px; }
+        .pf-melon-review-hdr strong { font-size: 13px; }
         .pf-melon-review-comment {
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text, #000);
-            margin-top: 5px;
-            line-height: 1.55;
+            margin-top: 3px;
+            font-style: italic;
             word-break: break-word;
         }
         .pf-melon-review-time {
             font-size: 10px;
             color: var(--text-faint, #888);
-            margin-top: 6px;
+            margin-top: 2px;
         }
-        /* Histograma de distribución de notas (estilo Letterboxd). */
-        .pf-melon-hist {
-            display: flex; align-items: flex-end; gap: 6px;
-            padding: 8px 4px 12px;
-            border-bottom: 2px solid var(--border, #c0c0c0);
-            margin-bottom: 2px;
-        }
-        .pf-melon-hist-star { color: var(--star-color, #e8b923); font-size: 9px; line-height: 1; padding-bottom: 1px; white-space: nowrap; }
-        .pf-melon-hist-bars { flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 38px; }
-        .pf-melon-hist-bar { flex: 1; display: flex; align-items: flex-end; height: 100%; }
-        .pf-melon-hist-bar > span { width: 100%; min-height: 2px; display: block; background: var(--star-color, #e8b923); opacity: 0.85; }
         /* Cabecera de la ventana de reseñas: carátula + título + media/nº. */
         .pf-melon-detail-header {
             display: flex;
@@ -1397,7 +1384,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             min-width: 0;
         }
         .pf-melon-detail-cover {
-            width: 60px; height: 60px; flex-shrink: 0;
+            width: 88px; aspect-ratio: 1 / 1; flex-shrink: 0;
             overflow: hidden; background: var(--input-bg, #000);
             display: flex; align-items: center; justify-content: center;
             box-shadow:
@@ -1407,6 +1394,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                  2px  2px 0 var(--bezel-light-2, #dfdfdf);
             margin: 2px;
         }
+        /* Pelis/series/libros/juegos → póster vertical (más alto que ancho). */
+        .pf-melon-detail-cover.pf-melon-cover-portrait { aspect-ratio: 2 / 3; }
         .pf-melon-detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .pf-melon-detail-cover.pf-melon-detail-cover-ph { font-size: 28px; }
         .pf-melon-detail-hinfo { flex: 1; min-width: 0; }
@@ -2010,9 +1999,11 @@ function openReviewView(item) {
     var commentHtml = (review.comment && review.comment.trim())
         ? '<div class="pf-review-comment">" ' + esc(review.comment) + ' "</div>'
         : '<div class="pf-review-comment-empty">(Sin comentario)</div>';
+    var _isMusic = !!(item.artist || item.type === 'album' || item.type === 'song' || item.mtype === 'album' || item.mtype === 'song');
+    var _portCls = _isMusic ? '' : ' pf-melon-cover-portrait';
     var coverHtml = item.image
-        ? '<div class="pf-review-cover"><img src="' + esc(item.image) + '" alt=""></div>'
-        : '<div class="pf-review-cover pf-review-cover-ph">🍈</div>';
+        ? '<div class="pf-review-cover' + _portCls + '"><img src="' + esc(item.image) + '" alt=""></div>'
+        : '<div class="pf-review-cover pf-review-cover-ph' + _portCls + '">🍈</div>';
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -3488,6 +3479,8 @@ function showMelonDetails(item) {
     head.className = 'pf-melon-detail-header';
     var cover = document.createElement('div');
     cover.className = 'pf-melon-detail-cover';
+    /* Música = cuadrada; resto (pelis/series/libros/juegos) = póster vertical. */
+    if (MELON_STATE.cat !== 'music') cover.classList.add('pf-melon-cover-portrait');
     if (item.image) {
         var cimg = document.createElement('img'); cimg.src = item.image; cimg.alt = item.title || '';
         (function(c){ cimg.onerror = function(){ c.classList.add('pf-melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
@@ -3507,20 +3500,6 @@ function showMelonDetails(item) {
     hinfo.appendChild(hr);
     head.appendChild(hinfo);
     listEl.appendChild(head);
-    /* Histograma de distribución de notas (estilo Letterboxd). */
-    var _revs = item.reviews || [];
-    if (_revs.length) {
-        var dist = [0,0,0,0,0,0,0,0,0,0];
-        _revs.forEach(function(rv){ var s = +rv.stars; if (!s) return; var idx = Math.round(s * 2) - 1; if (idx >= 0 && idx < 10) dist[idx]++; });
-        var maxd = Math.max.apply(null, dist) || 1;
-        var hist = document.createElement('div');
-        hist.className = 'pf-melon-hist';
-        var barsHtml = dist.map(function(c){ return '<span class="pf-melon-hist-bar"><span style="height:' + Math.round((c / maxd) * 100) + '%"></span></span>'; }).join('');
-        hist.innerHTML = '<span class="pf-melon-hist-star">★</span>'
-            + '<span class="pf-melon-hist-bars">' + barsHtml + '</span>'
-            + '<span class="pf-melon-hist-star">★★★★★</span>';
-        listEl.appendChild(hist);
-    }
     (item.reviews || []).forEach(function(rev){
         var row = document.createElement('div');
         row.className = 'pf-melon-review-row';
@@ -3547,13 +3526,14 @@ function showMelonDetails(item) {
         info.className = 'pf-melon-review-info';
         var hdr = document.createElement('div');
         hdr.className = 'pf-melon-review-hdr';
-        hdr.innerHTML = '<span class="pf-melon-review-by">Reseña de </span><strong>' + esc(rev.userLabel || '?') + '</strong> '
-            + '<span class="pf-melon-review-stars">' + makeStarsHtml(rev.stars, 5) + '</span>';
+        hdr.innerHTML = '<strong>' + esc(rev.userLabel || '?') + '</strong> '
+            + makeStarsHtml(rev.stars, 5)
+            + '<span class="pf-melon-review-num">' + rev.stars + '</span>';
         info.appendChild(hdr);
         if (rev.comment) {
             var cmt = document.createElement('div');
             cmt.className = 'pf-melon-review-comment';
-            cmt.textContent = rev.comment;
+            cmt.textContent = '" ' + rev.comment + ' "';
             info.appendChild(cmt);
         }
         var t = document.createElement('div');

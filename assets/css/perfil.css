@@ -227,77 +227,51 @@
 }
 
 /* Detail window with all reviews of an item */
-/* Reseñas estilo Letterboxd: avatar circular + "Reseña de X" + el
-   comentario destacado debajo + la fecha. */
 .melon-detail-row {
     display: flex;
-    gap: 10px;
-    padding: 12px 10px;
-    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
     border-bottom: 1px solid var(--border);
     min-width: 0;
     overflow: hidden;
 }
 .profile-avatar-frame.melon-detail-av {
-    width: 38px;
-    height: 38px;
+    width: 32px;
+    height: 32px;
     flex-shrink: 0;
-    border-radius: 50%;
-    overflow: hidden;
-    box-shadow: none;
-    border: 1px solid var(--border);
 }
 .profile-avatar-frame.melon-detail-av img {
-    width: 100%;
-    height: 100%;
+    width: 32px;
+    height: 32px;
     object-fit: cover;
     display: block;
 }
-.melon-detail-body {
-    flex: 1;
-    min-width: 0;
-}
+.melon-detail-body { flex: 1; min-width: 0; }
 .melon-detail-hdr {
     font-size: 11px;
-    color: var(--text-faint);
+    color: var(--star-color);
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     flex-wrap: wrap;
     min-width: 0;
     word-break: break-word;
     overflow-wrap: anywhere;
 }
-.melon-detail-by { color: var(--text-faint); }
-.melon-detail-hdr strong { color: var(--text); font-weight: bold; }
-.melon-detail-stars { color: var(--star-color); font-size: 11px; }
+.melon-detail-hdr .melon-item-avg { font-size: 10px; color: var(--star-color); }
 .melon-detail-comment {
-    font-size: 13px;
-    font-style: normal;
-    color: var(--text);
-    margin-top: 5px;
+    font-size: 11px;
+    font-style: italic;
+    color: var(--star-color);
+    margin-top: 3px;
     word-break: break-word;
-    line-height: 1.55;
+    line-height: 1.4;
 }
 .melon-detail-time {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-faint);
-    margin-top: 6px;
+    margin-top: 2px;
 }
-
-/* Histograma de distribución de notas (estilo Letterboxd). */
-.melon-hist {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    padding: 8px 12px 12px;
-    border-bottom: 2px solid var(--border);
-    margin-bottom: 2px;
-}
-.melon-hist-star { color: var(--star-color); font-size: 9px; line-height: 1; padding-bottom: 1px; white-space: nowrap; }
-.melon-hist-bars { flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 38px; }
-.melon-hist-bar { flex: 1; display: flex; align-items: flex-end; height: 100%; }
-.melon-hist-bar > span { width: 100%; min-height: 2px; display: block; background: var(--star-color); opacity: 0.85; }
 
 /* Cabecera de la ventana de reseñas: carátula + título + calificación
    media junto al nº de reseñas. */
@@ -311,8 +285,8 @@
     min-width: 0;
 }
 .melon-detail-cover {
-    width: 60px;
-    height: 60px;
+    width: 88px;
+    aspect-ratio: 1 / 1;          /* música: carátula cuadrada */
     flex-shrink: 0;
     overflow: hidden;
     background: var(--input-bg, #000);
@@ -327,8 +301,10 @@
          2px  2px 0 var(--bezel-light-2, #dfdfdf);
     margin: 2px;
 }
+/* Pelis/series/libros/juegos → póster vertical (más alto que ancho). */
+.melon-detail-cover.melon-cover-portrait { aspect-ratio: 2 / 3; }
 .melon-detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.melon-detail-cover.melon-detail-cover-ph { font-size: 28px; }
+.melon-detail-cover.melon-detail-cover-ph { font-size: 30px; }
 .melon-detail-hinfo { flex: 1; min-width: 0; }
 .melon-detail-htitle {
     font-size: 14px; font-weight: bold; color: var(--text);
@@ -353,8 +329,8 @@
     min-width: 0;
 }
 .review-view-cover {
-    width: 56px;
-    height: 56px;
+    width: 84px;
+    aspect-ratio: 1 / 1;          /* música: cuadrada */
     flex-shrink: 0;
     overflow: hidden;
     background: var(--input-bg, #000);
@@ -368,8 +344,10 @@
          2px  2px 0 var(--bezel-light-2, #dfdfdf);
     margin: 2px;
 }
+/* Pelis/series/libros/juegos → póster vertical. */
+.review-view-cover.melon-cover-portrait { aspect-ratio: 2 / 3; }
 .review-view-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.review-view-cover.review-view-cover-ph { font-size: 26px; }
+.review-view-cover.review-view-cover-ph { font-size: 28px; }
 .review-view-title {
     font-size: 15px; font-weight: bold; color: var(--text);
     word-break: break-word; line-height: 1.25; min-width: 0;
