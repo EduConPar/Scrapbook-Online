@@ -822,6 +822,56 @@ function melonRecordRecent(type, key, name, image, artist) {
     } catch (_) {}
 }
 
+/* ── Medias de la comunidad (reseñas) para música ───────────────────
+   Carga una vez (cacheado) el mapa de medias de canciones/álbumes
+   reseñados desde el perfil. Sirve para pintar la nota a la derecha de
+   cada resultado de búsqueda / canción del artista / pista de álbum. */
+var _musicRatings = null, _musicRatingsPromise = null;
+function _mrNorm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function loadMusicRatings(force) {
+    if (_musicRatings && !force) return Promise.resolve(_musicRatings);
+    if (_musicRatingsPromise && !force) return _musicRatingsPromise;
+    _musicRatingsPromise = fetch('assets/profile/api.php?action=music-ratings', { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+            _musicRatings = (d && d.ok) ? d : { songs:{}, albums:{}, songsTitle:{}, albumsTitle:{} };
+            return _musicRatings;
+        })
+        .catch(function(){ _musicRatings = { songs:{}, albums:{}, songsTitle:{}, albumsTitle:{} }; return _musicRatings; });
+    return _musicRatingsPromise;
+}
+/* Devuelve {avg,count} o null. Casa primero por título+artista; si no,
+   por título solo (el artista del resultado externo no siempre coincide). */
+function mrLookup(kind, title, artist) {
+    if (!_musicRatings) return null;
+    var nt = _mrNorm(title); if (!nt) return null;
+    var byTA = _musicRatings[kind] || {};
+    var byT  = _musicRatings[kind === 'albums' ? 'albumsTitle' : 'songsTitle'] || {};
+    var na = _mrNorm(artist);
+    if (na && byTA[nt + '\x1f' + na]) return byTA[nt + '\x1f' + na];
+    return byT[nt] || null;
+}
+/* HTML del badge de nota (estrella + media). */
+function mrBadge(rating) {
+    if (!rating) return '';
+    return '<span class="pl-sr-rating" title="' + rating.count + ' reseña' + (rating.count === 1 ? '' : 's') + '">★ ' + rating.avg.toFixed(1) + '</span>';
+}
+function mrAppendBadge(el, rating) { if (el && rating) el.insertAdjacentHTML('beforeend', mrBadge(rating)); }
+/* Pinta las notas en las filas de resultados de búsqueda (canción/álbum). */
+function decorateSearchRatings(container) {
+    if (!container) return;
+    loadMusicRatings().then(function(){
+        container.querySelectorAll('.pl-sr-row[data-type="song"]').forEach(function(row){
+            if (row.querySelector('.pl-sr-rating')) return;
+            mrAppendBadge(row, mrLookup('songs', row.dataset.title, row.dataset.artist));
+        });
+        container.querySelectorAll('.pl-sr-row[data-type="album"]').forEach(function(row){
+            if (row.querySelector('.pl-sr-rating')) return;
+            mrAppendBadge(row, mrLookup('albums', row.dataset.name, row.dataset.artist));
+        });
+    });
+}
+
 /* Reproduce una sola canción reemplazando la cola actual (usado por la
    búsqueda y por la sección de recientes). */
 function melonPlaySong(tr) {
@@ -870,6 +920,12 @@ function _awBuildAlbumCard(a) {
     var nm = document.createElement('div'); nm.className = 'pl-sr-name';
     nm.textContent = a.name + (a.year ? (' (' + a.year + ')') : '');
     card.appendChild(img); card.appendChild(nm);
+    /* Nota media del álbum (reseña propia del álbum) bajo el nombre. */
+    loadMusicRatings().then(function(){
+        if (card.querySelector('.pl-sr-rating')) return;
+        var r = mrLookup('albums', a.name, _awArtistName);
+        if (r) card.insertAdjacentHTML('beforeend', mrBadge(r));
+    });
     card.addEventListener('click', function(){
         if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name);
         melonRecordRecent('album', a.albumKey, a.name, a.image, _awArtistName || '');
@@ -933,6 +989,14 @@ function openArtistWindow(name) {
         topEl.innerHTML = html;
         topEl.querySelectorAll('.aw-top-row').forEach(function(row){
             row.addEventListener('click', function(){ playArtistTrackByName(row.dataset.title, row.dataset.artist); });
+        });
+        /* Nota media de la comunidad a la derecha de cada canción. */
+        loadMusicRatings().then(function(){
+            topEl.querySelectorAll('.aw-top-row').forEach(function(row){
+                if (row.querySelector('.pl-sr-rating')) return;
+                var r = mrLookup('songs', row.dataset.title, row.dataset.artist);
+                if (r) row.insertAdjacentHTML('beforeend', mrBadge(r));
+            });
         });
     }
 
@@ -2127,6 +2191,7 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
             dur.className = 'album-viewer-dur';
             dur.textContent = t.duration ? formatTime(t.duration) : '';
             row.appendChild(num); row.appendChild(info); row.appendChild(dur);
+            row.dataset.title = t.title || '';
             row.addEventListener('click', () => _playAlbumFrom(i));
             /* Click derecho → menú contextual de la canción: añadir a
                playlist / al perfil. Reusamos el ctx menú de tracks ya
@@ -2141,6 +2206,24 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
                 }
             });
             tracksEl.appendChild(row);
+        });
+
+        /* Notas de la comunidad: la media del álbum (sus reseñas propias)
+           en la cabecera, y la media de cada canción reseñada en su fila
+           (las reseñas de canciones van por separado, no se mezclan con
+           la del álbum). */
+        loadMusicRatings().then(function(){
+            if (myToken !== _albumViewerToken) return;
+            Array.from(tracksEl.querySelectorAll('.album-viewer-row')).forEach(function(row){
+                if (row.querySelector('.pl-sr-rating')) return;
+                var rt = mrLookup('songs', row.dataset.title, meta.artist);
+                if (rt) row.insertAdjacentHTML('beforeend', mrBadge(rt));
+            });
+            var own = mrLookup('albums', meta.name || albumName, meta.artist);
+            if (own && metaEl && !metaEl.querySelector('.pl-sr-rating')) {
+                metaEl.insertAdjacentHTML('beforeend',
+                    ' &nbsp; <span class="pl-sr-rating" title="Media del álbum (' + own.count + ' reseña' + (own.count === 1 ? '' : 's') + ')">★ ' + own.avg.toFixed(1) + '</span>');
+            }
         });
 
         _albumViewerCurrent = { albumId, meta, resolved: null };
@@ -4992,6 +5075,7 @@ var addTrackCallback = null;
         if (!html) html = '<div class="pl-sr-msg">Sin resultados.</div>';
         results.innerHTML = html;
         showResults();
+        decorateSearchRatings(results);
         /* Sube las miniaturas de canción de YouTube → carátula del álbum. */
         if (typeof _resolveSongThumb === 'function') {
             results.querySelectorAll('.pl-sr-row[data-type="song"]').forEach(function(row){

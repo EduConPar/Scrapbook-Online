@@ -2268,6 +2268,59 @@ case 'complete-series-episodes': {
     jsonResponse(['ok' => true]);
 }
 
+/* ─── Medias de la comunidad para música (reproductor) ───
+   Devuelve la media (estrellas) y nº de reseñas de cada canción/álbum
+   reseñado, indexado por título normalizado (+artista). El reproductor
+   lo usa para pintar la nota a la derecha de cada resultado. */
+case 'music-ratings': {
+    /* Normalización idéntica a la del JS del reproductor (_n):
+       minúsculas → todo lo no [a-z0-9] a espacio → trim. */
+    $norm = function($s) {
+        $s = mb_strtolower(trim((string)$s), 'UTF-8');
+        $s = preg_replace('/[^a-z0-9]+/u', ' ', $s);
+        return trim((string)$s);
+    };
+    $stmt = $pdo->query("
+        SELECT i.title, i.artist, i.music_type AS mtype, r.stars
+        FROM list_item_reviews r
+        JOIN list_items i ON r.item_id = i.id
+        WHERE i.category = 'music' AND r.stars > 0
+    ");
+    /* Acumuladores: por (título+artista) y por título solo (fallback /
+       para casar canciones de un álbum cuando el artista del track no
+       coincide exactamente con el de la reseña). */
+    $acc = ['songs' => [], 'albums' => [], 'songsTitle' => [], 'albumsTitle' => []];
+    $bump = function(&$map, $k, $stars) {
+        if (!isset($map[$k])) $map[$k] = ['sum' => 0.0, 'n' => 0];
+        $map[$k]['sum'] += $stars; $map[$k]['n']++;
+    };
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $nt = $norm($r['title']);
+        if ($nt === '') continue;
+        $na = $norm($r['artist'] ?? '');
+        $stars = (float)$r['stars'];
+        $isAlbum = (($r['mtype'] ?? '') === 'album');
+        $tk = $isAlbum ? 'albums' : 'songs';
+        $ttk = $isAlbum ? 'albumsTitle' : 'songsTitle';
+        $bump($acc[$tk], $nt . "\x1f" . $na, $stars);
+        $bump($acc[$ttk], $nt, $stars);
+    }
+    $finish = function($map) {
+        $out = [];
+        foreach ($map as $k => $v) {
+            $out[$k] = ['avg' => round($v['sum'] / max(1, $v['n']), 2), 'count' => $v['n']];
+        }
+        return $out;
+    };
+    jsonResponse([
+        'ok'          => true,
+        'songs'       => $finish($acc['songs']),
+        'albums'      => $finish($acc['albums']),
+        'songsTitle'  => $finish($acc['songsTitle']),
+        'albumsTitle' => $finish($acc['albumsTitle']),
+    ]);
+}
+
 /* ─── Reseñas globales (MelonArchive) ───────────────────── */
 
 case 'melon-reviews': {

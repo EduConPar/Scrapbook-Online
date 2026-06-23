@@ -1432,8 +1432,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-ep-meta { font-size: 10px; color: var(--text-faint, #888); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
         .pf-ep-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
         .pf-ep-controls .button { min-height: 22px; font-size: 11px; }
-        .pf-ep-controls .pf-ep-move { padding: 0 6px; font-size: 10px; line-height: 1; }
-        .pf-ep-controls .pf-ep-move[disabled] { opacity: 0.4; }
+        .pf-ep-drag {
+            flex-shrink: 0; align-self: stretch; display: flex; align-items: center; justify-content: center;
+            width: 22px; color: var(--text-faint, #888); font-size: 17px; line-height: 1;
+            cursor: grab; touch-action: none; user-select: none;
+        }
+        .pf-ep-row.pf-ep-dragging { opacity: 0.6; outline: 2px dashed var(--star-color, #e8b923); outline-offset: -2px; }
         .pf-ep-watch { font-size: 11px; display: flex; align-items: center; gap: 3px; }
         .pf-ep-wtag { font-size: 11px; color: #2e7d4f; font-weight: bold; }
         .pf-ep-addbar { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--win-border, #808080); padding-top: 8px; }
@@ -2433,14 +2437,13 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
             var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
             var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
             var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-            var moveBtns = '<button class="button pf-ep-move" data-up="' + ep.id + '"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
-                           '<button class="button pf-ep-move" data-down="' + ep.id + '"' + (i === eps.length - 1 ? ' disabled' : '') + '>▼</button>';
-            return '<div class="pf-ep-row">' +
+            return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
+                '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
                 '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
                 '<div class="pf-ep-info">' +
                     '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
                     '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="pf-ep-controls">' + watch + moveBtns +
+                    '<div class="pf-ep-controls">' + watch +
                         '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
                         '<button class="button" data-x="' + ep.id + '">✕</button>' +
                     '</div>' +
@@ -2460,20 +2463,47 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
         fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
     });
-    function moveEp(id, dir) {
-        var idx = -1;
-        for (var k = 0; k < eps.length; k++) { if (eps[k].id === id) { idx = k; break; } }
-        if (idx < 0) return;
-        var ni = idx + dir; if (ni < 0 || ni >= eps.length) return;
-        var tmp = eps[idx]; eps[idx] = eps[ni]; eps[ni] = tmp;
-        render();
-        fetch(API + '?action=reorder-series-episodes', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, order: eps.map(function(x){ return x.id; }) }) }).catch(function(){});
+    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil). */
+    var dragRow = null;
+    function epDragAfter(y) {
+        var els = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
+        var closest = null, closestOff = -Infinity;
+        els.forEach(function(ch){
+            var box = ch.getBoundingClientRect();
+            var off = y - box.top - box.height / 2;
+            if (off < 0 && off > closestOff) { closestOff = off; closest = ch; }
+        });
+        return closest;
     }
+    function epDragMove(e){
+        if (!dragRow) return;
+        e.preventDefault();
+        var after = epDragAfter(e.clientY);
+        if (after == null) listEl.appendChild(dragRow);
+        else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+    }
+    function epDragUp(){
+        if (!dragRow) return;
+        dragRow.classList.remove('pf-ep-dragging');
+        dragRow = null;
+        document.removeEventListener('pointermove', epDragMove);
+        document.removeEventListener('pointerup', epDragUp);
+        document.removeEventListener('pointercancel', epDragUp);
+        var ids = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row')).map(function(r){ return parseInt(r.getAttribute('data-ep-id'), 10); });
+        eps.sort(function(a, b){ return ids.indexOf(a.id) - ids.indexOf(b.id); });
+        render();
+        fetch(API + '?action=reorder-series-episodes', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, order: ids }) }).catch(function(){});
+    }
+    listEl.addEventListener('pointerdown', function(e){
+        var h = e.target.closest('[data-drag]'); if (!h) return;
+        var row = h.closest('.pf-ep-row'); if (!row) return;
+        e.preventDefault();
+        dragRow = row; row.classList.add('pf-ep-dragging');
+        document.addEventListener('pointermove', epDragMove);
+        document.addEventListener('pointerup', epDragUp);
+        document.addEventListener('pointercancel', epDragUp);
+    });
     listEl.addEventListener('click', function(e){
-        var up = e.target.closest('[data-up]');
-        if (up) { moveEp(parseInt(up.getAttribute('data-up'), 10), -1); return; }
-        var dn = e.target.closest('[data-down]');
-        if (dn) { moveEp(parseInt(dn.getAttribute('data-down'), 10), 1); return; }
         var rv = e.target.closest('[data-rev]');
         if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
         var r = e.target.closest('[data-r]');

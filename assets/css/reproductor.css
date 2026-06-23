@@ -483,6 +483,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Nota media de la comunidad (reseñas) a la derecha de un resultado. */
+.pl-sr-rating {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+    color: var(--star-color, #e8b923);
+    background: var(--inset-bg, rgba(0,0,0,0.18));
+    border-radius: 3px;
+}
+.pl-sr-row:hover .pl-sr-rating { color: #ffe98a; }
+.aw-top-row .pl-sr-rating { margin-left: 6px; }
+.aw-top-row:hover .pl-sr-rating { color: #ffe98a; }
+.pl-sr-album-card .pl-sr-rating { display: inline-block; margin: 3px auto 0; }
+.album-viewer-row .pl-sr-rating { margin-left: 6px; flex: 0 0 auto; }
+#album-viewer-meta .pl-sr-rating { vertical-align: middle; margin-left: 4px; }
 .pl-sr-msg { padding: 8px 4px; font-size: 11px; color: var(--text-muted); }
 #pl-artist-back {
     margin: 2px 0 6px;

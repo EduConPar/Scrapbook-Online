@@ -3767,15 +3767,8 @@ var PROFILE_USERS = <?php
             .then(function(d){ _epList = (d && d.episodes) || []; renderEpisodesList(); })
             .catch(function(){ document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Error.</div>'; });
     }
-    /* Mueve un capítulo arriba/abajo en el orden y persiste. */
-    function moveEpisode(id, dir) {
-        var idx = -1;
-        for (var k = 0; k < _epList.length; k++) { if (_epList[k].id === id) { idx = k; break; } }
-        if (idx < 0) return;
-        var ni = idx + dir;
-        if (ni < 0 || ni >= _epList.length) return;
-        var tmp = _epList[idx]; _epList[idx] = _epList[ni]; _epList[ni] = tmp;
-        renderEpisodesList();
+    /* Persiste el orden actual de _epList en el servidor. */
+    function persistEpisodeOrder() {
         fetch('assets/profile/api.php?action=reorder-series-episodes', {
             method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ seriesTitle: _epSeriesTitle, order: _epList.map(function(x){ return x.id; }) })
@@ -3806,14 +3799,13 @@ var PROFILE_USERS = <?php
             /* Botón reseña: si ya hay reseña muestra el icono de gráfica; si no, "Reseñar". */
             var chartIco = '<img src="assets/img/appIcons/chatIcon.png" alt="Reseña" class="ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
             var revLabel = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-            var moveBtns = '<button class="button ep-move-btn" data-ep-up="' + ep.id + '"' + (i === 0 ? ' disabled' : '') + ' title="Subir">▲</button>' +
-                           '<button class="button ep-move-btn" data-ep-down="' + ep.id + '"' + (i === _epList.length - 1 ? ' disabled' : '') + ' title="Bajar">▼</button>';
-            return '<div class="ep-row">' +
+            return '<div class="ep-row" data-ep-id="' + ep.id + '">' +
+                '<div class="ep-drag" data-ep-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
                 '<div class="ep-thumb">' + thumbInner + '</div>' +
                 '<div class="ep-info">' +
                     '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
                     '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="ep-controls">' + watchHtml + moveBtns +
+                    '<div class="ep-controls">' + watchHtml +
                         '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
                         '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
                     '</div>' +
@@ -3833,13 +3825,50 @@ var PROFILE_USERS = <?php
                 body: JSON.stringify({ episodeId: id, watched: cb.checked })
             }).catch(function(){});
         });
+        /* Reordenar arrastrando el tirador (.ep-drag). Pointer events →
+           funciona con ratón y con táctil. */
+        var dragRow = null;
+        function epDragAfter(y) {
+            var els = Array.prototype.slice.call(listEl.querySelectorAll('.ep-row:not(.ep-dragging)'));
+            var closest = null, closestOff = -Infinity;
+            els.forEach(function(ch){
+                var box = ch.getBoundingClientRect();
+                var off = y - box.top - box.height / 2;
+                if (off < 0 && off > closestOff) { closestOff = off; closest = ch; }
+            });
+            return closest;
+        }
+        function epDragMove(e){
+            if (!dragRow) return;
+            e.preventDefault();
+            var after = epDragAfter(e.clientY);
+            if (after == null) listEl.appendChild(dragRow);
+            else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+        }
+        function epDragUp(){
+            if (!dragRow) return;
+            dragRow.classList.remove('ep-dragging');
+            dragRow = null;
+            document.removeEventListener('pointermove', epDragMove);
+            document.removeEventListener('pointerup', epDragUp);
+            document.removeEventListener('pointercancel', epDragUp);
+            var ids = Array.prototype.slice.call(listEl.querySelectorAll('.ep-row')).map(function(r){ return parseInt(r.getAttribute('data-ep-id'), 10); });
+            _epList.sort(function(a, b){ return ids.indexOf(a.id) - ids.indexOf(b.id); });
+            renderEpisodesList();   /* re-numera 1. 2. 3. */
+            persistEpisodeOrder();
+        }
+        listEl.addEventListener('pointerdown', function(e){
+            var h = e.target.closest('[data-ep-drag]'); if (!h) return;
+            var row = h.closest('.ep-row'); if (!row) return;
+            e.preventDefault();
+            dragRow = row; row.classList.add('ep-dragging');
+            document.addEventListener('pointermove', epDragMove);
+            document.addEventListener('pointerup', epDragUp);
+            document.addEventListener('pointercancel', epDragUp);
+        });
         listEl.addEventListener('click', function(e){
             var rvw = e.target.closest('[data-ep-reviews]');
             if (rvw) { var rvid = parseInt(rvw.getAttribute('data-ep-reviews'), 10); var rvep = _epList.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpisodeReviewsView(rvep); return; }
-            var up = e.target.closest('[data-ep-up]');
-            if (up) { moveEpisode(parseInt(up.getAttribute('data-ep-up'), 10), -1); return; }
-            var dn = e.target.closest('[data-ep-down]');
-            if (dn) { moveEpisode(parseInt(dn.getAttribute('data-ep-down'), 10), 1); return; }
             var rev = e.target.closest('[data-ep-review]');
             if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
             var rm = e.target.closest('[data-ep-remove]');
