@@ -58,48 +58,80 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 
     <div id="view-host">
 
-        <!-- ───────── BIENVENIDA / PORTAL ───────── -->
+        <!-- ───────── INICIO (estructura tipo portada de Fandom) ───────── -->
         <section id="view-home" class="wiki-view">
-            <div class="wiki-hero">
-                <div class="wiki-hero-title">MelonArchive</div>
-                <div class="wiki-hero-sub">Bienvenido, <?= htmlspecialchars($userLabel) ?>. Entra a cualquier parte:</div>
+            <!-- Cabecera con título de la wiki + pestañas de navegación -->
+            <div class="wh-header">
+                <div class="wh-brand">
+                    <span class="wh-logo">📚</span>
+                    <span class="wh-name">MelonWiki</span>
+                    <span class="wh-pagecount" id="wh-pagecount"></span>
+                </div>
+                <nav class="wh-nav" id="wh-nav">
+                    <button class="wh-nav-item" data-go="wiki-list">Explorar</button>
+                    <button class="wh-nav-item" data-go="wiki-new">Crear página</button>
+                    <button class="wh-nav-item" data-go="wiki-requests">Mis solicitudes</button>
+                    <button class="wh-nav-item" data-go="archive">Archivo</button>
+                    <button class="wh-nav-item" data-go="wiki-mod" id="wh-nav-mod" style="display:none">Moderación</button>
+                </nav>
             </div>
-            <div class="wiki-tiles" id="home-tiles">
-                <button class="wiki-tile" data-go="archive">
-                    <span class="wiki-tile-icon">📼</span>
-                    <span class="wiki-tile-text">
-                        <span class="wiki-tile-name">Archivo de vídeos</span>
-                        <span class="wiki-tile-desc">Playlists y vídeos de YouTube</span>
-                    </span>
-                </button>
-                <button class="wiki-tile" data-go="wiki-list">
-                    <span class="wiki-tile-icon">📖</span>
-                    <span class="wiki-tile-text">
-                        <span class="wiki-tile-name">Explorar la wiki</span>
-                        <span class="wiki-tile-desc">Navega las entradas</span>
-                    </span>
-                </button>
-                <button class="wiki-tile" data-go="wiki-new">
-                    <span class="wiki-tile-icon">✎</span>
-                    <span class="wiki-tile-text">
-                        <span class="wiki-tile-name">Crear página</span>
-                        <span class="wiki-tile-desc">Propón una entrada nueva</span>
-                    </span>
-                </button>
-                <button class="wiki-tile" data-go="wiki-requests">
-                    <span class="wiki-tile-icon">🗳</span>
-                    <span class="wiki-tile-text">
-                        <span class="wiki-tile-name">Mis solicitudes</span>
-                        <span class="wiki-tile-desc">Estado de tus envíos</span>
-                    </span>
-                </button>
-                <button class="wiki-tile" data-go="wiki-mod" id="tile-mod" style="display:none">
-                    <span class="wiki-tile-icon">🛡</span>
-                    <span class="wiki-tile-text">
-                        <span class="wiki-tile-name">Moderación</span>
-                        <span class="wiki-tile-desc">Revisar solicitudes <span class="wiki-badge" id="mod-count" style="display:none">0</span></span>
-                    </span>
-                </button>
+            <div class="wh-scroll">
+                <!-- Banner de bienvenida -->
+                <div class="wh-welcome">
+                    <div class="wh-welcome-title">Bienvenido a la <b>MelonWiki</b></div>
+                    <div class="wh-welcome-text">Una enciclopedia escrita y mantenida por la comunidad. Hola, <?= htmlspecialchars($userLabel) ?> — entra a cualquier sección:</div>
+                </div>
+                <!-- Dos columnas: contenido principal + barra lateral -->
+                <div class="wh-cols">
+                    <div class="wh-main">
+                        <div class="wh-card">
+                            <div class="wh-card-title">Secciones</div>
+                            <div class="wiki-tiles" id="home-tiles">
+                                <button class="wiki-tile" data-go="archive">
+                                    <span class="wiki-tile-icon">📼</span>
+                                    <span class="wiki-tile-text">
+                                        <span class="wiki-tile-name">Archivo de vídeos</span>
+                                        <span class="wiki-tile-desc">Playlists y vídeos de YouTube</span>
+                                    </span>
+                                </button>
+                                <button class="wiki-tile" data-go="wiki-list">
+                                    <span class="wiki-tile-icon">📖</span>
+                                    <span class="wiki-tile-text">
+                                        <span class="wiki-tile-name">Explorar la wiki</span>
+                                        <span class="wiki-tile-desc">Navega las entradas</span>
+                                    </span>
+                                </button>
+                                <button class="wiki-tile" data-go="wiki-new">
+                                    <span class="wiki-tile-icon">✎</span>
+                                    <span class="wiki-tile-text">
+                                        <span class="wiki-tile-name">Crear página</span>
+                                        <span class="wiki-tile-desc">Propón una entrada nueva</span>
+                                    </span>
+                                </button>
+                                <button class="wiki-tile" data-go="wiki-requests">
+                                    <span class="wiki-tile-icon">🗳</span>
+                                    <span class="wiki-tile-text">
+                                        <span class="wiki-tile-name">Mis solicitudes</span>
+                                        <span class="wiki-tile-desc">Estado de tus envíos</span>
+                                    </span>
+                                </button>
+                                <button class="wiki-tile" data-go="wiki-mod" id="tile-mod" style="display:none">
+                                    <span class="wiki-tile-icon">🛡</span>
+                                    <span class="wiki-tile-text">
+                                        <span class="wiki-tile-name">Moderación</span>
+                                        <span class="wiki-tile-desc">Revisar solicitudes <span class="wiki-badge" id="mod-count" style="display:none">0</span></span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="wh-side">
+                        <div class="wh-card">
+                            <div class="wh-card-title">Páginas recientes</div>
+                            <div class="wh-recent" id="wh-recent"><div class="wiki-empty">Cargando…</div></div>
+                        </div>
+                    </aside>
+                </div>
             </div>
         </section>
 
@@ -125,15 +157,35 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <div id="wiki-list" class="wiki-list"></div>
         </section>
 
-        <!-- ───────── WIKI: LEER PÁGINA ───────── -->
+        <!-- ───────── WIKI: LEER PÁGINA (estructura tipo Fandom) ───────── -->
         <section id="view-wiki-page" class="wiki-view" style="display:none">
-            <article id="wiki-article" class="wiki-article"></article>
+            <div class="wp-breadcrumb" id="wp-breadcrumb"></div>
+            <div class="wp-titlebar">
+                <h1 class="wp-title" id="wp-title">Página</h1>
+                <div class="wp-titlebar-actions">
+                    <button class="button" id="wp-edit">&#9998; Editar</button>
+                </div>
+            </div>
+            <div class="wp-scroll">
+                <div class="wp-layout">
+                    <article class="wp-main" id="wiki-article"></article>
+                    <aside class="wp-side">
+                        <div class="wp-infobox" id="wp-infobox" style="display:none"></div>
+                        <div class="wp-toc" id="wp-toc" style="display:none"></div>
+                    </aside>
+                </div>
+            </div>
         </section>
 
-        <!-- ───────── WIKI: EDITOR ───────── -->
-        <!-- Editor estilo Fandom: barra de formato + documento + barra de guardado -->
+        <!-- ───────── WIKI: EDITOR (estructura tipo editor visual de Fandom) ───────── -->
         <section id="view-wiki-edit" class="wiki-view" style="display:none">
+            <div class="ve-modehead">
+                <span class="ve-mode"><span class="ve-mode-ic">&#9998;</span> Editor visual <span class="ve-caret">&#9662;</span></span>
+            </div>
             <div class="we-toolbar" id="we-toolbar">
+                <button type="button" class="we-tb-btn" data-fmt="undo" title="Deshacer">&#8630;</button>
+                <button type="button" class="we-tb-btn" data-fmt="redo" title="Rehacer">&#8631;</button>
+                <span class="we-tb-sep"></span>
                 <select class="we-tb-style" id="we-style" title="Estilo de párrafo">
                     <option value="">Texto normal</option>
                     <option value="# ">Título</option>
@@ -142,12 +194,20 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
                 <span class="we-tb-sep"></span>
                 <button type="button" class="we-tb-btn" data-fmt="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
                 <button type="button" class="we-tb-btn" data-fmt="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
+                <button type="button" class="we-tb-btn" data-fmt="more" title="Más formato"><span style="font-style:italic">T</span>&#9662;</button>
                 <span class="we-tb-sep"></span>
-                <button type="button" class="we-tb-btn" data-fmt="ul" title="Lista">&#8226; &#9776;</button>
-                <button type="button" class="we-tb-btn" data-fmt="ol" title="Lista numerada">1. &#9776;</button>
+                <button type="button" class="we-tb-btn" data-fmt="ul" title="Lista con viñetas">&#9776;</button>
+                <button type="button" class="we-tb-btn" data-fmt="ol" title="Lista numerada">1.&#9776;</button>
+                <button type="button" class="we-tb-btn" data-fmt="indent" title="Sangría">&#8677;&#9662;</button>
+                <span class="we-tb-sep"></span>
+                <button type="button" class="we-tb-btn we-tb-wide" data-fmt="cite" title="Citar">&#10077; Citar &#9662;</button>
                 <span class="we-tb-sep"></span>
                 <button type="button" class="we-tb-btn" data-fmt="link" title="Enlace">&#128279;</button>
-                <button type="button" class="we-tb-btn" data-fmt="ilink" title="Enlace interno a otra página">[[ ]]</button>
+                <button type="button" class="we-tb-btn" data-fmt="ilink" title="Enlace interno">[[ ]]</button>
+                <button type="button" class="we-tb-btn" data-fmt="image" title="Imagen">&#128444;</button>
+                <button type="button" class="we-tb-btn we-tb-wide" data-fmt="insert" title="Insertar">Insertar &#9662;</button>
+                <span class="we-tb-spacer"></span>
+                <button type="button" class="we-tb-btn" data-fmt="menu" title="Opciones">&#9776;</button>
             </div>
             <div class="we-doc">
                 <input type="text" class="we-title-input" id="we-title" autocomplete="off" placeholder="Título de la página">
@@ -155,7 +215,7 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             </div>
             <div class="we-bottombar">
                 <input type="text" class="we-summary-input" id="we-summary" autocomplete="off" placeholder="Describe qué cambiaste">
-                <label class="we-minor"><input type="checkbox" id="we-minor"> Edición menor</label>
+                <label class="we-minor"><input type="checkbox" id="we-minor"> Es una edición menor</label>
                 <span class="we-status-msg" id="we-status"></span>
                 <button class="button" id="we-cancel">Cancelar</button>
                 <button class="button default" id="we-submit">Guardar</button>
@@ -242,6 +302,10 @@ function wikiRender(text) {
     function closeP(){ if (inP) { html += '</p>'; inP = false; } }
     function inline(s) {
         s = esc(s);
+        /* imágenes ![alt](url) — antes que los enlaces para no confundir */
+        s = s.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, function(_, a, u){
+            return '<img class="wiki-img" src="' + esc(u) + '" alt="' + esc(a) + '" loading="lazy">';
+        });
         /* enlaces internos [[Página]] → navega a la wiki */
         s = s.replace(/\[\[([^\]]+)\]\]/g, function(_, t){
             const slug = wikiSlug(t);
@@ -271,6 +335,11 @@ function wikiRender(text) {
             html += '<ul><li>' + inline(m[1]) + '</li></ul>';
             return;
         }
+        if ((m = t.match(/^>\s?(.*)$/))) {
+            closeP();
+            html += '<blockquote>' + inline(m[1]) + '</blockquote>';
+            return;
+        }
         if (!inP) { html += '<p>'; inP = true; } else { html += '<br>'; }
         html += inline(t);
     });
@@ -278,21 +347,38 @@ function wikiRender(text) {
     return html;
 }
 
-/* ── HOME ───────────────────────────────────────────────────────── */
+/* ── HOME (portada tipo Fandom) ─────────────────────────────────── */
+function navGo(go) {
+    if (go === 'archive')            openArchive();
+    else if (go === 'wiki-list')     openWikiList();
+    else if (go === 'wiki-new')      openEditor(null);
+    else if (go === 'wiki-requests') openMyRequests();
+    else if (go === 'wiki-mod')      openModeration();
+}
 function goHome() {
     showView('home');
     setNav({ title: 'MelonArchive' });
     stopVideo();
+    /* Rellena el contador de páginas + la barra lateral de recientes. */
+    wikiGet('list-pages').then(function(res){
+        const pages = (res && res.pages) || [];
+        const pc = document.getElementById('wh-pagecount');
+        if (pc) pc.textContent = pages.length + (pages.length === 1 ? ' página' : ' páginas');
+        const rec = document.getElementById('wh-recent');
+        if (!rec) return;
+        if (!pages.length) { rec.innerHTML = '<div class="wiki-empty">Aún no hay páginas.</div>'; return; }
+        const recent = pages.slice().sort(function(a, b){ return (b.updatedAt || '').localeCompare(a.updatedAt || ''); }).slice(0, 8);
+        rec.innerHTML = recent.map(function(p){
+            return '<a href="#" class="wh-recent-item" data-slug="' + esc(p.slug) + '">' + esc(p.title) + '</a>';
+        }).join('');
+    });
 }
-document.getElementById('home-tiles').addEventListener('click', function(e){
-    const tile = e.target.closest('.wiki-tile');
-    if (!tile) return;
-    const go = tile.dataset.go;
-    if (go === 'archive')        openArchive();
-    else if (go === 'wiki-list') openWikiList();
-    else if (go === 'wiki-new')  openEditor(null);
-    else if (go === 'wiki-requests') openMyRequests();
-    else if (go === 'wiki-mod')  openModeration();
+/* Click en tiles, pestañas de navegación y recientes → navegar. */
+document.getElementById('view-home').addEventListener('click', function(e){
+    const go = e.target.closest('[data-go]');
+    if (go) { navGo(go.dataset.go); return; }
+    const rec = e.target.closest('.wh-recent-item');
+    if (rec) { e.preventDefault(); openPage(rec.dataset.slug); }
 });
 navHome.addEventListener('click', goHome);
 
@@ -425,36 +511,75 @@ document.getElementById('wiki-search').addEventListener('input', function(){
 });
 document.getElementById('wiki-new-from-list').addEventListener('click', function(){ openEditor(null); });
 
-/* ── Lectura ── */
+/* ── Lectura (estructura Fandom: miga + título + columnas + ToC/infobox) ── */
 async function openPage(slug) {
     showView('wiki-page');
     setNav({ title: 'Wiki', back: function(){ openWikiList(); } });
-    const art = document.getElementById('wiki-article');
+    const art   = document.getElementById('wiki-article');
+    const toc   = document.getElementById('wp-toc');
+    const info  = document.getElementById('wp-infobox');
+    const bc    = document.getElementById('wp-breadcrumb');
+    const ttl   = document.getElementById('wp-title');
+    const editB = document.getElementById('wp-edit');
+    toc.style.display = 'none'; info.style.display = 'none';
+    bc.innerHTML = 'en: <a href="#" id="wp-bc-wiki">Wiki</a>';
     art.innerHTML = '<div class="wiki-empty">Cargando…</div>';
+    ttl.textContent = '…';
+    editB.style.display = 'none';
+
     const res = await wikiGet('get-page', { slug });
     const page = res && res.page;
     if (!page) {
+        ttl.textContent = slug.replace(/-/g, ' ');
         art.innerHTML =
             '<div class="wiki-empty">Esta página no existe todavía.' +
-            '<div style="margin-top:10px"><button class="button" id="wiki-create-missing">Crear "' + esc(slug) + '"</button></div></div>';
+            '<div style="margin-top:12px"><button class="button" id="wiki-create-missing">Crear "' + esc(slug) + '"</button></div></div>';
         const b = document.getElementById('wiki-create-missing');
         if (b) b.onclick = function(){ openEditor(null, slug.replace(/-/g,' ')); };
-        setNav({ title: 'Wiki', back: function(){ openWikiList(); } });
         return;
     }
-    setNav({
-        title: 'Wiki · ' + page.title,
-        back: function(){ openWikiList(); },
-        action: { label: '✎ Editar', fn: function(){ openEditor(page.id, page.title, page.body, page.slug); } }
-    });
+    ttl.textContent = page.title;
+    editB.style.display = '';
+    editB.onclick = function(){ openEditor(page.id, page.title, page.body, page.slug); };
     art.innerHTML =
-        '<h1 class="wiki-article-title">' + esc(page.title) + '</h1>' +
         '<div class="wiki-article-meta">Última edición: ' + fmtDate(page.updatedAt) + ' · ' + esc(page.updatedBy) + '</div>' +
-        '<div class="wiki-article-body">' + wikiRender(page.body) + '</div>';
+        '<div class="wiki-article-body" id="wp-body">' + wikiRender(page.body) + '</div>';
+
+    /* Índice de contenidos (Contents): construido a partir de los h2/h3. */
+    const body = document.getElementById('wp-body');
+    const heads = body.querySelectorAll('h2, h3');
+    if (heads.length >= 2) {
+        let items = '';
+        heads.forEach(function(h, i){
+            const id = 'sec-' + i;
+            h.id = id;
+            const lvl = h.tagName === 'H3' ? ' wp-toc-sub' : '';
+            items += '<a href="#" class="wp-toc-item' + lvl + '" data-target="' + id + '">' +
+                     (i + 1) + '. ' + esc(h.textContent) + '</a>';
+        });
+        toc.innerHTML = '<div class="wp-toc-head">Contenidos</div>' + items;
+        toc.style.display = '';
+    }
+    /* Infobox: si la página tiene una imagen, la mostramos arriba en la barra lateral. */
+    const firstImg = body.querySelector('img.wiki-img');
+    if (firstImg) {
+        info.innerHTML = '<img src="' + firstImg.getAttribute('src') + '" alt="">' +
+                         '<div class="wp-infobox-cap">' + esc(page.title) + '</div>';
+        info.style.display = '';
+    }
 }
-document.getElementById('wiki-article').addEventListener('click', function(e){
+/* Delegación: enlaces internos, ToC y miga de pan. */
+document.getElementById('view-wiki-page').addEventListener('click', function(e){
     const il = e.target.closest('.wiki-ilink');
-    if (il) { e.preventDefault(); openPage(il.dataset.slug); }
+    if (il) { e.preventDefault(); openPage(il.dataset.slug); return; }
+    const tocItem = e.target.closest('.wp-toc-item');
+    if (tocItem) {
+        e.preventDefault();
+        const tgt = document.getElementById(tocItem.dataset.target);
+        if (tgt) tgt.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+    }
+    if (e.target.closest('#wp-bc-wiki')) { e.preventDefault(); openWikiList(); }
 });
 
 /* ── Editor (crear o editar) — estilo Fandom ── */
@@ -507,6 +632,12 @@ function weBlockHash(hash) {   /* '' | '# ' | '## ' */
     ta.value = ta.value.slice(0, startLine) + hash + line + ta.value.slice(endLine);
     ta.focus(); weAutoGrow();
 }
+function weInsertAt(ins) {
+    var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = s + ins.length;
+    weAutoGrow();
+}
 function weLink(internal) {
     var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
     var sel = ta.value.slice(s, e);
@@ -521,17 +652,37 @@ function weLink(internal) {
     ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
     ta.focus(); weAutoGrow();
 }
+function weImage() {
+    var url = prompt('URL de la imagen (https://…):', 'https://');
+    if (!url) return;
+    var alt = prompt('Texto alternativo (opcional):', '') || '';
+    weInsertAt('\n![' + alt + '](' + url + ')\n');
+}
 document.getElementById('we-toolbar').addEventListener('click', function(e){
     var btn = e.target.closest('.we-tb-btn');
     if (!btn) return;
     var fmt = btn.dataset.fmt;
-    if (fmt === 'bold')   weWrap('**');
+    if (fmt === 'bold')        weWrap('**');
     else if (fmt === 'italic') weWrap('*');
-    else if (fmt === 'ul') wePrefix('ul');
-    else if (fmt === 'ol') wePrefix('ol');
-    else if (fmt === 'link')  weLink(false);
-    else if (fmt === 'ilink') weLink(true);
+    else if (fmt === 'ul')     wePrefix('ul');
+    else if (fmt === 'ol')     wePrefix('ol');
+    else if (fmt === 'link')   weLink(false);
+    else if (fmt === 'ilink')  weLink(true);
+    else if (fmt === 'image')  weImage();
+    else if (fmt === 'cite')   weBlockquote();
+    else if (fmt === 'undo')   { weBody.focus(); try { document.execCommand('undo'); } catch (_) {} }
+    else if (fmt === 'redo')   { weBody.focus(); try { document.execCommand('redo'); } catch (_) {} }
+    /* 'more' | 'indent' | 'insert' | 'menu' son decorativos (paridad visual
+       con el editor de Fandom); no alteran el contenido. */
 });
+function weBlockquote() {
+    var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
+    var startLine = ta.value.lastIndexOf('\n', s - 1) + 1;
+    var block = ta.value.slice(startLine, e) || 'cita';
+    var out = block.split('\n').map(function(ln){ return '> ' + ln.replace(/^>\s?/, ''); }).join('\n');
+    ta.value = ta.value.slice(0, startLine) + out + ta.value.slice(e);
+    ta.focus(); weAutoGrow();
+}
 document.getElementById('we-style').addEventListener('change', function(){
     weBlockHash(this.value);
     this.value = '';   /* el desplegable vuelve a "Texto normal" tras aplicar */
@@ -660,6 +811,7 @@ function refreshModCount(n) {
         IS_ADMIN = !!(a && a.isAdmin);
         if (IS_ADMIN) {
             document.getElementById('tile-mod').style.display = '';
+            document.getElementById('wh-nav-mod').style.display = '';
             const p = await wikiGet('pending');
             refreshModCount(((p && p.requests) || []).length);
         }

@@ -318,3 +318,104 @@ html, body {
 #view-archive .archive-item:hover { border-color: var(--wk-link); background: var(--wk-panel); }
 #view-archive .archive-item-title { color: var(--wk-text); }
 #view-archive .archive-item-meta { color: var(--wk-faint); }
+
+/* =========================================================
+   WIKI — ESTRUCTURA tipo Fandom (cabecera+nav, columnas,
+   índice de contenidos, infobox, cabecera del editor).
+========================================================= */
+
+/* ── INICIO: cabecera con marca + pestañas ── */
+.wh-header {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+    padding: 12px 22px;
+    background: var(--wk-panel);
+    border-bottom: 1px solid var(--wk-border);
+}
+.wh-brand { display: flex; align-items: baseline; gap: 10px; }
+.wh-logo { font-size: 22px; }
+.wh-name { font-size: 20px; font-weight: 800; color: var(--wk-head); }
+.wh-pagecount { font-size: 12px; color: var(--wk-faint); }
+.wh-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.wh-nav-item {
+    background: transparent; border: none; box-shadow: none; text-shadow: none;
+    color: var(--wk-text); font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 8px 12px; border-radius: 6px; min-width: 0; min-height: 0;
+}
+.wh-nav-item:hover { background: var(--wk-panel2); color: var(--wk-link); }
+
+.wh-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* Banner de bienvenida */
+.wh-welcome {
+    margin: 18px 22px 0;
+    padding: 18px 20px;
+    background: linear-gradient(180deg, var(--wk-panel2), var(--wk-panel));
+    border: 1px solid var(--wk-border); border-radius: 10px;
+}
+.wh-welcome-title { font-size: 20px; color: var(--wk-head); }
+.wh-welcome-text { font-size: 13px; color: var(--wk-muted); margin-top: 6px; }
+
+/* Dos columnas: principal + barra lateral */
+.wh-cols { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; padding: 18px 22px 26px; }
+.wh-main { flex: 1 1 420px; min-width: 0; }
+.wh-side { flex: 0 1 300px; min-width: 240px; }
+.wh-card { background: var(--wk-panel); border: 1px solid var(--wk-border); border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+.wh-card-title {
+    font-size: 14px; font-weight: 700; color: var(--wk-head);
+    padding: 12px 16px; border-bottom: 1px solid var(--wk-border); background: var(--wk-panel2);
+}
+.wh-card .wiki-tiles { padding: 14px; overflow: visible; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.wh-recent { padding: 6px 8px; display: flex; flex-direction: column; }
+.wh-recent-item {
+    display: block; padding: 9px 10px; border-radius: 6px;
+    color: var(--wk-link); text-decoration: none; font-size: 14px;
+    border-bottom: 1px solid var(--wk-border);
+}
+.wh-recent-item:last-child { border-bottom: none; }
+.wh-recent-item:hover { background: var(--wk-panel2); text-decoration: underline; }
+
+/* ── PÁGINA: miga, barra de título, columnas, ToC, infobox ── */
+.wp-breadcrumb { flex-shrink: 0; padding: 10px 24px 0; font-size: 12px; color: var(--wk-muted); }
+.wp-breadcrumb a { color: var(--wk-link); text-decoration: none; }
+.wp-breadcrumb a:hover { text-decoration: underline; }
+.wp-titlebar {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 24px 12px; border-bottom: 1px solid var(--wk-border);
+}
+.wp-title { font-size: 30px; font-weight: 800; color: var(--wk-head); margin: 0; }
+.wp-titlebar-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.wp-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.wp-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; padding: 22px 24px 50px; }
+.wp-main { flex: 1 1 460px; min-width: 0; }
+.wp-side { flex: 0 1 300px; min-width: 240px; display: flex; flex-direction: column; gap: 16px; }
+/* dentro de la columna, el cuerpo no lleva su propio ancho/centrado */
+.wp-main .wiki-article-body { max-width: none; margin: 0; padding: 0; }
+.wp-main .wiki-article-meta { max-width: none; margin: 0 0 16px; padding: 0 0 12px; }
+
+.wp-toc { background: var(--wk-panel); border: 1px solid var(--wk-border); border-radius: 9px; padding: 10px 12px; }
+.wp-toc-head { font-size: 13px; font-weight: 700; color: var(--wk-head); margin-bottom: 6px; }
+.wp-toc-item { display: block; color: var(--wk-link); text-decoration: none; font-size: 13px; padding: 4px 0; }
+.wp-toc-item:hover { text-decoration: underline; }
+.wp-toc-sub { padding-left: 16px; font-size: 12px; }
+.wp-infobox { background: var(--wk-panel); border: 1px solid var(--wk-border); border-radius: 9px; padding: 10px; }
+.wp-infobox img { width: 100%; display: block; border-radius: 6px; }
+.wp-infobox-cap { font-size: 12px; color: var(--wk-muted); text-align: center; margin-top: 6px; }
+
+/* Imágenes y citas dentro del contenido */
+.wiki-img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; }
+.wiki-article-body blockquote, .wiki-modcard-body blockquote {
+    margin: 0 0 14px; padding: 6px 14px; border-left: 3px solid var(--wk-accent);
+    background: var(--wk-panel); color: var(--wk-muted); border-radius: 0 6px 6px 0;
+}
+
+/* ── EDITOR: cabecera de modo + toolbar extra ── */
+.ve-modehead {
+    flex-shrink: 0; padding: 8px 16px;
+    background: var(--wk-bg); border-bottom: 1px solid var(--wk-border);
+}
+.ve-mode { font-size: 14px; font-weight: 700; color: var(--wk-link); display: inline-flex; align-items: center; gap: 6px; }
+.ve-mode-ic { font-size: 13px; }
+.ve-caret { color: var(--wk-muted); font-size: 11px; }
+.we-tb-wide { padding: 0 10px; }
+.we-tb-spacer { flex: 1; }
