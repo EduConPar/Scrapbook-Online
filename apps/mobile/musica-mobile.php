@@ -669,23 +669,25 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-aw-disco-btn-wrap { display: flex; justify-content: center; padding: 8px 10px 18px; }
         .mu-aw-disco-btn { font-size: 12px; padding: 7px 18px; min-height: 34px; border-radius: 18px; }
 
-        /* ════ Página de discografía completa (overlay sobre el artista) ════ */
+        /* ════ Página de discografía completa (overlay sobre el artista) ════
+           Mismo chrome que playlists: el overlay solo posiciona; la
+           ventana interior (.mh-window) aporta borde + window-body +
+           panel hundido (.mh-panel). */
         #mu-disco-view {
             position: fixed; inset: 0;
-            background: var(--win-bg, silver);
-            display: none; flex-direction: column; box-sizing: border-box;
+            background: var(--desktop-bg, var(--win-bg, silver));
+            display: none; box-sizing: border-box;
             z-index: 73;
             padding-top: env(safe-area-inset-top);
-            padding-bottom: env(safe-area-inset-bottom);
         }
-        #mu-disco-view.is-open { display: flex; }
+        #mu-disco-view.is-open { display: block; }
         .mu-disco-chips {
-            display: flex; gap: 6px; padding: 8px 10px; flex-shrink: 0;
+            display: flex; gap: 6px; flex-shrink: 0;
             overflow-x: auto; -webkit-overflow-scrolling: touch;
         }
         .mu-disco-chip { font-size: 11px; padding: 6px 12px; min-height: 30px; white-space: nowrap; border-radius: 15px; flex-shrink: 0; }
         .mu-disco-chip.is-active { font-weight: bold; }
-        .mu-disco-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .mu-disco-body.mh-panel { min-height: 0; }
         .mu-disco-group-title { font-size: 17px; font-weight: bold; color: var(--text,#000); margin: 14px 12px 4px; }
 
         /* Editor de reseña — fila de estrellas grandes (tap para puntuar,
@@ -4734,19 +4736,28 @@ function muOpenDiscography() {
     if (!dv) {
         dv = document.createElement('div');
         dv.id = 'mu-disco-view';
+        /* Mismo chrome que la pantalla de playlists: ventana con borde
+           (.mh-window) → window-body → chips + panel hundido (.mh-panel)
+           con los lanzamientos dentro + statusbar al pie. */
         dv.innerHTML =
-            '<div class="window ma-titlebar"><div class="title-bar">' +
-                '<div class="title-bar-text" id="mu-disco-titlebar">Publicaciones</div>' +
-                '<div class="title-bar-controls"><button aria-label="Close" id="mu-disco-close" type="button"></button></div>' +
-            '</div></div>' +
-            '<div class="mu-disco-chips" id="mu-disco-chips">' +
-                '<button class="button mu-disco-chip is-active" data-f="all" type="button">Todos</button>' +
-                '<button class="button mu-disco-chip" data-f="album" type="button">Álbumes</button>' +
-                '<button class="button mu-disco-chip" data-f="single" type="button">Sencillos y EP</button>' +
-            '</div>' +
-            '<div class="mu-disco-body" id="mu-disco-body"></div>';
+            '<div class="window mh-window">' +
+                '<div class="title-bar">' +
+                    '<div class="title-bar-text" id="mu-disco-titlebar">Publicaciones</div>' +
+                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-disco-close" type="button"></button></div>' +
+                '</div>' +
+                '<div class="window-body">' +
+                    '<div class="mu-disco-chips" id="mu-disco-chips">' +
+                        '<button class="button mu-disco-chip is-active" data-f="all" type="button">Todos</button>' +
+                        '<button class="button mu-disco-chip" data-f="album" type="button">Álbumes</button>' +
+                        '<button class="button mu-disco-chip" data-f="single" type="button">Sencillos y EP</button>' +
+                    '</div>' +
+                    '<div class="mh-panel mu-disco-body" id="mu-disco-body"></div>' +
+                    '<div class="mh-statusbar"><button type="button" data-act="back">‹ Volver</button></div>' +
+                '</div>' +
+            '</div>';
         document.body.appendChild(dv);
         document.getElementById('mu-disco-close').addEventListener('click', function(){ dv.classList.remove('is-open'); });
+        dv.querySelector('[data-act="back"]').addEventListener('click', function(){ dv.classList.remove('is-open'); });
         document.getElementById('mu-disco-chips').addEventListener('click', function(e){
             var b = e.target.closest && e.target.closest('.mu-disco-chip');
             if (!b) return;
