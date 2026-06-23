@@ -155,7 +155,7 @@ if ($_perfilStandalone) {
     </script>
     <script src="assets/js/icon-pack.js"></script>
     <link rel="stylesheet" href="assets/css/reproductor.css">
-    <link rel="stylesheet" href="assets/css/perfil.css">
+    <link rel="stylesheet" href="assets/css/perfil.css?v=<?php echo @filemtime(dirname(__DIR__) . '/assets/css/perfil.css'); ?>">
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <?php /* $activeThemeCss ya es root-relative (themeCssRelPath
@@ -657,6 +657,7 @@ if ($_perfilStandalone) {
              espacios o un username largo se rompe en vez de empujar
              el contenedor más ancho que la ventana. -->
         <div style="padding:16px 18px 14px;min-width:0;overflow-wrap:anywhere;word-break:break-word;">
+            <div id="profile-review-view-item" style="display:none;"></div>
             <div id="profile-review-view-comment"></div>
             <div id="profile-review-view-header"></div>
         </div>
@@ -928,7 +929,7 @@ var PROFILE_USERS = <?php
                 }
             }
             if (found && found.review && typeof showReviewView === 'function') {
-                showReviewView(found.review);
+                showReviewView(found.review, found);
                 return;
             }
             if (!found && attempts < maxAttempts) {
@@ -1575,9 +1576,31 @@ var PROFILE_USERS = <?php
         return h;
     }
 
-    function showReviewView(review) {
+    function showReviewView(review, item) {
         var win = document.getElementById('profile-review-view');
         var username = (document.getElementById('profile-username') || {}).textContent || 'Usuario';
+        /* Cabecera: carátula + título del item arriba; debajo la reseña. */
+        var itemEl = document.getElementById('profile-review-view-item');
+        if (itemEl) {
+            itemEl.innerHTML = '';
+            if (item && (item.title || item.image)) {
+                var cov = document.createElement('div');
+                cov.className = 'review-view-cover';
+                if (item.image) {
+                    var im = document.createElement('img'); im.src = item.image; im.alt = '';
+                    im.onerror = function() { cov.classList.add('review-view-cover-ph'); cov.textContent = '🍈'; };
+                    cov.appendChild(im);
+                } else {
+                    cov.classList.add('review-view-cover-ph'); cov.textContent = '🍈';
+                }
+                var tt = document.createElement('div'); tt.className = 'review-view-title';
+                tt.textContent = item.title || '';
+                itemEl.appendChild(cov); itemEl.appendChild(tt);
+                itemEl.style.display = 'flex';
+            } else {
+                itemEl.style.display = 'none';
+            }
+        }
         document.getElementById('profile-review-view-comment').textContent = review.comment ? '" ' + review.comment + ' "' : '';
         document.getElementById('profile-review-view-header').innerHTML = '— ' + escHtml(username) + '  —  ' + makeStarsHtml(review.stars, 5) + '<span style="font-size:11px;margin-left:4px;vertical-align:middle;">' + review.stars + '</span>';
         /* Reset al tamaño base definido en el HTML — si el usuario
@@ -1843,12 +1866,12 @@ var PROFILE_USERS = <?php
                 var bubbleBtn = document.createElement('span');
                 bubbleBtn.className = 'profile-gallery-tb-bubble';
                 bubbleBtn.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-                (function(r) {
+                (function(r, it) {
                     bubbleBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
-                        showReviewView(r);
+                        showReviewView(r, it);
                     });
-                })(item.review);
+                })(item.review, item);
                 tb.appendChild(bubbleBtn);
             }
             /* Misma decisión que abajo (forceShowFooter) — necesario aquí
@@ -3607,6 +3630,43 @@ var PROFILE_USERS = <?php
         document.getElementById('profile-melon-details-title').textContent = '⭐ ' + item.title;
         var list = document.getElementById('profile-melon-details-list');
         list.innerHTML = '';
+        /* Cabecera: carátula + título + (artista) + calificación media
+           junto al número de reseñas. Debajo van las reseñas de usuarios. */
+        var head = document.createElement('div');
+        head.className = 'melon-detail-header';
+        var cover = document.createElement('div');
+        cover.className = 'melon-detail-cover';
+        if (item.image) {
+            var cimg = document.createElement('img');
+            cimg.src = item.image; cimg.alt = item.title;
+            (function(c){ cimg.onerror = function(){ c.classList.add('melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
+            cover.appendChild(cimg);
+        } else {
+            cover.classList.add('melon-detail-cover-ph'); cover.textContent = '🍈';
+        }
+        head.appendChild(cover);
+        var hinfo = document.createElement('div');
+        hinfo.className = 'melon-detail-hinfo';
+        var htitle = document.createElement('div');
+        htitle.className = 'melon-detail-htitle';
+        htitle.textContent = item.title; htitle.title = item.title;
+        hinfo.appendChild(htitle);
+        if (item.artist) {
+            var hart = document.createElement('div');
+            hart.className = 'melon-detail-hartist';
+            hart.textContent = item.artist;
+            hinfo.appendChild(hart);
+        }
+        var hrating = document.createElement('div');
+        hrating.className = 'melon-detail-hrating';
+        var avgTxt = (typeof item.avg === 'number') ? item.avg.toFixed(1) : (item.avg || '0');
+        var cnt = item.count || (item.reviews ? item.reviews.length : 0);
+        hrating.innerHTML = makeStarsHtml(item.avg || 0, 5)
+            + '<span class="melon-detail-havg">' + avgTxt + '</span>'
+            + '<span class="melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
+        hinfo.appendChild(hrating);
+        head.appendChild(hinfo);
+        list.appendChild(head);
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';
@@ -5147,7 +5207,7 @@ var PROFILE_USERS = <?php
                         var tbBubble = document.createElement('span');
                         tbBubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:10px;height:10px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
                         tbBubble.style.cssText = 'margin-left:3px;cursor:pointer;';
-                        (function(r) { tbBubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
+                        (function(r, it) { tbBubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r, it); }); })(item.review, item);
                         tbStars.appendChild(tbBubble);
                     }
                     tb.appendChild(tbStars);
@@ -5356,7 +5416,7 @@ var PROFILE_USERS = <?php
                 var bubble = document.createElement('span');
                 bubble.className = 'profile-gallery-tb-bubble';
                 bubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-                (function(r) { bubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
+                (function(r, it) { bubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r, it); }); })(item.review, item);
                 right.appendChild(bubble);
             }
             if (item.featured) {

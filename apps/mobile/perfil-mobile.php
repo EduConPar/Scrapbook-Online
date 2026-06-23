@@ -642,12 +642,36 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             background: var(--win-body-bg, var(--win-bg, silver));
             color: var(--text, #000);
         }
+        /* Cabecera de la reseña: carátula del item + título. */
+        .pf-modal .pf-review-itemhead {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border, #c0c0c0);
+            min-width: 0;
+        }
+        .pf-modal .pf-review-cover {
+            width: 56px; height: 56px; flex-shrink: 0;
+            overflow: hidden; background: var(--input-bg, #000);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff),
+                -2px -2px 0 var(--bezel-dark-2, grey),
+                 2px  2px 0 var(--bezel-light-2, #dfdfdf);
+            margin: 2px;
+        }
+        .pf-modal .pf-review-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-modal .pf-review-cover.pf-review-cover-ph { font-size: 26px; }
         .pf-modal .pf-review-title {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
             color: var(--text, #000);
-            margin: 0 0 10px;
+            margin: 0;
             word-break: break-word;
+            min-width: 0;
         }
         /* Bloque comentario — match al #profile-review-view-comment del escritorio. */
         .pf-modal .pf-review-comment {
@@ -1347,6 +1371,35 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             color: var(--text-faint, #888);
             margin-top: 2px;
         }
+        /* Cabecera de la ventana de reseñas: carátula + título + media/nº. */
+        .pf-melon-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 6px 10px;
+            margin-bottom: 4px;
+            border-bottom: 2px solid var(--border, #c0c0c0);
+            min-width: 0;
+        }
+        .pf-melon-detail-cover {
+            width: 60px; height: 60px; flex-shrink: 0;
+            overflow: hidden; background: var(--input-bg, #000);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff),
+                -2px -2px 0 var(--bezel-dark-2, grey),
+                 2px  2px 0 var(--bezel-light-2, #dfdfdf);
+            margin: 2px;
+        }
+        .pf-melon-detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-melon-detail-cover.pf-melon-detail-cover-ph { font-size: 28px; }
+        .pf-melon-detail-hinfo { flex: 1; min-width: 0; }
+        .pf-melon-detail-htitle { font-size: 14px; font-weight: bold; color: var(--text, #000); word-break: break-word; line-height: 1.25; }
+        .pf-melon-detail-hartist { font-size: 11px; color: var(--text-faint, #888); margin-top: 1px; }
+        .pf-melon-detail-hrating { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; color: var(--star-color, #e8b923); font-size: 14px; }
+        .pf-melon-detail-havg { font-size: 12px; font-weight: bold; }
+        .pf-melon-detail-hcount { font-size: 10px; color: var(--text-faint, #888); }
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -1942,6 +1995,9 @@ function openReviewView(item) {
     var commentHtml = (review.comment && review.comment.trim())
         ? '<div class="pf-review-comment">" ' + esc(review.comment) + ' "</div>'
         : '<div class="pf-review-comment-empty">(Sin comentario)</div>';
+    var coverHtml = item.image
+        ? '<div class="pf-review-cover"><img src="' + esc(item.image) + '" alt=""></div>'
+        : '<div class="pf-review-cover pf-review-cover-ph">🍈</div>';
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -1953,7 +2009,9 @@ function openReviewView(item) {
                 '</div>' +
             '</div>' +
             '<div class="window-body">' +
-                '<div class="pf-review-title">' + esc(item.title || '') + '</div>' +
+                '<div class="pf-review-itemhead">' + coverHtml +
+                    '<div class="pf-review-title">' + esc(item.title || '') + '</div>' +
+                '</div>' +
                 commentHtml +
                 '<div class="pf-review-header">' +
                     '— ' + esc(USER_LABEL) + ' &nbsp;—&nbsp; ' +
@@ -3410,6 +3468,30 @@ function showMelonDetails(item) {
     if (!backdrop || !listEl) return;
     titleEl.textContent = '⭐ ' + item.title;
     listEl.innerHTML = '';
+    /* Cabecera: carátula + título + (artista) + media junto al nº de reseñas. */
+    var head = document.createElement('div');
+    head.className = 'pf-melon-detail-header';
+    var cover = document.createElement('div');
+    cover.className = 'pf-melon-detail-cover';
+    if (item.image) {
+        var cimg = document.createElement('img'); cimg.src = item.image; cimg.alt = item.title || '';
+        (function(c){ cimg.onerror = function(){ c.classList.add('pf-melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
+        cover.appendChild(cimg);
+    } else { cover.classList.add('pf-melon-detail-cover-ph'); cover.textContent = '🍈'; }
+    head.appendChild(cover);
+    var hinfo = document.createElement('div'); hinfo.className = 'pf-melon-detail-hinfo';
+    var ht = document.createElement('div'); ht.className = 'pf-melon-detail-htitle'; ht.textContent = item.title || '';
+    hinfo.appendChild(ht);
+    if (item.artist) { var ha = document.createElement('div'); ha.className = 'pf-melon-detail-hartist'; ha.textContent = item.artist; hinfo.appendChild(ha); }
+    var hr = document.createElement('div'); hr.className = 'pf-melon-detail-hrating';
+    var avgTxt = (typeof item.avg === 'number') ? item.avg.toFixed(1) : (item.avg || '0');
+    var cnt = item.count || (item.reviews ? item.reviews.length : 0);
+    hr.innerHTML = makeStarsHtml(item.avg || 0, 5)
+        + '<span class="pf-melon-detail-havg">' + avgTxt + '</span>'
+        + '<span class="pf-melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
+    hinfo.appendChild(hr);
+    head.appendChild(hinfo);
+    listEl.appendChild(head);
     (item.reviews || []).forEach(function(rev){
         var row = document.createElement('div');
         row.className = 'pf-melon-review-row';

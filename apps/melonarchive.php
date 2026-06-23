@@ -1,6 +1,11 @@
 <?php
 session_start();
 require_once dirname(__DIR__) . '/assets/config.php';
+/* Flag de build solo-dev. La wiki (MelonWiki) vive sobre MelonArchive y
+   SOLO se activa en dev. En main MELON_DEV_BUILD es false → la wiki queda
+   inerte: MelonArchive abre directo al archivo de vídeos de siempre. */
+require_once dirname(__DIR__) . '/assets/dev-build.php';
+$WIKI = defined('MELON_DEV_BUILD') && MELON_DEV_BUILD;
 
 $userKey = $_SESSION['user'] ?? null;
 if (!$userKey || !isset($loginUsers[$userKey])) {
@@ -36,6 +41,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
     <?php require_once dirname(__DIR__) . "/assets/php/active-interface.php"; emitInterfaceCss("../"); ?>
     <script src="../assets/js/interface-loader.js?v=fs1"></script>
     <link rel="stylesheet" href="../assets/css/melonarchive.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/css/melonarchive.css'); ?>">
+    <?php if ($WIKI): /* CSS de la wiki: solo en dev */ ?>
+    <link rel="stylesheet" href="../assets/dev/wiki.css?v=<?php echo filemtime(dirname(__DIR__) . '/assets/dev/wiki.css'); ?>">
+    <?php endif; ?>
     <link rel="stylesheet" href="../assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <link rel="stylesheet" id="active-theme-link" href="<?php echo htmlspecialchars($activeThemeCss); ?>">
@@ -237,6 +245,9 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
 </div>
 
 <script>
+/* Flag solo-dev (lo emite PHP desde MELON_DEV_BUILD). En main es false →
+   MelonArchive abre directo al archivo de vídeos y la wiki queda inerte. */
+const WIKI_ENABLED = <?php echo $WIKI ? 'true' : 'false'; ?>;
 const WIKI_API = '../assets/wiki/api.php';
 const YT_API   = '../assets/yt-archive.php';
 
@@ -805,6 +816,14 @@ function refreshModCount(n) {
 
 /* ── Init ── */
 (async function init(){
+    /* En main (wiki desactivada) MelonArchive es solo el archivo de vídeos:
+       ocultamos el botón Inicio/acción del portal y abrimos las playlists. */
+    if (!WIKI_ENABLED) {
+        navHome.style.display = 'none';
+        navAction.style.display = 'none';
+        openArchive();
+        return;
+    }
     goHome();
     try {
         const a = await wikiGet('am-admin');

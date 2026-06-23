@@ -317,7 +317,7 @@ $_isTablet = isTabletDevice();
     <script src="assets/js/longpress.js"></script>
     <?php endif; ?>
     <link rel="stylesheet" href="assets/css/reproductor.css?v=<?php echo filemtime(__DIR__ . '/assets/css/reproductor.css'); ?>">
-    <link rel="stylesheet" href="assets/css/perfil.css">
+    <link rel="stylesheet" href="assets/css/perfil.css?v=<?php echo @filemtime(__DIR__ . '/assets/css/perfil.css'); ?>">
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($_isTablet): ?>
     <!-- Overrides para tablets (taskbar, ventanas, hit-targets). Va DESPUÉS

@@ -15,6 +15,10 @@ require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
 require_once dirname(__DIR__, 2) . '/assets/config.php';
+/* Flag solo-dev: la wiki (MelonWiki) solo se activa en dev. En main
+   MELON_DEV_BUILD es false → MelonArchive abre directo al archivo. */
+require_once dirname(__DIR__, 2) . '/assets/dev-build.php';
+$WIKI = defined('MELON_DEV_BUILD') && MELON_DEV_BUILD;
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
     header('Location: ../../index.php');
@@ -383,6 +387,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         /* Durante fullscreen: el iframe se expande. Quitamos los inset
            shadows y el padding para que no asomen por los bordes. */
         .ma-video-wrap:fullscreen { aspect-ratio: auto; height: 100%; }
+        <?php if ($WIKI): /* CSS de la wiki: solo en dev */ ?>
         /* ── WIKI (portal) — reusa .ma-card para tiles y filas ── */
         .ma-wiki-searchbar { display: flex; gap: 6px; padding: 8px; }
         .ma-wiki-searchbar input { flex: 1; box-sizing: border-box; font-size: 14px; padding: 7px; }
@@ -419,6 +424,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .ma-wiki-badge.no { background: #b00020; color: #fff; }
         .ma-wiki-badge.pend { background: #9e6a00; color: #fff; }
         .ma-wiki-empty { padding: 24px; text-align: center; color: var(--text-muted, #777); font-size: 13px; }
+        <?php endif; /* fin CSS wiki solo-dev */ ?>
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -514,6 +520,8 @@ if (EMBEDDED) {
 
 /* ─── Estado ────────────────────────────────────────────────────── */
 var API = '../../assets/yt-archive.php';
+/* Flag solo-dev (lo emite PHP). En main es false → sin wiki, solo archivo. */
+var WIKI_ENABLED = <?php echo $WIKI ? 'true' : 'false'; ?>;
 var STATE = {
     view: 'playlists',          /* 'playlists' | 'videos' */
     currentPl: null,            /* { id, title } cuando estamos en videos */
@@ -547,8 +555,8 @@ function setStatus(msg) {
 function loadPlaylists() {
     STATE.view = 'playlists';
     STATE.currentPl = null;
-    breadcrumbEl.textContent = 'Archivo · Playlists';
-    backBtn.disabled = false;   /* ahora playlists cuelga del Inicio */
+    breadcrumbEl.textContent = WIKI_ENABLED ? 'Archivo · Playlists' : 'Playlists';
+    backBtn.disabled = !WIKI_ENABLED;   /* con wiki, playlists cuelga del Inicio */
     panelEl.scrollTop = 0;
     /* Si ya cacheamos las playlists en esta sesión, las re-pintamos
        sin volver a llamar al API (la lista no cambia entre clics). */
@@ -764,7 +772,7 @@ backBtn.addEventListener('click', function(){
         try { history.back(); } catch (_) { loadPlaylists(); }
         return;
     }
-    goBack();
+    if (WIKI_ENABLED) goBack();   /* sin wiki, playlists es la raíz */
 });
 
 /* Botones "‹" (title-bar) y "✕" (close del title-bar) cierran el
@@ -1055,6 +1063,8 @@ function onModClick(e) {
 
 /* ─── Bootstrap ─────────────────────────────────────────────────── */
 (function init(){
+    /* En main (wiki desactivada) MelonArchive abre directo al archivo. */
+    if (!WIKI_ENABLED) { loadPlaylists(); return; }
     goHome();
     wikiGet('am-admin').then(function(a){
         WIKI_ADMIN = !!(a && a.isAdmin);
