@@ -121,21 +121,36 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
         </section>
 
         <!-- ───────── WIKI: EDITOR ───────── -->
+        <!-- Editor estilo Fandom: barra de formato + documento + barra de guardado -->
         <section id="view-wiki-edit" class="wiki-view" style="display:none">
-            <div class="wiki-editor">
-                <label class="wiki-lbl">Título</label>
-                <input type="text" id="we-title" autocomplete="off" placeholder="Título de la página">
-                <label class="wiki-lbl">Contenido</label>
-                <div class="wiki-edit-hint">Admite Markdown ligero: <code>## Título</code>, <code>**negrita**</code>, <code>*cursiva*</code>, <code>[texto](url)</code> y enlaces internos <code>[[Otra página]]</code>.</div>
-                <textarea id="we-body" rows="16" placeholder="Escribe el contenido de la página…"></textarea>
-                <label class="wiki-lbl">Comentario para los moderadores (opcional)</label>
-                <input type="text" id="we-summary" autocomplete="off" placeholder="Qué cambiaste y por qué">
-                <div class="wiki-editor-actions">
-                    <button class="button default" id="we-submit">Enviar a revisión</button>
-                    <button class="button" id="we-cancel">Cancelar</button>
-                    <span id="we-status" class="wiki-inline-msg"></span>
-                </div>
+            <div class="we-toolbar" id="we-toolbar">
+                <select class="we-tb-style" id="we-style" title="Estilo de párrafo">
+                    <option value="">Texto normal</option>
+                    <option value="# ">Título</option>
+                    <option value="## ">Subtítulo</option>
+                </select>
+                <span class="we-tb-sep"></span>
+                <button type="button" class="we-tb-btn" data-fmt="bold" title="Negrita (Ctrl+B)"><b>B</b></button>
+                <button type="button" class="we-tb-btn" data-fmt="italic" title="Cursiva (Ctrl+I)"><i>I</i></button>
+                <span class="we-tb-sep"></span>
+                <button type="button" class="we-tb-btn" data-fmt="ul" title="Lista">&#8226; &#9776;</button>
+                <button type="button" class="we-tb-btn" data-fmt="ol" title="Lista numerada">1. &#9776;</button>
+                <span class="we-tb-sep"></span>
+                <button type="button" class="we-tb-btn" data-fmt="link" title="Enlace">&#128279;</button>
+                <button type="button" class="we-tb-btn" data-fmt="ilink" title="Enlace interno a otra página">[[ ]]</button>
             </div>
+            <div class="we-doc">
+                <input type="text" class="we-title-input" id="we-title" autocomplete="off" placeholder="Título de la página">
+                <textarea class="we-body-input" id="we-body" placeholder="Empieza a escribir…"></textarea>
+            </div>
+            <div class="we-bottombar">
+                <input type="text" class="we-summary-input" id="we-summary" autocomplete="off" placeholder="Describe qué cambiaste">
+                <label class="we-minor"><input type="checkbox" id="we-minor"> Edición menor</label>
+                <span class="we-status-msg" id="we-status"></span>
+                <button class="button" id="we-cancel">Cancelar</button>
+                <button class="button default" id="we-submit">Guardar</button>
+            </div>
+            <div class="we-license">Las contribuciones se envían a los moderadores y se revisan antes de publicarse.</div>
         </section>
 
         <!-- ───────── WIKI: MIS SOLICITUDES ───────── -->
@@ -432,19 +447,92 @@ document.getElementById('wiki-article').addEventListener('click', function(e){
     if (il) { e.preventDefault(); openPage(il.dataset.slug); }
 });
 
-/* ── Editor (crear o editar) ── */
+/* ── Editor (crear o editar) — estilo Fandom ── */
+var weBody = document.getElementById('we-body');
+function weAutoGrow() { weBody.style.height = 'auto'; weBody.style.height = (weBody.scrollHeight) + 'px'; }
 function openEditor(pageId, title, body, slug) {
     showView('wiki-edit');
     editorCtx = { pageId: pageId || null, slug: slug || null };
     document.getElementById('we-title').value = title || '';
-    document.getElementById('we-body').value  = body || '';
+    weBody.value  = body || '';
     document.getElementById('we-summary').value = '';
     document.getElementById('we-status').textContent = '';
+    document.getElementById('we-minor').checked = false;
+    document.getElementById('we-style').value = '';
+    weAutoGrow();
     setNav({
         title: pageId ? 'Editar página' : 'Crear página',
         back: function(){ pageId ? openPage(slug) : openWikiList(); }
     });
 }
+weBody.addEventListener('input', weAutoGrow);
+
+/* Inserción de formato Markdown desde la barra de herramientas. */
+function weWrap(token) {
+    var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
+    var sel = ta.value.slice(s, e) || 'texto';
+    ta.value = ta.value.slice(0, s) + token + sel + token + ta.value.slice(e);
+    ta.focus();
+    ta.selectionStart = s + token.length;
+    ta.selectionEnd   = s + token.length + sel.length;
+    weAutoGrow();
+}
+function wePrefix(kind) {   /* 'ul' | 'ol' */
+    var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
+    var startLine = ta.value.lastIndexOf('\n', s - 1) + 1;
+    var block = ta.value.slice(startLine, e) || 'elemento';
+    var n = 1;
+    var out = block.split('\n').map(function(ln){
+        var clean = ln.replace(/^\s*(?:[-*]\s+|\d+\.\s+)/, '');
+        return (kind === 'ol' ? (n++) + '. ' : '- ') + clean;
+    }).join('\n');
+    ta.value = ta.value.slice(0, startLine) + out + ta.value.slice(e);
+    ta.focus(); weAutoGrow();
+}
+function weBlockHash(hash) {   /* '' | '# ' | '## ' */
+    var ta = weBody, s = ta.selectionStart;
+    var startLine = ta.value.lastIndexOf('\n', s - 1) + 1;
+    var endLine = ta.value.indexOf('\n', s); if (endLine === -1) endLine = ta.value.length;
+    var line = ta.value.slice(startLine, endLine).replace(/^#{1,3}\s+/, '');
+    ta.value = ta.value.slice(0, startLine) + hash + line + ta.value.slice(endLine);
+    ta.focus(); weAutoGrow();
+}
+function weLink(internal) {
+    var ta = weBody, s = ta.selectionStart, e = ta.selectionEnd;
+    var sel = ta.value.slice(s, e);
+    var ins;
+    if (internal) {
+        ins = '[[' + (sel || 'Otra página') + ']]';
+    } else {
+        var url = prompt('URL del enlace:', 'https://');
+        if (!url) return;
+        ins = '[' + (sel || 'texto') + '](' + url + ')';
+    }
+    ta.value = ta.value.slice(0, s) + ins + ta.value.slice(e);
+    ta.focus(); weAutoGrow();
+}
+document.getElementById('we-toolbar').addEventListener('click', function(e){
+    var btn = e.target.closest('.we-tb-btn');
+    if (!btn) return;
+    var fmt = btn.dataset.fmt;
+    if (fmt === 'bold')   weWrap('**');
+    else if (fmt === 'italic') weWrap('*');
+    else if (fmt === 'ul') wePrefix('ul');
+    else if (fmt === 'ol') wePrefix('ol');
+    else if (fmt === 'link')  weLink(false);
+    else if (fmt === 'ilink') weLink(true);
+});
+document.getElementById('we-style').addEventListener('change', function(){
+    weBlockHash(this.value);
+    this.value = '';   /* el desplegable vuelve a "Texto normal" tras aplicar */
+});
+weBody.addEventListener('keydown', function(e){
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = e.key.toLowerCase();
+    if (k === 'b') { e.preventDefault(); weWrap('**'); }
+    else if (k === 'i') { e.preventDefault(); weWrap('*'); }
+});
+
 document.getElementById('we-cancel').addEventListener('click', function(){
     if (editorCtx && editorCtx.pageId) openPage(editorCtx.slug); else openWikiList();
 });
