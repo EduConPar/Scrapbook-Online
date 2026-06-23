@@ -2150,11 +2150,19 @@ function showActionMenu(item, origIdx) {
     var lastAct   = isCollab ? 'leave' : 'delete';
     var items = [];
 
+    /* Las series se pueden editar (título/imagen/capítulos) en cualquier
+       estado, no solo completadas. */
+    var seriesEdit = (cat === 'series')
+        ? { act: 'review', icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' }
+        : null;
+
     if (status === 'pending') {
+        if (seriesEdit) items.push(seriesEdit);
         items.push({ act: 'inprogress', icon: '▶', label: 'Poner en curso' });
         items.push({ act: 'collab',     icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
         items.push({ act: lastAct,      icon: lastIcon, label: lastLabel });
     } else if (status === 'in-progress') {
+        if (seriesEdit) items.push(seriesEdit);
         items.push({ act: 'complete', icon: '✓', label: 'Completar' });
         items.push({ act: 'unstart',  icon: '✕', label: 'Quitar de en curso' });
         items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
@@ -3198,6 +3206,9 @@ function openAddItemDialog(cat) {
                     '<label for="ai-runtime">' + rtLabel + '</label>' +
                     '<input type="number" id="ai-runtime" min="0" step="1" inputmode="numeric" placeholder="0">' +
                 '</div>' : '') +
+                (cat === 'series' ? '<div class="pf-form-row">' +
+                    '<button class="button" id="ai-eps-btn" type="button" style="width:100%;box-sizing:border-box;">🎬 Capítulos</button>' +
+                '</div>' : '') +
                 '<div class="pf-form-row">' +
                     '<label for="ai-status">Estado</label>' +
                     '<select id="ai-status">' +
@@ -3218,6 +3229,14 @@ function openAddItemDialog(cat) {
     bd.querySelector('.title-bar-controls button').addEventListener('click', close);
     bd.querySelector('[data-act="cancel"]').addEventListener('click', close);
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    /* Capítulos al añadir una serie (compartidos por título): se pueden
+       gestionar con el nombre escrito antes de guardar el item. */
+    var epsBtn = bd.querySelector('#ai-eps-btn');
+    if (epsBtn) epsBtn.addEventListener('click', function(){
+        var t = bd.querySelector('#ai-title').value.trim();
+        if (!t) { bd.querySelector('#ai-error').textContent = 'Escribe el nombre de la serie primero.'; return; }
+        openEpisodesModal(t, false);
+    });
     bd.querySelector('[data-act="save"]').addEventListener('click', function(){
         var title  = bd.querySelector('#ai-title').value.trim();
         var image  = bd.querySelector('#ai-image').value.trim();

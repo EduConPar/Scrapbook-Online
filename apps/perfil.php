@@ -686,6 +686,10 @@ if ($_perfilStandalone) {
             <label id="profile-add-runtime-label" for="profile-add-runtime">Duración (min)</label>
             <input type="number" id="profile-add-runtime" min="0" step="1" placeholder="0">
         </div>
+        <!-- Series: gestionar capítulos al añadir (compartidos por título). -->
+        <div id="profile-add-eps-row" style="margin-top:8px;flex-shrink:0;display:none;">
+            <button class="button" id="profile-add-eps-btn" type="button">🎬 Capítulos</button>
+        </div>
         <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;flex-shrink:0;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-add-dialog-cancel">Cancelar</button>
@@ -2059,6 +2063,15 @@ var PROFILE_USERS = <?php
                                 if (i !== -1) showReviewWindow(cat, i);
                             }});
                         } else {
+                            /* Las series se pueden editar (título/imagen/capítulos)
+                               también estando pendientes o en curso, no solo al
+                               completarlas. */
+                            if (cat === 'series') {
+                                menuItems.push({ label: '✏ Editar', action: function() {
+                                    var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
+                                    if (i !== -1) showReviewWindow(cat, i);
+                                }});
+                            }
                             menuItems.push({ label: '▶ Poner en curso', action: function() {
                                 var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) {
@@ -2240,6 +2253,9 @@ var PROFILE_USERS = <?php
             addRuntimeRow.style.display = 'none';
             addRuntimeEl.value = '';
         }
+        /* Botón de capítulos solo en series. */
+        var addEpsRow = document.getElementById('profile-add-eps-row');
+        if (addEpsRow) addEpsRow.style.display = (cat === 'series') ? '' : 'none';
         document.getElementById('profile-add-error').textContent = '';
         addDlg.style.display = 'flex';
         setTimeout(function() { addNameInput.focus(); }, 0);
@@ -2280,6 +2296,15 @@ var PROFILE_USERS = <?php
         closeAddDialog();
     }
 
+    /* Capítulos al añadir una serie: usa el nombre escrito (los capítulos
+       son compartidos por título de serie, así que se pueden gestionar
+       antes incluso de guardar el item). */
+    var addEpsBtn = document.getElementById('profile-add-eps-btn');
+    if (addEpsBtn) addEpsBtn.addEventListener('click', function() {
+        var t = addNameInput.value.trim();
+        if (!t) { document.getElementById('profile-add-error').textContent = '⚠ Escribe el nombre de la serie primero.'; return; }
+        openEpisodesWindow(t, false);
+    });
     document.getElementById('profile-add-dialog-submit').addEventListener('click', submitAdd);
     document.getElementById('profile-add-dialog-cancel').addEventListener('click', closeAddDialog);
     document.getElementById('profile-add-dialog-close').addEventListener('click', closeAddDialog);
