@@ -2141,7 +2141,7 @@ function showActionMenu(item, origIdx) {
         items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
     } else { /* completed */
         var hasReview = !!(item.review && item.review.stars);
-        items.push({ act: 'review',  icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: hasReview ? 'Editar reseña' : 'Añadir reseña' });
+        items.push({ act: 'review',  icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: hasReview ? 'Editar' : 'Añadir reseña' });
         items.push({ act: lastAct,   icon: lastIcon, label: lastLabel });
     }
 
@@ -2173,7 +2173,7 @@ function showMusicActionMenu(item, origIdx, title, isCollab) {
     var canFeature = isFeatured || featuredCount < 3;
     var featLabel  = isFeatured ? 'Quitar de destacados' : 'Destacar';
     var hasReview  = !!(item.review && item.review.stars);
-    var revLabel   = hasReview ? 'Editar reseña' : 'Añadir reseña';
+    var revLabel   = hasReview ? 'Editar' : 'Añadir reseña';
     var lastLabel  = isCollab ? 'Abandonar actividad' : 'Eliminar';
     var lastIcon   = isCollab ? '🚪' : '✕';
     var lastAct    = isCollab ? 'leave' : 'delete';
@@ -2364,18 +2364,27 @@ function openReviewEditor(item, origIdx, cat) {
     var cur = (item.review && item.review.stars) ? Math.round(item.review.stars) : 0;
     var curComment = (item.review && item.review.comment) ? item.review.comment : '';
     var hadReview = cur > 0;
+    /* Edición del item: título, imagen y (no-música) duración/capítulos. */
+    var RW_RT_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+    var rtLabel = RW_RT_LABEL[cat];
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
         '<div class="window pf-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">★ ' + esc(item.title || '—') + '</div>' +
+                '<div class="title-bar-text">✏ ' + esc(item.title || '—') + '</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
             '</div>' +
             '<div class="window-body">' +
+                '<div class="pf-rev-edit-label">Título</div>' +
+                '<input type="text" id="pf-rev-edit-title" maxlength="200" style="width:100%;box-sizing:border-box;">' +
+                '<div class="pf-rev-edit-label">Imagen (URL)</div>' +
+                '<input type="text" id="pf-rev-edit-image" maxlength="500" placeholder="https://..." style="width:100%;box-sizing:border-box;">' +
+                (rtLabel ? '<div class="pf-rev-edit-label">' + rtLabel + '</div>' +
+                           '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
                 '<div class="pf-rev-edit-label">Puntuación</div>' +
                 '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
                 '<div class="pf-rev-edit-label">Comentario</div>' +
@@ -2392,6 +2401,12 @@ function openReviewEditor(item, origIdx, cat) {
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
     commentEl.value = curComment;
+    var titleEl = bd.querySelector('#pf-rev-edit-title');
+    var imageEl = bd.querySelector('#pf-rev-edit-image');
+    var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
+    titleEl.value = item.title || '';
+    imageEl.value = item.image || '';
+    if (runtimeEl) runtimeEl.value = item.runtime ? item.runtime : '';
     var sel = cur;
 
     function renderStars() {
@@ -2419,14 +2434,24 @@ function openReviewEditor(item, origIdx, cat) {
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
 
     bd.querySelector('[data-act="save"]').addEventListener('click', function(){
-        if (!sel) return;  /* Necesita al menos 1 estrella */
         var list = STATE.lists && STATE.lists[cat];
         if (!list || !list[origIdx]) { close(); return; }
-        list[origIdx].review = {
-            stars: sel,
-            comment: commentEl.value.trim(),
-            reviewedAt: Math.floor(Date.now() / 1000)
-        };
+        var newTitle = titleEl.value.trim();
+        if (newTitle) list[origIdx].title = newTitle;
+        list[origIdx].image = imageEl.value.trim();
+        if (rtLabel && runtimeEl) {
+            var rt = parseInt(runtimeEl.value, 10) || 0;
+            if (rt > 0) list[origIdx].runtime = rt; else delete list[origIdx].runtime;
+        }
+        if (sel > 0) {
+            list[origIdx].review = {
+                stars: sel,
+                comment: commentEl.value.trim(),
+                reviewedAt: Math.floor(Date.now() / 1000)
+            };
+        } else {
+            delete list[origIdx].review;
+        }
         renderActiveList();
         fetch(API + '?action=save-lists', {
             method: 'POST',
@@ -2437,13 +2462,15 @@ function openReviewEditor(item, origIdx, cat) {
         .then(function(r){ return r.json(); })
         .then(function(d){
             if (d && Array.isArray(d.items)) { STATE.lists[cat] = d.items; renderActiveList(); }
-            /* Notify a followers — mismo flow que el escritorio. */
-            fetch(API + '?action=notify-review', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category: cat, itemTitle: item.title || '', mtype: item.type || '' })
-            }).catch(function(){});
+            /* Notify a followers solo si hay reseña — mismo flow que escritorio. */
+            if (sel > 0) {
+                fetch(API + '?action=notify-review', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: cat, itemTitle: (titleEl.value.trim() || item.title || ''), mtype: item.type || '' })
+                }).catch(function(){});
+            }
         })
         .catch(function(){});
         close();
@@ -3593,6 +3620,12 @@ function showMelonDetails(item) {
     }
     head.appendChild(hinfo);
     (headEl || listEl).appendChild(head);
+    /* Tap en la carátula → añadir el item a mi perfil. */
+    cover.style.cursor = 'pointer';
+    cover.title = 'Añadir a mi perfil';
+    cover.addEventListener('click', function(){
+        if (typeof addItemToOwnProfile === 'function') addItemToOwnProfile(MELON_STATE.cat, item);
+    });
     (item.reviews || []).forEach(function(rev){
         var row = document.createElement('div');
         row.className = 'pf-melon-review-row';

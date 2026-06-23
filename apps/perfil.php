@@ -697,6 +697,20 @@ if ($_perfilStandalone) {
         </div>
     </div>
     <div class="window-body" style="padding:10px 12px 12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;">
+        <!-- Edición del item: título + imagen + (duración) + nota + reseña. -->
+        <div class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;">
+            <label for="profile-review-title" style="font-size:11px;margin-bottom:3px;">Título</label>
+            <input type="text" id="profile-review-title" style="width:100%;box-sizing:border-box;">
+        </div>
+        <div class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;">
+            <label for="profile-review-image" style="font-size:11px;margin-bottom:3px;">Imagen (URL)</label>
+            <input type="text" id="profile-review-image" style="width:100%;box-sizing:border-box;" placeholder="https://...">
+        </div>
+        <div id="profile-review-rt-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <label id="profile-review-rt-label" for="profile-review-rt" style="font-size:11px;margin-bottom:3px;">Duración (min)</label>
+            <input type="number" id="profile-review-rt" min="0" step="1" style="width:120px;box-sizing:border-box;" placeholder="0">
+        </div>
+        <div style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
         <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
@@ -1639,9 +1653,27 @@ var PROFILE_USERS = <?php
         var item = lists[cat][itemIdx];
         if (!item) return;
         var itemId = item.id;   /* re-resolver por id en submit/delete */
-        document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
+        document.getElementById('profile-review-window-title').textContent = '✏ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
+
+        /* Campos de edición del item: título, imagen y duración/capítulos. */
+        var titleEl = document.getElementById('profile-review-title');
+        var imageEl = document.getElementById('profile-review-image');
+        var rtRow   = document.getElementById('profile-review-rt-row');
+        var rtEl    = document.getElementById('profile-review-rt');
+        var rtLbl   = document.getElementById('profile-review-rt-label');
+        var RW_RT_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+        titleEl.value = item.title || '';
+        imageEl.value = item.image || '';
+        if (RW_RT_LABEL[cat]) {
+            rtLbl.textContent = RW_RT_LABEL[cat];
+            rtEl.value = item.runtime ? item.runtime : '';
+            rtRow.style.display = '';
+        } else {
+            rtRow.style.display = 'none';
+            rtEl.value = '';
+        }
 
         var numEl = document.getElementById('profile-review-stars-num');
         function setStarDisp(el, val, pos) {
@@ -1704,12 +1736,24 @@ var PROFILE_USERS = <?php
         newClose.addEventListener('click', closeWin);
         newCancel.addEventListener('click', closeWin);
         newSubmit.addEventListener('click', function() {
-            if (!sel) return;
             var i = lists[cat].findIndex(function(x){ return x.id === itemId; });
             if (i === -1) { closeWin(); return; }
-            lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            /* Edición del item. */
+            var newTitle = titleEl.value.trim();
+            if (newTitle) lists[cat][i].title = newTitle;
+            lists[cat][i].image = imageEl.value.trim();
+            if (RW_RT_LABEL[cat]) {
+                var rt = parseInt(rtEl.value, 10) || 0;
+                if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
+            }
+            /* Reseña: con estrellas la guarda; sin estrellas la quita. */
+            if (sel > 0) {
+                lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
+            } else {
+                delete lists[cat][i].review;
+            }
             saveCategory(cat);
-            notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
             renderCatView(cat);
             closeWin();
         });
@@ -1973,7 +2017,7 @@ var PROFILE_USERS = <?php
                         }
                         var isCollab = !!it.sharedFrom;
                         if (it.status === 'completed') {
-                            var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
+                            var reviewLabel = (it.review && it.review.stars) ? '✏ Editar' : '✏ Añadir reseña';
                             menuItems.push({ label: reviewLabel, action: function() {
                                 var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) showReviewWindow(cat, i);
@@ -3673,6 +3717,53 @@ var PROFILE_USERS = <?php
         var m = Math.floor(sec / 60), s = sec % 60;
         return m + ':' + (s < 10 ? '0' : '') + s;
     }
+    /* Añadir un item de música (álbum/canción) a una playlist: resuelve
+       sus tracks (play-music-item) y los añade a la playlist elegida.
+       Usa APIs estables (get-playlists / save-playlist-item). */
+    function melonAddToPlaylist(item, x, y) {
+        fetch('assets/music/api.php?action=get-playlists', { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(pls){
+                if (!Array.isArray(pls) || !pls.length) {
+                    if (window.notifSystem) window.notifSystem.show({ id:'np'+Date.now(), type:'info', title:'Sin playlists', message:'No tienes playlists todavía.' });
+                    return;
+                }
+                showCtxMenu(x, y, pls.map(function(pl){
+                    return { label: '📋 ' + (pl.name || 'Playlist'), action: function(){ melonDoAddToPlaylist(item, pl); } };
+                }));
+            }).catch(function(){});
+    }
+    function melonDoAddToPlaylist(item, pl) {
+        fetch('assets/profile/api.php?action=play-music-item', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                itemType:       item.mtype || item.type || 'song',
+                title:          item.title || '', artist: item.artist || '',
+                ytId:           item.ytId || '', spotifyId: item.spotifyId || '',
+                ytPlaylistId:   item.ytPlaylistId || '', spotifyAlbumId: item.spotifyAlbumId || '',
+            })
+        })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(data){
+            var tracks = (data && data.tracks) || [];
+            if (!tracks.length) {
+                if (window.notifSystem) window.notifSystem.show({ id:'er'+Date.now(), type:'error', title:'Error', message:'No se pudo resolver la música.' });
+                return;
+            }
+            var newTracks = (pl.tracks || []).slice();
+            tracks.forEach(function(t){ newTracks.push({ videoId: t.videoId, title: t.title, artist: t.artist }); });
+            var payload = { id: pl.id, name: pl.name, tracks: newTracks };
+            if (pl.sharedFrom) payload.sharedFrom = pl.sharedFrom;
+            fetch('assets/music/api.php?action=save-playlist-item', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(){
+                if (window.notifSystem) window.notifSystem.show({ id:'ok'+Date.now(), type:'success', title:'Añadido', message:'"' + (item.title || '') + '" añadido a "' + (pl.name || '') + '".' });
+            }).catch(function(){});
+        }).catch(function(){});
+    }
     /* Abre la ventana del álbum resolviéndolo por título+artista. */
     function melonOpenAlbum(item) {
         if (typeof window.openAlbumViewer !== 'function') return;
@@ -3797,6 +3888,22 @@ var PROFILE_USERS = <?php
         }
         head.appendChild(hinfo);
         headEl.appendChild(head);
+
+        /* Carátula: click → añadir el item a mi perfil. Click derecho (solo
+           música) → menú Reproducir / Añadir a playlist / Añadir a mi perfil. */
+        cover.style.cursor = 'pointer';
+        cover.title = (melonCat === 'music') ? 'Click: añadir a mi perfil · Click derecho: más opciones' : 'Añadir a mi perfil';
+        cover.addEventListener('click', function(){ addMelonItemToProfile(melonCat, item); });
+        if (melonCat === 'music') {
+            cover.addEventListener('contextmenu', function(e){
+                e.preventDefault(); e.stopPropagation();
+                showCtxMenu(e.clientX, e.clientY, [
+                    { label: '▶ Reproducir',           action: function(){ if (typeof playMusicItem === 'function') playMusicItem(item); } },
+                    { label: '📋 Añadir a una playlist', action: function(){ melonAddToPlaylist(item, e.clientX, e.clientY); } },
+                    { label: '+ Añadir a mi perfil',     action: function(){ addMelonItemToProfile('music', item); } }
+                ]);
+            });
+        }
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';
@@ -5604,7 +5711,7 @@ var PROFILE_USERS = <?php
                             lists.music[i].featured = true; saveCategory('music'); renderMusicDestacados(); renderMusicView(currentMusicTab);
                         }});
                     }
-                    var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
+                    var reviewLabel = (it.review && it.review.stars) ? '✏ Editar' : '✏ Añadir reseña';
                     menuItems.push({ label: reviewLabel, action: function() {
                         var i = curIdx(); if (i !== -1) showMusicReviewWindow(i);
                     }});
@@ -5649,9 +5756,15 @@ var PROFILE_USERS = <?php
         /* id estable para re-resolver el ítem en submit/delete, por si
            lists.music fue reemplazado por un saveCategory intermedio. */
         var itemId = item.id;
-        document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
+        document.getElementById('profile-review-window-title').textContent = '✏ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
+        /* Edición del item: título + imagen (música no usa duración manual). */
+        var mTitleEl = document.getElementById('profile-review-title');
+        var mImageEl = document.getElementById('profile-review-image');
+        document.getElementById('profile-review-rt-row').style.display = 'none';
+        mTitleEl.value = item.title || '';
+        mImageEl.value = item.image || '';
         var numEl = document.getElementById('profile-review-stars-num');
         numEl.textContent = sel > 0 ? sel : '';
         function setStarDisp(el, val, pos) {
@@ -5697,12 +5810,18 @@ var PROFILE_USERS = <?php
         var submitBtn = document.getElementById('profile-review-window-submit');
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         newSubmit.addEventListener('click', function() {
-            if (!sel) return;
             var mi = lists.music.findIndex(function(x){ return x.id === itemId; });
             if (mi === -1) { closeWin(); return; }
-            lists.music[mi].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            var newTitle = mTitleEl.value.trim();
+            if (newTitle) lists.music[mi].title = newTitle;
+            lists.music[mi].image = mImageEl.value.trim();
+            if (sel > 0) {
+                lists.music[mi].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                notifyReviewToFollowers('music', lists.music[mi].title, lists.music[mi].type);
+            } else {
+                delete lists.music[mi].review;
+            }
             saveCategory('music');
-            notifyReviewToFollowers('music', lists.music[mi].title, lists.music[mi].type);
             renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
         });
         var deleteBtn = document.getElementById('profile-review-window-delete');
