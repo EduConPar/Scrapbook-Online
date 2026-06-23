@@ -639,15 +639,52 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-aw-top-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mu-aw-top-sub { font-size: 11px; color: var(--text-faint,#888); }
         .mu-aw-top-dur { font-size: 12px; color: var(--text-faint,#888); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-        .mu-aw-tabs { display: flex; gap: 6px; padding: 4px 10px 0; flex-wrap: wrap; }
-        .mu-aw-tab { font-size: 11px; padding: 5px 10px; min-height: 28px; }
-        .mu-aw-tab.is-active { font-weight: bold; }
-        .mu-aw-albums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px 10px 16px; }
-        .mu-aw-album-card { cursor: pointer; user-select: none; }
-        .mu-aw-album-card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border: 1px solid var(--border,#808080); background: var(--inset-bg,#000); display: block; }
-        .mu-aw-album-card:active img { opacity: .8; }
-        .mu-aw-album-name { font-size: 11px; color: var(--text,#000); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mu-aw-album-year { font-size: 10px; color: var(--text-faint,#888); }
+        /* Discografía como LISTA de lanzamientos (filas tipo móvil):
+           carátula a la izquierda + nombre en negrita + "Tipo • Año".
+           Mucho más legible en móvil que el grid de carátulas. */
+        #mu-aw-albums { padding-bottom: 8px; }
+        .mu-aw-rel-list { display: flex; flex-direction: column; padding: 4px 10px; }
+        .mu-aw-rel {
+            display: flex; align-items: center; gap: 12px;
+            padding: 8px 4px; cursor: pointer; user-select: none;
+            -webkit-user-select: none; color: var(--text, #000);
+        }
+        .mu-aw-rel:active { background: color-mix(in srgb, var(--accent,#1db954) 22%, transparent); }
+        .mu-aw-rel-cover {
+            width: 64px; height: 64px; object-fit: cover; flex-shrink: 0;
+            border: 1px solid var(--border,#808080); background: var(--inset-bg,#000);
+        }
+        .mu-aw-rel-main { flex: 1; min-width: 0; }
+        .mu-aw-rel-name {
+            font-size: 15px; font-weight: bold; color: var(--text,#000);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .mu-aw-rel-sub {
+            font-size: 12px; color: var(--text-faint,#888); margin-top: 2px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        /* Botón "Ver discografía" centrado, tipo pastilla. */
+        .mu-aw-disco-btn-wrap { display: flex; justify-content: center; padding: 8px 10px 18px; }
+        .mu-aw-disco-btn { font-size: 12px; padding: 7px 18px; min-height: 34px; border-radius: 18px; }
+
+        /* ════ Página de discografía completa (overlay sobre el artista) ════ */
+        #mu-disco-view {
+            position: fixed; inset: 0;
+            background: var(--win-bg, silver);
+            display: none; flex-direction: column; box-sizing: border-box;
+            z-index: 73;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        #mu-disco-view.is-open { display: flex; }
+        .mu-disco-chips {
+            display: flex; gap: 6px; padding: 8px 10px; flex-shrink: 0;
+            overflow-x: auto; -webkit-overflow-scrolling: touch;
+        }
+        .mu-disco-chip { font-size: 11px; padding: 6px 12px; min-height: 30px; white-space: nowrap; border-radius: 15px; flex-shrink: 0; }
+        .mu-disco-chip.is-active { font-weight: bold; }
+        .mu-disco-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .mu-disco-group-title { font-size: 17px; font-weight: bold; color: var(--text,#000); margin: 14px 12px 4px; }
 
         /* Editor de reseña — fila de estrellas grandes (tap para puntuar,
            tap en la mitad izquierda = media estrella). */
@@ -2621,6 +2658,82 @@ document.getElementById('mu-full-add').addEventListener('click', function(){
     muOpenAddCurrentToPlaylist(QUEUE[CUR_IDX]);
 });
 
+/* ─── MENÚ DE LA CANCIÓN ACTUAL (long-press en el vinilo) ────────────
+   Mantener pulsado el vinilo del reproductor grande abre el mismo menú
+   de opciones que el long-press de una canción en la lista, incluida
+   la opción "Corregir". Actúa sobre el track en reproducción. */
+function muOpenNowPlayingMenu() {
+    if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
+    var tr = QUEUE[CUR_IDX];
+    var items = [
+        { act: 'fixAlbum', label: 'Corregir' },
+        { act: 'addPl',    label: '📋 Añadir a otra playlist' }
+    ];
+    var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
+                     esc(tr.title || tr.videoId || 'Canción') +
+                     (tr.artist ? ' — ' + esc(tr.artist) : '') +
+                   '</p><div class="mu-modal-list">';
+    items.forEach(function(it){
+        bodyHtml += '<div class="mu-modal-list-item" data-act="' + it.act + '">' +
+                      '<div class="item-main">' + it.label + '</div>' +
+                    '</div>';
+    });
+    bodyHtml += '</div><div class="modal-actions"><button class="button" data-act="cancel" type="button">Cerrar</button></div>';
+
+    var m = muOpenModal({ title: 'Opciones', body: bodyHtml });
+    m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+    m.body.querySelectorAll('.mu-modal-list-item').forEach(function(el){
+        el.addEventListener('click', function(){
+            var act = el.dataset.act;
+            m.close();
+            if (act === 'fixAlbum') muReportWrongAlbum(tr);
+            if (act === 'addPl')    muOpenAddCurrentToPlaylist(tr);
+        });
+    });
+}
+
+/* Gesto long-press sobre el vinilo del reproductor grande. Implementación
+   local (no comparte estado con el long-press de la lista) para no
+   interferir con sus clicks sintéticos. */
+(function setupVinylLongPress(){
+    var vinyl = document.getElementById('mu-vinyl');
+    if (!vinyl) return;
+    var timer = null, sx = 0, sy = 0;
+    function start(x, y) {
+        sx = x; sy = y;
+        vinyl.classList.add('long-pressing');
+        timer = setTimeout(function(){
+            timer = null;
+            vinyl.classList.remove('long-pressing');
+            try { navigator.vibrate && navigator.vibrate(40); } catch (_) {}
+            muOpenNowPlayingMenu();
+        }, 500);
+    }
+    function cancel() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        vinyl.classList.remove('long-pressing');
+    }
+    vinyl.addEventListener('touchstart', function(e){
+        if (!e.touches || e.touches.length !== 1) return;
+        start(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    vinyl.addEventListener('touchmove', function(e){
+        if (!timer || !e.touches[0]) return;
+        if (Math.abs(e.touches[0].clientX - sx) > 12 || Math.abs(e.touches[0].clientY - sy) > 12) cancel();
+    }, { passive: true });
+    vinyl.addEventListener('touchend',    cancel);
+    vinyl.addEventListener('touchcancel', cancel);
+    vinyl.addEventListener('mousedown', function(e){ if (e.button === 0) start(e.clientX, e.clientY); });
+    vinyl.addEventListener('mousemove', function(e){
+        if (!timer) return;
+        if (Math.abs(e.clientX - sx) > 12 || Math.abs(e.clientY - sy) > 12) cancel();
+    });
+    vinyl.addEventListener('mouseup',    cancel);
+    vinyl.addEventListener('mouseleave', cancel);
+    /* Evita el menú contextual nativo del navegador al mantener pulsado. */
+    vinyl.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+})();
+
 function muOpenAddCurrentToPlaylist(tr) {
     if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;">' +
@@ -4455,22 +4568,10 @@ function muOpenArtistView(name) {
                 '<div class="mu-aw-section-title">Popular</div>' +
                 '<div id="mu-aw-top"><div class="mu-sr-msg">Cargando…</div></div>' +
                 '<div class="mu-aw-section-title">Discografía</div>' +
-                '<div class="mu-aw-tabs" id="mu-aw-tabs">' +
-                    '<button class="button mu-aw-tab is-active" data-tab="popular" type="button">Populares</button>' +
-                    '<button class="button mu-aw-tab" data-tab="album" type="button">Álbumes</button>' +
-                    '<button class="button mu-aw-tab" data-tab="single" type="button">Singles y EP</button>' +
-                '</div>' +
                 '<div class="mu-aw-albums" id="mu-aw-albums"><div class="mu-sr-msg">Cargando…</div></div>' +
             '</div>';
         document.body.appendChild(av);
         document.getElementById('mu-aw-close').addEventListener('click', muCloseArtistView);
-        document.getElementById('mu-aw-tabs').addEventListener('click', function(e){
-            var b = e.target.closest && e.target.closest('.mu-aw-tab');
-            if (!b) return;
-            _muAwTab = b.dataset.tab;
-            av.querySelectorAll('.mu-aw-tab').forEach(function(x){ x.classList.toggle('is-active', x === b); });
-            _muAwRenderAlbums();
-        });
         document.getElementById('mu-aw-top').addEventListener('click', function(e){
             var row = e.target.closest && e.target.closest('.mu-aw-top-row');
             if (!row) return;
@@ -4480,13 +4581,13 @@ function muOpenArtistView(name) {
             }] }, 0);
         });
         document.getElementById('mu-aw-albums').addEventListener('click', function(e){
-            var card = e.target.closest && e.target.closest('.mu-aw-album-card');
-            if (!card) return;
-            _muOpenAlbumViewer(card.dataset.key, card.dataset.name, _muAwName);
+            if (e.target.closest && e.target.closest('#mu-aw-disco-open')) { muOpenDiscography(); return; }
+            var row = e.target.closest && e.target.closest('.mu-aw-rel');
+            if (!row) return;
+            _muOpenAlbumViewer(row.dataset.key, row.dataset.name, _muAwName);
         });
     }
     _muAwName = name; _muAwTab = 'popular'; _muAwAlbums = [];
-    av.querySelectorAll('.mu-aw-tab').forEach(function(x){ x.classList.toggle('is-active', x.dataset.tab === 'popular'); });
     document.getElementById('mu-aw-titlebar').textContent = name;
     document.getElementById('mu-aw-name').textContent = name;
     document.getElementById('mu-aw-listeners').textContent = '';
@@ -4550,25 +4651,120 @@ function muOpenArtistView(name) {
     });
 }
 function muCloseArtistView() {
+    var dv = document.getElementById('mu-disco-view');
+    if (dv) dv.classList.remove('is-open');
     var av = document.getElementById('mu-artist-view');
     if (av) av.classList.remove('is-open');
 }
+
+/* Etiqueta legible del tipo de lanzamiento. */
+function _muRelTypeLabel(t) {
+    if (t === 'album') return 'Álbum';
+    if (t === 'ep')    return 'EP';
+    return 'Sencillo';   /* single y desconocidos */
+}
+/* Fila de lanzamiento: carátula + nombre + "Tipo • Año". */
+function _muRelRowHtml(a) {
+    var sub = _muRelTypeLabel(a.type) + (a.year ? ' • ' + esc(String(a.year)) : '');
+    return '<div class="mu-aw-rel" data-key="' + esc(a.albumKey || '') + '" data-name="' + esc(a.name || '') + '">' +
+        '<img class="mu-aw-rel-cover" src="' + esc(a.image || '') + '" alt="" loading="lazy">' +
+        '<div class="mu-aw-rel-main">' +
+            '<div class="mu-aw-rel-name">' + esc(a.name || '') + '</div>' +
+            '<div class="mu-aw-rel-sub">' + sub + '</div>' +
+        '</div>' +
+    '</div>';
+}
+/* Ordena lanzamientos del más reciente al más antiguo (por año). */
+function _muSortReleases(list) {
+    return (list || []).slice().sort(function(a, b){
+        return (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0);
+    });
+}
+
+/* Sección "Discografía" del artista: vista previa de los lanzamientos
+   más recientes como lista + botón "Ver discografía" para abrir la
+   página completa. */
 function _muAwRenderAlbums() {
     var el = document.getElementById('mu-aw-albums');
     if (!el) return;
-    var list = _muAwAlbums || [];
-    if (_muAwTab === 'album')  list = list.filter(function(a){ return a.type === 'album'; });
-    if (_muAwTab === 'single') list = list.filter(function(a){ return a.type === 'single' || a.type === 'ep'; });
-    if (!list.length) { el.innerHTML = '<div class="mu-sr-msg">Nada por aquí.</div>'; return; }
-    var html = '';
-    list.forEach(function(a){
-        html += '<div class="mu-aw-album-card" data-key="' + esc(a.albumKey || '') + '" data-name="' + esc(a.name || '') + '">' +
-            '<img src="' + esc(a.image || '') + '" alt="">' +
-            '<div class="mu-aw-album-name">' + esc(a.name || '') + '</div>' +
-            (a.year ? '<div class="mu-aw-album-year">' + esc(String(a.year)) + '</div>' : '') +
-        '</div>';
-    });
+    var list = _muSortReleases(_muAwAlbums);
+    if (!list.length) { el.innerHTML = '<div class="mu-sr-msg">Sin discografía.</div>'; return; }
+    var preview = list.slice(0, 5);
+    var html = '<div class="mu-aw-rel-list">';
+    preview.forEach(function(a){ html += _muRelRowHtml(a); });
+    html += '</div>';
+    html += '<div class="mu-aw-disco-btn-wrap">' +
+              '<button class="button mu-aw-disco-btn" id="mu-aw-disco-open" type="button">Ver discografía</button>' +
+            '</div>';
     el.innerHTML = html;
+}
+
+/* ─── PÁGINA DE DISCOGRAFÍA COMPLETA ─────────────────────────────────
+   Overlay sobre la vista de artista. Filtros por tipo (Todos / Álbumes
+   / Sencillos y EP) y, en "Todos", destaca la "Última publicación". */
+var _muDiscoFilter = 'all';
+function muOpenDiscography() {
+    var dv = document.getElementById('mu-disco-view');
+    if (!dv) {
+        dv = document.createElement('div');
+        dv.id = 'mu-disco-view';
+        dv.innerHTML =
+            '<div class="window ma-titlebar"><div class="title-bar">' +
+                '<div class="title-bar-text" id="mu-disco-titlebar">Publicaciones</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" id="mu-disco-close" type="button"></button></div>' +
+            '</div></div>' +
+            '<div class="mu-disco-chips" id="mu-disco-chips">' +
+                '<button class="button mu-disco-chip is-active" data-f="all" type="button">Todos</button>' +
+                '<button class="button mu-disco-chip" data-f="album" type="button">Álbumes</button>' +
+                '<button class="button mu-disco-chip" data-f="single" type="button">Sencillos y EP</button>' +
+            '</div>' +
+            '<div class="mu-disco-body" id="mu-disco-body"></div>';
+        document.body.appendChild(dv);
+        document.getElementById('mu-disco-close').addEventListener('click', function(){ dv.classList.remove('is-open'); });
+        document.getElementById('mu-disco-chips').addEventListener('click', function(e){
+            var b = e.target.closest && e.target.closest('.mu-disco-chip');
+            if (!b) return;
+            _muDiscoFilter = b.dataset.f;
+            dv.querySelectorAll('.mu-disco-chip').forEach(function(x){ x.classList.toggle('is-active', x === b); });
+            _muRenderDiscography();
+        });
+        document.getElementById('mu-disco-body').addEventListener('click', function(e){
+            var row = e.target.closest && e.target.closest('.mu-aw-rel');
+            if (!row) return;
+            _muOpenAlbumViewer(row.dataset.key, row.dataset.name, _muAwName);
+        });
+    }
+    _muDiscoFilter = 'all';
+    dv.querySelectorAll('.mu-disco-chip').forEach(function(x){ x.classList.toggle('is-active', x.dataset.f === 'all'); });
+    document.getElementById('mu-disco-titlebar').textContent = _muAwName || 'Publicaciones';
+    _muRenderDiscography();
+    dv.classList.add('is-open');
+}
+function _muRenderDiscography() {
+    var body = document.getElementById('mu-disco-body');
+    if (!body) return;
+    var list = _muSortReleases(_muAwAlbums);
+    if (_muDiscoFilter === 'album')  list = list.filter(function(a){ return a.type === 'album'; });
+    if (_muDiscoFilter === 'single') list = list.filter(function(a){ return a.type === 'single' || a.type === 'ep'; });
+    if (!list.length) { body.innerHTML = '<div class="mu-sr-msg">Nada por aquí.</div>'; return; }
+    var html = '';
+    if (_muDiscoFilter === 'all') {
+        /* Última publicación destacada + el resto debajo. */
+        html += '<div class="mu-disco-group-title">Última publicación</div>';
+        html += '<div class="mu-aw-rel-list">' + _muRelRowHtml(list[0]) + '</div>';
+        var rest = list.slice(1);
+        if (rest.length) {
+            html += '<div class="mu-disco-group-title">Más publicaciones</div>';
+            html += '<div class="mu-aw-rel-list">';
+            rest.forEach(function(a){ html += _muRelRowHtml(a); });
+            html += '</div>';
+        }
+    } else {
+        html += '<div class="mu-aw-rel-list">';
+        list.forEach(function(a){ html += _muRelRowHtml(a); });
+        html += '</div>';
+    }
+    body.innerHTML = html;
 }
 
 /* Botón "Buscar" de la barra superior. */
