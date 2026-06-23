@@ -105,9 +105,10 @@ try { $pdo->exec("ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP NULL DEFAU
 catch (Throwable $e) { /* ya existe */ }
 try { $pdo->exec("ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"); }
 catch (Throwable $e) { /* ya existe */ }
-/* runtime por reseña: minutos (pelis) o nº de capítulos (series/libros).
-   La que más se repite entre los usuarios es la que se muestra (moda). */
-try { $pdo->exec("ALTER TABLE list_item_reviews ADD COLUMN runtime INT NULL DEFAULT NULL"); }
+/* runtime del item: minutos (pelis) o nº de capítulos (series/libros).
+   Se pone AL CREAR el item (autorrellenable). La moda entre los items
+   del mismo título (varios usuarios) es la que se muestra en reseñas. */
+try { $pdo->exec("ALTER TABLE list_items ADD COLUMN runtime INT NULL DEFAULT NULL"); }
 catch (Throwable $e) { /* ya existe */ }
 
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
@@ -245,9 +246,6 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
                 'stars'   => (float)$r['my_review_stars'],
                 'comment' => (string)($r['my_review_comment'] ?? ''),
             ];
-            if (isset($r['my_review_runtime']) && $r['my_review_runtime'] !== null) {
-                $item['review']['runtime'] = (int)$r['my_review_runtime'];
-            }
             if (!empty($r['my_reviewed_at_ts'])) {
                 $item['review']['reviewedAt'] = (int)$r['my_reviewed_at_ts'];
             }
@@ -261,6 +259,7 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
             $item['review']['reviewedAt'] = (int)$r['reviewed_at_ts'];
         }
     }
+    if (isset($r['runtime']) && $r['runtime'] !== null) $item['runtime'] = (int)$r['runtime'];
     if (!empty($collabs)) $item['collaborators'] = $collabs;
     if ($sharedFromUserKey)  $item['sharedFrom']    = $sharedFromUserKey;
     return $item;
@@ -280,9 +279,7 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
                                   u.user_key AS shared_from_key,
                                   myr.stars AS my_review_stars,
-                                  myr.comment AS my_review_comment,
-                                  myr.runtime AS my_review_runtime,
-                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
+                                  myr.comment AS my_review_comment,                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_items i
                            LEFT JOIN usuarios u ON i.shared_from = u.id
                            LEFT JOIN list_item_reviews myr
@@ -299,9 +296,7 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
                                   ou.user_key AS owner_key,
                                   myr.stars AS my_review_stars,
-                                  myr.comment AS my_review_comment,
-                                  myr.runtime AS my_review_runtime,
-                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
+                                  myr.comment AS my_review_comment,                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_item_collaborators c
                            JOIN list_items i ON c.item_id = i.id
                            JOIN usuarios ou ON i.owner_id = ou.id
@@ -857,7 +852,7 @@ case 'search-titles': {
     $likeAny   = '%' . $q . '%';
     /* Distinct por title (puede haber varios users con el mismo título). */
     $stmt = $pdo->prepare("
-        SELECT title, MAX(image) AS image,
+        SELECT title, MAX(image) AS image, GROUP_CONCAT(runtime) AS runtimes,
                CASE WHEN LOWER(title) LIKE ? THEN 1 ELSE 2 END AS rank_p
         FROM list_items
         WHERE category = ? AND LOWER(title) LIKE ?
@@ -870,10 +865,15 @@ case 'search-titles': {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         if (count($suggestions) >= 8) break;
         if (isset($excluded[mb_strtolower($row['title'])])) continue;
-        $suggestions[] = [
-            'title' => $row['title'],
-            'image' => $row['image'] ?? '',
-        ];
+        /* runtime sugerido = la moda de los valores de ese título. */
+        $rt = null;
+        if (!empty($row['runtimes'])) {
+            $vals = array_filter(array_map('intval', explode(',', $row['runtimes'])), fn($v) => $v > 0);
+            if ($vals) { $freq = array_count_values($vals); arsort($freq); $rt = (int)array_key_first($freq); }
+        }
+        $sug = ['title' => $row['title'], 'image' => $row['image'] ?? ''];
+        if ($rt !== null) $sug['runtime'] = $rt;
+        $suggestions[] = $sug;
     }
     jsonResponse(['ok' => true, 'suggestions' => $suggestions]);
 }
@@ -981,6 +981,10 @@ case 'save-lists': {
                 'review_stars'   => null,
                 'review_comment' => null,
                 'reviewed_at'    => null,
+                /* runtime del item: minutos (pelis) / capítulos (series, libros).
+                   Se pone al crear el item; música no lo usa. */
+                'runtime' => (isset($item['runtime']) && is_numeric($item['runtime']) && (int)$item['runtime'] > 0)
+                    ? min(100000, (int)$item['runtime']) : null,
             ];
             if ($isMusic) {
                 $clean['music_type'] = in_array($item['type'] ?? '', ['song','album'], true) ? $item['type'] : 'song';
@@ -1004,11 +1008,6 @@ case 'save-lists': {
                 $clean['reviewed_at'] = isset($item['review']['reviewedAt']) && is_numeric($item['review']['reviewedAt'])
                     ? (int)$item['review']['reviewedAt']
                     : time();
-                /* runtime: minutos (pelis) o nº de capítulos (series/libros).
-                   0/ausente → null (sin valor de ese usuario). */
-                $clean['review_runtime'] = (isset($item['review']['runtime']) && is_numeric($item['review']['runtime']) && (int)$item['review']['runtime'] > 0)
-                    ? min(100000, (int)$item['review']['runtime'])
-                    : null;
             }
             return $clean;
         };
@@ -1042,15 +1041,13 @@ case 'save-lists': {
                 return;
             }
             $reviewedAt = $clean['reviewed_at'] !== null ? (int)$clean['reviewed_at'] : time();
-            $runtime    = $clean['review_runtime'] ?? null;
-            $pdo->prepare("INSERT INTO list_item_reviews (item_id, user_id, stars, comment, reviewed_at, runtime)
-                           VALUES (?, ?, ?, ?, FROM_UNIXTIME(?), ?)
+            $pdo->prepare("INSERT INTO list_item_reviews (item_id, user_id, stars, comment, reviewed_at)
+                           VALUES (?, ?, ?, ?, FROM_UNIXTIME(?))
                            ON DUPLICATE KEY UPDATE
                              stars = VALUES(stars),
                              comment = VALUES(comment),
-                             reviewed_at = VALUES(reviewed_at),
-                             runtime = VALUES(runtime)")
-                ->execute([$itemId, $uid, $stars, $clean['review_comment'], $reviewedAt, $runtime]);
+                             reviewed_at = VALUES(reviewed_at)")
+                ->execute([$itemId, $uid, $stars, $clean['review_comment'], $reviewedAt]);
         };
 
         foreach ($items as $item) {
@@ -1074,13 +1071,13 @@ case 'save-lists': {
                 $sql = "UPDATE list_items SET
                             title = ?, image = ?, status = ?, music_type = ?, artist = ?,
                             featured = ?, yt_id = ?, spotify_id = ?, yt_playlist_id = ?,
-                            spotify_album_id = ?,
+                            spotify_album_id = ?, runtime = ?,
                             completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ? AND owner_id = ?";
                 $params = [
                     $clean['title'], $clean['image'], $clean['status'], $clean['music_type'], $clean['artist'],
                     $clean['featured'], $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'],
-                    $clean['spotify_album_id'],
+                    $clean['spotify_album_id'], $clean['runtime'],
                 ];
                 if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $params[] = $id; $params[] = $uid;
@@ -1118,13 +1115,14 @@ case 'save-lists': {
                     : null;
                 $sql = "INSERT INTO list_items
                         (owner_id, category, title, image, status, music_type, artist, featured,
-                         yt_id, spotify_id, yt_playlist_id, spotify_album_id, completed_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
+                         yt_id, spotify_id, yt_playlist_id, spotify_album_id, runtime, completed_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
                         ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
                 $params = [
                     $uid, $category, $clean['title'], $clean['image'], $clean['status'],
                     $clean['music_type'], $clean['artist'], $clean['featured'],
                     $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'], $clean['spotify_album_id'],
+                    $clean['runtime'],
                 ];
                 if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $pdo->prepare($sql)->execute($params);
@@ -2102,10 +2100,10 @@ case 'melon-reviews': {
        review se atribuye al user_id que la escribió (no al owner del
        item). Un item colaborativo con dos reseñas distintas aparece
        agrupado por título pero con dos entradas en 'reviews'. */
-    $sql = "SELECT i.title, i.image, i.artist, i.music_type AS mtype, i.yt_id AS ytId,
+    $sql = "SELECT i.id AS itemId, i.title, i.image, i.artist, i.music_type AS mtype, i.yt_id AS ytId,
                    i.spotify_id AS spotifyId, i.yt_playlist_id AS ytPlaylistId,
                    i.spotify_album_id AS spotifyAlbumId,
-                   r.stars AS stars, r.comment AS comment, r.runtime AS runtime,
+                   r.stars AS stars, r.comment AS comment, i.runtime AS runtime,
                    UNIX_TIMESTAMP(COALESCE(r.reviewed_at, i.created_at)) AS reviewedAt,
                    u.user_key AS userKey, u.label AS userLabel
             FROM list_item_reviews r
@@ -2137,13 +2135,13 @@ case 'melon-reviews': {
                 'ytPlaylistId'   => $r['ytPlaylistId']   ?? '',
                 'spotifyAlbumId' => $r['spotifyAlbumId'] ?? '',
                 'totalStars'     => 0.0, 'totalReviews' => 0, 'latestAt' => 0, 'reviews' => [],
-                'runtimes'       => [],
+                'runtimeByItem'  => [],   /* itemId => runtime (1 voto por item) */
             ];
         }
         foreach (['image','artist','mtype','ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) {
             if (empty($groups[$key][$f]) && !empty($r[$f])) $groups[$key][$f] = $r[$f];
         }
-        if ($r['runtime'] !== null && (int)$r['runtime'] > 0) $groups[$key]['runtimes'][] = (int)$r['runtime'];
+        if ($r['runtime'] !== null && (int)$r['runtime'] > 0) $groups[$key]['runtimeByItem'][(int)$r['itemId']] = (int)$r['runtime'];
         $groups[$key]['totalStars'] += $stars;
         $groups[$key]['totalReviews']++;
         if ($rAt > $groups[$key]['latestAt']) $groups[$key]['latestAt'] = $rAt;
@@ -2168,11 +2166,11 @@ case 'melon-reviews': {
         ];
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];
         if (!empty($g['mtype'])) $e['type'] = $g['mtype'];
-        /* Consenso de runtime = la moda (valor con más coincidencias).
-           Empate → el mayor valor (determinista). */
-        if (!empty($g['runtimes'])) {
+        /* Consenso de runtime = la moda (valor con más coincidencias entre
+           los items del mismo título). Empate → el mayor (determinista). */
+        if (!empty($g['runtimeByItem'])) {
             $freq = [];
-            foreach ($g['runtimes'] as $rt) $freq[$rt] = ($freq[$rt] ?? 0) + 1;
+            foreach ($g['runtimeByItem'] as $rt) $freq[$rt] = ($freq[$rt] ?? 0) + 1;
             $bestVal = null; $bestCnt = -1;
             foreach ($freq as $val => $cnt) {
                 if ($cnt > $bestCnt || ($cnt === $bestCnt && (int)$val > (int)$bestVal)) { $bestCnt = $cnt; $bestVal = (int)$val; }

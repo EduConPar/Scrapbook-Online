@@ -2363,10 +2363,6 @@ function openReviewEditor(item, origIdx, cat) {
     var cur = (item.review && item.review.stars) ? Math.round(item.review.stars) : 0;
     var curComment = (item.review && item.review.comment) ? item.review.comment : '';
     var hadReview = cur > 0;
-    /* Duración (pelis) / nº de capítulos (series, libros). Música no. */
-    var RUNTIME_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
-    var rtLabel = RUNTIME_LABEL[cat];
-    var curRuntime = (item.review && item.review.runtime) ? item.review.runtime : '';
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
@@ -2381,8 +2377,6 @@ function openReviewEditor(item, origIdx, cat) {
             '<div class="window-body">' +
                 '<div class="pf-rev-edit-label">Puntuación</div>' +
                 '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
-                (rtLabel ? '<div class="pf-rev-edit-label">' + rtLabel + '</div>' +
-                           '<input type="number" class="pf-rev-edit-runtime" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0">' : '') +
                 '<div class="pf-rev-edit-label">Comentario</div>' +
                 '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>' +
                 '<div class="modal-actions">' +
@@ -2397,8 +2391,6 @@ function openReviewEditor(item, origIdx, cat) {
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
     commentEl.value = curComment;
-    var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
-    if (runtimeEl) runtimeEl.value = curRuntime;
     var sel = cur;
 
     function renderStars() {
@@ -2432,7 +2424,6 @@ function openReviewEditor(item, origIdx, cat) {
         list[origIdx].review = {
             stars: sel,
             comment: commentEl.value.trim(),
-            runtime: (rtLabel && runtimeEl) ? (parseInt(runtimeEl.value, 10) || 0) : 0,
             reviewedAt: Math.floor(Date.now() / 1000)
         };
         renderActiveList();
@@ -2896,6 +2887,9 @@ function openAddItemDialog(cat) {
         games:  { title: '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Añadir juego',    titleField: 'Título' }
     };
     var cfg = labels[cat]; if (!cfg) return;
+    /* Duración (pelis) / nº de capítulos (series, libros). */
+    var RUNTIME_LABEL = { movies: 'Duración (min)', series: 'Nº de capítulos', books: 'Nº de capítulos' };
+    var rtLabel = RUNTIME_LABEL[cat];
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -2915,6 +2909,10 @@ function openAddItemDialog(cat) {
                     '<label for="ai-image">Imagen (URL, opcional)</label>' +
                     '<input type="text" id="ai-image" maxlength="500" placeholder="https://...">' +
                 '</div>' +
+                (rtLabel ? '<div class="pf-form-row">' +
+                    '<label for="ai-runtime">' + rtLabel + '</label>' +
+                    '<input type="number" id="ai-runtime" min="0" step="1" inputmode="numeric" placeholder="0">' +
+                '</div>' : '') +
                 '<div class="pf-form-row">' +
                     '<label for="ai-status">Estado</label>' +
                     '<select id="ai-status">' +
@@ -2953,6 +2951,11 @@ function openAddItemDialog(cat) {
             image:  image,
             status: status
         };
+        if (rtLabel) {
+            var rtIn = bd.querySelector('#ai-runtime');
+            var rt = rtIn ? (parseInt(rtIn.value, 10) || 0) : 0;
+            if (rt > 0) item.runtime = rt;
+        }
         var newList = list.slice(); newList.push(item);
         errEl.textContent = 'Guardando…';
         fetch(API + '?action=save-lists', {
