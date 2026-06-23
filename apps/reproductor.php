@@ -840,15 +840,16 @@ function loadMusicRatings(force) {
         .catch(function(){ _musicRatings = { songs:{}, albums:{}, songsTitle:{}, albumsTitle:{} }; return _musicRatings; });
     return _musicRatingsPromise;
 }
-/* Devuelve {avg,count} o null. Casa primero por título+artista; si no,
-   por título solo (el artista del resultado externo no siempre coincide). */
+/* Devuelve {avg,count} o null. Exige que coincidan título Y artista: dos
+   álbumes/canciones con el mismo título pero distinto artista NO comparten
+   nota. Solo si no se conoce el artista del resultado se cae a título solo. */
 function mrLookup(kind, title, artist) {
     if (!_musicRatings) return null;
     var nt = _mrNorm(title); if (!nt) return null;
     var byTA = _musicRatings[kind] || {};
-    var byT  = _musicRatings[kind === 'albums' ? 'albumsTitle' : 'songsTitle'] || {};
     var na = _mrNorm(artist);
-    if (na && byTA[nt + '\x1f' + na]) return byTA[nt + '\x1f' + na];
+    if (na) return byTA[nt + '\x1f' + na] || null;
+    var byT = _musicRatings[kind === 'albums' ? 'albumsTitle' : 'songsTitle'] || {};
     return byT[nt] || null;
 }
 /* HTML del badge de nota (estrella + media). */
@@ -863,7 +864,12 @@ function decorateSearchRatings(container) {
     loadMusicRatings().then(function(){
         container.querySelectorAll('.pl-sr-row[data-type="song"]').forEach(function(row){
             if (row.querySelector('.pl-sr-rating')) return;
-            mrAppendBadge(row, mrLookup('songs', row.dataset.title, row.dataset.artist));
+            var r = mrLookup('songs', row.dataset.title, row.dataset.artist);
+            if (!r) return;
+            /* La nota va delante del tiempo de la canción. */
+            var timeEl = row.querySelector('.pl-sr-time');
+            if (timeEl) timeEl.insertAdjacentHTML('beforebegin', mrBadge(r));
+            else row.insertAdjacentHTML('beforeend', mrBadge(r));
         });
         container.querySelectorAll('.pl-sr-row[data-type="album"]').forEach(function(row){
             if (row.querySelector('.pl-sr-rating')) return;
@@ -990,12 +996,15 @@ function openArtistWindow(name) {
         topEl.querySelectorAll('.aw-top-row').forEach(function(row){
             row.addEventListener('click', function(){ playArtistTrackByName(row.dataset.title, row.dataset.artist); });
         });
-        /* Nota media de la comunidad a la derecha de cada canción. */
+        /* Nota media de la comunidad, delante del tiempo de cada canción. */
         loadMusicRatings().then(function(){
             topEl.querySelectorAll('.aw-top-row').forEach(function(row){
                 if (row.querySelector('.pl-sr-rating')) return;
                 var r = mrLookup('songs', row.dataset.title, row.dataset.artist);
-                if (r) row.insertAdjacentHTML('beforeend', mrBadge(r));
+                if (!r) return;
+                var durEl = row.querySelector('.aw-top-dur');
+                if (durEl) durEl.insertAdjacentHTML('beforebegin', mrBadge(r));
+                else row.insertAdjacentHTML('beforeend', mrBadge(r));
             });
         });
     }
@@ -2192,6 +2201,7 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
             dur.textContent = t.duration ? formatTime(t.duration) : '';
             row.appendChild(num); row.appendChild(info); row.appendChild(dur);
             row.dataset.title = t.title || '';
+            row.dataset.artist = t.artist || meta.artist || '';
             row.addEventListener('click', () => _playAlbumFrom(i));
             /* Click derecho → menú contextual de la canción: añadir a
                playlist / al perfil. Reusamos el ctx menú de tracks ya
@@ -2216,8 +2226,11 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
             if (myToken !== _albumViewerToken) return;
             Array.from(tracksEl.querySelectorAll('.album-viewer-row')).forEach(function(row){
                 if (row.querySelector('.pl-sr-rating')) return;
-                var rt = mrLookup('songs', row.dataset.title, meta.artist);
-                if (rt) row.insertAdjacentHTML('beforeend', mrBadge(rt));
+                var rt = mrLookup('songs', row.dataset.title, row.dataset.artist || meta.artist);
+                if (!rt) return;
+                var durEl = row.querySelector('.album-viewer-dur');
+                if (durEl) durEl.insertAdjacentHTML('beforebegin', mrBadge(rt));
+                else row.insertAdjacentHTML('beforeend', mrBadge(rt));
             });
             var own = mrLookup('albums', meta.name || albumName, meta.artist);
             if (own && metaEl && !metaEl.querySelector('.pl-sr-rating')) {
@@ -5066,9 +5079,11 @@ var addTrackCallback = null;
             html += '<div class="pl-sr-group-title">Canciones</div>';
             songs.forEach(function(s){
                 var thumb = 'https://i.ytimg.com/vi/' + encodeURIComponent(s.videoId) + '/default.jpg';
+                var sdur = fmtDur(s.duration);
                 html += '<div class="pl-sr-row" data-type="song" data-vid="'+esc(s.videoId)+'" data-title="'+esc(s.title)+'" data-artist="'+esc(s.artist)+'" data-dur="'+(parseInt(s.duration,10)||0)+'">' +
                             '<img class="pl-sr-thumb" src="'+thumb+'" alt="" onerror="this.style.visibility=\'hidden\'">' +
-                            '<div class="pl-sr-info"><div class="pl-sr-name">'+esc(s.title)+'</div><div class="pl-sr-sub">'+esc(s.artist||'')+(fmtDur(s.duration)?(' · '+fmtDur(s.duration)):'')+'</div></div>' +
+                            '<div class="pl-sr-info"><div class="pl-sr-name">'+esc(s.title)+'</div><div class="pl-sr-sub">'+esc(s.artist||'')+'</div></div>' +
+                            (sdur ? '<span class="pl-sr-time">'+sdur+'</span>' : '') +
                         '</div>';
             });
         }
