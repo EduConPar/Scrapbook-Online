@@ -617,6 +617,17 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .mu-sr-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mu-sr-sub { font-size: 11px; color: var(--text-muted, var(--text-faint, #888)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mu-sr-msg { padding: 16px; text-align: center; color: var(--text-faint, #888); font-size: 12px; }
+        /* Nota media de la comunidad (reseñas) en resultados/listas de música. */
+        .mu-sr-rating {
+            flex: 0 0 auto; margin-left: 8px;
+            padding: 1px 7px; font-size: 12px; font-weight: bold; white-space: nowrap;
+            color: var(--star-color, #e8b923);
+            background: var(--inset-bg, rgba(0,0,0,0.18)); border-radius: 3px;
+            align-self: center;
+        }
+        .mu-sr-time { flex: 0 0 auto; margin-left: 8px; font-size: 11px; color: var(--text-muted, var(--text-faint, #888)); white-space: nowrap; }
+        .mu-aw-top-row .mu-sr-rating, .mu-album-track .mu-sr-rating { margin-left: 0; margin-right: 8px; }
+        .mu-album-artist .mu-sr-rating { margin-left: 6px; padding: 0 6px; font-size: 11px; vertical-align: middle; }
 
         /* Vista de artista */
         .mu-aw-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -3467,6 +3478,40 @@ function profileApiPost(action, body) {
         body: JSON.stringify(body || {})
     }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, data: d }; }); });
 }
+
+/* ── Medias de la comunidad (reseñas) para música ───────────────────
+   Igual que en el reproductor de escritorio: carga una vez (cacheado) el
+   mapa de medias de canciones/álbumes reseñados y pinta la nota junto a
+   cada resultado / canción / pista de álbum. La nota exige que coincidan
+   título Y artista. */
+var _muRatings = null, _muRatingsPromise = null;
+function _mrNorm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+function loadMusicRatings(force) {
+    if (_muRatings && !force) return Promise.resolve(_muRatings);
+    if (_muRatingsPromise && !force) return _muRatingsPromise;
+    _muRatingsPromise = profileApiGet('music-ratings')
+        .then(function(r){
+            _muRatings = (r.ok && r.data && r.data.ok) ? r.data : { songs:{}, albums:{}, songsTitle:{}, albumsTitle:{} };
+            return _muRatings;
+        })
+        .catch(function(){ _muRatings = { songs:{}, albums:{}, songsTitle:{}, albumsTitle:{} }; return _muRatings; });
+    return _muRatingsPromise;
+}
+/* Devuelve {avg,count} o null. Exige título Y artista; solo cae a título
+   solo si no se conoce el artista del resultado. */
+function mrLookup(kind, title, artist) {
+    if (!_muRatings) return null;
+    var nt = _mrNorm(title); if (!nt) return null;
+    var byTA = _muRatings[kind] || {};
+    var na = _mrNorm(artist);
+    if (na) return byTA[nt + '\x1f' + na] || null;
+    var byT = _muRatings[kind === 'albums' ? 'albumsTitle' : 'songsTitle'] || {};
+    return byT[nt] || null;
+}
+function mrBadge(rating) {
+    if (!rating) return '';
+    return '<span class="mu-sr-rating" title="' + rating.count + ' reseña' + (rating.count === 1 ? '' : 's') + '">★ ' + rating.avg.toFixed(1) + '</span>';
+}
 /* Reconstruye el lookup ytId → review desde MY_PROFILE_MUSIC. Lo llaman
    loadProfileMusic + saveProfileMusic tras cada cambio. */
 function buildReviewsMap() {
@@ -4398,6 +4443,8 @@ function _muOpenAlbumViewer(albumId, albumName, albumArtist) {
             var row = document.createElement('div');
             row.className = 'mu-album-track';
             row.dataset.idx = String(idx);
+            row.dataset.title = t.title || '';
+            row.dataset.artist = t.artist || album.artist || '';
             row.innerHTML =
                 '<div class="mu-album-track-num">' + (idx + 1) + '</div>' +
                 '<div class="mu-album-track-title">' + esc(t.title || '') +
@@ -4407,6 +4454,24 @@ function _muOpenAlbumViewer(albumId, albumName, albumArtist) {
             tracksEl.appendChild(row);
         });
         _muHighlightAlbumPlayingRow();
+        /* Notas de la comunidad: media del álbum (sus reseñas) en la
+           cabecera y media de cada canción reseñada delante de su tiempo
+           (las reseñas de canción van por separado, no en la del álbum). */
+        loadMusicRatings().then(function(){
+            tracksEl.querySelectorAll('.mu-album-track').forEach(function(row){
+                if (row.querySelector('.mu-sr-rating')) return;
+                var rt = mrLookup('songs', row.dataset.title, row.dataset.artist || album.artist);
+                if (!rt) return;
+                var durEl = row.querySelector('.mu-album-track-dur');
+                if (durEl) durEl.insertAdjacentHTML('beforebegin', mrBadge(rt));
+                else row.insertAdjacentHTML('beforeend', mrBadge(rt));
+            });
+            var own = mrLookup('albums', album.name || albumName, album.artist);
+            var artEl = document.getElementById('mu-album-view-artist');
+            if (own && artEl && !artEl.querySelector('.mu-sr-rating')) {
+                artEl.insertAdjacentHTML('beforeend', ' ' + mrBadge(own));
+            }
+        });
     }
 
     if (_muAlbumViewCache[albumId]) {
@@ -4557,13 +4622,36 @@ function _muRunSearch() {
         if (songs.length) {
             html += '<div class="mu-sr-group-title">Canciones</div>';
             songs.slice(0, 12).forEach(function(s){
+                var sdur = s.duration ? fmtDur(s.duration) : '';
                 html += '<div class="mu-sr-row" data-type="song" data-vid="' + esc(s.videoId || '') + '" data-title="' + esc(s.title || '') + '" data-artist="' + esc(s.artist || '') + '" data-dur="' + (s.duration || 0) + '">' +
                     '<img class="mu-sr-thumb" src="https://i.ytimg.com/vi/' + esc(s.videoId || '') + '/default.jpg" alt="">' +
-                    '<div class="mu-sr-info"><div class="mu-sr-name">' + esc(s.title || '') + '</div><div class="mu-sr-sub">' + esc(s.artist || '') + (s.duration ? ' · ' + fmtDur(s.duration) : '') + '</div></div></div>';
+                    '<div class="mu-sr-info"><div class="mu-sr-name">' + esc(s.title || '') + '</div><div class="mu-sr-sub">' + esc(s.artist || '') + '</div></div>' +
+                    (sdur ? '<span class="mu-sr-time">' + sdur + '</span>' : '') + '</div>';
             });
         }
         if (!html) html = '<div class="mu-sr-msg">Sin resultados.</div>';
         resEl.innerHTML = html;
+        muDecorateSearchRatings(resEl);
+    });
+}
+/* Pinta las notas de la comunidad en los resultados de búsqueda: canción
+   (delante del tiempo) y álbum (al final, exigiendo artista). */
+function muDecorateSearchRatings(container) {
+    if (!container) return;
+    loadMusicRatings().then(function(){
+        container.querySelectorAll('.mu-sr-row[data-type="song"]').forEach(function(row){
+            if (row.querySelector('.mu-sr-rating')) return;
+            var r = mrLookup('songs', row.dataset.title, row.dataset.artist);
+            if (!r) return;
+            var timeEl = row.querySelector('.mu-sr-time');
+            if (timeEl) timeEl.insertAdjacentHTML('beforebegin', mrBadge(r));
+            else row.insertAdjacentHTML('beforeend', mrBadge(r));
+        });
+        container.querySelectorAll('.mu-sr-row[data-type="album"]').forEach(function(row){
+            if (row.querySelector('.mu-sr-rating')) return;
+            var r = mrLookup('albums', row.dataset.name, row.dataset.artist);
+            if (r) row.insertAdjacentHTML('beforeend', mrBadge(r));
+        });
     });
 }
 
@@ -4684,6 +4772,17 @@ function muOpenArtistView(name) {
                 '<div class="mu-aw-top-dur">' + (t.duration ? fmtDur(t.duration) : '') + '</div></div>';
         });
         topEl.innerHTML = html;
+        /* Nota media de la comunidad, delante del tiempo de cada canción. */
+        loadMusicRatings().then(function(){
+            topEl.querySelectorAll('.mu-aw-top-row').forEach(function(row){
+                if (row.querySelector('.mu-sr-rating')) return;
+                var r = mrLookup('songs', row.dataset.title, row.dataset.artist);
+                if (!r) return;
+                var durEl = row.querySelector('.mu-aw-top-dur');
+                if (durEl) durEl.insertAdjacentHTML('beforebegin', mrBadge(r));
+                else row.insertAdjacentHTML('beforeend', mrBadge(r));
+            });
+        });
     });
 }
 function muCloseArtistView() {
@@ -4733,6 +4832,19 @@ function _muAwRenderAlbums() {
               '<button class="button mu-aw-disco-btn" id="mu-aw-disco-open" type="button">Ver discografía</button>' +
             '</div>';
     el.innerHTML = html;
+    muDecorateAlbumRows(el, _muAwName);
+}
+/* Pinta la nota del álbum (sus reseñas) en filas .mu-aw-rel, exigiendo
+   que el artista coincida con el de la página. */
+function muDecorateAlbumRows(container, artistName) {
+    if (!container) return;
+    loadMusicRatings().then(function(){
+        container.querySelectorAll('.mu-aw-rel').forEach(function(row){
+            if (row.querySelector('.mu-sr-rating')) return;
+            var r = mrLookup('albums', row.dataset.name, artistName);
+            if (r) row.insertAdjacentHTML('beforeend', mrBadge(r));
+        });
+    });
 }
 
 /* ─── PÁGINA DE DISCOGRAFÍA COMPLETA ─────────────────────────────────
@@ -4814,6 +4926,7 @@ function _muRenderDiscography() {
         html += '</div>';
     }
     body.innerHTML = html;
+    muDecorateAlbumRows(body, _muAwName);
 }
 
 /* Botón "Buscar" de la barra superior. */
