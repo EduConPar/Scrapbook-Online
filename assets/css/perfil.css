@@ -344,6 +344,9 @@
 .ep-cnt, .ep-noavg { color: var(--text-faint); }
 .ep-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .ep-controls .button { min-height: 22px; min-width: 0; padding: 0 8px; font-size: 11px; }
+.ep-controls .ep-move-btn { padding: 0 5px; font-size: 10px; line-height: 1; }
+.ep-controls .ep-move-btn[disabled] { opacity: 0.4; }
+.ep-review-btn .ep-chart-ico { display: inline-block; }
 .ep-watch { font-size: 11px; color: var(--text); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .ep-watched-tag { font-size: 11px; color: #2e7d4f; font-weight: bold; }
 .ep-remove-btn { color: var(--error-text, #c00); }

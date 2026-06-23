@@ -1432,6 +1432,8 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-ep-meta { font-size: 10px; color: var(--text-faint, #888); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
         .pf-ep-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
         .pf-ep-controls .button { min-height: 22px; font-size: 11px; }
+        .pf-ep-controls .pf-ep-move { padding: 0 6px; font-size: 10px; line-height: 1; }
+        .pf-ep-controls .pf-ep-move[disabled] { opacity: 0.4; }
         .pf-ep-watch { font-size: 11px; display: flex; align-items: center; gap: 3px; }
         .pf-ep-wtag { font-size: 11px; color: #2e7d4f; font-weight: bold; }
         .pf-ep-addbar { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--win-border, #808080); padding-top: 8px; }
@@ -2429,13 +2431,16 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
                 '</div>';
             }
             var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
-            var rev = (ep.myStars != null) ? ('★ ' + ep.myStars) : '✎ Reseñar';
+            var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+            var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
+            var moveBtns = '<button class="button pf-ep-move" data-up="' + ep.id + '"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
+                           '<button class="button pf-ep-move" data-down="' + ep.id + '"' + (i === eps.length - 1 ? ' disabled' : '') + '>▼</button>';
             return '<div class="pf-ep-row">' +
                 '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
                 '<div class="pf-ep-info">' +
                     '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
                     '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="pf-ep-controls">' + watch +
+                    '<div class="pf-ep-controls">' + watch + moveBtns +
                         '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
                         '<button class="button" data-x="' + ep.id + '">✕</button>' +
                     '</div>' +
@@ -2455,7 +2460,20 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
         fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
     });
+    function moveEp(id, dir) {
+        var idx = -1;
+        for (var k = 0; k < eps.length; k++) { if (eps[k].id === id) { idx = k; break; } }
+        if (idx < 0) return;
+        var ni = idx + dir; if (ni < 0 || ni >= eps.length) return;
+        var tmp = eps[idx]; eps[idx] = eps[ni]; eps[ni] = tmp;
+        render();
+        fetch(API + '?action=reorder-series-episodes', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, order: eps.map(function(x){ return x.id; }) }) }).catch(function(){});
+    }
     listEl.addEventListener('click', function(e){
+        var up = e.target.closest('[data-up]');
+        if (up) { moveEp(parseInt(up.getAttribute('data-up'), 10), -1); return; }
+        var dn = e.target.closest('[data-down]');
+        if (dn) { moveEp(parseInt(dn.getAttribute('data-down'), 10), 1); return; }
         var rv = e.target.closest('[data-rev]');
         if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
         var r = e.target.closest('[data-r]');

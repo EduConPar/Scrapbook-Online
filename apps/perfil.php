@@ -3767,6 +3767,20 @@ var PROFILE_USERS = <?php
             .then(function(d){ _epList = (d && d.episodes) || []; renderEpisodesList(); })
             .catch(function(){ document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Error.</div>'; });
     }
+    /* Mueve un capítulo arriba/abajo en el orden y persiste. */
+    function moveEpisode(id, dir) {
+        var idx = -1;
+        for (var k = 0; k < _epList.length; k++) { if (_epList[k].id === id) { idx = k; break; } }
+        if (idx < 0) return;
+        var ni = idx + dir;
+        if (ni < 0 || ni >= _epList.length) return;
+        var tmp = _epList[idx]; _epList[idx] = _epList[ni]; _epList[ni] = tmp;
+        renderEpisodesList();
+        fetch('assets/profile/api.php?action=reorder-series-episodes', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seriesTitle: _epSeriesTitle, order: _epList.map(function(x){ return x.id; }) })
+        }).catch(function(){});
+    }
     function renderEpisodesList() {
         var listEl = document.getElementById('profile-episodes-list');
         if (!_epList.length) { listEl.innerHTML = '<div class="ep-empty">Sin capítulos todavía. Añade el primero abajo.</div>'; return; }
@@ -3789,13 +3803,17 @@ var PROFILE_USERS = <?php
             var watchHtml = _epCanWatch
                 ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
                 : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
-            var revLabel = (ep.myStars != null) ? ('★ ' + ep.myStars) : '✎ Reseñar';
+            /* Botón reseña: si ya hay reseña muestra el icono de gráfica; si no, "Reseñar". */
+            var chartIco = '<img src="assets/img/appIcons/chatIcon.png" alt="Reseña" class="ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+            var revLabel = (ep.myStars != null) ? chartIco : '✎ Reseñar';
+            var moveBtns = '<button class="button ep-move-btn" data-ep-up="' + ep.id + '"' + (i === 0 ? ' disabled' : '') + ' title="Subir">▲</button>' +
+                           '<button class="button ep-move-btn" data-ep-down="' + ep.id + '"' + (i === _epList.length - 1 ? ' disabled' : '') + ' title="Bajar">▼</button>';
             return '<div class="ep-row">' +
                 '<div class="ep-thumb">' + thumbInner + '</div>' +
                 '<div class="ep-info">' +
                     '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
                     '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="ep-controls">' + watchHtml +
+                    '<div class="ep-controls">' + watchHtml + moveBtns +
                         '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
                         '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
                     '</div>' +
@@ -3818,6 +3836,10 @@ var PROFILE_USERS = <?php
         listEl.addEventListener('click', function(e){
             var rvw = e.target.closest('[data-ep-reviews]');
             if (rvw) { var rvid = parseInt(rvw.getAttribute('data-ep-reviews'), 10); var rvep = _epList.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpisodeReviewsView(rvep); return; }
+            var up = e.target.closest('[data-ep-up]');
+            if (up) { moveEpisode(parseInt(up.getAttribute('data-ep-up'), 10), -1); return; }
+            var dn = e.target.closest('[data-ep-down]');
+            if (dn) { moveEpisode(parseInt(dn.getAttribute('data-ep-down'), 10), 1); return; }
             var rev = e.target.closest('[data-ep-review]');
             if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
             var rm = e.target.closest('[data-ep-remove]');

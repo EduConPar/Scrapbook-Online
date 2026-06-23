@@ -2208,6 +2208,24 @@ case 'delete-series-episode': {
     jsonResponse(['ok' => true]);
 }
 
+case 'reorder-series-episodes': {
+    /* Reordena los capítulos de una serie. Recibe el orden completo de ids. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    $order = isset($b['order']) && is_array($b['order']) ? $b['order'] : [];
+    if ($key === '' || !$order) jsonError('Faltan datos');
+    $up = $pdo->prepare("UPDATE series_episodes SET position=? WHERE id=? AND series_key=?");
+    $pos = 1;
+    foreach ($order as $id) {
+        $id = (int)$id;
+        if ($id <= 0) continue;
+        $up->execute([$pos, $id, $key]);
+        $pos++;
+    }
+    jsonResponse(['ok' => true]);
+}
+
 case 'series-episode-state': {
     /* Setea visto y/o reseña del usuario para un capítulo (merge parcial). */
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
