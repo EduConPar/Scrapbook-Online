@@ -3667,6 +3667,24 @@ var PROFILE_USERS = <?php
         hinfo.appendChild(hrating);
         head.appendChild(hinfo);
         list.appendChild(head);
+        /* Histograma de distribución de notas (estilo Letterboxd): 10
+           barras de 0.5 a 5 estrellas, altura proporcional al recuento. */
+        var _revs = item.reviews || [];
+        if (_revs.length) {
+            var dist = [0,0,0,0,0,0,0,0,0,0];
+            _revs.forEach(function(rv){ var s = +rv.stars; if (!s) return; var idx = Math.round(s * 2) - 1; if (idx >= 0 && idx < 10) dist[idx]++; });
+            var maxd = Math.max.apply(null, dist) || 1;
+            var hist = document.createElement('div');
+            hist.className = 'melon-hist';
+            var barsHtml = dist.map(function(c, i){
+                var pct = Math.round((c / maxd) * 100);
+                return '<span class="melon-hist-bar" title="' + ((i + 1) / 2) + '★ · ' + c + '"><span style="height:' + pct + '%"></span></span>';
+            }).join('');
+            hist.innerHTML = '<span class="melon-hist-star">★</span>'
+                + '<span class="melon-hist-bars">' + barsHtml + '</span>'
+                + '<span class="melon-hist-star">★★★★★</span>';
+            list.appendChild(hist);
+        }
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';
@@ -3684,14 +3702,13 @@ var PROFILE_USERS = <?php
             body.className = 'melon-detail-body';
             var hdr = document.createElement('div');
             hdr.className = 'melon-detail-hdr';
-            hdr.innerHTML = '<strong>' + escHtml(rev.userLabel) + '</strong> '
-                + makeStarsHtml(rev.stars, 5)
-                + '<span class="melon-item-avg">' + rev.stars + '</span>';
+            hdr.innerHTML = '<span class="melon-detail-by">Reseña de </span><strong>' + escHtml(rev.userLabel) + '</strong> '
+                + '<span class="melon-detail-stars">' + makeStarsHtml(rev.stars, 5) + '</span>';
             body.appendChild(hdr);
             if (rev.comment) {
                 var cmt = document.createElement('div');
                 cmt.className = 'melon-detail-comment';
-                cmt.textContent = '" ' + rev.comment + ' "';
+                cmt.textContent = rev.comment;
                 body.appendChild(cmt);
             }
             var t = document.createElement('div');
