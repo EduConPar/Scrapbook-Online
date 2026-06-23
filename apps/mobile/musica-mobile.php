@@ -586,6 +586,21 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         #mu-artist-view  { z-index: 72; }
         #mu-search-view.is-open, #mu-artist-view.is-open { display: flex; }
 
+        /* Footer común con botón "Volver" (misma vista que el del visor
+           de álbum). flex-shrink:0 → queda fijo abajo mientras el cuerpo
+           scrollea. */
+        .mu-view-footer {
+            flex-shrink: 0;
+            display: flex;
+            gap: 6px;
+            padding: 8px 8px max(8px, env(safe-area-inset-bottom)) 8px;
+        }
+        .mu-view-footer .button.back-btn {
+            flex: 1;
+            min-height: 34px;
+            font-size: 13px;
+        }
+
         /* Búsqueda */
         .mu-sr-searchbar { flex-shrink: 0; padding: 8px; }
         .mu-sr-searchbar input { width: 100%; box-sizing: border-box; font-size: 15px; padding: 8px; }
@@ -2666,7 +2681,7 @@ function muOpenNowPlayingMenu() {
     if (CUR_IDX < 0 || !QUEUE[CUR_IDX]) return;
     var tr = QUEUE[CUR_IDX];
     var items = [
-        { act: 'fixAlbum', label: 'Corregir' },
+        { act: 'fixAlbum', label: MU_DISC_SVG + 'Corregir' },
         { act: 'addPl',    label: '📋 Añadir a otra playlist' }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -3243,6 +3258,16 @@ function muOpenEditPlaylist(idx) {
     });
 }
 
+/* Icono de disco/vinilo (SVG inline monocromo) para la opción
+   "Corregir". Sin emoji, hereda el color del tema (currentColor). */
+var MU_DISC_SVG =
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+        'style="vertical-align:-3px;margin-right:6px;" aria-hidden="true">' +
+        '<circle cx="12" cy="12" r="9"/>' +
+        '<circle cx="12" cy="12" r="3.2"/>' +
+        '<circle cx="12" cy="12" r="0.7" fill="currentColor" stroke="none"/>' +
+    '</svg>';
+
 /* ─── MENÚ CONTEXTUAL DE TRACK (long-press) ────────────────────
    Opciones: añadir la canción a la lista de música del perfil del
    usuario, o quitarla de la playlist actual. */
@@ -3254,7 +3279,7 @@ function muOpenTrackMenu(pi, ti) {
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
         { act: 'addPl',      label: '📋 Añadir a otra playlist' },
-        { act: 'fixAlbum',   label: 'Corregir' },
+        { act: 'fixAlbum',   label: MU_DISC_SVG + 'Corregir' },
         { act: 'remove',     label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la playlist', danger: true }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
@@ -4464,9 +4489,13 @@ function muOpenSearch() {
                 '<div class="title-bar-controls"><button aria-label="Close" id="mu-search-close" type="button"></button></div>' +
             '</div></div>' +
             '<div class="mu-sr-searchbar"><input type="text" id="mu-search-input" autocomplete="off" placeholder="Canciones, álbumes, artistas…"></div>' +
-            '<div class="mu-sr-results" id="mu-search-results"><div class="mu-sr-msg">Escribe para buscar.</div></div>';
+            '<div class="mu-sr-results" id="mu-search-results"><div class="mu-sr-msg">Escribe para buscar.</div></div>' +
+            '<div class="mu-view-footer">' +
+                '<button class="button back-btn" type="button" data-act="back">‹ Volver</button>' +
+            '</div>';
         document.body.appendChild(sv);
         document.getElementById('mu-search-close').addEventListener('click', muCloseSearch);
+        sv.querySelector('[data-act="back"]').addEventListener('click', muCloseSearch);
         document.getElementById('mu-search-input').addEventListener('input', function(){
             if (_muSearchTimer) clearTimeout(_muSearchTimer);
             _muSearchTimer = setTimeout(_muRunSearch, 350);
@@ -4569,9 +4598,13 @@ function muOpenArtistView(name) {
                 '<div id="mu-aw-top"><div class="mu-sr-msg">Cargando…</div></div>' +
                 '<div class="mu-aw-section-title">Discografía</div>' +
                 '<div class="mu-aw-albums" id="mu-aw-albums"><div class="mu-sr-msg">Cargando…</div></div>' +
+            '</div>' +
+            '<div class="mu-view-footer">' +
+                '<button class="button back-btn" type="button" data-act="back">‹ Volver</button>' +
             '</div>';
         document.body.appendChild(av);
         document.getElementById('mu-aw-close').addEventListener('click', muCloseArtistView);
+        av.querySelector('[data-act="back"]').addEventListener('click', muCloseArtistView);
         document.getElementById('mu-aw-top').addEventListener('click', function(e){
             var row = e.target.closest && e.target.closest('.mu-aw-top-row');
             if (!row) return;

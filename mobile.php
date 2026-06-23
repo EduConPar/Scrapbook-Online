@@ -3281,6 +3281,15 @@ window.MuShell = (function(){
     }
 
     /* Menú vinilo: 2 acciones (perfil + playlist). */
+    /* Icono de disco/vinilo (SVG inline monocromo, hereda currentColor)
+       para la opción "Corregir". Sin emoji, válido en cualquier tema. */
+    var SHELL_DISC_SVG =
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">' +
+            '<circle cx="12" cy="12" r="9"/>' +
+            '<circle cx="12" cy="12" r="3.2"/>' +
+            '<circle cx="12" cy="12" r="0.7" fill="currentColor" stroke="none"/>' +
+        '</svg>';
+
     function openVinylMenu(){
         var tr = getCurrentTrack(); if (!tr) return;
         /* Etiqueta de Listen Together según rol actual. */
@@ -3301,6 +3310,10 @@ window.MuShell = (function(){
                         '<span class="shell-modal-icon">📋</span>' +
                         '<span>Añadir a una playlist</span>' +
                     '</button>' +
+                    '<button class="button shell-modal-item" data-act="fix" type="button">' +
+                        '<span class="shell-modal-icon">' + SHELL_DISC_SVG + '</span>' +
+                        '<span>Corregir</span>' +
+                    '</button>' +
                     '<button class="button shell-modal-item" data-act="listen-together" type="button">' +
                         '<span class="shell-modal-icon">🎧</span>' +
                         '<span>' + ltLabel + '</span>' +
@@ -3313,10 +3326,142 @@ window.MuShell = (function(){
         m.body.querySelector('[data-act="playlist"]').addEventListener('click', function(){
             m.close(); openShellPlaylistPicker(tr);
         });
+        m.body.querySelector('[data-act="fix"]').addEventListener('click', function(){
+            m.close(); shellReportWrongAlbum(tr);
+        });
         m.body.querySelector('[data-act="listen-together"]').addEventListener('click', function(){
             m.close();
             if (typeof window.ltOpenModal === 'function') window.ltOpenModal();
         });
+    }
+
+    /* ─── CORREGIR CANCIÓN (shell móvil) ──────────────────────────────
+       Port del muReportWrongAlbum de musica-mobile: corrige título,
+       artista, link de YouTube y/o álbum del track actual. Persiste por
+       videoId vía report-album. El álbum se busca en vivo y al elegir un
+       resultado queda seleccionado; se envía al pulsar Guardar. */
+    function shellReportWrongAlbum(tr){
+        if (!tr || !tr.videoId) { shellAlert('Esta canción no se puede corregir.'); return; }
+        var chosenAlbum = null;
+        var inLbl = 'font-size:11px;font-weight:bold;display:block;margin:0 0 2px;';
+        var inSty = 'width:100%;box-sizing:border-box;margin-bottom:8px;';
+        var m = shellOpenModal({
+            title: 'Corregir canción',
+            body:
+                '<p class="shell-modal-msg" style="text-align:left;font-size:11px;line-height:1.45;opacity:0.85;margin:0 0 8px;">' +
+                    'Corrige los datos de esta canción. Se guardan para siempre: al añadirla a otra playlist o importarla se usarán estos valores.' +
+                '</p>' +
+                '<label style="' + inLbl + '">Título</label>' +
+                '<input type="text" class="sfx-title" autocomplete="off" placeholder="Título de la canción" style="' + inSty + '">' +
+                '<label style="' + inLbl + '">Artista</label>' +
+                '<input type="text" class="sfx-artist" autocomplete="off" placeholder="Nombre del artista" style="' + inSty + '">' +
+                '<label style="' + inLbl + '">Link de YouTube</label>' +
+                '<input type="text" class="sfx-link" autocomplete="off" placeholder="Pega un enlace de YouTube (opcional)" style="' + inSty + '">' +
+                '<label style="' + inLbl + '">Álbum</label>' +
+                '<input type="text" class="sfx-album" autocomplete="off" placeholder="Escribe el nombre del álbum (opcional)…" style="width:100%;box-sizing:border-box;">' +
+                '<div class="sfx-chosen" style="display:none;align-items:center;gap:8px;margin-top:6px;padding:4px 6px;border:1px solid var(--bezel-dark-2,grey);"></div>' +
+                '<div class="sfx-results" style="margin-top:6px;max-height:34vh;overflow-y:auto;"></div>' +
+                '<div class="shell-modal-actions">' +
+                    '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
+                    '<button class="button default" data-act="save" type="button">Guardar</button>' +
+                '</div>'
+        });
+        var titleIn  = m.body.querySelector('.sfx-title');
+        var artistIn = m.body.querySelector('.sfx-artist');
+        var linkIn   = m.body.querySelector('.sfx-link');
+        var input    = m.body.querySelector('.sfx-album');
+        var resultsEl= m.body.querySelector('.sfx-results');
+        var chosenEl = m.body.querySelector('.sfx-chosen');
+        titleIn.value  = tr.title  || '';
+        artistIn.value = tr.artist || '';
+        m.body.querySelector('[data-act="cancel"]').addEventListener('click', m.close);
+
+        function renderChosen(){
+            if (!chosenAlbum) { chosenEl.style.display = 'none'; chosenEl.innerHTML = ''; return; }
+            chosenEl.style.display = 'flex';
+            chosenEl.innerHTML =
+                '<img src="' + esc(chosenAlbum.image || '') + '" alt="" style="width:36px;height:36px;object-fit:cover;flex:0 0 36px;background:#222;" onerror="this.style.visibility=\'hidden\'">' +
+                '<div style="min-width:0;flex:1;">' +
+                    '<div style="font-size:12px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(chosenAlbum.name || '') + '</div>' +
+                    '<div style="font-size:10px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(chosenAlbum.artist || '') + '</div>' +
+                '</div>' +
+                '<button class="button" type="button" data-act="rm-album" style="flex:0 0 auto;">Quitar</button>';
+            chosenEl.querySelector('[data-act="rm-album"]').addEventListener('click', function(){ chosenAlbum = null; renderChosen(); });
+        }
+
+        function submit(){
+            var payload = {
+                videoId:   tr.videoId,
+                title:     (titleIn.value  || '').trim(),
+                artist:    (artistIn.value || '').trim(),
+                videoLink: (linkIn.value   || '').trim()
+            };
+            if (chosenAlbum) {
+                payload.albumKey    = chosenAlbum.albumKey || '';
+                payload.albumName   = chosenAlbum.name   || '';
+                payload.albumArtist = chosenAlbum.artist || '';
+                payload.albumImage  = chosenAlbum.image  || '';
+            }
+            fetch('assets/music/api.php?action=report-album', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (!d || !d.ok) { shellAlert((d && d.error) || 'No se pudo guardar la corrección'); return; }
+                /* Refleja título/artista en el track actual y repinta. */
+                if (payload.title)  tr.title  = payload.title;
+                if (payload.artist) tr.artist = payload.artist;
+                m.close();
+                if (typeof renderTrack === 'function') renderTrack(getCurrentTrack());
+                var alb = d.album;
+                shellAlert((alb && alb.albumName) ? ('Canción corregida · álbum: ' + alb.albumName) : 'Canción corregida', 'Hecho');
+            })
+            .catch(function(){ shellAlert('Error al guardar la corrección.'); });
+        }
+        m.body.querySelector('[data-act="save"]').addEventListener('click', submit);
+
+        function renderResults(list){
+            resultsEl.innerHTML = '';
+            (list || []).forEach(function(a){
+                var row = document.createElement('div');
+                row.className = 'shell-modal-item';
+                row.style.cssText = 'display:flex;align-items:center;gap:8px;min-height:48px;padding:4px 6px;cursor:pointer;';
+                row.innerHTML =
+                    '<img src="' + esc(a.image || '') + '" alt="" style="width:36px;height:36px;object-fit:cover;flex:0 0 36px;background:#222;" onerror="this.style.visibility=\'hidden\'">' +
+                    '<div style="min-width:0;flex:1;text-align:left;">' +
+                        '<div style="font-size:12px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.name || '') + '</div>' +
+                        '<div style="font-size:10px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(a.artist || '') + '</div>' +
+                    '</div>';
+                row.addEventListener('click', function(){
+                    chosenAlbum = { albumKey: a.albumKey, name: a.name || '', artist: a.artist || '', image: a.image || '' };
+                    renderChosen();
+                    input.value = '';
+                    resultsEl.innerHTML = '';
+                    lastQ = null;
+                });
+                resultsEl.appendChild(row);
+            });
+        }
+
+        var searchT = null, lastQ = null;
+        function doSearch(){
+            var q = (input.value || '').trim();
+            if (q === lastQ) return;
+            lastQ = q;
+            if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+            var url = 'assets/music/api.php?action=search-albums&q=' + encodeURIComponent(q) +
+                      '&artist=' + encodeURIComponent((artistIn.value || '').trim() || tr.artist || '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    if ((input.value || '').trim() !== q) return;   /* respuesta obsoleta */
+                    renderResults(d && d.results ? d.results : []);
+                })
+                .catch(function(){ /* silencioso */ });
+        }
+        input.addEventListener('input', function(){ clearTimeout(searchT); searchT = setTimeout(doSearch, 300); });
     }
 
     /* Picker: fetch playlists del usuario y permite elegir destino. */

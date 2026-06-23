@@ -3926,7 +3926,15 @@ var addTrackCallback = null;
            → la canción se ve corregida en cualquier playlist y al importar. */
         var fixAlbum = document.createElement('div');
         fixAlbum.className = 'pl-menu-item';
-        fixAlbum.textContent = 'Corregir…';
+        /* Icono de disco/vinilo (SVG inline monocromo, sin emoji) +
+           etiqueta. innerHTML porque incluimos markup SVG. */
+        fixAlbum.innerHTML =
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+                'style="vertical-align:-2px;margin-right:5px;" aria-hidden="true">' +
+                '<circle cx="12" cy="12" r="9"/>' +
+                '<circle cx="12" cy="12" r="3"/>' +
+                '<circle cx="12" cy="12" r="0.6" fill="currentColor" stroke="none"/>' +
+            '</svg>Corregir…';
         fixAlbum.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
             reportWrongAlbum(track);
