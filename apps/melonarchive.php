@@ -67,28 +67,38 @@ if ($activeTheme !== '' && isset(((array)$_userThemes['themes'])[$activeTheme]))
             <div class="wiki-tiles" id="home-tiles">
                 <button class="wiki-tile" data-go="archive">
                     <span class="wiki-tile-icon">📼</span>
-                    <span class="wiki-tile-name">Archivo de vídeos</span>
-                    <span class="wiki-tile-desc">Playlists y vídeos de YouTube</span>
+                    <span class="wiki-tile-text">
+                        <span class="wiki-tile-name">Archivo de vídeos</span>
+                        <span class="wiki-tile-desc">Playlists y vídeos de YouTube</span>
+                    </span>
                 </button>
                 <button class="wiki-tile" data-go="wiki-list">
                     <span class="wiki-tile-icon">📖</span>
-                    <span class="wiki-tile-name">Explorar la wiki</span>
-                    <span class="wiki-tile-desc">Navega las entradas</span>
+                    <span class="wiki-tile-text">
+                        <span class="wiki-tile-name">Explorar la wiki</span>
+                        <span class="wiki-tile-desc">Navega las entradas</span>
+                    </span>
                 </button>
                 <button class="wiki-tile" data-go="wiki-new">
                     <span class="wiki-tile-icon">✎</span>
-                    <span class="wiki-tile-name">Crear página</span>
-                    <span class="wiki-tile-desc">Propón una entrada nueva</span>
+                    <span class="wiki-tile-text">
+                        <span class="wiki-tile-name">Crear página</span>
+                        <span class="wiki-tile-desc">Propón una entrada nueva</span>
+                    </span>
                 </button>
                 <button class="wiki-tile" data-go="wiki-requests">
                     <span class="wiki-tile-icon">🗳</span>
-                    <span class="wiki-tile-name">Mis solicitudes</span>
-                    <span class="wiki-tile-desc">Estado de tus envíos</span>
+                    <span class="wiki-tile-text">
+                        <span class="wiki-tile-name">Mis solicitudes</span>
+                        <span class="wiki-tile-desc">Estado de tus envíos</span>
+                    </span>
                 </button>
                 <button class="wiki-tile" data-go="wiki-mod" id="tile-mod" style="display:none">
                     <span class="wiki-tile-icon">🛡</span>
-                    <span class="wiki-tile-name">Moderación</span>
-                    <span class="wiki-tile-desc">Revisar solicitudes <span class="wiki-badge" id="mod-count" style="display:none">0</span></span>
+                    <span class="wiki-tile-text">
+                        <span class="wiki-tile-name">Moderación</span>
+                        <span class="wiki-tile-desc">Revisar solicitudes <span class="wiki-badge" id="mod-count" style="display:none">0</span></span>
+                    </span>
                 </button>
             </div>
         </section>
