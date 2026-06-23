@@ -318,6 +318,10 @@
 .melon-detail-havg { font-size: 12px; font-weight: bold; }
 .melon-detail-hcount { font-size: 10px; color: var(--text-faint); }
 .melon-detail-hruntime { font-size: 11px; color: var(--text-muted, var(--text-faint)); margin-top: 3px; }
+.melon-detail-hmeta { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+/* Álbum/artista clicables en Melon Reviews de música. */
+.melon-detail-link { color: var(--accent); cursor: pointer; }
+.melon-detail-link:hover { text-decoration: underline; }
 
 /* Ventana "ver una reseña": carátula + título del item arriba, reseña abajo. */
 #profile-review-view-item {

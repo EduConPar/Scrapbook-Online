@@ -3658,6 +3658,61 @@ var PROFILE_USERS = <?php
         }
     }
 
+    /* Formatea segundos: álbum → "45 min" / "1 h 12 min"; canción → "3:45". */
+    function melonFmtDur(sec) {
+        sec = Math.round(sec || 0);
+        if (sec <= 0) return '';
+        var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+        if (h > 0) return h + ' h ' + m + ' min';
+        if (m >= 1) return m + ' min';
+        return sec + ' s';
+    }
+    function melonFmtSong(sec) {
+        sec = Math.round(sec || 0);
+        if (sec <= 0) return '';
+        var m = Math.floor(sec / 60), s = sec % 60;
+        return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    /* Abre la ventana del álbum resolviéndolo por título+artista. */
+    function melonOpenAlbum(item) {
+        if (typeof window.openAlbumViewer !== 'function') return;
+        var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+        fetch('assets/music/api.php?action=find-album&' + p.toString())
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){
+                if (d && !d.notFound && d.albumKey) window.openAlbumViewer(d.albumKey, item.title || '');
+            }).catch(function(){});
+    }
+    /* Carga duración + nº de tracks (álbum) o duración (canción) y lo pinta
+       en `el`. find-album resuelve la albumKey; album-tracks da las pistas
+       con su duración. Best-effort: cualquier fallo deja `el` vacío. */
+    function melonLoadMusicMeta(item, isAlbum, el) {
+        var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+        fetch('assets/music/api.php?action=find-album&' + p.toString())
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){
+                if (!d || d.notFound || !d.albumKey) return;
+                return fetch('assets/music/api.php?action=album-tracks&key=' + encodeURIComponent(d.albumKey))
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(al){
+                        if (!al || !Array.isArray(al.tracks) || !al.tracks.length) return;
+                        if (isAlbum) {
+                            var total = al.tracks.reduce(function(a, t){ return a + (t.duration || 0); }, 0);
+                            var parts = [al.tracks.length + (al.tracks.length === 1 ? ' canción' : ' canciones')];
+                            var dur = melonFmtDur(total);
+                            if (dur) parts.push(dur);
+                            el.textContent = parts.join(' · ');
+                        } else {
+                            var lt = (item.title || '').toLowerCase();
+                            var match = al.tracks.filter(function(t){ return (t.title || '').toLowerCase() === lt; })[0]
+                                     || al.tracks.filter(function(t){ return (t.title || '').toLowerCase().indexOf(lt) !== -1; })[0];
+                            var ds = melonFmtSong(match ? match.duration : 0);
+                            if (ds) el.textContent = ds;
+                        }
+                    });
+            }).catch(function(){});
+    }
+
     function showMelonDetails(item) {
         var win = document.getElementById('profile-melon-details-window');
         if (!win) return;
@@ -3717,6 +3772,28 @@ var PROFILE_USERS = <?php
                 hrt.textContent = rtLabel;
                 hinfo.appendChild(hrt);
             }
+        }
+        /* Música: nombre de álbum y artista clicables (abren sus ventanas
+           en el reproductor) + duración y nº de tracks (álbum) o duración
+           (canción). Todo best-effort: si algo falla, no se muestra. */
+        if (melonCat === 'music') {
+            var _isAlbum = (item.mtype === 'album' || item.type === 'album');
+            if (item.artist) {
+                hart.classList.add('melon-detail-link');
+                hart.title = 'Ver artista';
+                hart.addEventListener('click', function(){
+                    if (typeof window.openArtistWindow === 'function') window.openArtistWindow(item.artist);
+                });
+            }
+            if (_isAlbum) {
+                htitle.classList.add('melon-detail-link');
+                htitle.title = 'Ver álbum';
+                htitle.addEventListener('click', function(){ melonOpenAlbum(item); });
+            }
+            var hmeta = document.createElement('div');
+            hmeta.className = 'melon-detail-hmeta';
+            hinfo.appendChild(hmeta);
+            melonLoadMusicMeta(item, _isAlbum, hmeta);
         }
         head.appendChild(hinfo);
         headEl.appendChild(head);

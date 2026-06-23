@@ -971,6 +971,10 @@ function openArtistWindow(name) {
     .catch(function(){ if (token === _artistWinToken) { topEl.innerHTML = '<div class="pl-sr-msg">Error cargando el artista.</div>'; } });
 }
 window.openArtistWindow = openArtistWindow;
+/* Exponemos el viewer de álbum para que otras apps (p.ej. Melon Reviews
+   del perfil) puedan abrir la ventana del álbum. openAlbumViewer es una
+   function declaration → está hoisted aunque se defina más abajo. */
+window.openAlbumViewer = openAlbumViewer;
 
 /* Re-renderiza la ventana del artista si está abierta. Se llama tras
    corregir una canción para que las populares/carátulas reflejen al

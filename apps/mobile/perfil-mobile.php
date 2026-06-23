@@ -1414,6 +1414,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-melon-detail-havg { font-size: 12px; font-weight: bold; }
         .pf-melon-detail-hcount { font-size: 10px; color: var(--text-faint, #888); }
         .pf-melon-detail-hruntime { font-size: 11px; color: var(--text-muted, var(--text-faint, #888)); margin-top: 3px; }
+        .pf-melon-detail-hmeta { font-size: 11px; color: var(--text-faint, #888); margin-top: 3px; }
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -3490,6 +3491,51 @@ function renderMelonItems() {
 /* makeStarsHtml ya está definida arriba (línea ~1583) con clip-path
    safe-cross-device para la media estrella. NO redefinirla aquí. */
 
+/* Duración + nº de tracks (álbum) o duración (canción) en Melon Reviews.
+   find-album resuelve la albumKey; album-tracks da las pistas con duración.
+   Best-effort: cualquier fallo deja el elemento vacío. */
+function pfFmtDur(sec) {
+    sec = Math.round(sec || 0);
+    if (sec <= 0) return '';
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (h > 0) return h + ' h ' + m + ' min';
+    if (m >= 1) return m + ' min';
+    return sec + ' s';
+}
+function pfFmtSong(sec) {
+    sec = Math.round(sec || 0);
+    if (sec <= 0) return '';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+function pfLoadMusicMeta(item, isAlbum, el) {
+    var MUS = '../../assets/music/api.php';
+    var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+    fetch(MUS + '?action=find-album&' + p.toString(), { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+            if (!d || d.notFound || !d.albumKey) return;
+            return fetch(MUS + '?action=album-tracks&key=' + encodeURIComponent(d.albumKey), { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(al){
+                    if (!al || !Array.isArray(al.tracks) || !al.tracks.length) return;
+                    if (isAlbum) {
+                        var total = al.tracks.reduce(function(a, t){ return a + (t.duration || 0); }, 0);
+                        var parts = [al.tracks.length + (al.tracks.length === 1 ? ' canción' : ' canciones')];
+                        var dur = pfFmtDur(total);
+                        if (dur) parts.push(dur);
+                        el.textContent = parts.join(' · ');
+                    } else {
+                        var lt = (item.title || '').toLowerCase();
+                        var match = al.tracks.filter(function(t){ return (t.title || '').toLowerCase() === lt; })[0]
+                                 || al.tracks.filter(function(t){ return (t.title || '').toLowerCase().indexOf(lt) !== -1; })[0];
+                        var ds = pfFmtSong(match ? match.duration : 0);
+                        if (ds) el.textContent = ds;
+                    }
+                });
+        }).catch(function(){});
+}
+
 function showMelonDetails(item) {
     var backdrop = document.getElementById('pf-melon-modal-backdrop');
     var titleEl  = document.getElementById('pf-melon-modal-title');
@@ -3536,6 +3582,14 @@ function showMelonDetails(item) {
             hrt.textContent = rtTxt;
             hinfo.appendChild(hrt);
         }
+    }
+    /* Música: duración + nº de tracks (álbum) o duración (canción). */
+    if (MELON_STATE.cat === 'music') {
+        var _isAlbum = (item.mtype === 'album' || item.type === 'album');
+        var hmeta = document.createElement('div');
+        hmeta.className = 'pf-melon-detail-hmeta';
+        hinfo.appendChild(hmeta);
+        pfLoadMusicMeta(item, _isAlbum, hmeta);
     }
     head.appendChild(hinfo);
     (headEl || listEl).appendChild(head);
