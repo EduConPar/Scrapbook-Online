@@ -316,7 +316,7 @@ $_isTablet = isTabletDevice();
          para abrir su menú contextual (sustituto del click derecho). -->
     <script src="assets/js/longpress.js"></script>
     <?php endif; ?>
-    <link rel="stylesheet" href="assets/css/reproductor.css">
+    <link rel="stylesheet" href="assets/css/reproductor.css?v=<?php echo filemtime(__DIR__ . '/assets/css/reproductor.css'); ?>">
     <link rel="stylesheet" href="assets/css/perfil.css">
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($_isTablet): ?>

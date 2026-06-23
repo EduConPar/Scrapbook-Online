@@ -153,6 +153,9 @@ html, body {
 .wiki-tile {
     display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
     text-align: left; padding: 12px; min-height: 92px; cursor: pointer; color: var(--text);
+    /* 98.css pinta el texto de los <button> con color:transparent +
+       text-shadow; lo anulamos porque metemos spans con color propio. */
+    text-shadow: none;
 }
 .wiki-tile-icon { font-size: 24px; line-height: 1; }
 .wiki-tile-name { font-weight: bold; font-size: 13px; color: var(--text); }
@@ -165,7 +168,7 @@ html, body {
 .wiki-row {
     display: flex; justify-content: space-between; align-items: center;
     width: 100%; text-align: left; padding: 8px 10px; min-height: 40px;
-    cursor: pointer; margin-bottom: 4px; color: var(--text);
+    cursor: pointer; margin-bottom: 4px; color: var(--text); text-shadow: none;
 }
 .wiki-row-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wiki-row-meta { font-size: 10px; color: var(--text-faint); flex-shrink: 0; margin-left: 8px; }
