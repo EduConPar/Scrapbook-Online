@@ -4475,7 +4475,11 @@ function muOpenSearch() {
                     '<div class="title-bar-text">' +
                         '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:16px;height:16px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;margin-right:4px;">Buscar' +
                     '</div>' +
-                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-search-close" type="button"></button></div>' +
+                    '<div class="title-bar-controls">' +
+                        '<button aria-label="Minimize" type="button"></button>' +
+                        '<button aria-label="Maximize" type="button"></button>' +
+                        '<button aria-label="Close" id="mu-search-close" type="button"></button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="window-body">' +
                     '<div class="mu-sr-searchbar"><input type="text" id="mu-search-input" autocomplete="off" placeholder="Canciones, álbumes, artistas…"></div>' +
@@ -4581,7 +4585,11 @@ function muOpenArtistView(name) {
             '<div class="window mh-window">' +
                 '<div class="title-bar">' +
                     '<div class="title-bar-text" id="mu-aw-titlebar">Artista</div>' +
-                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-aw-close" type="button"></button></div>' +
+                    '<div class="title-bar-controls">' +
+                        '<button aria-label="Minimize" type="button"></button>' +
+                        '<button aria-label="Maximize" type="button"></button>' +
+                        '<button aria-label="Close" id="mu-aw-close" type="button"></button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="window-body">' +
                     '<div class="mh-panel mu-aw-body">' +
@@ -4743,7 +4751,11 @@ function muOpenDiscography() {
             '<div class="window mh-window">' +
                 '<div class="title-bar">' +
                     '<div class="title-bar-text" id="mu-disco-titlebar">Publicaciones</div>' +
-                    '<div class="title-bar-controls"><button aria-label="Close" id="mu-disco-close" type="button"></button></div>' +
+                    '<div class="title-bar-controls">' +
+                        '<button aria-label="Minimize" type="button"></button>' +
+                        '<button aria-label="Maximize" type="button"></button>' +
+                        '<button aria-label="Close" id="mu-disco-close" type="button"></button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="window-body">' +
                     '<div class="mu-disco-chips" id="mu-disco-chips">' +

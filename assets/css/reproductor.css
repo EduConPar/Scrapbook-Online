@@ -942,6 +942,19 @@
     /* El bisel escala con el ancho de la tarjeta (cqw): imágenes grandes
        → marco más grueso. clamp lo acota a [1px, 4px]. */
     --fw: clamp(1px, 1.6cqw, 4px);
+}
+/* Marco biselado como OVERLAY. Antes era un `box-shadow: inset` sobre
+   .pl-card-cover, pero la <img> de la carátula (100%×100%, hija del
+   contenedor) se pinta por encima del inset y tapaba el marco — por eso
+   solo se veía en las tarjetas SIN imagen. Un ::before absoluto con
+   pointer-events:none se pinta sobre la imagen y el marco se ve siempre.
+   border-radius:inherit para respetar la variante --round. */
+.pl-card-cover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
     box-shadow:
         inset calc(var(--fw) * -1) calc(var(--fw) * -1) var(--bezel-dark-1, #0a0a0a),
         inset var(--fw) var(--fw) var(--bezel-light-1, #fff);
