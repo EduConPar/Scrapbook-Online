@@ -155,7 +155,7 @@ if ($_perfilStandalone) {
     </script>
     <script src="assets/js/icon-pack.js"></script>
     <link rel="stylesheet" href="assets/css/reproductor.css">
-    <link rel="stylesheet" href="assets/css/perfil.css">
+    <link rel="stylesheet" href="assets/css/perfil.css?v=<?php echo @filemtime(dirname(__DIR__) . '/assets/css/perfil.css'); ?>">
     <link rel="stylesheet" href="assets/css/themes.css">
     <?php if ($activeThemeCss): ?>
     <?php /* $activeThemeCss ya es root-relative (themeCssRelPath
@@ -540,8 +540,51 @@ if ($_perfilStandalone) {
          esa medida. Si el body supera max-height (definido en
          perfil.css), aparece scroll. Una reseña → body pequeño → ventana
          compacta. Muchas reseñas → ventana al límite + scroll. -->
-    <div class="window-body" style="padding:6px;overflow-y:auto;flex:0 1 auto;">
-        <div id="profile-melon-details-list"></div>
+    <!-- La cabecera (carátula + título + nota) queda FIJA; solo el
+         listado de reseñas scrollea cuando hay muchas. -->
+    <div class="window-body" style="padding:0;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
+        <div id="profile-melon-details-head" style="flex-shrink:0;"></div>
+        <div id="profile-melon-details-list" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px;"></div>
+    </div>
+</div>
+
+<!-- EPISODES WINDOW (capítulos de una serie, compartidos) -->
+<div class="window" id="profile-episodes-window" style="display:none;flex-direction:column;position:fixed;z-index:10003;width:540px;max-width:95vw;height:72vh;max-height:80vh;">
+    <div class="title-bar" style="flex-shrink:0;">
+        <div class="title-bar-text" id="profile-episodes-title">Capítulos</div>
+        <div class="title-bar-controls"><button aria-label="Close" id="profile-episodes-close"></button></div>
+    </div>
+    <div class="window-body" style="padding:0;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
+        <div id="profile-episodes-list" style="flex:1;min-height:0;overflow-y:auto;padding:8px;"></div>
+        <div id="profile-episodes-addbar" style="flex-shrink:0;border-top:1px solid var(--border);padding:8px;display:none;">
+            <div style="font-size:11px;font-weight:bold;margin-bottom:4px;">Añadir capítulo</div>
+            <input type="text" id="ep-add-title" placeholder="Título del capítulo" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
+            <input type="text" id="ep-add-image" placeholder="Imagen de preview (URL horizontal)" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input type="number" id="ep-add-dur" placeholder="min" min="0" style="width:80px;box-sizing:border-box;">
+                <button class="button default" id="ep-add-btn">+ Añadir capítulo</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- EPISODE REVIEW POPUP (reseña de un capítulo) -->
+<div class="window" id="profile-episode-review" style="display:none;flex-direction:column;position:fixed;z-index:10004;width:300px;">
+    <div class="title-bar" style="flex-shrink:0;">
+        <div class="title-bar-text" id="profile-episode-review-title">Reseña del capítulo</div>
+        <div class="title-bar-controls"><button aria-label="Close" id="profile-episode-review-close"></button></div>
+    </div>
+    <div class="window-body" style="padding:10px 12px 12px;">
+        <div style="font-size:11px;margin-bottom:3px;">Puntuación</div>
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+            <div id="profile-episode-review-stars" style="font-size:24px;letter-spacing:4px;"></div>
+            <span id="profile-episode-review-num" style="font-size:13px;margin-left:8px;font-weight:bold;"></span>
+        </div>
+        <textarea id="profile-episode-review-comment" rows="3" style="width:100%;box-sizing:border-box;resize:none;" placeholder="Comentario (opcional)"></textarea>
+        <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:8px;">
+            <button class="button" id="profile-episode-review-cancel">Cancelar</button>
+            <button class="button default" id="profile-episode-review-save">Guardar</button>
+        </div>
     </div>
 </div>
 
@@ -636,6 +679,13 @@ if ($_perfilStandalone) {
             <label for="profile-add-image">Imagen (URL)</label>
             <input type="text" id="profile-add-image" placeholder="https://...">
         </div>
+        <!-- Duración (pelis) / nº de capítulos (series, libros). El label y
+             la visibilidad los ajusta openAddDialog según la categoría.
+             Se autorrellena al elegir una sugerencia. -->
+        <div id="profile-add-runtime-row" class="field-row-stacked" style="margin-top:8px;flex-shrink:0;display:none;">
+            <label id="profile-add-runtime-label" for="profile-add-runtime">Duración (min)</label>
+            <input type="number" id="profile-add-runtime" min="0" step="1" placeholder="0">
+        </div>
         <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;flex-shrink:0;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-add-dialog-cancel">Cancelar</button>
@@ -686,6 +736,24 @@ if ($_perfilStandalone) {
         </div>
     </div>
     <div class="window-body" style="padding:10px 12px 12px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;">
+        <!-- Edición del item: título + imagen + (duración) + nota + reseña. -->
+        <div class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;">
+            <label for="profile-review-title" style="font-size:11px;margin-bottom:3px;">Título</label>
+            <input type="text" id="profile-review-title" style="width:100%;box-sizing:border-box;">
+        </div>
+        <div class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;">
+            <label for="profile-review-image" style="font-size:11px;margin-bottom:3px;">Imagen (URL)</label>
+            <input type="text" id="profile-review-image" style="width:100%;box-sizing:border-box;" placeholder="https://...">
+        </div>
+        <div id="profile-review-rt-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <label id="profile-review-rt-label" for="profile-review-rt" style="font-size:11px;margin-bottom:3px;">Duración (min)</label>
+            <input type="number" id="profile-review-rt" min="0" step="1" style="width:120px;box-sizing:border-box;" placeholder="0">
+        </div>
+        <!-- Series: en lugar de un número, un botón a la ventana de capítulos. -->
+        <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
+        </div>
+        <div style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
         <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
@@ -928,7 +996,7 @@ var PROFILE_USERS = <?php
                 }
             }
             if (found && found.review && typeof showReviewView === 'function') {
-                showReviewView(found.review);
+                showReviewView(found.review, found);
                 return;
             }
             if (!found && attempts < maxAttempts) {
@@ -1237,6 +1305,13 @@ var PROFILE_USERS = <?php
                                     lists[cat][idx].status = 'completed';
                                     if (!lists[cat][idx].completedAt) {
                                         lists[cat][idx].completedAt = Math.floor(Date.now() / 1000);
+                                    }
+                                    /* Serie completada → marca todos sus capítulos como vistos. */
+                                    if (cat === 'series' && lists[cat][idx].title) {
+                                        fetch('assets/profile/api.php?action=complete-series-episodes', {
+                                            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ seriesTitle: lists[cat][idx].title })
+                                        }).catch(function(){});
                                     }
                                     saveCategory(cat);
                                     renderCatView(cat);
@@ -1575,7 +1650,7 @@ var PROFILE_USERS = <?php
         return h;
     }
 
-    function showReviewView(review) {
+    function showReviewView(review, item) {
         var win = document.getElementById('profile-review-view');
         var username = (document.getElementById('profile-username') || {}).textContent || 'Usuario';
         document.getElementById('profile-review-view-comment').textContent = review.comment ? '" ' + review.comment + ' "' : '';
@@ -1603,9 +1678,38 @@ var PROFILE_USERS = <?php
         var item = lists[cat][itemIdx];
         if (!item) return;
         var itemId = item.id;   /* re-resolver por id en submit/delete */
-        document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
+        document.getElementById('profile-review-window-title').textContent = '✏ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
+
+        /* Campos de edición del item: título, imagen y duración/capítulos. */
+        var titleEl = document.getElementById('profile-review-title');
+        var imageEl = document.getElementById('profile-review-image');
+        var rtRow   = document.getElementById('profile-review-rt-row');
+        var rtEl    = document.getElementById('profile-review-rt');
+        var rtLbl   = document.getElementById('profile-review-rt-label');
+        var epsRow  = document.getElementById('profile-review-eps-row');
+        var epsBtn  = document.getElementById('profile-review-eps-btn');
+        var RW_RT_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
+        titleEl.value = item.title || '';
+        imageEl.value = item.image || '';
+        if (cat === 'series') {
+            /* Series → botón a la ventana de capítulos (visto editable si está en curso). */
+            rtRow.style.display = 'none'; rtEl.value = '';
+            epsRow.style.display = 'flex';
+            var newEps = epsBtn.cloneNode(true); epsBtn.parentNode.replaceChild(newEps, epsBtn);
+            newEps.addEventListener('click', function(){
+                openEpisodesWindow(titleEl.value.trim() || item.title || '', item.status === 'in-progress');
+            });
+        } else if (RW_RT_LABEL[cat]) {
+            rtLbl.textContent = RW_RT_LABEL[cat];
+            rtEl.value = item.runtime ? item.runtime : '';
+            rtRow.style.display = '';
+            epsRow.style.display = 'none';
+        } else {
+            rtRow.style.display = 'none'; rtEl.value = '';
+            epsRow.style.display = 'none';
+        }
 
         var numEl = document.getElementById('profile-review-stars-num');
         function setStarDisp(el, val, pos) {
@@ -1668,12 +1772,24 @@ var PROFILE_USERS = <?php
         newClose.addEventListener('click', closeWin);
         newCancel.addEventListener('click', closeWin);
         newSubmit.addEventListener('click', function() {
-            if (!sel) return;
             var i = lists[cat].findIndex(function(x){ return x.id === itemId; });
             if (i === -1) { closeWin(); return; }
-            lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            /* Edición del item. */
+            var newTitle = titleEl.value.trim();
+            if (newTitle) lists[cat][i].title = newTitle;
+            lists[cat][i].image = imageEl.value.trim();
+            if (RW_RT_LABEL[cat]) {
+                var rt = parseInt(rtEl.value, 10) || 0;
+                if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
+            }
+            /* Reseña: con estrellas la guarda; sin estrellas la quita. */
+            if (sel > 0) {
+                lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
+            } else {
+                delete lists[cat][i].review;
+            }
             saveCategory(cat);
-            notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
             renderCatView(cat);
             closeWin();
         });
@@ -1843,12 +1959,12 @@ var PROFILE_USERS = <?php
                 var bubbleBtn = document.createElement('span');
                 bubbleBtn.className = 'profile-gallery-tb-bubble';
                 bubbleBtn.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:12px;height:12px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-                (function(r) {
+                (function(r, it) {
                     bubbleBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
-                        showReviewView(r);
+                        showReviewView(r, it);
                     });
-                })(item.review);
+                })(item.review, item);
                 tb.appendChild(bubbleBtn);
             }
             /* Misma decisión que abajo (forceShowFooter) — necesario aquí
@@ -1937,7 +2053,7 @@ var PROFILE_USERS = <?php
                         }
                         var isCollab = !!it.sharedFrom;
                         if (it.status === 'completed') {
-                            var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
+                            var reviewLabel = (it.review && it.review.stars) ? '✏ Editar' : '✏ Añadir reseña';
                             menuItems.push({ label: reviewLabel, action: function() {
                                 var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) showReviewWindow(cat, i);
@@ -2003,6 +2119,11 @@ var PROFILE_USERS = <?php
     var addNameInput = document.getElementById('profile-add-name');
     var addImgInput  = document.getElementById('profile-add-image');
     var addSuggest   = document.getElementById('profile-add-suggest');
+    var addRuntimeRow = document.getElementById('profile-add-runtime-row');
+    var addRuntimeEl  = document.getElementById('profile-add-runtime');
+    var addRuntimeLbl = document.getElementById('profile-add-runtime-label');
+    /* Series no usa número: gestiona capítulos tras crearla (botón Capítulos). */
+    var ADD_RUNTIME_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
 
     /* ── Autocomplete del nombre ──
        Busca titles existentes en la categoría (por otros usuarios) que
@@ -2060,6 +2181,10 @@ var PROFILE_USERS = <?php
                 e.preventDefault();
                 addNameInput.value = s.title;
                 if (s.image && !addImgInput.value.trim()) addImgInput.value = s.image;
+                /* Autorrelleno de duración/capítulos desde la sugerencia. */
+                if (s.runtime && ADD_RUNTIME_LABEL[addDialogCat] && !addRuntimeEl.value.trim()) {
+                    addRuntimeEl.value = s.runtime;
+                }
                 hideSuggest();
                 addNameInput.focus();
             });
@@ -2107,6 +2232,14 @@ var PROFILE_USERS = <?php
         }
         addNameInput.value = '';
         addImgInput.value  = '';
+        if (ADD_RUNTIME_LABEL[cat]) {
+            addRuntimeLbl.textContent = ADD_RUNTIME_LABEL[cat];
+            addRuntimeEl.value = '';
+            addRuntimeRow.style.display = '';
+        } else {
+            addRuntimeRow.style.display = 'none';
+            addRuntimeEl.value = '';
+        }
         document.getElementById('profile-add-error').textContent = '';
         addDlg.style.display = 'flex';
         setTimeout(function() { addNameInput.focus(); }, 0);
@@ -2130,12 +2263,17 @@ var PROFILE_USERS = <?php
             return;
         }
         errEl.textContent = '';
-        lists[addDialogCat].push({
+        var newItem = {
             id:     'item_' + Date.now(),
             title:  title,
             image:  addImgInput.value.trim(),
             status: 'pending'
-        });
+        };
+        if (ADD_RUNTIME_LABEL[addDialogCat]) {
+            var rt = parseInt(addRuntimeEl.value, 10) || 0;
+            if (rt > 0) newItem.runtime = rt;
+        }
+        lists[addDialogCat].push(newItem);
         saveCategory(addDialogCat);
         updateCounts();
         if (currentCat) { renderCatView(currentCat); renderCatEncurso(currentCat); }
@@ -3601,12 +3739,484 @@ var PROFILE_USERS = <?php
         }
     }
 
+    /* ═══ Capítulos de series (compartidos por título) ═══════════════ */
+    var _epSeriesTitle = '', _epCanWatch = false, _epReadOnly = false, _epList = [];
+    function epFmtDur(min) {
+        min = parseInt(min, 10) || 0;
+        if (min <= 0) return '';
+        var h = Math.floor(min / 60), m = min % 60;
+        return h > 0 ? (h + ' h' + (m ? ' ' + m + ' min' : '')) : (m + ' min');
+    }
+    function epTotalDurStr() {
+        var t = _epList.reduce(function(a, e){ return a + (e.duration || 0); }, 0);
+        return epFmtDur(t);
+    }
+    function openEpisodesWindow(seriesTitle, canWatch, readOnly) {
+        if (!seriesTitle) return;
+        _epSeriesTitle = seriesTitle; _epCanWatch = !!canWatch; _epReadOnly = !!readOnly;
+        var win = document.getElementById('profile-episodes-window');
+        document.getElementById('profile-episodes-title').textContent = '🎬 Capítulos · ' + seriesTitle;
+        /* Desde Melon Reviews: solo lectura — sin barra para añadir capítulos. */
+        document.getElementById('profile-episodes-addbar').style.display = _epReadOnly ? 'none' : '';
+        document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Cargando…</div>';
+        win.style.display = 'flex';
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        fetch('assets/profile/api.php?action=series-episodes&seriesTitle=' + encodeURIComponent(seriesTitle), { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){ _epList = (d && d.episodes) || []; renderEpisodesList(); })
+            .catch(function(){ document.getElementById('profile-episodes-list').innerHTML = '<div class="ep-empty">Error.</div>'; });
+    }
+    /* Persiste el orden actual de _epList en el servidor. */
+    function persistEpisodeOrder() {
+        fetch('assets/profile/api.php?action=reorder-series-episodes', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seriesTitle: _epSeriesTitle, order: _epList.map(function(x){ return x.id; }) })
+        }).catch(function(){});
+    }
+    function renderEpisodesList() {
+        var listEl = document.getElementById('profile-episodes-list');
+        if (!_epList.length) { listEl.innerHTML = '<div class="ep-empty">Sin capítulos todavía. Añade el primero abajo.</div>'; return; }
+        listEl.innerHTML = _epList.map(function(ep, i){
+            var dur = epFmtDur(ep.duration);
+            var avg = (ep.avgStars != null)
+                ? (makeStarsHtml(ep.avgStars, 5) + ' <span class="ep-avg">' + ep.avgStars.toFixed(1) + '</span> <span class="ep-cnt">(' + ep.reviewCount + ')</span>')
+                : '<span class="ep-noavg">Sin reseñas</span>';
+            var thumbInner = ep.image ? '<img src="' + escHtml(ep.image) + '" alt="">' : '<div class="ep-thumb-ph">🎬</div>';
+            /* Solo lectura (desde Melon Reviews): la miniatura abre las reseñas. */
+            if (_epReadOnly) {
+                return '<div class="ep-row">' +
+                    '<div class="ep-thumb ep-thumb-click" data-ep-reviews="' + ep.id + '" title="Ver reseñas">' + thumbInner + '</div>' +
+                    '<div class="ep-info">' +
+                        '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
+                        '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+            var watchHtml = _epCanWatch
+                ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
+                : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
+            /* Botón reseña: si ya hay reseña muestra el icono de gráfica; si no, "Reseñar". */
+            var chartIco = '<img src="assets/img/appIcons/chatIcon.png" alt="Reseña" class="ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+            var revLabel = (ep.myStars != null) ? chartIco : '✎ Reseñar';
+            return '<div class="ep-row" data-ep-id="' + ep.id + '">' +
+                '<div class="ep-drag" data-ep-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
+                '<div class="ep-thumb">' + thumbInner + '</div>' +
+                '<div class="ep-info">' +
+                    '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
+                    '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '<div class="ep-controls">' + watchHtml +
+                        '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
+                        '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+    (function setupEpisodesEvents(){
+        var listEl = document.getElementById('profile-episodes-list');
+        if (!listEl) return;
+        listEl.addEventListener('change', function(e){
+            var cb = e.target.closest('input[data-ep-watch]'); if (!cb) return;
+            var id = parseInt(cb.getAttribute('data-ep-watch'), 10);
+            var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
+            fetch('assets/profile/api.php?action=series-episode-state', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId: id, watched: cb.checked })
+            }).catch(function(){});
+        });
+        /* Reordenar arrastrando el tirador (.ep-drag). Pointer events →
+           funciona con ratón y con táctil. */
+        var dragRow = null;
+        function epDragAfter(y) {
+            var els = Array.prototype.slice.call(listEl.querySelectorAll('.ep-row:not(.ep-dragging)'));
+            var closest = null, closestOff = -Infinity;
+            els.forEach(function(ch){
+                var box = ch.getBoundingClientRect();
+                var off = y - box.top - box.height / 2;
+                if (off < 0 && off > closestOff) { closestOff = off; closest = ch; }
+            });
+            return closest;
+        }
+        function epDragMove(e){
+            if (!dragRow) return;
+            e.preventDefault();
+            var after = epDragAfter(e.clientY);
+            if (after == null) listEl.appendChild(dragRow);
+            else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+        }
+        function epDragUp(){
+            if (!dragRow) return;
+            dragRow.classList.remove('ep-dragging');
+            dragRow = null;
+            document.removeEventListener('pointermove', epDragMove);
+            document.removeEventListener('pointerup', epDragUp);
+            document.removeEventListener('pointercancel', epDragUp);
+            var ids = Array.prototype.slice.call(listEl.querySelectorAll('.ep-row')).map(function(r){ return parseInt(r.getAttribute('data-ep-id'), 10); });
+            _epList.sort(function(a, b){ return ids.indexOf(a.id) - ids.indexOf(b.id); });
+            renderEpisodesList();   /* re-numera 1. 2. 3. */
+            persistEpisodeOrder();
+        }
+        listEl.addEventListener('pointerdown', function(e){
+            var h = e.target.closest('[data-ep-drag]'); if (!h) return;
+            var row = h.closest('.ep-row'); if (!row) return;
+            e.preventDefault();
+            dragRow = row; row.classList.add('ep-dragging');
+            document.addEventListener('pointermove', epDragMove);
+            document.addEventListener('pointerup', epDragUp);
+            document.addEventListener('pointercancel', epDragUp);
+        });
+        listEl.addEventListener('click', function(e){
+            var rvw = e.target.closest('[data-ep-reviews]');
+            if (rvw) { var rvid = parseInt(rvw.getAttribute('data-ep-reviews'), 10); var rvep = _epList.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpisodeReviewsView(rvep); return; }
+            var rev = e.target.closest('[data-ep-review]');
+            if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
+            var rm = e.target.closest('[data-ep-remove]');
+            if (rm) {
+                var rid = parseInt(rm.getAttribute('data-ep-remove'), 10);
+                var rep = _epList.filter(function(x){ return x.id === rid; })[0];
+                confirmFn('¿Quitar el capítulo "' + (rep ? rep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
+                    fetch('assets/profile/api.php?action=delete-series-episode', {
+                        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: rid })
+                    }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== rid; }); renderEpisodesList(); }).catch(function(){});
+                });
+            }
+        });
+        var addBtn = document.getElementById('ep-add-btn');
+        if (addBtn) addBtn.addEventListener('click', function(){
+            var t = document.getElementById('ep-add-title').value.trim(); if (!t) return;
+            var img = document.getElementById('ep-add-image').value.trim();
+            var dur = parseInt(document.getElementById('ep-add-dur').value, 10) || 0;
+            fetch('assets/profile/api.php?action=save-series-episode', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seriesTitle: _epSeriesTitle, title: t, image: img, duration: dur })
+            }).then(function(r){ return r.ok ? r.json() : null; }).then(function(){
+                document.getElementById('ep-add-title').value = '';
+                document.getElementById('ep-add-image').value = '';
+                document.getElementById('ep-add-dur').value = '';
+                openEpisodesWindow(_epSeriesTitle, _epCanWatch);
+            }).catch(function(){});
+        });
+        var closeBtn = document.getElementById('profile-episodes-close');
+        if (closeBtn) closeBtn.addEventListener('click', function(){ document.getElementById('profile-episodes-window').style.display = 'none'; });
+    })();
+
+    /* Reseña individual de un capítulo (popup con estrellas + comentario). */
+    function openEpisodeReview(ep) {
+        var win = document.getElementById('profile-episode-review');
+        document.getElementById('profile-episode-review-title').textContent = '★ ' + ep.title;
+        document.getElementById('profile-episode-review-comment').value = ep.myComment || '';
+        var sel = ep.myStars || 0;
+        var starsEl = document.getElementById('profile-episode-review-stars');
+        var numEl = document.getElementById('profile-episode-review-num');
+        function setDisp(el, val, pos) {
+            if (val >= pos) { el.innerHTML = '★'; el.style.clipPath = ''; }
+            else if (val >= pos - 0.5) { el.innerHTML = '★'; el.style.clipPath = 'inset(0 50% 0 0)'; }
+            else { el.innerHTML = '☆'; el.style.clipPath = ''; }
+        }
+        function draw() {
+            starsEl.innerHTML = ''; numEl.textContent = sel > 0 ? sel : '';
+            for (var n = 1; n <= 5; n++) (function(star){
+                var s = document.createElement('span');
+                s.style.cssText = 'display:inline-block;position:relative;width:1.1em;cursor:pointer;';
+                setDisp(s, sel, star);
+                s.addEventListener('mousemove', function(e){ var hv = (e.offsetX < this.offsetWidth / 2) ? star - 0.5 : star; starsEl.querySelectorAll('span').forEach(function(sp, idx){ setDisp(sp, hv, idx + 1); }); numEl.textContent = hv; });
+                s.addEventListener('mouseout', function(){ starsEl.querySelectorAll('span').forEach(function(sp, idx){ setDisp(sp, sel, idx + 1); }); numEl.textContent = sel > 0 ? sel : ''; });
+                s.addEventListener('click', function(e){ sel = (e.offsetX < this.offsetWidth / 2) ? star - 0.5 : star; draw(); });
+                starsEl.appendChild(s);
+            })(n);
+        }
+        draw();
+        win.style.display = 'flex';
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        var saveBtn = document.getElementById('profile-episode-review-save');
+        var newSave = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(newSave, saveBtn);
+        newSave.addEventListener('click', function(){
+            var comment = document.getElementById('profile-episode-review-comment').value.trim();
+            fetch('assets/profile/api.php?action=series-episode-state', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+            }).then(function(){
+                ep.myStars = sel > 0 ? sel : null; ep.myComment = comment;
+                win.style.display = 'none';
+                openEpisodesWindow(_epSeriesTitle, _epCanWatch);
+            }).catch(function(){});
+        });
+    }
+    (function(){
+        var c = document.getElementById('profile-episode-review-close'); if (c) c.addEventListener('click', function(){ document.getElementById('profile-episode-review').style.display = 'none'; });
+        var cancel = document.getElementById('profile-episode-review-cancel'); if (cancel) cancel.addEventListener('click', function(){ document.getElementById('profile-episode-review').style.display = 'none'; });
+    })();
+    /* Vista de TODAS las reseñas de un capítulo (solo lectura). */
+    function openEpisodeReviewsView(ep) {
+        var old = document.getElementById('profile-ep-reviews-view');
+        if (old) old.parentNode.removeChild(old);
+        var win = document.createElement('div');
+        win.id = 'profile-ep-reviews-view';
+        win.className = 'window';
+        win.style.cssText = 'position:fixed;z-index:10005;width:380px;max-height:72vh;display:flex;flex-direction:column;';
+        win.innerHTML =
+            '<div class="title-bar">' +
+                '<div class="title-bar-text">★ Reseñas · ' + escHtml(ep.title) + '</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div>' +
+            '</div>' +
+            '<div class="window-body melon-detail-list" style="overflow-y:auto;flex:1;margin:0;padding:8px;">' +
+                '<div class="ep-empty">Cargando…</div>' +
+            '</div>';
+        document.body.appendChild(win);
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        win.querySelector('.title-bar-controls button').addEventListener('click', function(){ win.parentNode.removeChild(win); });
+        var body = win.querySelector('.window-body');
+        fetch('assets/profile/api.php?action=series-episode-reviews&episodeId=' + ep.id, { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){
+                var reviews = (d && d.reviews) || [];
+                if (!reviews.length) { body.innerHTML = '<div class="ep-empty">Este capítulo no tiene reseñas todavía.</div>'; return; }
+                body.innerHTML = '';
+                reviews.forEach(function(rev){
+                    var row = document.createElement('div');
+                    row.className = 'melon-detail-row';
+                    var avFrame = document.createElement('div');
+                    avFrame.className = 'profile-avatar-frame melon-detail-av';
+                    if (rev.userImg) { var img = document.createElement('img'); img.src = rev.userImg; img.alt = rev.userLabel; avFrame.appendChild(img); }
+                    else { avFrame.innerHTML = '<div class="profile-avatar-placeholder">👤</div>'; }
+                    row.appendChild(avFrame);
+                    var b = document.createElement('div');
+                    b.className = 'melon-detail-body';
+                    var hdr = document.createElement('div');
+                    hdr.className = 'melon-detail-hdr';
+                    hdr.innerHTML = '<strong>' + escHtml(rev.userLabel) + '</strong> ' + makeStarsHtml(rev.stars, 5) + '<span class="melon-item-avg">' + rev.stars + '</span>';
+                    b.appendChild(hdr);
+                    if (rev.comment) { var cmt = document.createElement('div'); cmt.className = 'melon-detail-comment'; cmt.textContent = '" ' + rev.comment + ' "'; b.appendChild(cmt); }
+                    var t = document.createElement('div'); t.className = 'melon-detail-time';
+                    t.textContent = rev.reviewedAt ? (typeof relTime === 'function' ? relTime(rev.reviewedAt) : '') : '';
+                    b.appendChild(t);
+                    row.appendChild(b);
+                    body.appendChild(row);
+                });
+            })
+            .catch(function(){ body.innerHTML = '<div class="ep-empty">Error al cargar reseñas.</div>'; });
+    }
+    window.profileOpenEpisodes = openEpisodesWindow;
+
+    /* Formatea segundos: álbum → "45 min" / "1 h 12 min"; canción → "3:45". */
+    function melonFmtDur(sec) {
+        sec = Math.round(sec || 0);
+        if (sec <= 0) return '';
+        var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+        if (h > 0) return h + ' h ' + m + ' min';
+        if (m >= 1) return m + ' min';
+        return sec + ' s';
+    }
+    function melonFmtSong(sec) {
+        sec = Math.round(sec || 0);
+        if (sec <= 0) return '';
+        var m = Math.floor(sec / 60), s = sec % 60;
+        return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    /* Añadir un item de música (álbum/canción) a una playlist: resuelve
+       sus tracks (play-music-item) y los añade a la playlist elegida.
+       Usa APIs estables (get-playlists / save-playlist-item). */
+    function melonAddToPlaylist(item, x, y) {
+        fetch('assets/music/api.php?action=get-playlists', { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(pls){
+                if (!Array.isArray(pls) || !pls.length) {
+                    if (window.notifSystem) window.notifSystem.show({ id:'np'+Date.now(), type:'info', title:'Sin playlists', message:'No tienes playlists todavía.' });
+                    return;
+                }
+                showCtxMenu(x, y, pls.map(function(pl){
+                    return { label: '📋 ' + (pl.name || 'Playlist'), action: function(){ melonDoAddToPlaylist(item, pl); } };
+                }));
+            }).catch(function(){});
+    }
+    function melonDoAddToPlaylist(item, pl) {
+        fetch('assets/profile/api.php?action=play-music-item', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                itemType:       item.mtype || item.type || 'song',
+                title:          item.title || '', artist: item.artist || '',
+                ytId:           item.ytId || '', spotifyId: item.spotifyId || '',
+                ytPlaylistId:   item.ytPlaylistId || '', spotifyAlbumId: item.spotifyAlbumId || '',
+            })
+        })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(data){
+            var tracks = (data && data.tracks) || [];
+            if (!tracks.length) {
+                if (window.notifSystem) window.notifSystem.show({ id:'er'+Date.now(), type:'error', title:'Error', message:'No se pudo resolver la música.' });
+                return;
+            }
+            var newTracks = (pl.tracks || []).slice();
+            tracks.forEach(function(t){ newTracks.push({ videoId: t.videoId, title: t.title, artist: t.artist }); });
+            var payload = { id: pl.id, name: pl.name, tracks: newTracks };
+            if (pl.sharedFrom) payload.sharedFrom = pl.sharedFrom;
+            fetch('assets/music/api.php?action=save-playlist-item', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(){
+                if (window.notifSystem) window.notifSystem.show({ id:'ok'+Date.now(), type:'success', title:'Añadido', message:'"' + (item.title || '') + '" añadido a "' + (pl.name || '') + '".' });
+            }).catch(function(){});
+        }).catch(function(){});
+    }
+    /* Abre la ventana del álbum resolviéndolo por título+artista. */
+    function melonOpenAlbum(item) {
+        if (typeof window.openAlbumViewer !== 'function') return;
+        var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+        fetch('assets/music/api.php?action=find-album&' + p.toString())
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){
+                if (d && !d.notFound && d.albumKey) window.openAlbumViewer(d.albumKey, item.title || '');
+            }).catch(function(){});
+    }
+    /* Carga duración + nº de tracks (álbum) o duración (canción) y lo pinta
+       en `el`. find-album resuelve la albumKey; album-tracks da las pistas
+       con su duración. Best-effort: cualquier fallo deja `el` vacío. */
+    function melonLoadMusicMeta(item, isAlbum, el) {
+        var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+        fetch('assets/music/api.php?action=find-album&' + p.toString())
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){
+                if (!d || d.notFound || !d.albumKey) return;
+                return fetch('assets/music/api.php?action=album-tracks&key=' + encodeURIComponent(d.albumKey))
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(al){
+                        if (!al || !Array.isArray(al.tracks) || !al.tracks.length) return;
+                        if (isAlbum) {
+                            var total = al.tracks.reduce(function(a, t){ return a + (t.duration || 0); }, 0);
+                            var parts = [al.tracks.length + (al.tracks.length === 1 ? ' canción' : ' canciones')];
+                            var dur = melonFmtDur(total);
+                            if (dur) parts.push(dur);
+                            el.textContent = parts.join(' · ');
+                        } else {
+                            var lt = (item.title || '').toLowerCase();
+                            var match = al.tracks.filter(function(t){ return (t.title || '').toLowerCase() === lt; })[0]
+                                     || al.tracks.filter(function(t){ return (t.title || '').toLowerCase().indexOf(lt) !== -1; })[0];
+                            var ds = melonFmtSong(match ? match.duration : 0);
+                            if (ds) el.textContent = ds;
+                        }
+                    });
+            }).catch(function(){});
+    }
+
     function showMelonDetails(item) {
         var win = document.getElementById('profile-melon-details-window');
         if (!win) return;
         document.getElementById('profile-melon-details-title').textContent = '⭐ ' + item.title;
         var list = document.getElementById('profile-melon-details-list');
+        var headEl = document.getElementById('profile-melon-details-head');
         list.innerHTML = '';
+        headEl.innerHTML = '';
+        /* Cabecera FIJA: carátula + título + (artista) + calificación media
+           junto al número de reseñas. Debajo, en zona scrollable, las reseñas. */
+        var head = document.createElement('div');
+        head.className = 'melon-detail-header';
+        var cover = document.createElement('div');
+        cover.className = 'melon-detail-cover';
+        /* Música (álbumes/canciones) = carátula cuadrada; el resto
+           (pelis, series, libros, juegos…) = póster vertical. */
+        if (melonCat !== 'music') cover.classList.add('melon-cover-portrait');
+        if (item.image) {
+            var cimg = document.createElement('img');
+            cimg.src = item.image; cimg.alt = item.title;
+            (function(c){ cimg.onerror = function(){ c.classList.add('melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
+            cover.appendChild(cimg);
+        } else {
+            cover.classList.add('melon-detail-cover-ph'); cover.textContent = '🍈';
+        }
+        head.appendChild(cover);
+        var hinfo = document.createElement('div');
+        hinfo.className = 'melon-detail-hinfo';
+        var htitle = document.createElement('div');
+        htitle.className = 'melon-detail-htitle';
+        htitle.textContent = item.title; htitle.title = item.title;
+        hinfo.appendChild(htitle);
+        if (item.artist) {
+            var hart = document.createElement('div');
+            hart.className = 'melon-detail-hartist';
+            hart.textContent = item.artist;
+            hinfo.appendChild(hart);
+        }
+        var hrating = document.createElement('div');
+        hrating.className = 'melon-detail-hrating';
+        var avgTxt = (typeof item.avg === 'number') ? item.avg.toFixed(1) : (item.avg || '0');
+        var cnt = item.count || (item.reviews ? item.reviews.length : 0);
+        hrating.innerHTML = makeStarsHtml(item.avg || 0, 5)
+            + '<span class="melon-detail-havg">' + avgTxt + '</span>'
+            + '<span class="melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
+        hinfo.appendChild(hrating);
+        /* Consenso de duración/capítulos (la moda entre las reseñas). */
+        if (item.runtime && item.runtime > 0) {
+            var rtLabel = melonCat === 'movies'
+                ? (item.runtime + ' min')
+                : (melonCat === 'series' || melonCat === 'books')
+                    ? (item.runtime + (item.runtime === 1 ? ' capítulo' : ' capítulos'))
+                    : '';
+            if (rtLabel) {
+                var hrt = document.createElement('div');
+                hrt.className = 'melon-detail-hruntime';
+                hrt.textContent = rtLabel;
+                hinfo.appendChild(hrt);
+            }
+        }
+        /* Series con capítulos asignados: nº + duración total, clicable →
+           abre la página de capítulos con sus notas. */
+        if (melonCat === 'series' && item.episodeCount && item.episodeCount > 0) {
+            var epDur = item.episodeDuration ? epFmtDur(item.episodeDuration) : '';
+            var epEl = document.createElement('div');
+            epEl.className = 'melon-detail-hruntime melon-detail-link';
+            epEl.style.cursor = 'pointer';
+            epEl.title = 'Ver capítulos y sus notas';
+            epEl.textContent = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos') + (epDur ? ' · ' + epDur : '');
+            epEl.addEventListener('click', function(){ openEpisodesWindow(item.title, false, true); });
+            hinfo.appendChild(epEl);
+        }
+        /* Música: nombre de álbum y artista clicables (abren sus ventanas
+           en el reproductor) + duración y nº de tracks (álbum) o duración
+           (canción). Todo best-effort: si algo falla, no se muestra. */
+        if (melonCat === 'music') {
+            var _isAlbum = (item.mtype === 'album' || item.type === 'album');
+            if (item.artist) {
+                hart.classList.add('melon-detail-link');
+                hart.title = 'Ver artista';
+                hart.addEventListener('click', function(){
+                    if (typeof window.openArtistWindow === 'function') window.openArtistWindow(item.artist);
+                });
+            }
+            if (_isAlbum) {
+                htitle.classList.add('melon-detail-link');
+                htitle.title = 'Ver álbum';
+                htitle.addEventListener('click', function(){ melonOpenAlbum(item); });
+            }
+            var hmeta = document.createElement('div');
+            hmeta.className = 'melon-detail-hmeta';
+            hinfo.appendChild(hmeta);
+            melonLoadMusicMeta(item, _isAlbum, hmeta);
+        }
+        head.appendChild(hinfo);
+        headEl.appendChild(head);
+
+        /* Carátula: click → añadir el item a mi perfil. Click derecho →
+           menú: en música Reproducir / Añadir a playlist / Añadir a mi
+           perfil; en el resto solo Añadir a mi perfil. */
+        cover.style.cursor = 'pointer';
+        cover.title = 'Click: añadir a mi perfil · Click derecho: más opciones';
+        cover.addEventListener('click', function(){ addMelonItemToProfile(melonCat, item); });
+        cover.addEventListener('contextmenu', function(e){
+            e.preventDefault(); e.stopPropagation();
+            var menu = [];
+            if (melonCat === 'music') {
+                menu.push({ label: '▶ Reproducir',           action: function(){ if (typeof playMusicItem === 'function') playMusicItem(item); } });
+                menu.push({ label: '📋 Añadir a una playlist', action: function(){ melonAddToPlaylist(item, e.clientX, e.clientY); } });
+            }
+            menu.push({ label: '+ Añadir a mi perfil', action: function(){ addMelonItemToProfile(melonCat, item); } });
+            showCtxMenu(e.clientX, e.clientY, menu);
+        });
         (item.reviews || []).forEach(function(rev) {
             var row = document.createElement('div');
             row.className = 'melon-detail-row';
@@ -5147,7 +5757,7 @@ var PROFILE_USERS = <?php
                         var tbBubble = document.createElement('span');
                         tbBubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:10px;height:10px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
                         tbBubble.style.cssText = 'margin-left:3px;cursor:pointer;';
-                        (function(r) { tbBubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
+                        (function(r, it) { tbBubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r, it); }); })(item.review, item);
                         tbStars.appendChild(tbBubble);
                     }
                     tb.appendChild(tbStars);
@@ -5356,7 +5966,7 @@ var PROFILE_USERS = <?php
                 var bubble = document.createElement('span');
                 bubble.className = 'profile-gallery-tb-bubble';
                 bubble.innerHTML = '<img src="assets/img/appIcons/chatIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-                (function(r) { bubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r); }); })(item.review);
+                (function(r, it) { bubble.addEventListener('click', function(e) { e.stopPropagation(); showReviewView(r, it); }); })(item.review, item);
                 right.appendChild(bubble);
             }
             if (item.featured) {
@@ -5414,7 +6024,7 @@ var PROFILE_USERS = <?php
                             lists.music[i].featured = true; saveCategory('music'); renderMusicDestacados(); renderMusicView(currentMusicTab);
                         }});
                     }
-                    var reviewLabel = (it.review && it.review.stars) ? '✏ Editar reseña' : '✏ Añadir reseña';
+                    var reviewLabel = (it.review && it.review.stars) ? '✏ Editar' : '✏ Añadir reseña';
                     menuItems.push({ label: reviewLabel, action: function() {
                         var i = curIdx(); if (i !== -1) showMusicReviewWindow(i);
                     }});
@@ -5459,9 +6069,16 @@ var PROFILE_USERS = <?php
         /* id estable para re-resolver el ítem en submit/delete, por si
            lists.music fue reemplazado por un saveCategory intermedio. */
         var itemId = item.id;
-        document.getElementById('profile-review-window-title').textContent = '⭐ ' + item.title;
+        document.getElementById('profile-review-window-title').textContent = '✏ ' + item.title;
         commentEl.value = (item.review && item.review.comment) ? item.review.comment : '';
         var sel = (item.review && item.review.stars) ? item.review.stars : 0;
+        /* Edición del item: título + imagen (música no usa duración manual). */
+        var mTitleEl = document.getElementById('profile-review-title');
+        var mImageEl = document.getElementById('profile-review-image');
+        document.getElementById('profile-review-rt-row').style.display = 'none';
+        document.getElementById('profile-review-eps-row').style.display = 'none';
+        mTitleEl.value = item.title || '';
+        mImageEl.value = item.image || '';
         var numEl = document.getElementById('profile-review-stars-num');
         numEl.textContent = sel > 0 ? sel : '';
         function setStarDisp(el, val, pos) {
@@ -5507,12 +6124,18 @@ var PROFILE_USERS = <?php
         var submitBtn = document.getElementById('profile-review-window-submit');
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         newSubmit.addEventListener('click', function() {
-            if (!sel) return;
             var mi = lists.music.findIndex(function(x){ return x.id === itemId; });
             if (mi === -1) { closeWin(); return; }
-            lists.music[mi].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+            var newTitle = mTitleEl.value.trim();
+            if (newTitle) lists.music[mi].title = newTitle;
+            lists.music[mi].image = mImageEl.value.trim();
+            if (sel > 0) {
+                lists.music[mi].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                notifyReviewToFollowers('music', lists.music[mi].title, lists.music[mi].type);
+            } else {
+                delete lists.music[mi].review;
+            }
             saveCategory('music');
-            notifyReviewToFollowers('music', lists.music[mi].title, lists.music[mi].type);
             renderMusicView(currentMusicTab); renderMusicDestacados(); closeWin();
         });
         var deleteBtn = document.getElementById('profile-review-window-delete');

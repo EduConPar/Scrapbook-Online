@@ -130,3 +130,9 @@ html, body {
     flex: 1;
     border: none;
 }
+
+/* Layout compartido (estructural, sin color): el archivo de vídeos vive
+   ahora dentro de #view-host > #view-archive, así que necesitan flex para
+   llenar el alto incluso cuando la wiki (solo-dev) está desactivada. */
+#view-host { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wiki-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }

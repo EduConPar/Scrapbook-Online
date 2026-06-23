@@ -642,12 +642,38 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             background: var(--win-body-bg, var(--win-bg, silver));
             color: var(--text, #000);
         }
+        /* Cabecera de la reseña: carátula del item + título. */
+        .pf-modal .pf-review-itemhead {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border, #c0c0c0);
+            min-width: 0;
+        }
+        .pf-modal .pf-review-cover {
+            width: 84px; aspect-ratio: 1 / 1; flex-shrink: 0;
+            overflow: hidden; background: var(--input-bg, #000);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff),
+                -2px -2px 0 var(--bezel-dark-2, grey),
+                 2px  2px 0 var(--bezel-light-2, #dfdfdf);
+            margin: 2px;
+        }
+        /* Pelis/series/libros/juegos → póster vertical. */
+        .pf-modal .pf-review-cover.pf-melon-cover-portrait { aspect-ratio: 2 / 3; }
+        .pf-modal .pf-review-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-modal .pf-review-cover.pf-review-cover-ph { font-size: 28px; }
         .pf-modal .pf-review-title {
-            font-size: 14px;
+            font-size: 15px;
             font-weight: bold;
             color: var(--text, #000);
-            margin: 0 0 10px;
+            margin: 0;
             word-break: break-word;
+            min-width: 0;
         }
         /* Bloque comentario — match al #profile-review-view-comment del escritorio. */
         .pf-modal .pf-review-comment {
@@ -733,6 +759,10 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         }
         .pf-rev-edit-label {
             font-size: 11px; margin: 8px 0 4px; color: var(--text, #000);
+        }
+        .pf-rev-edit-runtime {
+            width: 110px; box-sizing: border-box;
+            font-family: inherit; font-size: 13px; padding: 6px 8px;
         }
         .pf-modal .modal-actions .button.danger {
             margin-right: auto;
@@ -1301,11 +1331,16 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             max-height: 75vh;
             display: flex; flex-direction: column;
         }
+        /* Body en columna: la cabecera queda fija y solo el listado de
+           reseñas scrollea. */
         .pf-melon-modal-body {
             flex: 1; min-height: 0;
-            overflow-y: auto;
-            padding: 8px 10px;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            padding: 0;
         }
+        #pf-melon-modal-head { flex-shrink: 0; }
+        #pf-melon-modal-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 8px; }
         .pf-melon-review-row {
             display: flex;
             gap: 8px;
@@ -1347,6 +1382,66 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
             color: var(--text-faint, #888);
             margin-top: 2px;
         }
+        /* Cabecera de la ventana de reseñas: carátula + título + media/nº. */
+        .pf-melon-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px 10px;
+            margin-bottom: 0;
+            border-bottom: 2px solid var(--border, #c0c0c0);
+            min-width: 0;
+        }
+        .pf-melon-detail-cover {
+            width: 88px; aspect-ratio: 1 / 1; flex-shrink: 0;
+            overflow: hidden; background: var(--input-bg, #000);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow:
+                -1px -1px 0 var(--bezel-dark-1, #0a0a0a),
+                 1px  1px 0 var(--bezel-light-1, #fff),
+                -2px -2px 0 var(--bezel-dark-2, grey),
+                 2px  2px 0 var(--bezel-light-2, #dfdfdf);
+            margin: 2px;
+        }
+        /* Pelis/series/libros/juegos → póster vertical (más alto que ancho). */
+        .pf-melon-detail-cover.pf-melon-cover-portrait { aspect-ratio: 2 / 3; }
+        .pf-melon-detail-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-melon-detail-cover.pf-melon-detail-cover-ph { font-size: 28px; }
+        .pf-melon-detail-hinfo { flex: 1; min-width: 0; }
+        .pf-melon-detail-htitle { font-size: 14px; font-weight: bold; color: var(--text, #000); word-break: break-word; line-height: 1.25; }
+        .pf-melon-detail-hartist { font-size: 11px; color: var(--text-faint, #888); margin-top: 1px; }
+        .pf-melon-detail-hrating { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; color: var(--star-color, #e8b923); font-size: 14px; }
+        .pf-melon-detail-havg { font-size: 12px; font-weight: bold; }
+        .pf-melon-detail-hcount { font-size: 10px; color: var(--text-faint, #888); }
+        .pf-melon-detail-hruntime { font-size: 11px; color: var(--text-muted, var(--text-faint, #888)); margin-top: 3px; }
+        .pf-melon-detail-hmeta { font-size: 11px; color: var(--text-faint, #888); margin-top: 3px; }
+        .pf-melon-detail-eplink { cursor: pointer; text-decoration: underline; }
+        /* ─── Capítulos de series ─── */
+        .pf-episodes-modal { max-width: 420px; }
+        .pf-episodes-body { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 90px); overflow: hidden; }
+        .pf-ep-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+        .pf-ep-empty { font-size: 12px; color: var(--text-faint, #888); text-align: center; padding: 12px 4px; }
+        .pf-ep-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px; border: 1px solid var(--win-border, #808080); background: var(--win-bg-light, #fff); }
+        .pf-ep-thumb { width: 96px; aspect-ratio: 16/9; flex-shrink: 0; background: #000; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; }
+        .pf-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pf-ep-thumb-click { cursor: pointer; }
+        .pf-ep-thumb-click:active { outline: 2px solid var(--star-color, #e8b923); outline-offset: -2px; }
+        .pf-ep-reviews-body { max-height: calc(100vh - 90px); overflow-y: auto; }
+        .pf-ep-info { flex: 1; min-width: 0; }
+        .pf-ep-title { font-size: 12px; font-weight: bold; color: var(--text, #000); word-break: break-word; line-height: 1.2; }
+        .pf-ep-meta { font-size: 10px; color: var(--text-faint, #888); margin-top: 2px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .pf-ep-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+        .pf-ep-controls .button { min-height: 22px; font-size: 11px; }
+        .pf-ep-drag {
+            flex-shrink: 0; align-self: stretch; display: flex; align-items: center; justify-content: center;
+            width: 22px; color: var(--text-faint, #888); font-size: 17px; line-height: 1;
+            cursor: grab; touch-action: none; user-select: none;
+        }
+        .pf-ep-row.pf-ep-dragging { opacity: 0.6; outline: 2px dashed var(--star-color, #e8b923); outline-offset: -2px; }
+        .pf-ep-watch { font-size: 11px; display: flex; align-items: center; gap: 3px; }
+        .pf-ep-wtag { font-size: 11px; color: #2e7d4f; font-weight: bold; }
+        .pf-ep-addbar { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--win-border, #808080); padding-top: 8px; }
+        .pf-ep-addbar input[type="text"] { width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -1491,6 +1586,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
                     </div>
                 </div>
                 <div class="window-body pf-melon-modal-body">
+                    <div id="pf-melon-modal-head"></div>
                     <div id="pf-melon-modal-list"></div>
                 </div>
             </div>
@@ -1953,7 +2049,6 @@ function openReviewView(item) {
                 '</div>' +
             '</div>' +
             '<div class="window-body">' +
-                '<div class="pf-review-title">' + esc(item.title || '') + '</div>' +
                 commentHtml +
                 '<div class="pf-review-header">' +
                     '— ' + esc(USER_LABEL) + ' &nbsp;—&nbsp; ' +
@@ -2065,7 +2160,7 @@ function showActionMenu(item, origIdx) {
         items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
     } else { /* completed */
         var hasReview = !!(item.review && item.review.stars);
-        items.push({ act: 'review',  icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: hasReview ? 'Editar reseña' : 'Añadir reseña' });
+        items.push({ act: 'review',  icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: hasReview ? 'Editar' : 'Añadir reseña' });
         items.push({ act: lastAct,   icon: lastIcon, label: lastLabel });
     }
 
@@ -2097,7 +2192,7 @@ function showMusicActionMenu(item, origIdx, title, isCollab) {
     var canFeature = isFeatured || featuredCount < 3;
     var featLabel  = isFeatured ? 'Quitar de destacados' : 'Destacar';
     var hasReview  = !!(item.review && item.review.stars);
-    var revLabel   = hasReview ? 'Editar reseña' : 'Añadir reseña';
+    var revLabel   = hasReview ? 'Editar' : 'Añadir reseña';
     var lastLabel  = isCollab ? 'Abandonar actividad' : 'Eliminar';
     var lastIcon   = isCollab ? '🚪' : '✕';
     var lastAct    = isCollab ? 'leave' : 'delete';
@@ -2158,6 +2253,13 @@ function completeItem(cat, origIdx) {
     var src = list[origIdx];
     for (var k in src) if (src.hasOwnProperty(k)) snapshot[k] = src[k];
     setItemStatus(cat, origIdx, 'completed');
+    /* Serie completada → todos sus capítulos como vistos. */
+    if (cat === 'series' && snapshot.title) {
+        fetch(API + '?action=complete-series-episodes', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seriesTitle: snapshot.title })
+        }).catch(function(){});
+    }
     crearMomentoFromItem(cat, snapshot);
     pfReviewPrompt(
         '"' + (snapshot.title || 'Item') + '" completada. ¿Quieres reseñarla?',
@@ -2280,6 +2382,228 @@ function pfConfirm(message, okLabel, onOk) {
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
 }
 
+/* ─── Capítulos de series (compartidos por título) ─── */
+function epFmtDurM(min) {
+    min = parseInt(min, 10) || 0;
+    if (min <= 0) return '';
+    var h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? (h + ' h' + (m ? ' ' + m + ' min' : '')) : (m + ' min');
+}
+function openEpisodesModal(seriesTitle, canWatch, readOnly) {
+    if (!seriesTitle) return;
+    var bd = document.createElement('div');
+    bd.className = 'pf-modal-backdrop';
+    /* Desde Melon Reviews: solo lectura — sin barra para añadir. */
+    var addBar = readOnly ? '' :
+        '<div class="pf-ep-addbar">' +
+            '<input type="text" id="pf-ep-title" placeholder="Título del capítulo">' +
+            '<input type="text" id="pf-ep-image" placeholder="Imagen de preview (URL)">' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+                '<input type="number" id="pf-ep-dur" placeholder="min" min="0" inputmode="numeric" style="width:80px;">' +
+                '<button class="button default" id="pf-ep-add" type="button">+ Añadir</button>' +
+            '</div>' +
+        '</div>';
+    bd.innerHTML =
+        '<div class="window pf-modal pf-episodes-modal">' +
+            '<div class="title-bar"><div class="title-bar-text">🎬 Capítulos</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
+            '<div class="window-body pf-episodes-body">' +
+                '<div class="pf-ep-list" id="pf-ep-list"><div class="ma-status">Cargando…</div></div>' +
+                addBar +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(bd);
+    function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    var listEl = bd.querySelector('#pf-ep-list');
+    var eps = [];
+    function render() {
+        if (!eps.length) { listEl.innerHTML = '<div class="pf-ep-empty">Sin capítulos. Añade el primero abajo.</div>'; return; }
+        listEl.innerHTML = eps.map(function(ep, i){
+            var dur = epFmtDurM(ep.duration);
+            var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
+            var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
+            /* Solo lectura: miniatura abre las reseñas, sin controles de edición. */
+            if (readOnly) {
+                return '<div class="pf-ep-row">' +
+                    '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
+                    '<div class="pf-ep-info">' +
+                        '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
+                        '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+            var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
+            var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+            var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
+            return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
+                '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
+                '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
+                '<div class="pf-ep-info">' +
+                    '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
+                    '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                    '<div class="pf-ep-controls">' + watch +
+                        '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
+                        '<button class="button" data-x="' + ep.id + '">✕</button>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+    }
+    function load() {
+        fetch(API + '?action=series-episodes&seriesTitle=' + encodeURIComponent(seriesTitle), { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){ eps = (d && d.episodes) || []; render(); })
+            .catch(function(){ listEl.innerHTML = '<div class="pf-ep-empty">Error.</div>'; });
+    }
+    listEl.addEventListener('change', function(e){
+        var cb = e.target.closest('input[data-w]'); if (!cb) return;
+        var id = parseInt(cb.getAttribute('data-w'), 10);
+        var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
+        fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
+    });
+    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil). */
+    var dragRow = null;
+    function epDragAfter(y) {
+        var els = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
+        var closest = null, closestOff = -Infinity;
+        els.forEach(function(ch){
+            var box = ch.getBoundingClientRect();
+            var off = y - box.top - box.height / 2;
+            if (off < 0 && off > closestOff) { closestOff = off; closest = ch; }
+        });
+        return closest;
+    }
+    function epDragMove(e){
+        if (!dragRow) return;
+        e.preventDefault();
+        var after = epDragAfter(e.clientY);
+        if (after == null) listEl.appendChild(dragRow);
+        else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+    }
+    function epDragUp(){
+        if (!dragRow) return;
+        dragRow.classList.remove('pf-ep-dragging');
+        dragRow = null;
+        document.removeEventListener('pointermove', epDragMove);
+        document.removeEventListener('pointerup', epDragUp);
+        document.removeEventListener('pointercancel', epDragUp);
+        var ids = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row')).map(function(r){ return parseInt(r.getAttribute('data-ep-id'), 10); });
+        eps.sort(function(a, b){ return ids.indexOf(a.id) - ids.indexOf(b.id); });
+        render();
+        fetch(API + '?action=reorder-series-episodes', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, order: ids }) }).catch(function(){});
+    }
+    listEl.addEventListener('pointerdown', function(e){
+        var h = e.target.closest('[data-drag]'); if (!h) return;
+        var row = h.closest('.pf-ep-row'); if (!row) return;
+        e.preventDefault();
+        dragRow = row; row.classList.add('pf-ep-dragging');
+        document.addEventListener('pointermove', epDragMove);
+        document.addEventListener('pointerup', epDragUp);
+        document.addEventListener('pointercancel', epDragUp);
+    });
+    listEl.addEventListener('click', function(e){
+        var rv = e.target.closest('[data-rev]');
+        if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
+        var r = e.target.closest('[data-r]');
+        if (r) { var id = parseInt(r.getAttribute('data-r'), 10); var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) openEpReviewModal(ep, load); return; }
+        var x = e.target.closest('[data-x]');
+        if (x) {
+            var xid = parseInt(x.getAttribute('data-x'), 10);
+            if (confirm('¿Quitar este capítulo? Afecta a todos.')) {
+                fetch(API + '?action=delete-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xid }) }).then(function(){ eps = eps.filter(function(y){ return y.id !== xid; }); render(); }).catch(function(){});
+            }
+        }
+    });
+    var addEl = bd.querySelector('#pf-ep-add');
+    if (addEl) addEl.addEventListener('click', function(){
+        var t = bd.querySelector('#pf-ep-title').value.trim(); if (!t) return;
+        var img = bd.querySelector('#pf-ep-image').value.trim();
+        var dur = parseInt(bd.querySelector('#pf-ep-dur').value, 10) || 0;
+        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, title: t, image: img, duration: dur }) })
+            .then(function(){ bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = ''; load(); }).catch(function(){});
+    });
+    load();
+}
+/* Lista de reseñas de un capítulo (solo lectura). */
+function openEpReviewsModal(ep) {
+    var bd = document.createElement('div');
+    bd.className = 'pf-modal-backdrop';
+    bd.innerHTML =
+        '<div class="window pf-modal">' +
+            '<div class="title-bar"><div class="title-bar-text">★ Reseñas · ' + esc(ep.title || '—') + '</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
+            '<div class="window-body pf-ep-reviews-body"><div class="pf-ep-empty">Cargando…</div></div>' +
+        '</div>';
+    document.body.appendChild(bd);
+    function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    var body = bd.querySelector('.pf-ep-reviews-body');
+    fetch(API + '?action=series-episode-reviews&episodeId=' + ep.id, { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+            var reviews = (d && d.reviews) || [];
+            if (!reviews.length) { body.innerHTML = '<div class="pf-ep-empty">Este capítulo no tiene reseñas todavía.</div>'; return; }
+            body.innerHTML = reviews.map(function(rev){
+                var src = rev.userImg || '';
+                if (src && src.indexOf('/') !== 0 && src.indexOf('http') !== 0 && src.indexOf('../') !== 0) src = '../../' + src;
+                var av = src ? '<img src="' + esc(src) + '" alt="">' : '👤';
+                return '<div class="pf-melon-review-row">' +
+                    '<div class="pf-melon-review-av">' + av + '</div>' +
+                    '<div class="pf-melon-review-info">' +
+                        '<div class="pf-melon-review-hdr"><strong>' + esc(rev.userLabel || '') + '</strong> ' + makeStarsHtml(rev.stars, 5) + ' <span class="pf-melon-review-num">' + rev.stars + '</span></div>' +
+                        (rev.comment ? '<div class="pf-melon-review-comment">" ' + esc(rev.comment) + ' "</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        })
+        .catch(function(){ body.innerHTML = '<div class="pf-ep-empty">Error al cargar reseñas.</div>'; });
+}
+function openEpReviewModal(ep, onSaved) {
+    var sel = ep.myStars || 0;
+    var bd = document.createElement('div');
+    bd.className = 'pf-modal-backdrop';
+    bd.innerHTML =
+        '<div class="window pf-modal">' +
+            '<div class="title-bar"><div class="title-bar-text">★ ' + esc(ep.title || '—') + '</div>' +
+                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
+            '<div class="window-body">' +
+                '<div class="pf-rev-edit-label">Puntuación</div>' +
+                '<div class="pf-rev-edit-stars" id="pf-epr-stars"></div>' +
+                '<div class="pf-rev-edit-label">Comentario</div>' +
+                '<textarea class="pf-rev-edit-comment" id="pf-epr-comment" maxlength="500" placeholder="Opcional"></textarea>' +
+                '<div class="modal-actions">' +
+                    '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
+                    '<button class="button default" data-act="save" type="button">Guardar</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(bd);
+    var starsBox = bd.querySelector('#pf-epr-stars');
+    var commentEl = bd.querySelector('#pf-epr-comment');
+    commentEl.value = ep.myComment || '';
+    function renderStars() {
+        var html = '';
+        for (var i = 1; i <= 5; i++) html += '<span class="pf-rev-edit-star' + (i > sel ? ' empty' : '') + '" data-v="' + i + '">' + (i > sel ? '☆' : '★') + '</span>';
+        html += '<span class="pf-rev-edit-num">' + (sel || '') + '</span>';
+        starsBox.innerHTML = html;
+        Array.prototype.forEach.call(starsBox.querySelectorAll('.pf-rev-edit-star'), function(el){
+            el.addEventListener('click', function(){ var v = parseInt(el.dataset.v, 10); sel = (v === sel) ? (v - 1) : v; renderStars(); });
+        });
+    }
+    renderStars();
+    function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+    bd.querySelector('[data-act="cancel"]').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    bd.querySelector('[data-act="save"]').addEventListener('click', function(){
+        fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: commentEl.value.trim() }) })
+            .then(function(){ close(); if (onSaved) onSaved(); }).catch(function(){});
+    });
+}
+
 /* Editor de reseña: 5 estrellas (full-star, sin medios para móvil) +
    textarea. Save → actualiza item.review + POST save-lists +
    notify-review. Delete → quita review + save-lists. */
@@ -2288,18 +2612,31 @@ function openReviewEditor(item, origIdx, cat) {
     var cur = (item.review && item.review.stars) ? Math.round(item.review.stars) : 0;
     var curComment = (item.review && item.review.comment) ? item.review.comment : '';
     var hadReview = cur > 0;
+    /* Edición del item: título, imagen y duración (pelis) / capítulos (libros).
+       Series no usa número: botón a la ventana de capítulos. */
+    var RW_RT_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
+    var rtLabel = RW_RT_LABEL[cat];
+    var isSeries = (cat === 'series');
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
         '<div class="window pf-modal">' +
             '<div class="title-bar">' +
-                '<div class="title-bar-text">★ ' + esc(item.title || '—') + '</div>' +
+                '<div class="title-bar-text">✏ ' + esc(item.title || '—') + '</div>' +
                 '<div class="title-bar-controls">' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
             '</div>' +
             '<div class="window-body">' +
+                '<div class="pf-rev-edit-label">Título</div>' +
+                '<input type="text" id="pf-rev-edit-title" maxlength="200" style="width:100%;box-sizing:border-box;">' +
+                '<div class="pf-rev-edit-label">Imagen (URL)</div>' +
+                '<input type="text" id="pf-rev-edit-image" maxlength="500" placeholder="https://..." style="width:100%;box-sizing:border-box;">' +
+                (rtLabel ? '<div class="pf-rev-edit-label">' + rtLabel + '</div>' +
+                           '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
+                (isSeries ? '<div class="pf-rev-edit-label">Capítulos</div>' +
+                            '<button class="button" id="pf-rev-edit-eps" type="button" style="width:100%;box-sizing:border-box;">🎬 Ver / editar capítulos</button>' : '') +
                 '<div class="pf-rev-edit-label">Puntuación</div>' +
                 '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
                 '<div class="pf-rev-edit-label">Comentario</div>' +
@@ -2316,6 +2653,16 @@ function openReviewEditor(item, origIdx, cat) {
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
     commentEl.value = curComment;
+    var titleEl = bd.querySelector('#pf-rev-edit-title');
+    var imageEl = bd.querySelector('#pf-rev-edit-image');
+    var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
+    var epsBtn = bd.querySelector('#pf-rev-edit-eps');
+    if (epsBtn) epsBtn.addEventListener('click', function(){
+        openEpisodesModal((titleEl.value.trim() || item.title || ''), normalizeStatus(item.status) === 'in-progress');
+    });
+    titleEl.value = item.title || '';
+    imageEl.value = item.image || '';
+    if (runtimeEl) runtimeEl.value = item.runtime ? item.runtime : '';
     var sel = cur;
 
     function renderStars() {
@@ -2343,14 +2690,24 @@ function openReviewEditor(item, origIdx, cat) {
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
 
     bd.querySelector('[data-act="save"]').addEventListener('click', function(){
-        if (!sel) return;  /* Necesita al menos 1 estrella */
         var list = STATE.lists && STATE.lists[cat];
         if (!list || !list[origIdx]) { close(); return; }
-        list[origIdx].review = {
-            stars: sel,
-            comment: commentEl.value.trim(),
-            reviewedAt: Math.floor(Date.now() / 1000)
-        };
+        var newTitle = titleEl.value.trim();
+        if (newTitle) list[origIdx].title = newTitle;
+        list[origIdx].image = imageEl.value.trim();
+        if (rtLabel && runtimeEl) {
+            var rt = parseInt(runtimeEl.value, 10) || 0;
+            if (rt > 0) list[origIdx].runtime = rt; else delete list[origIdx].runtime;
+        }
+        if (sel > 0) {
+            list[origIdx].review = {
+                stars: sel,
+                comment: commentEl.value.trim(),
+                reviewedAt: Math.floor(Date.now() / 1000)
+            };
+        } else {
+            delete list[origIdx].review;
+        }
         renderActiveList();
         fetch(API + '?action=save-lists', {
             method: 'POST',
@@ -2361,13 +2718,15 @@ function openReviewEditor(item, origIdx, cat) {
         .then(function(r){ return r.json(); })
         .then(function(d){
             if (d && Array.isArray(d.items)) { STATE.lists[cat] = d.items; renderActiveList(); }
-            /* Notify a followers — mismo flow que el escritorio. */
-            fetch(API + '?action=notify-review', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category: cat, itemTitle: item.title || '', mtype: item.type || '' })
-            }).catch(function(){});
+            /* Notify a followers solo si hay reseña — mismo flow que escritorio. */
+            if (sel > 0) {
+                fetch(API + '?action=notify-review', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: cat, itemTitle: (titleEl.value.trim() || item.title || ''), mtype: item.type || '' })
+                }).catch(function(){});
+            }
         })
         .catch(function(){});
         close();
@@ -2812,6 +3171,10 @@ function openAddItemDialog(cat) {
         games:  { title: '<img src="../../assets/img/appIcons/juegosIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;"> Añadir juego',    titleField: 'Título' }
     };
     var cfg = labels[cat]; if (!cfg) return;
+    /* Duración (pelis) / nº de capítulos (series, libros). */
+    /* Series gestiona capítulos tras crearla (no un número aquí). */
+    var RUNTIME_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
+    var rtLabel = RUNTIME_LABEL[cat];
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -2831,6 +3194,10 @@ function openAddItemDialog(cat) {
                     '<label for="ai-image">Imagen (URL, opcional)</label>' +
                     '<input type="text" id="ai-image" maxlength="500" placeholder="https://...">' +
                 '</div>' +
+                (rtLabel ? '<div class="pf-form-row">' +
+                    '<label for="ai-runtime">' + rtLabel + '</label>' +
+                    '<input type="number" id="ai-runtime" min="0" step="1" inputmode="numeric" placeholder="0">' +
+                '</div>' : '') +
                 '<div class="pf-form-row">' +
                     '<label for="ai-status">Estado</label>' +
                     '<select id="ai-status">' +
@@ -2869,6 +3236,11 @@ function openAddItemDialog(cat) {
             image:  image,
             status: status
         };
+        if (rtLabel) {
+            var rtIn = bd.querySelector('#ai-runtime');
+            var rt = rtIn ? (parseInt(rtIn.value, 10) || 0) : 0;
+            if (rt > 0) item.runtime = rt;
+        }
         var newList = list.slice(); newList.push(item);
         errEl.textContent = 'Guardando…';
         fetch(API + '?action=save-lists', {
@@ -3403,13 +3775,125 @@ function renderMelonItems() {
 /* makeStarsHtml ya está definida arriba (línea ~1583) con clip-path
    safe-cross-device para la media estrella. NO redefinirla aquí. */
 
+/* Duración + nº de tracks (álbum) o duración (canción) en Melon Reviews.
+   find-album resuelve la albumKey; album-tracks da las pistas con duración.
+   Best-effort: cualquier fallo deja el elemento vacío. */
+function pfFmtDur(sec) {
+    sec = Math.round(sec || 0);
+    if (sec <= 0) return '';
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (h > 0) return h + ' h ' + m + ' min';
+    if (m >= 1) return m + ' min';
+    return sec + ' s';
+}
+function pfFmtSong(sec) {
+    sec = Math.round(sec || 0);
+    if (sec <= 0) return '';
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+function pfLoadMusicMeta(item, isAlbum, el) {
+    var MUS = '../../assets/music/api.php';
+    var p = new URLSearchParams({ title: item.title || '', artist: item.artist || '' });
+    fetch(MUS + '?action=find-album&' + p.toString(), { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(d){
+            if (!d || d.notFound || !d.albumKey) return;
+            return fetch(MUS + '?action=album-tracks&key=' + encodeURIComponent(d.albumKey), { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(al){
+                    if (!al || !Array.isArray(al.tracks) || !al.tracks.length) return;
+                    if (isAlbum) {
+                        var total = al.tracks.reduce(function(a, t){ return a + (t.duration || 0); }, 0);
+                        var parts = [al.tracks.length + (al.tracks.length === 1 ? ' canción' : ' canciones')];
+                        var dur = pfFmtDur(total);
+                        if (dur) parts.push(dur);
+                        el.textContent = parts.join(' · ');
+                    } else {
+                        var lt = (item.title || '').toLowerCase();
+                        var match = al.tracks.filter(function(t){ return (t.title || '').toLowerCase() === lt; })[0]
+                                 || al.tracks.filter(function(t){ return (t.title || '').toLowerCase().indexOf(lt) !== -1; })[0];
+                        var ds = pfFmtSong(match ? match.duration : 0);
+                        if (ds) el.textContent = ds;
+                    }
+                });
+        }).catch(function(){});
+}
+
 function showMelonDetails(item) {
     var backdrop = document.getElementById('pf-melon-modal-backdrop');
     var titleEl  = document.getElementById('pf-melon-modal-title');
     var listEl   = document.getElementById('pf-melon-modal-list');
+    var headEl   = document.getElementById('pf-melon-modal-head');
     if (!backdrop || !listEl) return;
     titleEl.textContent = '⭐ ' + item.title;
     listEl.innerHTML = '';
+    if (headEl) headEl.innerHTML = '';
+    /* Cabecera FIJA: carátula + título + (artista) + media/nº; debajo,
+       en zona scrollable, las reseñas. */
+    var head = document.createElement('div');
+    head.className = 'pf-melon-detail-header';
+    var cover = document.createElement('div');
+    cover.className = 'pf-melon-detail-cover';
+    /* Música = cuadrada; resto (pelis/series/libros/juegos) = póster vertical. */
+    if (MELON_STATE.cat !== 'music') cover.classList.add('pf-melon-cover-portrait');
+    if (item.image) {
+        var cimg = document.createElement('img'); cimg.src = item.image; cimg.alt = item.title || '';
+        (function(c){ cimg.onerror = function(){ c.classList.add('pf-melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
+        cover.appendChild(cimg);
+    } else { cover.classList.add('pf-melon-detail-cover-ph'); cover.textContent = '🍈'; }
+    head.appendChild(cover);
+    var hinfo = document.createElement('div'); hinfo.className = 'pf-melon-detail-hinfo';
+    var ht = document.createElement('div'); ht.className = 'pf-melon-detail-htitle'; ht.textContent = item.title || '';
+    hinfo.appendChild(ht);
+    if (item.artist) { var ha = document.createElement('div'); ha.className = 'pf-melon-detail-hartist'; ha.textContent = item.artist; hinfo.appendChild(ha); }
+    var hr = document.createElement('div'); hr.className = 'pf-melon-detail-hrating';
+    var avgTxt = (typeof item.avg === 'number') ? item.avg.toFixed(1) : (item.avg || '0');
+    var cnt = item.count || (item.reviews ? item.reviews.length : 0);
+    hr.innerHTML = makeStarsHtml(item.avg || 0, 5)
+        + '<span class="pf-melon-detail-havg">' + avgTxt + '</span>'
+        + '<span class="pf-melon-detail-hcount">' + cnt + ' ' + (cnt === 1 ? 'reseña' : 'reseñas') + '</span>';
+    hinfo.appendChild(hr);
+    /* Consenso de duración/capítulos (la moda entre las reseñas). */
+    if (item.runtime && item.runtime > 0) {
+        var c = MELON_STATE.cat;
+        var rtTxt = c === 'movies' ? (item.runtime + ' min')
+                  : (c === 'series' || c === 'books') ? (item.runtime + (item.runtime === 1 ? ' capítulo' : ' capítulos'))
+                  : '';
+        if (rtTxt) {
+            var hrt = document.createElement('div');
+            hrt.className = 'pf-melon-detail-hruntime';
+            hrt.textContent = rtTxt;
+            hinfo.appendChild(hrt);
+        }
+    }
+    /* Series con capítulos: nº de capítulos + duración total, clicable → modal de capítulos. */
+    if (MELON_STATE.cat === 'series' && item.episodeCount > 0) {
+        var hep = document.createElement('div');
+        hep.className = 'pf-melon-detail-hruntime pf-melon-detail-eplink';
+        var epTxt = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos');
+        if (item.episodeDuration > 0) epTxt += ' · ' + epFmtDurM(item.episodeDuration);
+        hep.textContent = '🎬 ' + epTxt;
+        hep.style.cursor = 'pointer';
+        hep.addEventListener('click', function(){ openEpisodesModal(item.title, false, true); });
+        hinfo.appendChild(hep);
+    }
+    /* Música: duración + nº de tracks (álbum) o duración (canción). */
+    if (MELON_STATE.cat === 'music') {
+        var _isAlbum = (item.mtype === 'album' || item.type === 'album');
+        var hmeta = document.createElement('div');
+        hmeta.className = 'pf-melon-detail-hmeta';
+        hinfo.appendChild(hmeta);
+        pfLoadMusicMeta(item, _isAlbum, hmeta);
+    }
+    head.appendChild(hinfo);
+    (headEl || listEl).appendChild(head);
+    /* Tap en la carátula → añadir el item a mi perfil. */
+    cover.style.cursor = 'pointer';
+    cover.title = 'Añadir a mi perfil';
+    cover.addEventListener('click', function(){
+        if (typeof addItemToOwnProfile === 'function') addItemToOwnProfile(MELON_STATE.cat, item);
+    });
     (item.reviews || []).forEach(function(rev){
         var row = document.createElement('div');
         row.className = 'pf-melon-review-row';

@@ -15,6 +15,10 @@ require_once dirname(__DIR__, 2) . '/assets/mobile-detect.php';
 setLongSessionCookie();
 session_start();
 require_once dirname(__DIR__, 2) . '/assets/config.php';
+/* Flag solo-dev: la wiki (MelonWiki) solo se activa en dev. En main
+   MELON_DEV_BUILD es false → MelonArchive abre directo al archivo. */
+require_once dirname(__DIR__, 2) . '/assets/dev-build.php';
+$WIKI = defined('MELON_DEV_BUILD') && MELON_DEV_BUILD;
 
 if (!isset($_SESSION['user']) || !isset($loginUsers[$_SESSION['user']])) {
     header('Location: ../../index.php');
@@ -383,6 +387,44 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         /* Durante fullscreen: el iframe se expande. Quitamos los inset
            shadows y el padding para que no asomen por los bordes. */
         .ma-video-wrap:fullscreen { aspect-ratio: auto; height: 100%; }
+        <?php if ($WIKI): /* CSS de la wiki: solo en dev */ ?>
+        /* ── WIKI (portal) — reusa .ma-card para tiles y filas ── */
+        .ma-wiki-searchbar { display: flex; gap: 6px; padding: 8px; }
+        .ma-wiki-searchbar input { flex: 1; box-sizing: border-box; font-size: 14px; padding: 7px; }
+        .ma-wiki-article { padding: 12px 14px; color: var(--text, #000); }
+        .ma-wiki-article h1 { font-size: 20px; margin: 0 0 4px; }
+        .ma-wiki-article .meta { font-size: 11px; color: var(--text-muted, #777); border-bottom: 1px solid var(--border, #c0c0c0); padding-bottom: 8px; margin-bottom: 10px; }
+        .ma-wiki-body { font-size: 14px; line-height: 1.6; }
+        .ma-wiki-body h2 { font-size: 17px; margin: 12px 0 6px; }
+        .ma-wiki-body h3 { font-size: 15px; margin: 10px 0 4px; }
+        .ma-wiki-body h4 { font-size: 14px; margin: 8px 0 4px; }
+        .ma-wiki-body p { margin: 0 0 10px; }
+        .ma-wiki-body ul { margin: 0 0 10px 18px; }
+        .ma-wiki-body a { color: var(--accent, #1db954); }
+        .ma-wiki-editor { padding: 12px; display: flex; flex-direction: column; }
+        .ma-wiki-editor label { font-size: 11px; font-weight: bold; margin: 8px 0 2px; color: var(--text, #000); }
+        .ma-wiki-editor input[type=text], .ma-wiki-editor textarea { width: 100%; box-sizing: border-box; font-size: 14px; }
+        .ma-wiki-editor textarea { resize: vertical; min-height: 200px; font-family: inherit; }
+        .ma-wiki-hint { font-size: 10px; color: var(--text-muted, #777); margin-bottom: 4px; }
+        .ma-wiki-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+        .ma-wiki-msg { font-size: 11px; color: var(--text-muted, #777); }
+        .ma-wiki-cards { padding: 10px; }
+        .ma-wiki-card { border: 1px solid var(--border, #c0c0c0); background: var(--win-body-bg, #fff); padding: 10px; margin-bottom: 10px; color: var(--text, #000); }
+        .ma-wiki-card .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .ma-wiki-card .title { font-weight: bold; font-size: 13px; }
+        .ma-wiki-card .type { font-size: 10px; color: var(--text-muted, #777); margin-left: auto; }
+        .ma-wiki-card .meta { font-size: 11px; color: var(--text-muted, #777); margin-top: 4px; }
+        .ma-wiki-card .reason { font-size: 12px; margin-top: 6px; }
+        .ma-wiki-card .pts { font-size: 12px; color: var(--accent, #1db954); font-weight: bold; margin-top: 4px; }
+        .ma-wiki-modbody { font-size: 12px; line-height: 1.5; max-height: 160px; overflow: auto; border: 1px solid var(--border, #c0c0c0); padding: 6px 8px; margin: 8px 0; background: var(--win-bg, #fff); }
+        .ma-wiki-modbody h2, .ma-wiki-modbody h3 { font-size: 14px; margin: 6px 0 3px; }
+        .ma-wiki-reason-in { width: 100%; box-sizing: border-box; margin-bottom: 6px; font-size: 13px; }
+        .ma-wiki-badge { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 8px; background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+        .ma-wiki-badge.ok { background: #2e7d32; color: #fff; }
+        .ma-wiki-badge.no { background: #b00020; color: #fff; }
+        .ma-wiki-badge.pend { background: #9e6a00; color: #fff; }
+        .ma-wiki-empty { padding: 24px; text-align: center; color: var(--text-muted, #777); font-size: 13px; }
+        <?php endif; /* fin CSS wiki solo-dev */ ?>
     </style>
 </head>
 <body class="mh-body <?= htmlspecialchars($activeThemeClass) ?>">
@@ -478,6 +520,8 @@ if (EMBEDDED) {
 
 /* ─── Estado ────────────────────────────────────────────────────── */
 var API = '../../assets/yt-archive.php';
+/* Flag solo-dev (lo emite PHP). En main es false → sin wiki, solo archivo. */
+var WIKI_ENABLED = <?php echo $WIKI ? 'true' : 'false'; ?>;
 var STATE = {
     view: 'playlists',          /* 'playlists' | 'videos' */
     currentPl: null,            /* { id, title } cuando estamos en videos */
@@ -511,8 +555,8 @@ function setStatus(msg) {
 function loadPlaylists() {
     STATE.view = 'playlists';
     STATE.currentPl = null;
-    breadcrumbEl.textContent = 'Playlists';
-    backBtn.disabled = true;
+    breadcrumbEl.textContent = WIKI_ENABLED ? 'Archivo · Playlists' : 'Playlists';
+    backBtn.disabled = !WIKI_ENABLED;   /* con wiki, playlists cuelga del Inicio */
     panelEl.scrollTop = 0;
     /* Si ya cacheamos las playlists en esta sesión, las re-pintamos
        sin volver a llamar al API (la lista no cambia entre clics). */
@@ -702,24 +746,33 @@ document.addEventListener('fullscreenchange', function(){
 
 /* ─── Delegación de taps + back ────────────────────────────────── */
 panelEl.addEventListener('click', function(e){
+    /* Enlaces internos de la wiki ([[Página]]) dentro de un artículo. */
+    var il = e.target && e.target.closest && e.target.closest('.wiki-ilink');
+    if (il) { e.preventDefault(); openPage(il.dataset.slug); return; }
     var card = e.target && e.target.closest && e.target.closest('.ma-card');
     if (!card) return;
+    var act = card.dataset.act;
+    if (act === 'go')        { navGo(card.dataset.go); return; }
+    if (act === 'wiki-open') { openPage(card.dataset.slug); return; }
     var idx = parseInt(card.dataset.idx, 10);
-    if (card.dataset.act === 'open-pl') {
+    if (act === 'open-pl') {
         var pl = (STATE.playlistsCache || [])[idx];
         if (pl) loadVideos(pl);
-    } else if (card.dataset.act === 'play-v') {
+    } else if (act === 'play-v') {
         var v = (panelEl._videos || [])[idx];
         if (v) playVideo(v);
     }
 });
 
 backBtn.addEventListener('click', function(){
-    /* Si estoy en videos, vuelvo a playlists.
-       Reproductor se cierra solo con su ✕. */
+    /* En videos mantenemos la semántica con history (back del SO).
+       El reproductor se cierra con su ✕. El resto de vistas navegan
+       en-app hacia su pantalla anterior. */
     if (STATE.view === 'videos') {
         try { history.back(); } catch (_) { loadPlaylists(); }
+        return;
     }
+    if (WIKI_ENABLED) goBack();   /* sin wiki, playlists es la raíz */
 });
 
 /* Botones "‹" (title-bar) y "✕" (close del title-bar) cierran el
@@ -754,8 +807,270 @@ window.addEventListener('message', function(ev){
     if (d && d.type === 'archive-stop') closePlayer();
 });
 
+/* ════════════════════════════════════════════════════════════════
+   WIKI / PORTAL — bienvenida + entradas + editor + moderación
+═══════════════════════════════════════════════════════════════════ */
+var WIKI_API = '../../assets/wiki/api.php';
+var WIKI_ADMIN = false;
+var wikiEdit = null;   /* {pageId, backSlug} mientras editas */
+
+function wikiGet(action, params) {
+    var qs = new URLSearchParams(Object.assign({ action: action }, params || {})).toString();
+    return fetch(WIKI_API + '?' + qs, { credentials: 'same-origin' }).then(function(r){ return r.json(); });
+}
+function wikiPost(action, body) {
+    return fetch(WIKI_API + '?action=' + action, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {})
+    }).then(function(r){ return r.json(); });
+}
+function wikiSlug(s) {
+    s = (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 150) || 'pagina';
+}
+function fmtDate(s) {
+    if (!s) return '';
+    var d = new Date(s.replace(' ', 'T'));
+    if (isNaN(d)) return s;
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+/* Markdown ligero seguro (escapa y aplica formato básico). */
+function wikiRender(text) {
+    var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    var html = '', inP = false;
+    function closeP(){ if (inP) { html += '</p>'; inP = false; } }
+    function inline(s) {
+        s = esc(s);
+        s = s.replace(/\[\[([^\]]+)\]\]/g, function(_, t){ return '<a href="#" class="wiki-ilink" data-slug="' + esc(wikiSlug(t)) + '">' + esc(t) + '</a>'; });
+        s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function(_, t, u){ return '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(t) + '</a>'; });
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+        s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+        return s;
+    }
+    lines.forEach(function(ln){
+        var t = ln.trim(), m;
+        if (t === '') { closeP(); return; }
+        if ((m = t.match(/^(#{1,3})\s+(.*)$/))) { closeP(); var lvl = m[1].length + 1; html += '<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>'; return; }
+        if ((m = t.match(/^[-*]\s+(.*)$/)))      { closeP(); html += '<ul><li>' + inline(m[1]) + '</li></ul>'; return; }
+        if (!inP) { html += '<p>'; inP = true; } else { html += '<br>'; }
+        html += inline(t);
+    });
+    closeP();
+    return html;
+}
+
+/* ── Navegación ── */
+function navGo(go) {
+    if (go === 'archive')           loadPlaylists();
+    else if (go === 'wiki-list')    openWikiList();
+    else if (go === 'wiki-new')     openEditor(null);
+    else if (go === 'wiki-requests')openMyRequests();
+    else if (go === 'wiki-mod')     openModeration();
+}
+function goBack() {
+    switch (STATE.view) {
+        case 'wiki-page':    openWikiList(); break;
+        case 'wiki-edit':    (wikiEdit && wikiEdit.pageId) ? openPage(wikiEdit.backSlug) : openWikiList(); break;
+        case 'wiki-list':
+        case 'wiki-requests':
+        case 'wiki-mod':
+        case 'playlists':    goHome(); break;
+        default:             goHome();
+    }
+}
+
+/* ── Inicio (portal) ── */
+function maTile(go, icon, name, desc) {
+    return '<div class="ma-card" data-act="go" data-go="' + go + '" role="button" tabindex="0">' +
+        '<div class="ma-card-thumb"><span class="ma-card-thumb-ph">' + icon + '</span></div>' +
+        '<div class="ma-card-info"><div class="ma-card-title">' + esc(name) + '</div>' +
+        '<div class="ma-card-meta">' + esc(desc) + '</div></div></div>';
+}
+function goHome() {
+    STATE.view = 'home';
+    breadcrumbEl.textContent = 'MelonArchive';
+    backBtn.disabled = true;
+    panelEl.scrollTop = 0;
+    var html =
+        maTile('archive', '📼', 'Archivo de vídeos', 'Playlists y vídeos de YouTube') +
+        maTile('wiki-list', '📖', 'Explorar la wiki', 'Navega las entradas') +
+        maTile('wiki-new', '✎', 'Crear página', 'Propón una entrada nueva') +
+        maTile('wiki-requests', '🗳', 'Mis solicitudes', 'Estado de tus envíos');
+    if (WIKI_ADMIN) html += maTile('wiki-mod', '🛡', 'Moderación', 'Revisar solicitudes');
+    panelEl.innerHTML = html;
+}
+
+/* ── Lista de páginas ── */
+function openWikiList() {
+    STATE.view = 'wiki-list';
+    breadcrumbEl.textContent = 'Wiki · Explorar';
+    backBtn.disabled = false;
+    panelEl.scrollTop = 0;
+    panelEl.innerHTML =
+        '<div class="ma-wiki-searchbar"><input type="search" id="ma-wiki-search" placeholder="Buscar páginas…" autocomplete="off"><button class="button" id="ma-wiki-new">＋</button></div>' +
+        '<div id="ma-wiki-results"><div class="ma-wiki-empty">Cargando…</div></div>';
+    var inp = document.getElementById('ma-wiki-search'), t = null;
+    inp.addEventListener('input', function(){ clearTimeout(t); var q = this.value.trim(); t = setTimeout(function(){ renderWikiList(q); }, 300); });
+    document.getElementById('ma-wiki-new').addEventListener('click', function(){ openEditor(null); });
+    renderWikiList('');
+}
+function renderWikiList(q) {
+    var box = document.getElementById('ma-wiki-results');
+    if (!box) return;
+    wikiGet('list-pages', q ? { q: q } : null).then(function(res){
+        var pages = (res && res.pages) || [];
+        if (!pages.length) { box.innerHTML = '<div class="ma-wiki-empty">' + (q ? 'Sin resultados.' : 'Aún no hay páginas. ¡Crea la primera!') + '</div>'; return; }
+        box.innerHTML = pages.map(function(p){
+            return '<div class="ma-card" data-act="wiki-open" data-slug="' + esc(p.slug) + '" role="button" tabindex="0">' +
+                '<div class="ma-card-info"><div class="ma-card-title">' + esc(p.title) + '</div>' +
+                '<div class="ma-card-meta">' + fmtDate(p.updatedAt) + '</div></div></div>';
+        }).join('');
+    });
+}
+
+/* ── Leer página ── */
+function openPage(slug) {
+    STATE.view = 'wiki-page';
+    breadcrumbEl.textContent = 'Wiki';
+    backBtn.disabled = false;
+    panelEl.scrollTop = 0;
+    panelEl.innerHTML = '<div class="ma-wiki-empty">Cargando…</div>';
+    wikiGet('get-page', { slug: slug }).then(function(res){
+        var page = res && res.page;
+        if (!page) {
+            panelEl.innerHTML = '<div class="ma-wiki-empty">Esta página no existe todavía.' +
+                '<div style="margin-top:10px"><button class="button" id="ma-wiki-create">Crear "' + esc(slug) + '"</button></div></div>';
+            var b = document.getElementById('ma-wiki-create');
+            if (b) b.onclick = function(){ openEditor(null, slug.replace(/-/g, ' ')); };
+            return;
+        }
+        breadcrumbEl.textContent = 'Wiki · ' + page.title;
+        panelEl.innerHTML =
+            '<div class="ma-wiki-article"><h1>' + esc(page.title) + '</h1>' +
+            '<div class="meta">Última edición: ' + fmtDate(page.updatedAt) + ' · ' + esc(page.updatedBy) + '</div>' +
+            '<div class="ma-wiki-body">' + wikiRender(page.body) + '</div>' +
+            '<div style="margin-top:14px"><button class="button" id="ma-wiki-edit-btn">✎ Editar</button></div></div>';
+        document.getElementById('ma-wiki-edit-btn').onclick = function(){ openEditor(page.id, page.title, page.body, page.slug); };
+    });
+}
+
+/* ── Editor ── */
+function openEditor(pageId, title, body, slug) {
+    STATE.view = 'wiki-edit';
+    wikiEdit = { pageId: pageId || null, backSlug: slug || null };
+    breadcrumbEl.textContent = pageId ? 'Editar página' : 'Crear página';
+    backBtn.disabled = false;
+    panelEl.scrollTop = 0;
+    panelEl.innerHTML =
+        '<div class="ma-wiki-editor">' +
+            '<label>Título</label><input type="text" id="ma-we-title" autocomplete="off" placeholder="Título de la página">' +
+            '<label>Contenido</label>' +
+            '<div class="ma-wiki-hint">Markdown ligero: ## Título, **negrita**, *cursiva*, [texto](url), [[Otra página]].</div>' +
+            '<textarea id="ma-we-body" placeholder="Escribe el contenido…"></textarea>' +
+            '<label>Comentario para moderadores (opcional)</label><input type="text" id="ma-we-summary" autocomplete="off" placeholder="Qué cambiaste y por qué">' +
+            '<div class="ma-wiki-actions"><button class="button default" id="ma-we-submit">Enviar a revisión</button><button class="button" id="ma-we-cancel">Cancelar</button><span class="ma-wiki-msg" id="ma-we-status"></span></div>' +
+        '</div>';
+    document.getElementById('ma-we-title').value = title || '';
+    document.getElementById('ma-we-body').value = body || '';
+    document.getElementById('ma-we-cancel').onclick = function(){ (wikiEdit && wikiEdit.pageId) ? openPage(wikiEdit.backSlug) : openWikiList(); };
+    document.getElementById('ma-we-submit').onclick = submitEditor;
+}
+function submitEditor() {
+    var title = document.getElementById('ma-we-title').value.trim();
+    var body  = document.getElementById('ma-we-body').value.trim();
+    var summary = document.getElementById('ma-we-summary').value.trim();
+    var st  = document.getElementById('ma-we-status');
+    var btn = document.getElementById('ma-we-submit');
+    if (!title) { st.textContent = 'Ponle un título.'; return; }
+    if (!body)  { st.textContent = 'El contenido no puede estar vacío.'; return; }
+    btn.disabled = true; st.textContent = 'Enviando…';
+    var payload = { title: title, body: body, summary: summary };
+    if (wikiEdit && wikiEdit.pageId) payload.pageId = wikiEdit.pageId;
+    wikiPost('submit', payload).then(function(res){
+        btn.disabled = false;
+        if (!res || res.error) { st.textContent = (res && res.error) || 'Error al enviar.'; return; }
+        alert('Tu ' + (wikiEdit && wikiEdit.pageId ? 'edición' : 'página') + ' se ha enviado a los moderadores. Te avisaremos cuando la revisen.');
+        openMyRequests();
+    });
+}
+
+/* ── Mis solicitudes ── */
+function openMyRequests() {
+    STATE.view = 'wiki-requests';
+    breadcrumbEl.textContent = 'Wiki · Mis solicitudes';
+    backBtn.disabled = false;
+    panelEl.scrollTop = 0;
+    panelEl.innerHTML = '<div class="ma-wiki-empty">Cargando…</div>';
+    wikiGet('my-requests').then(function(res){
+        var reqs = (res && res.requests) || [];
+        if (!reqs.length) { panelEl.innerHTML = '<div class="ma-wiki-empty">No has enviado ninguna solicitud todavía.</div>'; return; }
+        panelEl.innerHTML = '<div class="ma-wiki-cards">' + reqs.map(function(r){
+            var badge = r.status === 'accepted' ? '<span class="ma-wiki-badge ok">Aceptada</span>'
+                      : r.status === 'declined' ? '<span class="ma-wiki-badge no">Denegada</span>'
+                      : '<span class="ma-wiki-badge pend">Pendiente</span>';
+            var extra = '';
+            if (r.status === 'accepted' && r.pointsAwarded) extra += '<div class="pts">+' + r.pointsAwarded + ' autismo</div>';
+            if (r.reason) extra += '<div class="reason"><b>Motivo:</b> ' + esc(r.reason) + '</div>';
+            return '<div class="ma-wiki-card"><div class="head">' + badge + '<span class="title">' + esc(r.title) + '</span><span class="type">' + (r.isNew ? 'Nueva' : 'Edición') + '</span></div>' +
+                '<div class="meta">Enviada: ' + fmtDate(r.createdAt) + (r.reviewedAt ? ' · Revisada: ' + fmtDate(r.reviewedAt) : '') + '</div>' + extra + '</div>';
+        }).join('') + '</div>';
+    });
+}
+
+/* ── Moderación (admin) ── */
+function openModeration() {
+    if (!WIKI_ADMIN) { goHome(); return; }
+    STATE.view = 'wiki-mod';
+    breadcrumbEl.textContent = 'Wiki · Moderación';
+    backBtn.disabled = false;
+    panelEl.scrollTop = 0;
+    panelEl.innerHTML = '<div class="ma-wiki-empty">Cargando…</div>';
+    wikiGet('pending').then(function(res){
+        var reqs = (res && res.requests) || [];
+        if (!reqs.length) { panelEl.innerHTML = '<div class="ma-wiki-empty">No hay solicitudes pendientes. ✓</div>'; return; }
+        panelEl.innerHTML = '<div class="ma-wiki-cards" id="ma-wiki-modlist">' + reqs.map(function(r){
+            return '<div class="ma-wiki-card" data-id="' + r.id + '"><div class="head"><span class="type">' + (r.isNew ? 'Nueva página' : 'Edición') + '</span><span class="title">' + esc(r.title) + '</span></div>' +
+                '<div class="meta">Por ' + esc(r.author) + ' · ' + fmtDate(r.createdAt) + '</div>' +
+                (r.summary ? '<div class="reason"><b>Comentario:</b> ' + esc(r.summary) + '</div>' : '') +
+                '<div class="ma-wiki-modbody">' + wikiRender(r.body) + '</div>' +
+                '<input type="text" class="ma-wiki-reason-in" placeholder="Motivo (se enviará al usuario)">' +
+                '<div class="ma-wiki-actions"><button class="button default" data-wact="accept">Aceptar</button><button class="button" data-wact="decline">Denegar</button><span class="ma-wiki-msg" data-role="msg"></span></div>' +
+            '</div>';
+        }).join('') + '</div>';
+        document.getElementById('ma-wiki-modlist').addEventListener('click', onModClick);
+    });
+}
+function onModClick(e) {
+    var btn = e.target && e.target.closest && e.target.closest('button[data-wact]');
+    if (!btn) return;
+    var card = btn.closest('.ma-wiki-card');
+    var id = parseInt(card.dataset.id, 10);
+    var decision = btn.dataset.wact;
+    var reason = card.querySelector('.ma-wiki-reason-in').value.trim();
+    var msg = card.querySelector('[data-role="msg"]');
+    if (decision === 'decline' && !reason) { if (!confirm('Vas a denegar sin indicar motivo. ¿Continuar?')) return; }
+    card.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+    msg.textContent = 'Procesando…';
+    wikiPost('review', { revisionId: id, decision: decision, reason: reason }).then(function(res){
+        if (!res || res.error) { msg.textContent = (res && res.error) || 'Error.'; card.querySelectorAll('button').forEach(function(b){ b.disabled = false; }); return; }
+        card.style.opacity = '0.5';
+        msg.textContent = decision === 'accept' ? ('Aceptada' + (res.points ? ' (+' + res.points + ')' : '')) : 'Denegada';
+        setTimeout(openModeration, 700);
+    });
+}
+
 /* ─── Bootstrap ─────────────────────────────────────────────────── */
-loadPlaylists();
+(function init(){
+    /* En main (wiki desactivada) MelonArchive abre directo al archivo. */
+    if (!WIKI_ENABLED) { loadPlaylists(); return; }
+    goHome();
+    wikiGet('am-admin').then(function(a){
+        WIKI_ADMIN = !!(a && a.isAdmin);
+        if (WIKI_ADMIN && STATE.view === 'home') goHome();   /* repinta con la tile de Moderación */
+    }).catch(function(){});
+})();
 </script>
 
 </body>

@@ -105,6 +105,39 @@ try { $pdo->exec("ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP NULL DEFAU
 catch (Throwable $e) { /* ya existe */ }
 try { $pdo->exec("ALTER TABLE messages ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL"); }
 catch (Throwable $e) { /* ya existe */ }
+/* runtime del item: minutos (pelis) o nº de capítulos (series/libros).
+   Se pone AL CREAR el item (autorrellenable). La moda entre los items
+   del mismo título (varios usuarios) es la que se muestra en reseñas. */
+try { $pdo->exec("ALTER TABLE list_items ADD COLUMN runtime INT NULL DEFAULT NULL"); }
+catch (Throwable $e) { /* ya existe */ }
+/* Capítulos de series — COMPARTIDOS por título (series_key = título en
+   minúsculas). Cualquier usuario añade/quita capítulos. La duración va
+   en minutos. El estado (visto + reseña) es POR USUARIO. */
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS series_episodes (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        series_key  VARCHAR(200) NOT NULL,
+        position    INT NOT NULL DEFAULT 0,
+        title       VARCHAR(255) NOT NULL,
+        image       VARCHAR(2000) NULL,
+        duration    INT NULL,            /* minutos */
+        created_by  INT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_series (series_key, position)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS series_episode_state (
+        episode_id  INT NOT NULL,
+        user_id     INT NOT NULL,
+        watched     TINYINT NOT NULL DEFAULT 0,
+        stars       DECIMAL(2,1) NULL,
+        comment     TEXT NULL,
+        reviewed_at TIMESTAMP NULL,
+        PRIMARY KEY (episode_id, user_id),
+        INDEX idx_ep (episode_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
 
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
 function pf_uid(PDO $pdo, string $userKey): ?int {
@@ -254,6 +287,7 @@ function pf_rowToItem(array $r, ?string $sharedFromUserKey, array $collabs): arr
             $item['review']['reviewedAt'] = (int)$r['reviewed_at_ts'];
         }
     }
+    if (isset($r['runtime']) && $r['runtime'] !== null) $item['runtime'] = (int)$r['runtime'];
     if (!empty($collabs)) $item['collaborators'] = $collabs;
     if ($sharedFromUserKey)  $item['sharedFrom']    = $sharedFromUserKey;
     return $item;
@@ -273,8 +307,7 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
                                   u.user_key AS shared_from_key,
                                   myr.stars AS my_review_stars,
-                                  myr.comment AS my_review_comment,
-                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
+                                  myr.comment AS my_review_comment,                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_items i
                            LEFT JOIN usuarios u ON i.shared_from = u.id
                            LEFT JOIN list_item_reviews myr
@@ -291,8 +324,7 @@ function pf_loadAllLists(PDO $pdo, int $uid): array {
                                   UNIX_TIMESTAMP(i.completed_at) AS completed_at_ts,
                                   ou.user_key AS owner_key,
                                   myr.stars AS my_review_stars,
-                                  myr.comment AS my_review_comment,
-                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
+                                  myr.comment AS my_review_comment,                                  UNIX_TIMESTAMP(myr.reviewed_at) AS my_reviewed_at_ts
                            FROM list_item_collaborators c
                            JOIN list_items i ON c.item_id = i.id
                            JOIN usuarios ou ON i.owner_id = ou.id
@@ -848,7 +880,7 @@ case 'search-titles': {
     $likeAny   = '%' . $q . '%';
     /* Distinct por title (puede haber varios users con el mismo título). */
     $stmt = $pdo->prepare("
-        SELECT title, MAX(image) AS image,
+        SELECT title, MAX(image) AS image, GROUP_CONCAT(runtime) AS runtimes,
                CASE WHEN LOWER(title) LIKE ? THEN 1 ELSE 2 END AS rank_p
         FROM list_items
         WHERE category = ? AND LOWER(title) LIKE ?
@@ -861,10 +893,15 @@ case 'search-titles': {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         if (count($suggestions) >= 8) break;
         if (isset($excluded[mb_strtolower($row['title'])])) continue;
-        $suggestions[] = [
-            'title' => $row['title'],
-            'image' => $row['image'] ?? '',
-        ];
+        /* runtime sugerido = la moda de los valores de ese título. */
+        $rt = null;
+        if (!empty($row['runtimes'])) {
+            $vals = array_filter(array_map('intval', explode(',', $row['runtimes'])), fn($v) => $v > 0);
+            if ($vals) { $freq = array_count_values($vals); arsort($freq); $rt = (int)array_key_first($freq); }
+        }
+        $sug = ['title' => $row['title'], 'image' => $row['image'] ?? ''];
+        if ($rt !== null) $sug['runtime'] = $rt;
+        $suggestions[] = $sug;
     }
     jsonResponse(['ok' => true, 'suggestions' => $suggestions]);
 }
@@ -972,6 +1009,10 @@ case 'save-lists': {
                 'review_stars'   => null,
                 'review_comment' => null,
                 'reviewed_at'    => null,
+                /* runtime del item: minutos (pelis) / capítulos (series, libros).
+                   Se pone al crear el item; música no lo usa. */
+                'runtime' => (isset($item['runtime']) && is_numeric($item['runtime']) && (int)$item['runtime'] > 0)
+                    ? min(100000, (int)$item['runtime']) : null,
             ];
             if ($isMusic) {
                 $clean['music_type'] = in_array($item['type'] ?? '', ['song','album'], true) ? $item['type'] : 'song';
@@ -1058,13 +1099,13 @@ case 'save-lists': {
                 $sql = "UPDATE list_items SET
                             title = ?, image = ?, status = ?, music_type = ?, artist = ?,
                             featured = ?, yt_id = ?, spotify_id = ?, yt_playlist_id = ?,
-                            spotify_album_id = ?,
+                            spotify_album_id = ?, runtime = ?,
                             completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ? AND owner_id = ?";
                 $params = [
                     $clean['title'], $clean['image'], $clean['status'], $clean['music_type'], $clean['artist'],
                     $clean['featured'], $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'],
-                    $clean['spotify_album_id'],
+                    $clean['spotify_album_id'], $clean['runtime'],
                 ];
                 if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $params[] = $id; $params[] = $uid;
@@ -1102,13 +1143,14 @@ case 'save-lists': {
                     : null;
                 $sql = "INSERT INTO list_items
                         (owner_id, category, title, image, status, music_type, artist, featured,
-                         yt_id, spotify_id, yt_playlist_id, spotify_album_id, completed_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
+                         yt_id, spotify_id, yt_playlist_id, spotify_album_id, runtime, completed_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " .
                         ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . ")";
                 $params = [
                     $uid, $category, $clean['title'], $clean['image'], $clean['status'],
                     $clean['music_type'], $clean['artist'], $clean['featured'],
                     $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'], $clean['spotify_album_id'],
+                    $clean['runtime'],
                 ];
                 if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $pdo->prepare($sql)->execute($params);
@@ -2070,6 +2112,215 @@ case 'view-user': {
     ]);
 }
 
+/* ─── Capítulos de series (compartidos por título) ─────────────── */
+
+case 'series-episodes': {
+    $uid = pf_uid($pdo, $userKey);
+    $key = mb_strtolower(trim((string)($_GET['seriesTitle'] ?? '')));
+    if ($key === '') jsonResponse(['ok' => true, 'episodes' => []]);
+    $st = $pdo->prepare("
+        SELECT e.id, e.position, e.title, e.image, e.duration,
+               s.watched AS myWatched, s.stars AS myStars, s.comment AS myComment,
+               (SELECT AVG(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS avgStars,
+               (SELECT COUNT(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS reviewCount
+        FROM series_episodes e
+        LEFT JOIN series_episode_state s ON s.episode_id = e.id AND s.user_id = ?
+        WHERE e.series_key = ?
+        ORDER BY e.position ASC, e.id ASC
+    ");
+    $st->execute([$uid, $key]);
+    $eps = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $eps[] = [
+            'id'          => (int)$r['id'],
+            'title'       => $r['title'],
+            'image'       => $r['image'] ?? '',
+            'duration'    => $r['duration'] !== null ? (int)$r['duration'] : null,
+            'watched'     => (int)($r['myWatched'] ?? 0) === 1,
+            'myStars'     => $r['myStars'] !== null ? (float)$r['myStars'] : null,
+            'myComment'   => (string)($r['myComment'] ?? ''),
+            'avgStars'    => $r['avgStars'] !== null ? round((float)$r['avgStars'], 2) : null,
+            'reviewCount' => (int)($r['reviewCount'] ?? 0),
+        ];
+    }
+    jsonResponse(['ok' => true, 'episodes' => $eps]);
+}
+
+case 'series-episode-reviews': {
+    /* Todas las reseñas (estrellas + comentario) de un capítulo concreto. */
+    $epId = (int)($_GET['episodeId'] ?? 0);
+    if (!$epId) jsonResponse(['ok' => true, 'reviews' => []]);
+    $st = $pdo->prepare("
+        SELECT u.user_key AS userKey, u.label AS userLabel,
+               s.stars AS stars, s.comment AS comment, UNIX_TIMESTAMP(s.reviewed_at) AS reviewedAt
+        FROM series_episode_state s
+        JOIN usuarios u ON u.id = s.user_id
+        WHERE s.episode_id = ? AND s.stars IS NOT NULL
+        ORDER BY s.reviewed_at DESC, s.user_id ASC
+    ");
+    $st->execute([$epId]);
+    $reviews = [];
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $userLabel = $r['userLabel'];
+        $reviews[] = [
+            'user'       => $r['userKey'],
+            'userLabel'  => $userLabel,
+            'userImg'    => function_exists('getUserImage') ? getUserImage($userLabel) : '',
+            'stars'      => (float)$r['stars'],
+            'comment'    => (string)($r['comment'] ?? ''),
+            'reviewedAt' => (int)($r['reviewedAt'] ?? 0),
+        ];
+    }
+    jsonResponse(['ok' => true, 'reviews' => $reviews]);
+}
+
+case 'save-series-episode': {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $key   = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    $title = mb_substr(trim((string)($b['title'] ?? '')), 0, 255);
+    if ($key === '' || $title === '') jsonError('Faltan datos');
+    $image = mb_substr(trim((string)($b['image'] ?? '')), 0, 2000);
+    $dur   = (isset($b['duration']) && is_numeric($b['duration']) && (int)$b['duration'] > 0) ? min(100000, (int)$b['duration']) : null;
+    $epId  = (isset($b['id']) && is_numeric($b['id'])) ? (int)$b['id'] : 0;
+    if ($epId > 0) {
+        $pdo->prepare("UPDATE series_episodes SET title=?, image=?, duration=? WHERE id=? AND series_key=?")
+            ->execute([$title, $image, $dur, $epId, $key]);
+    } else {
+        $posStmt = $pdo->prepare("SELECT COALESCE(MAX(position),0)+1 FROM series_episodes WHERE series_key=?");
+        $posStmt->execute([$key]);
+        $pos = (int)$posStmt->fetchColumn();
+        $pdo->prepare("INSERT INTO series_episodes (series_key, position, title, image, duration, created_by) VALUES (?,?,?,?,?,?)")
+            ->execute([$key, $pos, $title, $image, $dur, $uid]);
+        $epId = (int)$pdo->lastInsertId();
+    }
+    jsonResponse(['ok' => true, 'id' => $epId]);
+}
+
+case 'delete-series-episode': {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $b = jsonBody();
+    $epId = (int)($b['id'] ?? 0);
+    if (!$epId) jsonError('Falta id');
+    $pdo->prepare("DELETE FROM series_episodes WHERE id=?")->execute([$epId]);
+    $pdo->prepare("DELETE FROM series_episode_state WHERE episode_id=?")->execute([$epId]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'reorder-series-episodes': {
+    /* Reordena los capítulos de una serie. Recibe el orden completo de ids. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    $order = isset($b['order']) && is_array($b['order']) ? $b['order'] : [];
+    if ($key === '' || !$order) jsonError('Faltan datos');
+    $up = $pdo->prepare("UPDATE series_episodes SET position=? WHERE id=? AND series_key=?");
+    $pos = 1;
+    foreach ($order as $id) {
+        $id = (int)$id;
+        if ($id <= 0) continue;
+        $up->execute([$pos, $id, $key]);
+        $pos++;
+    }
+    jsonResponse(['ok' => true]);
+}
+
+case 'series-episode-state': {
+    /* Setea visto y/o reseña del usuario para un capítulo (merge parcial). */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $epId = (int)($b['episodeId'] ?? 0);
+    if (!$epId) jsonError('Falta episodeId');
+    $cur = $pdo->prepare("SELECT watched, stars, comment FROM series_episode_state WHERE episode_id=? AND user_id=?");
+    $cur->execute([$epId, $uid]);
+    $row = $cur->fetch(PDO::FETCH_ASSOC) ?: ['watched' => 0, 'stars' => null, 'comment' => null];
+    $watched = array_key_exists('watched', $b) ? (!empty($b['watched']) ? 1 : 0) : (int)$row['watched'];
+    $stars   = $row['stars'] !== null ? (float)$row['stars'] : null;
+    $comment = $row['comment'];
+    if (array_key_exists('stars', $b)) {
+        $s = (float)$b['stars'];
+        $stars   = ($s > 0) ? round($s * 2) / 2 : null;
+        $comment = ($stars !== null) ? mb_substr(trim((string)($b['comment'] ?? $comment ?? '')), 0, 1000) : null;
+    } elseif (array_key_exists('comment', $b)) {
+        $comment = mb_substr(trim((string)$b['comment']), 0, 1000);
+    }
+    $pdo->prepare("INSERT INTO series_episode_state (episode_id, user_id, watched, stars, comment, reviewed_at)
+                   VALUES (?,?,?,?,?, " . ($stars !== null ? "NOW()" : "NULL") . ")
+                   ON DUPLICATE KEY UPDATE watched=VALUES(watched), stars=VALUES(stars), comment=VALUES(comment), reviewed_at=VALUES(reviewed_at)")
+        ->execute([$epId, $uid, $watched, $stars, $comment]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'complete-series-episodes': {
+    /* Marca TODOS los capítulos de la serie como vistos para el usuario. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    if ($key === '') jsonError('Falta seriesTitle');
+    $ids = $pdo->prepare("SELECT id FROM series_episodes WHERE series_key=?");
+    $ids->execute([$key]);
+    $up = $pdo->prepare("INSERT INTO series_episode_state (episode_id, user_id, watched) VALUES (?,?,1)
+                         ON DUPLICATE KEY UPDATE watched=1");
+    foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $eid) $up->execute([(int)$eid, $uid]);
+    jsonResponse(['ok' => true]);
+}
+
+/* ─── Medias de la comunidad para música (reproductor) ───
+   Devuelve la media (estrellas) y nº de reseñas de cada canción/álbum
+   reseñado, indexado por título normalizado (+artista). El reproductor
+   lo usa para pintar la nota a la derecha de cada resultado. */
+case 'music-ratings': {
+    /* Normalización idéntica a la del JS del reproductor (_n):
+       minúsculas → todo lo no [a-z0-9] a espacio → trim. */
+    $norm = function($s) {
+        $s = mb_strtolower(trim((string)$s), 'UTF-8');
+        $s = preg_replace('/[^a-z0-9]+/u', ' ', $s);
+        return trim((string)$s);
+    };
+    $stmt = $pdo->query("
+        SELECT i.title, i.artist, i.music_type AS mtype, r.stars
+        FROM list_item_reviews r
+        JOIN list_items i ON r.item_id = i.id
+        WHERE i.category = 'music' AND r.stars > 0
+    ");
+    /* Acumuladores: por (título+artista) y por título solo (fallback /
+       para casar canciones de un álbum cuando el artista del track no
+       coincide exactamente con el de la reseña). */
+    $acc = ['songs' => [], 'albums' => [], 'songsTitle' => [], 'albumsTitle' => []];
+    $bump = function(&$map, $k, $stars) {
+        if (!isset($map[$k])) $map[$k] = ['sum' => 0.0, 'n' => 0];
+        $map[$k]['sum'] += $stars; $map[$k]['n']++;
+    };
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $nt = $norm($r['title']);
+        if ($nt === '') continue;
+        $na = $norm($r['artist'] ?? '');
+        $stars = (float)$r['stars'];
+        $isAlbum = (($r['mtype'] ?? '') === 'album');
+        $tk = $isAlbum ? 'albums' : 'songs';
+        $ttk = $isAlbum ? 'albumsTitle' : 'songsTitle';
+        $bump($acc[$tk], $nt . "\x1f" . $na, $stars);
+        $bump($acc[$ttk], $nt, $stars);
+    }
+    $finish = function($map) {
+        $out = [];
+        foreach ($map as $k => $v) {
+            $out[$k] = ['avg' => round($v['sum'] / max(1, $v['n']), 2), 'count' => $v['n']];
+        }
+        return $out;
+    };
+    jsonResponse([
+        'ok'          => true,
+        'songs'       => $finish($acc['songs']),
+        'albums'      => $finish($acc['albums']),
+        'songsTitle'  => $finish($acc['songsTitle']),
+        'albumsTitle' => $finish($acc['albumsTitle']),
+    ]);
+}
+
 /* ─── Reseñas globales (MelonArchive) ───────────────────── */
 
 case 'melon-reviews': {
@@ -2086,10 +2337,10 @@ case 'melon-reviews': {
        review se atribuye al user_id que la escribió (no al owner del
        item). Un item colaborativo con dos reseñas distintas aparece
        agrupado por título pero con dos entradas en 'reviews'. */
-    $sql = "SELECT i.title, i.image, i.artist, i.music_type AS mtype, i.yt_id AS ytId,
+    $sql = "SELECT i.id AS itemId, i.title, i.image, i.artist, i.music_type AS mtype, i.yt_id AS ytId,
                    i.spotify_id AS spotifyId, i.yt_playlist_id AS ytPlaylistId,
                    i.spotify_album_id AS spotifyAlbumId,
-                   r.stars AS stars, r.comment AS comment,
+                   r.stars AS stars, r.comment AS comment, i.runtime AS runtime,
                    UNIX_TIMESTAMP(COALESCE(r.reviewed_at, i.created_at)) AS reviewedAt,
                    u.user_key AS userKey, u.label AS userLabel
             FROM list_item_reviews r
@@ -2121,11 +2372,13 @@ case 'melon-reviews': {
                 'ytPlaylistId'   => $r['ytPlaylistId']   ?? '',
                 'spotifyAlbumId' => $r['spotifyAlbumId'] ?? '',
                 'totalStars'     => 0.0, 'totalReviews' => 0, 'latestAt' => 0, 'reviews' => [],
+                'runtimeByItem'  => [],   /* itemId => runtime (1 voto por item) */
             ];
         }
         foreach (['image','artist','mtype','ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) {
             if (empty($groups[$key][$f]) && !empty($r[$f])) $groups[$key][$f] = $r[$f];
         }
+        if ($r['runtime'] !== null && (int)$r['runtime'] > 0) $groups[$key]['runtimeByItem'][(int)$r['itemId']] = (int)$r['runtime'];
         $groups[$key]['totalStars'] += $stars;
         $groups[$key]['totalReviews']++;
         if ($rAt > $groups[$key]['latestAt']) $groups[$key]['latestAt'] = $rAt;
@@ -2140,6 +2393,14 @@ case 'melon-reviews': {
         ];
     }
 
+    /* Series: nº de capítulos + duración total (compartidos) por título. */
+    $epMap = [];
+    if ($cat === 'series') {
+        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
+            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'dur' => (int)$er['dur']];
+        }
+    }
+
     $items = [];
     foreach ($groups as $g) {
         usort($g['reviews'], fn($a, $b) => $b['reviewedAt'] - $a['reviewedAt']);
@@ -2148,8 +2409,26 @@ case 'melon-reviews': {
             'avg'   => round($g['totalStars'] / $g['totalReviews'], 2),
             'count' => $g['totalReviews'], 'latestAt' => $g['latestAt'], 'reviews' => $g['reviews'],
         ];
+        if ($cat === 'series') {
+            $lk = mb_strtolower($g['title']);
+            if (isset($epMap[$lk]) && $epMap[$lk]['cnt'] > 0) {
+                $e['episodeCount']    = $epMap[$lk]['cnt'];
+                $e['episodeDuration'] = $epMap[$lk]['dur'];
+            }
+        }
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];
         if (!empty($g['mtype'])) $e['type'] = $g['mtype'];
+        /* Consenso de runtime = la moda (valor con más coincidencias entre
+           los items del mismo título). Empate → el mayor (determinista). */
+        if (!empty($g['runtimeByItem'])) {
+            $freq = [];
+            foreach ($g['runtimeByItem'] as $rt) $freq[$rt] = ($freq[$rt] ?? 0) + 1;
+            $bestVal = null; $bestCnt = -1;
+            foreach ($freq as $val => $cnt) {
+                if ($cnt > $bestCnt || ($cnt === $bestCnt && (int)$val > (int)$bestVal)) { $bestCnt = $cnt; $bestVal = (int)$val; }
+            }
+            $e['runtime'] = $bestVal;
+        }
         $items[] = $e;
     }
     if ($period === 'recent') {
