@@ -2758,14 +2758,15 @@ function openEpEditorModal(ep, seriesTitle, onSaved) {
    iframe. Solo URLs http(s). */
 function openPdfViewerModal(url, title) {
     if (!url || !/^https?:\/\//i.test(url)) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
-    /* Drive → su visor /preview (se ve embebido en móvil). Resto → nuestro
-       visor PDF.js sobre el proxy (Chrome/Safari móvil no embeben PDFs). */
+    /* Drive → su visor /preview (se ve embebido en móvil). Resto → visor
+       completo de PDF.js (barra de páginas/zoom/descarga) sobre el proxy. */
     var embedSrc;
     if (/drive\.google\.com/i.test(url)) {
         var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
         embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
     } else {
-        embedSrc = '../../assets/profile/pdf-view.php?url=' + encodeURIComponent(url);
+        var fileParam = '../../../profile/pdf-proxy.php?url=' + encodeURIComponent(url);
+        embedSrc = '../../assets/vendor/pdfjs/web/viewer.html?file=' + encodeURIComponent(fileParam);
     }
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';

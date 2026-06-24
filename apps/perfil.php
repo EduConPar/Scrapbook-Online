@@ -4199,13 +4199,15 @@ var PROFILE_USERS = <?php
     function openPdfViewer(url, title) {
         if (!url || /^https?:\/\//i.test(url) === false) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
         /* Drive → su visor /preview (se ve embebido también en móvil).
-           Resto → nuestro visor PDF.js sobre el proxy (esquiva CORS/móvil). */
+           Resto → visor completo de PDF.js (con barra de páginas/zoom/
+           descarga) sobre nuestro proxy mismo-origen (esquiva CORS/móvil). */
         var embedSrc;
         if (/drive\.google\.com/i.test(url)) {
             var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
             embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
         } else {
-            embedSrc = 'assets/profile/pdf-view.php?url=' + encodeURIComponent(url);
+            var fileParam = '../../../profile/pdf-proxy.php?url=' + encodeURIComponent(url);
+            embedSrc = 'assets/vendor/pdfjs/web/viewer.html?file=' + encodeURIComponent(fileParam);
         }
         var old = document.getElementById('profile-pdf-viewer');
         if (old) old.parentNode.removeChild(old);
