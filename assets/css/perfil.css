@@ -325,6 +325,16 @@
 
 /* ── Ventana de capítulos de series ── */
 .ep-empty { padding: 24px; text-align: center; color: var(--text-faint); font-size: 12px; }
+.ep-season { margin-bottom: 10px; }
+.ep-season-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 6px; margin-bottom: 2px;
+    background: var(--accent, #000080); color: var(--accent-text, #fff);
+    position: sticky; top: -8px; z-index: 1;
+}
+.ep-season-title { font-weight: bold; font-size: 12px; flex: 1; }
+.ep-season-del { min-height: 20px; padding: 0 6px; font-size: 11px; }
+.ep-season-empty { padding: 10px; text-align: center; color: var(--text-faint); font-size: 11px; }
 .ep-row { display: flex; gap: 10px; padding: 8px; border-bottom: 1px solid var(--border); align-items: flex-start; }
 .ep-row:last-child { border-bottom: none; }
 .ep-thumb {

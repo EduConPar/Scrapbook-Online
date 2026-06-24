@@ -1421,6 +1421,12 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-episodes-body { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 90px); overflow: hidden; }
         .pf-ep-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
         .pf-ep-empty { font-size: 12px; color: var(--text-faint, #888); text-align: center; padding: 12px 4px; }
+        .pf-ep-season { margin-bottom: 8px; }
+        .pf-ep-season-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin-bottom: 4px; background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+        .pf-ep-season-title { font-weight: bold; font-size: 12px; flex: 1; }
+        .pf-ep-season-del { min-height: 22px; padding: 0 7px; font-size: 11px; }
+        .pf-ep-season-rows { display: flex; flex-direction: column; gap: 6px; }
+        .pf-ep-season-empty { font-size: 11px; color: var(--text-faint, #888); text-align: center; padding: 8px 4px; }
         .pf-ep-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px; border: 1px solid var(--win-border, #808080); background: var(--win-bg-light, #fff); }
         .pf-ep-thumb { width: 96px; aspect-ratio: 16/9; flex-shrink: 0; background: #000; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; }
         .pf-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -2150,19 +2156,17 @@ function showActionMenu(item, origIdx) {
     var lastAct   = isCollab ? 'leave' : 'delete';
     var items = [];
 
-    /* Las series se pueden editar (título/imagen/capítulos) en cualquier
-       estado, no solo completadas. */
-    var seriesEdit = (cat === 'series')
-        ? { act: 'review', icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' }
-        : null;
+    /* Cualquier item se puede editar en cualquier estado (título/imagen/
+       reseña/duración y, en series, capítulos), no solo completado. */
+    var editAction = { act: 'review', icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' };
 
     if (status === 'pending') {
-        if (seriesEdit) items.push(seriesEdit);
+        items.push(editAction);
         items.push({ act: 'inprogress', icon: '▶', label: 'Poner en curso' });
         items.push({ act: 'collab',     icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
         items.push({ act: lastAct,      icon: lastIcon, label: lastLabel });
     } else if (status === 'in-progress') {
-        if (seriesEdit) items.push(seriesEdit);
+        items.push(editAction);
         items.push({ act: 'complete', icon: '✓', label: 'Completar' });
         items.push({ act: 'unstart',  icon: '✕', label: 'Quitar de en curso' });
         items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
@@ -2404,6 +2408,11 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     /* Desde Melon Reviews: solo lectura — sin barra para añadir. */
     var addBar = readOnly ? '' :
         '<div class="pf-ep-addbar">' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+                '<label for="pf-ep-season" style="font-size:11px;">Temporada</label>' +
+                '<select id="pf-ep-season" style="flex:1;"></select>' +
+                '<button class="button" id="pf-ep-newseason" type="button">+ Temp.</button>' +
+            '</div>' +
             '<input type="text" id="pf-ep-title" placeholder="Título del capítulo">' +
             '<input type="text" id="pf-ep-image" placeholder="Imagen de preview (URL)">' +
             '<div style="display:flex;gap:6px;align-items:center;">' +
@@ -2426,36 +2435,66 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
     var listEl = bd.querySelector('#pf-ep-list');
     var eps = [];
-    function render() {
-        if (!eps.length) { listEl.innerHTML = '<div class="pf-ep-empty">Sin capítulos. Añade el primero abajo.</div>'; return; }
-        listEl.innerHTML = eps.map(function(ep, i){
-            var dur = epFmtDurM(ep.duration);
-            var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
-            var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
-            /* Solo lectura: miniatura abre las reseñas, sin controles de edición. */
-            if (readOnly) {
-                return '<div class="pf-ep-row">' +
-                    '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
-                    '<div class="pf-ep-info">' +
-                        '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
-                        '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '</div>' +
-                '</div>';
-            }
-            var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
-            var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-            var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-            return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
-                '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
-                '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
+    var extraSeasons = [];
+    function seasonsList() {
+        var set = {};
+        eps.forEach(function(ep){ set[ep.season || 1] = true; });
+        extraSeasons.forEach(function(s){ set[s] = true; });
+        var arr = Object.keys(set).map(function(s){ return parseInt(s, 10); });
+        if (!arr.length) arr = [1];
+        arr.sort(function(a, b){ return a - b; });
+        return arr;
+    }
+    function syncSeasonSelect() {
+        var sel = bd.querySelector('#pf-ep-season');
+        if (!sel) return;
+        var prev = sel.value;
+        var seasons = seasonsList();
+        sel.innerHTML = seasons.map(function(s){ return '<option value="' + s + '">Temporada ' + s + '</option>'; }).join('');
+        if (prev && seasons.indexOf(parseInt(prev, 10)) !== -1) sel.value = prev;
+    }
+    function renderRow(ep, n) {
+        var dur = epFmtDurM(ep.duration);
+        var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
+        var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
+        if (readOnly) {
+            return '<div class="pf-ep-row">' +
+                '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
                 '<div class="pf-ep-info">' +
-                    '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
+                    '<div class="pf-ep-title">' + n + '. ' + esc(ep.title) + '</div>' +
                     '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="pf-ep-controls">' + watch +
-                        '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
-                        '<button class="button" data-x="' + ep.id + '">✕</button>' +
-                    '</div>' +
                 '</div>' +
+            '</div>';
+        }
+        var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
+        var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
+        var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
+        return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
+            '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
+            '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
+            '<div class="pf-ep-info">' +
+                '<div class="pf-ep-title">' + n + '. ' + esc(ep.title) + '</div>' +
+                '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                '<div class="pf-ep-controls">' + watch +
+                    '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
+                    '<button class="button" data-x="' + ep.id + '">✕</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    }
+    function render() {
+        syncSeasonSelect();
+        if (!eps.length && !extraSeasons.length) { listEl.innerHTML = '<div class="pf-ep-empty">Sin capítulos. Añade el primero abajo.</div>'; return; }
+        var seasons = seasonsList();
+        listEl.innerHTML = seasons.map(function(seasonNum){
+            var group = eps.filter(function(ep){ return (ep.season || 1) === seasonNum; });
+            var rowsHtml = group.length
+                ? group.map(function(ep, i){ return renderRow(ep, i + 1); }).join('')
+                : '<div class="pf-ep-season-empty">Sin capítulos en esta temporada.</div>';
+            var delBtn = readOnly ? '' : '<button class="button pf-ep-season-del" data-delseason="' + seasonNum + '">✕</button>';
+            return '<div class="pf-ep-season">' +
+                '<div class="pf-ep-season-head"><span class="pf-ep-season-title">Temporada ' + seasonNum + '</span>' + delBtn + '</div>' +
+                '<div class="pf-ep-season-rows" data-season="' + seasonNum + '">' + rowsHtml + '</div>' +
             '</div>';
         }).join('');
     }
@@ -2471,10 +2510,11 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
         fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
     });
-    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil). */
-    var dragRow = null;
+    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil).
+       El reordenado es dentro de la misma temporada (su contenedor). */
+    var dragRow = null, dragCont = null;
     function epDragAfter(y) {
-        var els = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
+        var els = Array.prototype.slice.call((dragCont || listEl).querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
         var closest = null, closestOff = -Infinity;
         els.forEach(function(ch){
             var box = ch.getBoundingClientRect();
@@ -2487,13 +2527,13 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         if (!dragRow) return;
         e.preventDefault();
         var after = epDragAfter(e.clientY);
-        if (after == null) listEl.appendChild(dragRow);
-        else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+        if (after == null) (dragCont || listEl).appendChild(dragRow);
+        else if (after !== dragRow) (dragCont || listEl).insertBefore(dragRow, after);
     }
     function epDragUp(){
         if (!dragRow) return;
         dragRow.classList.remove('pf-ep-dragging');
-        dragRow = null;
+        dragRow = null; dragCont = null;
         document.removeEventListener('pointermove', epDragMove);
         document.removeEventListener('pointerup', epDragUp);
         document.removeEventListener('pointercancel', epDragUp);
@@ -2506,7 +2546,7 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var h = e.target.closest('[data-drag]'); if (!h) return;
         var row = h.closest('.pf-ep-row'); if (!row) return;
         e.preventDefault();
-        dragRow = row; row.classList.add('pf-ep-dragging');
+        dragRow = row; dragCont = row.parentNode; row.classList.add('pf-ep-dragging');
         document.addEventListener('pointermove', epDragMove);
         document.addEventListener('pointerup', epDragUp);
         document.addEventListener('pointercancel', epDragUp);
@@ -2514,6 +2554,17 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     listEl.addEventListener('click', function(e){
         var rv = e.target.closest('[data-rev]');
         if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
+        var dsn = e.target.closest('[data-delseason]');
+        if (dsn) {
+            var sNum = parseInt(dsn.getAttribute('data-delseason'), 10);
+            var inSeason = eps.filter(function(x){ return (x.season || 1) === sNum; });
+            if (!inSeason.length) { extraSeasons = extraSeasons.filter(function(s){ return s !== sNum; }); render(); return; }
+            if (confirm('¿Eliminar la Temporada ' + sNum + ' y sus ' + inSeason.length + ' capítulo(s)? Afecta a todos.')) {
+                fetch(API + '?action=delete-series-season', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, season: sNum }) })
+                    .then(function(){ eps = eps.filter(function(x){ return (x.season || 1) !== sNum; }); extraSeasons = extraSeasons.filter(function(s){ return s !== sNum; }); render(); }).catch(function(){});
+            }
+            return;
+        }
         var r = e.target.closest('[data-r]');
         if (r) { var id = parseInt(r.getAttribute('data-r'), 10); var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) openEpReviewModal(ep, load); return; }
         var x = e.target.closest('[data-x]');
@@ -2529,8 +2580,26 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var t = bd.querySelector('#pf-ep-title').value.trim(); if (!t) return;
         var img = bd.querySelector('#pf-ep-image').value.trim();
         var dur = parseInt(bd.querySelector('#pf-ep-dur').value, 10) || 0;
-        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, title: t, image: img, duration: dur }) })
-            .then(function(){ bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = ''; load(); }).catch(function(){});
+        var seasonEl = bd.querySelector('#pf-ep-season');
+        var season = seasonEl ? (parseInt(seasonEl.value, 10) || 1) : 1;
+        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, title: t, image: img, duration: dur, season: season }) })
+            .then(function(){
+                bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = '';
+                /* Recargar conservando la temporada seleccionada. */
+                fetch(API + '?action=series-episodes&seriesTitle=' + encodeURIComponent(seriesTitle), { credentials: 'same-origin' })
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(d){ eps = (d && d.episodes) || []; render(); var s = bd.querySelector('#pf-ep-season'); if (s) s.value = season; })
+                    .catch(function(){});
+            }).catch(function(){});
+    });
+    /* Añadir temporada (transitoria hasta que tenga capítulos). */
+    var newSeasonEl = bd.querySelector('#pf-ep-newseason');
+    if (newSeasonEl) newSeasonEl.addEventListener('click', function(){
+        var seasons = seasonsList();
+        var next = (seasons.length ? seasons[seasons.length - 1] : 0) + 1;
+        extraSeasons.push(next);
+        render();
+        var s = bd.querySelector('#pf-ep-season'); if (s) s.value = next;
     });
     load();
 }
