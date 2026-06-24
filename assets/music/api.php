@@ -1131,17 +1131,35 @@ case 'album-tracks': {
     }
 
     /* iTunes / Deezer: sin auth ni rate-limit estricto, fetch directo. */
-    if ($source === 'itunes') {
-        $r = itunesGetAlbumTracks($albumId);
-        if (!$r) jsonError('No se pudo leer el álbum de iTunes', 502);
-        cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
-        jsonResponse($r);
-    }
-    if ($source === 'deezer') {
-        $r = deezerGetAlbumTracks($albumId);
-        if (!$r) jsonError('No se pudo leer el álbum de Deezer', 502);
-        cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
-        jsonResponse($r);
+    if ($source === 'itunes' || $source === 'deezer') {
+        $r = ($source === 'itunes') ? itunesGetAlbumTracks($albumId) : deezerGetAlbumTracks($albumId);
+        if ($r && !empty($r['tracks'])) {
+            cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
+            jsonResponse($r);
+        }
+        /* El álbum existe en su fuente pero la búsqueda de pistas vino
+           VACÍA (no disponible en esa store/región) o falló. Algunos
+           álbumes salen en la búsqueda/página de artista pero al abrirlos
+           no tenían pistas → ventana vacía. Reintentamos buscando el MISMO
+           álbum por nombre+artista en iTunes/Deezer (la otra fuente suele
+           tenerlo). Usamos el nombre del propio álbum si lo tenemos, o los
+           hints que mande el cliente. */
+        $fbName   = trim((string)(($r['name']   ?? '') ?: ($_GET['name']   ?? '')));
+        $fbArtist = trim((string)(($r['artist'] ?? '') ?: ($_GET['artist'] ?? '')));
+        if ($fbName !== '') {
+            try {
+                $fb = _albumTracksFallbackByName($fbName, $fbArtist, $cacheKey);
+                if ($fb !== null && !empty($fb['tracks'])) jsonResponse($fb);
+            } catch (Throwable $e) { /* cae al cierre de abajo */ }
+        }
+        /* Si teníamos el álbum (aunque sin pistas) lo devolvemos para que
+           al menos se vea su nombre/portada; si no, error. Cache corta
+           para no re-resolver en bucle pero permitir reintento. */
+        if ($r) {
+            cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 3600);
+            jsonResponse($r);
+        }
+        jsonError('No se pudo leer el álbum (' . $source . ')', 502);
     }
 
     /* ── Spotify ELIMINADO ──
@@ -2369,7 +2387,7 @@ function _albumTracksFallbackByName(string $name, string $artist, string $origCa
                 $collId = (string)($r['collectionId'] ?? '');
                 if ($collId === '' || !$matches((string)($r['collectionName'] ?? ''))) continue;
                 $tracks = itunesGetAlbumTracks($collId);
-                if ($tracks) {
+                if ($tracks && !empty($tracks['tracks'])) {
                     cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
                     return $tracks;
                 }
@@ -2384,7 +2402,7 @@ function _albumTracksFallbackByName(string $name, string $artist, string $origCa
                 $aid = (string)($a['id'] ?? '');
                 if ($aid === '' || !$matches((string)($a['title'] ?? ''))) continue;
                 $tracks = deezerGetAlbumTracks($aid);
-                if ($tracks) {
+                if ($tracks && !empty($tracks['tracks'])) {
                     cacheSet($origCacheKey, json_encode($tracks, JSON_UNESCAPED_UNICODE), 30 * 24 * 3600);
                     return $tracks;
                 }
