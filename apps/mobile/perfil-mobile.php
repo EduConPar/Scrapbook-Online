@@ -1423,7 +1423,9 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-ep-empty { font-size: 12px; color: var(--text-faint, #888); text-align: center; padding: 12px 4px; }
         .pf-ep-season { margin-bottom: 8px; }
         .pf-ep-season-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin-bottom: 4px; background: var(--accent, #1db954); color: var(--accent-text, #fff); }
-        .pf-ep-season-title { font-weight: bold; font-size: 12px; flex: 1; }
+        .pf-ep-season-title { font-weight: bold; font-size: 12px; flex-shrink: 0; }
+        .pf-ep-season-meta { flex: 1; font-size: 10px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pf-ep-season-avg { flex-shrink: 0; font-size: 11px; font-weight: bold; }
         .pf-ep-season-del { min-height: 22px; padding: 0 7px; font-size: 11px; }
         .pf-ep-season-rows { display: flex; flex-direction: column; gap: 6px; }
         .pf-ep-season-empty { font-size: 11px; color: var(--text-faint, #888); text-align: center; padding: 8px 4px; }
@@ -2492,8 +2494,21 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
                 ? group.map(function(ep, i){ return renderRow(ep, i + 1); }).join('')
                 : '<div class="pf-ep-season-empty">Sin capítulos en esta temporada.</div>';
             var delBtn = readOnly ? '' : '<button class="button pf-ep-season-del" data-delseason="' + seasonNum + '">✕</button>';
+            /* Resumen de la temporada: nº de capítulos, duración total y
+               nota media (media de las notas medias de sus capítulos). */
+            var cnt = group.length;
+            var durSum = group.reduce(function(a, ep){ return a + (ep.duration || 0); }, 0);
+            var rated = group.filter(function(ep){ return ep.avgStars != null; });
+            var savg = rated.length ? (rated.reduce(function(a, ep){ return a + ep.avgStars; }, 0) / rated.length) : null;
+            var metaBits = [cnt + (cnt === 1 ? ' cap.' : ' caps.')];
+            if (durSum > 0) metaBits.push(epFmtDurM(durSum));
+            var avgHtml = (savg != null) ? '<span class="pf-ep-season-avg">★ ' + savg.toFixed(1) + '</span>' : '';
             return '<div class="pf-ep-season">' +
-                '<div class="pf-ep-season-head"><span class="pf-ep-season-title">Temporada ' + seasonNum + '</span>' + delBtn + '</div>' +
+                '<div class="pf-ep-season-head">' +
+                    '<span class="pf-ep-season-title">Temporada ' + seasonNum + '</span>' +
+                    '<span class="pf-ep-season-meta">' + metaBits.join(' · ') + '</span>' +
+                    avgHtml + delBtn +
+                '</div>' +
                 '<div class="pf-ep-season-rows" data-season="' + seasonNum + '">' + rowsHtml + '</div>' +
             '</div>';
         }).join('');
@@ -2694,6 +2709,9 @@ function openReviewEditor(item, origIdx, cat) {
     var RW_RT_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
     var rtLabel = RW_RT_LABEL[cat];
     var isSeries = (cat === 'series');
+    /* La nota y la reseña solo si el item está completado (la música no
+       tiene estado → siempre se puede reseñar). */
+    var allowReview = (cat === 'music') || (normalizeStatus(item.status) === 'completed');
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
@@ -2714,12 +2732,14 @@ function openReviewEditor(item, origIdx, cat) {
                            '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
                 (isSeries ? '<div class="pf-rev-edit-label">Capítulos</div>' +
                             '<button class="button" id="pf-rev-edit-eps" type="button" style="width:100%;box-sizing:border-box;">🎬 Ver / editar capítulos</button>' : '') +
-                '<div class="pf-rev-edit-label">Puntuación</div>' +
-                '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
-                '<div class="pf-rev-edit-label">Comentario</div>' +
-                '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>' +
+                (allowReview
+                    ? '<div class="pf-rev-edit-label">Puntuación</div>' +
+                      '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
+                      '<div class="pf-rev-edit-label">Comentario</div>' +
+                      '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>'
+                    : '<div class="pf-rev-edit-label" style="color:var(--text-faint,#888);">Marca el item como completado para poder puntuarlo y reseñarlo.</div>') +
                 '<div class="modal-actions">' +
-                    (hadReview ? '<button class="button danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Borrar</button>' : '') +
+                    ((hadReview && allowReview) ? '<button class="button danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Borrar</button>' : '') +
                     '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
                     '<button class="button default" data-act="save" type="button">Guardar</button>' +
                 '</div>' +
@@ -2729,7 +2749,7 @@ function openReviewEditor(item, origIdx, cat) {
 
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
-    commentEl.value = curComment;
+    if (commentEl) commentEl.value = curComment;
     var titleEl = bd.querySelector('#pf-rev-edit-title');
     var imageEl = bd.querySelector('#pf-rev-edit-image');
     var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
@@ -2759,7 +2779,7 @@ function openReviewEditor(item, origIdx, cat) {
             });
         });
     }
-    renderStars();
+    if (starsBox) renderStars();
 
     function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
     bd.querySelector('.title-bar-controls button').addEventListener('click', close);
@@ -2776,14 +2796,18 @@ function openReviewEditor(item, origIdx, cat) {
             var rt = parseInt(runtimeEl.value, 10) || 0;
             if (rt > 0) list[origIdx].runtime = rt; else delete list[origIdx].runtime;
         }
-        if (sel > 0) {
-            list[origIdx].review = {
-                stars: sel,
-                comment: commentEl.value.trim(),
-                reviewedAt: Math.floor(Date.now() / 1000)
-            };
-        } else {
-            delete list[origIdx].review;
+        /* La reseña solo se toca si está permitida (item completado o
+           música). En otros estados se preserva lo que hubiera. */
+        if (allowReview) {
+            if (sel > 0) {
+                list[origIdx].review = {
+                    stars: sel,
+                    comment: commentEl ? commentEl.value.trim() : '',
+                    reviewedAt: Math.floor(Date.now() / 1000)
+                };
+            } else {
+                delete list[origIdx].review;
+            }
         }
         renderActiveList();
         fetch(API + '?action=save-lists', {
@@ -2796,7 +2820,7 @@ function openReviewEditor(item, origIdx, cat) {
         .then(function(d){
             if (d && Array.isArray(d.items)) { STATE.lists[cat] = d.items; renderActiveList(); }
             /* Notify a followers solo si hay reseña — mismo flow que escritorio. */
-            if (sel > 0) {
+            if (allowReview && sel > 0) {
                 fetch(API + '?action=notify-review', {
                     method: 'POST',
                     credentials: 'same-origin',

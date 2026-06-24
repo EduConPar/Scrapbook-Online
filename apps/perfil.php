@@ -762,12 +762,13 @@ if ($_perfilStandalone) {
         <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
         </div>
-        <div style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
-        <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
+        <div id="profile-review-only-completed" style="font-size:11px;margin-bottom:8px;flex-shrink:0;color:var(--text-faint);display:none;">Marca el item como completado para poder puntuarlo y reseñarlo.</div>
+        <div id="profile-review-score-label" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
+        <div id="profile-review-score-row" style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
         </div>
-        <div class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
+        <div id="profile-review-comment-row" class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
             <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Comentario (opcional)</label>
             <!-- resize:none — el resize:vertical permitía al usuario
                  arrastrar el handle y agrandar el textarea fuera de su
@@ -1728,6 +1729,15 @@ var PROFILE_USERS = <?php
             epsRow.style.display = 'none';
         }
 
+        /* La nota y la reseña solo se pueden añadir si el item está
+           completado. En pendiente/en curso solo se editan título/imagen/
+           duración (y, en series, capítulos). */
+        var allowReview = (item.status === 'completed');
+        document.getElementById('profile-review-only-completed').style.display = allowReview ? 'none' : '';
+        document.getElementById('profile-review-score-label').style.display = allowReview ? '' : 'none';
+        document.getElementById('profile-review-score-row').style.display = allowReview ? '' : 'none';
+        document.getElementById('profile-review-comment-row').style.display = allowReview ? '' : 'none';
+
         var numEl = document.getElementById('profile-review-stars-num');
         function setStarDisp(el, val, pos) {
             if (val >= pos) { el.innerHTML = '★'; el.style.clipPath = ''; el.style.opacity = ''; }
@@ -1782,8 +1792,9 @@ var PROFILE_USERS = <?php
         var newCancel = cancelBtn.cloneNode(true); cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         var newDelete = deleteBtn.cloneNode(true); deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
-        /* Botón Eliminar solo si ya hay una reseña guardada */
-        newDelete.style.display = (item.review && item.review.stars) ? '' : 'none';
+        /* Botón Eliminar solo si ya hay una reseña guardada y el item está
+           completado (en otros estados no se gestiona reseña). */
+        newDelete.style.display = (allowReview && item.review && item.review.stars) ? '' : 'none';
 
         function closeWin() { win.style.display = 'none'; }
         newClose.addEventListener('click', closeWin);
@@ -1799,12 +1810,15 @@ var PROFILE_USERS = <?php
                 var rt = parseInt(rtEl.value, 10) || 0;
                 if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
             }
-            /* Reseña: con estrellas la guarda; sin estrellas la quita. */
-            if (sel > 0) {
-                lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
-                notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
-            } else {
-                delete lists[cat][i].review;
+            /* Reseña: solo se toca si el item está completado. En otros
+               estados se preserva lo que hubiera (no se añade nota/reseña). */
+            if (allowReview) {
+                if (sel > 0) {
+                    lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                    notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
+                } else {
+                    delete lists[cat][i].review;
+                }
             }
             saveCategory(cat);
             renderCatView(cat);
@@ -3872,8 +3886,21 @@ var PROFILE_USERS = <?php
                 ? eps.map(function(ep, i){ return epRenderRow(ep, i + 1); }).join('')
                 : '<div class="ep-season-empty">Sin capítulos en esta temporada.</div>';
             var delBtn = _epReadOnly ? '' : '<button class="button ep-season-del" data-ep-delseason="' + seasonNum + '" title="Eliminar temporada">✕</button>';
+            /* Resumen de la temporada: nº de capítulos, duración total y
+               nota media (media de las notas medias de sus capítulos). */
+            var cnt = eps.length;
+            var durSum = eps.reduce(function(a, ep){ return a + (ep.duration || 0); }, 0);
+            var rated = eps.filter(function(ep){ return ep.avgStars != null; });
+            var savg = rated.length ? (rated.reduce(function(a, ep){ return a + ep.avgStars; }, 0) / rated.length) : null;
+            var metaBits = [cnt + (cnt === 1 ? ' capítulo' : ' capítulos')];
+            if (durSum > 0) metaBits.push(epFmtDur(durSum));
+            var avgHtml = (savg != null) ? '<span class="ep-season-avg">★ ' + savg.toFixed(1) + '</span>' : '';
             return '<div class="ep-season">' +
-                '<div class="ep-season-head"><span class="ep-season-title">Temporada ' + seasonNum + '</span>' + delBtn + '</div>' +
+                '<div class="ep-season-head">' +
+                    '<span class="ep-season-title">Temporada ' + seasonNum + '</span>' +
+                    '<span class="ep-season-meta">' + metaBits.join(' · ') + '</span>' +
+                    avgHtml + delBtn +
+                '</div>' +
                 '<div class="ep-season-rows" data-season="' + seasonNum + '">' + rowsHtml + '</div>' +
             '</div>';
         }).join('');
