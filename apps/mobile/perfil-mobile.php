@@ -2758,6 +2758,15 @@ function openEpEditorModal(ep, seriesTitle, onSaved) {
    iframe. Solo URLs http(s). */
 function openPdfViewerModal(url, title) {
     if (!url || !/^https?:\/\//i.test(url)) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+    /* Drive → su visor /preview (se ve embebido en móvil). Resto → nuestro
+       visor PDF.js sobre el proxy (Chrome/Safari móvil no embeben PDFs). */
+    var embedSrc;
+    if (/drive\.google\.com/i.test(url)) {
+        var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
+    } else {
+        embedSrc = '../../assets/profile/pdf-view.php?url=' + encodeURIComponent(url);
+    }
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
@@ -2765,7 +2774,7 @@ function openPdfViewerModal(url, title) {
             '<div class="title-bar"><div class="title-bar-text">📖 ' + esc(title || 'PDF') + '</div>' +
                 '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
             '<div class="window-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
-                '<iframe src="' + esc(url) + '" style="width:100%;height:100%;border:0;display:block;" referrerpolicy="no-referrer"></iframe>' +
+                '<iframe src="' + esc(embedSrc) + '" style="width:100%;height:100%;border:0;display:block;"></iframe>' +
             '</div>' +
         '</div>';
     document.body.appendChild(bd);

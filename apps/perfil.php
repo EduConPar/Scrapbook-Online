@@ -4198,6 +4198,15 @@ var PROFILE_USERS = <?php
        con maximizar/minimizar. Solo acepta URLs http(s). */
     function openPdfViewer(url, title) {
         if (!url || /^https?:\/\//i.test(url) === false) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+        /* Drive → su visor /preview (se ve embebido también en móvil).
+           Resto → nuestro visor PDF.js sobre el proxy (esquiva CORS/móvil). */
+        var embedSrc;
+        if (/drive\.google\.com/i.test(url)) {
+            var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+            embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
+        } else {
+            embedSrc = 'assets/profile/pdf-view.php?url=' + encodeURIComponent(url);
+        }
         var old = document.getElementById('profile-pdf-viewer');
         if (old) old.parentNode.removeChild(old);
         var win = document.createElement('div');
@@ -4214,9 +4223,8 @@ var PROFILE_USERS = <?php
                 '</div>' +
             '</div>' +
             '<div class="window-body" id="pdf-viewer-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
-                '<iframe src="' + escHtml(url) + '" style="width:100%;height:100%;border:0;display:block;" referrerpolicy="no-referrer"></iframe>' +
-            '</div>' +
-            '<div class="pdf-resize-handle" style="position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:2;"></div>';
+                '<iframe src="' + escHtml(embedSrc) + '" style="width:100%;height:100%;border:0;display:block;"></iframe>' +
+            '</div>';
         document.body.appendChild(win);
         win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
@@ -4244,19 +4252,44 @@ var PROFILE_USERS = <?php
             function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
             document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
         });
-        /* Redimensionar desde la esquina inferior derecha. */
-        win.querySelector('.pdf-resize-handle').addEventListener('pointerdown', function(e){
+        /* Redimensionar desde las 4 esquinas y los 4 lados. Cada handle
+           lleva su 'edge' (combinación de n/s/e/w). */
+        var MINW = 320, MINH = 200;
+        var EDGES = [
+            { edge: 'nw', css: 'top:0;left:0;width:14px;height:14px;cursor:nwse-resize;' },
+            { edge: 'ne', css: 'top:0;right:0;width:14px;height:14px;cursor:nesw-resize;' },
+            { edge: 'sw', css: 'bottom:0;left:0;width:14px;height:14px;cursor:nesw-resize;' },
+            { edge: 'se', css: 'bottom:0;right:0;width:14px;height:14px;cursor:nwse-resize;' },
+            { edge: 'n',  css: 'top:0;left:14px;right:14px;height:6px;cursor:ns-resize;' },
+            { edge: 's',  css: 'bottom:0;left:14px;right:14px;height:6px;cursor:ns-resize;' },
+            { edge: 'w',  css: 'left:0;top:14px;bottom:14px;width:6px;cursor:ew-resize;' },
+            { edge: 'e',  css: 'right:0;top:14px;bottom:14px;width:6px;cursor:ew-resize;' }
+        ];
+        function startResize(e, edge){
             if (maximized) return;
             e.preventDefault(); e.stopPropagation();
             var r = win.getBoundingClientRect();
-            var sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
+            var sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top;
             iframe.style.pointerEvents = 'none';
             function mv(ev){
-                win.style.width  = Math.max(320, sw + (ev.clientX - sx)) + 'px';
-                win.style.height = Math.max(200, sh + (ev.clientY - sy)) + 'px';
+                var dx = ev.clientX - sx, dy = ev.clientY - sy;
+                var w = sw, h = sh, l = sl, t = st;
+                if (edge.indexOf('e') !== -1) w = Math.max(MINW, sw + dx);
+                if (edge.indexOf('s') !== -1) h = Math.max(MINH, sh + dy);
+                if (edge.indexOf('w') !== -1) { w = Math.max(MINW, sw - dx); l = sl + (sw - w); }
+                if (edge.indexOf('n') !== -1) { h = Math.max(MINH, sh - dy); t = st + (sh - h); }
+                win.style.width = w + 'px'; win.style.height = h + 'px';
+                win.style.left = l + 'px'; win.style.top = t + 'px';
             }
             function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
             document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        }
+        EDGES.forEach(function(h){
+            var d = document.createElement('div');
+            d.className = 'pdf-resize-handle';
+            d.style.cssText = 'position:absolute;z-index:3;' + h.css;
+            (function(edge){ d.addEventListener('pointerdown', function(e){ startResize(e, edge); }); })(h.edge);
+            win.appendChild(d);
         });
         /* Maximizar: alterna pantalla completa / tamaño previo. */
         ctrls.querySelector('button[aria-label="Maximize"]').addEventListener('click', function(){
