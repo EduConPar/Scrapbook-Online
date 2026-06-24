@@ -768,6 +768,15 @@ if ($_perfilStandalone) {
         <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
         </div>
+        <!-- Libros: enlace a un PDF (compartido por título). Al clicar el
+             título del libro en Melon Reviews se abre embebido. -->
+        <div id="profile-review-pdf-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <label for="profile-review-pdf" style="font-size:11px;margin-bottom:3px;">PDF (URL) — al clicar el título del libro se abre</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" id="profile-review-pdf" style="flex:1;box-sizing:border-box;" placeholder="https://....pdf  o  Drive .../preview">
+                <button class="button" id="profile-review-pdf-btn" type="button">📖 Abrir</button>
+            </div>
+        </div>
         <div id="profile-review-only-completed" style="font-size:11px;margin-bottom:8px;flex-shrink:0;color:var(--text-faint);display:none;">Marca el item como completado para poder puntuarlo y reseñarlo.</div>
         <div id="profile-review-score-label" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
         <div id="profile-review-score-row" style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
@@ -1734,6 +1743,25 @@ var PROFILE_USERS = <?php
             rtRow.style.display = 'none'; rtEl.value = '';
             epsRow.style.display = 'none';
         }
+        /* Libros: campo de PDF (compartido por título). Se carga el actual
+           y se guarda al pulsar Guardar. El botón Abrir lo previsualiza. */
+        var pdfRow = document.getElementById('profile-review-pdf-row');
+        var pdfEl  = document.getElementById('profile-review-pdf');
+        var pdfBtn = document.getElementById('profile-review-pdf-btn');
+        if (cat === 'books') {
+            pdfRow.style.display = '';
+            pdfEl.value = '';
+            fetch('assets/profile/api.php?action=book-pdf&bookTitle=' + encodeURIComponent(item.title || ''), { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){ if (d && d.url) pdfEl.value = d.url; }).catch(function(){});
+            var newPdfBtn = pdfBtn.cloneNode(true); pdfBtn.parentNode.replaceChild(newPdfBtn, pdfBtn);
+            newPdfBtn.addEventListener('click', function(){
+                var u = pdfEl.value.trim();
+                if (u) openPdfViewer(u, titleEl.value.trim() || item.title || 'Libro');
+            });
+        } else {
+            pdfRow.style.display = 'none';
+        }
 
         /* La nota y la reseña solo se pueden añadir si el item está
            completado. En pendiente/en curso solo se editan título/imagen/
@@ -1815,6 +1843,13 @@ var PROFILE_USERS = <?php
             if (RW_RT_LABEL[cat]) {
                 var rt = parseInt(rtEl.value, 10) || 0;
                 if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
+            }
+            /* Libros: guardar/actualizar el PDF compartido por título. */
+            if (cat === 'books') {
+                fetch('assets/profile/api.php?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: lists[cat][i].title, url: pdfEl.value.trim() })
+                }).catch(function(){});
             }
             /* Reseña: solo se toca si el item está completado. En otros
                estados se preserva lo que hubiera (no se añade nota/reseña). */
@@ -4159,6 +4194,33 @@ var PROFILE_USERS = <?php
     }
     window.profileOpenEpisodes = openEpisodesWindow;
 
+    /* Visor de PDF embebido (libros). Ventana con un iframe al PDF. Solo
+       acepta URLs http(s); otros esquemas se ignoran por seguridad. */
+    function openPdfViewer(url, title) {
+        if (!url || !/^https?:\/\//i.test(url)) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+        var old = document.getElementById('profile-pdf-viewer');
+        if (old) old.parentNode.removeChild(old);
+        var win = document.createElement('div');
+        win.id = 'profile-pdf-viewer';
+        win.className = 'window';
+        win.style.cssText = 'position:fixed;z-index:10006;width:min(820px,94vw);height:min(88vh,1000px);display:flex;flex-direction:column;';
+        win.innerHTML =
+            '<div class="title-bar">' +
+                '<div class="title-bar-text">📖 ' + escHtml(title || 'PDF') + '</div>' +
+                '<div class="title-bar-controls">' +
+                    '<button aria-label="Close" type="button"></button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="window-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
+                '<iframe src="' + escHtml(url) + '" style="width:100%;height:100%;border:0;display:block;" referrerpolicy="no-referrer"></iframe>' +
+            '</div>';
+        document.body.appendChild(win);
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+        win.querySelector('.title-bar-controls button').addEventListener('click', function(){ win.parentNode.removeChild(win); });
+    }
+    window.profileOpenPdf = openPdfViewer;
+
     /* Formatea segundos: álbum → "45 min" / "1 h 12 min"; canción → "3:45". */
     function melonFmtDur(sec) {
         sec = Math.round(sec || 0);
@@ -4292,6 +4354,13 @@ var PROFILE_USERS = <?php
         var htitle = document.createElement('div');
         htitle.className = 'melon-detail-htitle';
         htitle.textContent = item.title; htitle.title = item.title;
+        /* Libros con PDF: clicar el título lo abre embebido. */
+        if (melonCat === 'books' && item.pdfUrl) {
+            htitle.classList.add('melon-detail-link');
+            htitle.style.cursor = 'pointer';
+            htitle.title = 'Abrir PDF';
+            htitle.addEventListener('click', function(){ openPdfViewer(item.pdfUrl, item.title); });
+        }
         hinfo.appendChild(htitle);
         if (item.artist) {
             var hart = document.createElement('div');

@@ -129,6 +129,7 @@
 - Ahora puedes añadir los capitulos de cada una de las series y añadirles una reseña individualmente
 - Ahora en las reseñas de los albumes puedes clicar en el titulo del album o en el artista y te abrira una ventana con el contenido del album o el perfil del artista respectivamente
 - Se ha añadido que en las ventanas de contenido de album aparezca la nota media si alguna de las canciones del album ha sido reseñada
+- Ahora al subir libros se puede adjuntar un link a un pdf. Al darle click en la reseña de melon reviews al titulo del libro, se abrira el pdf que hayan subido los usuarios y podras leer el libro
 
 ## Bugs y mejoras
 - Arreglado un bug que hacia que al poner una reseña y hacer la ventana mas pequeña, los elementos de la ventana se salieran de esta

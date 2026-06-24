@@ -142,6 +142,17 @@ $pdo->exec("
         INDEX idx_ep (episode_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
+/* Libros: enlace a un PDF COMPARTIDO por título (book_key = título en
+   minúsculas). Cualquier usuario lo pone y todos los que tengan ese libro
+   lo abren con el botón "Leer". */
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS book_pdfs (
+        book_key   VARCHAR(200) PRIMARY KEY,
+        url        VARCHAR(2000) NOT NULL,
+        set_by     INT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
 
 /* ── user_key → usuarios.id (cacheado por petición) ──────── */
 function pf_uid(PDO $pdo, string $userKey): ?int {
@@ -2343,6 +2354,35 @@ case 'complete-series-episodes': {
     jsonResponse(['ok' => true]);
 }
 
+case 'book-pdf': {
+    /* Devuelve el PDF (compartido por título) de un libro. */
+    $key = mb_strtolower(trim((string)($_GET['bookTitle'] ?? '')));
+    if ($key === '') jsonResponse(['ok' => true, 'url' => '']);
+    $st = $pdo->prepare("SELECT url FROM book_pdfs WHERE book_key = ?");
+    $st->execute([$key]);
+    jsonResponse(['ok' => true, 'url' => (string)($st->fetchColumn() ?: '')]);
+}
+
+case 'save-book-pdf': {
+    /* Guarda/actualiza (o borra si url vacía) el PDF compartido de un libro.
+       Solo se aceptan URLs http(s) para evitar esquemas peligrosos. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $uid = pf_uid($pdo, $userKey);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['bookTitle'] ?? '')));
+    if ($key === '') jsonError('Falta bookTitle');
+    $url = mb_substr(trim((string)($b['url'] ?? '')), 0, 2000);
+    if ($url === '') {
+        $pdo->prepare("DELETE FROM book_pdfs WHERE book_key = ?")->execute([$key]);
+        jsonResponse(['ok' => true, 'url' => '']);
+    }
+    if (!preg_match('#^https?://#i', $url)) jsonError('La URL debe empezar por http:// o https://');
+    $pdo->prepare("INSERT INTO book_pdfs (book_key, url, set_by) VALUES (?,?,?)
+                   ON DUPLICATE KEY UPDATE url = VALUES(url), set_by = VALUES(set_by)")
+        ->execute([$key, $url, $uid]);
+    jsonResponse(['ok' => true, 'url' => $url]);
+}
+
 /* ─── Medias de la comunidad para música (reproductor) ───
    Devuelve la media (estrellas) y nº de reseñas de cada canción/álbum
    reseñado, indexado por título normalizado (+artista). El reproductor
@@ -2476,6 +2516,13 @@ case 'melon-reviews': {
             $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'seasons' => (int)$er['seasons'], 'dur' => (int)$er['dur']];
         }
     }
+    /* Libros: PDF (compartido por título) → clicar el título lo abre. */
+    $pdfMap = [];
+    if ($cat === 'books') {
+        foreach ($pdo->query("SELECT book_key, url FROM book_pdfs")->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+            $pdfMap[$pr['book_key']] = (string)$pr['url'];
+        }
+    }
 
     $items = [];
     foreach ($groups as $g) {
@@ -2492,6 +2539,10 @@ case 'melon-reviews': {
                 $e['episodeDuration'] = $epMap[$lk]['dur'];
                 $e['seasonCount']     = $epMap[$lk]['seasons'];
             }
+        }
+        if ($cat === 'books') {
+            $lk = mb_strtolower($g['title']);
+            if (!empty($pdfMap[$lk])) $e['pdfUrl'] = $pdfMap[$lk];
         }
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];
         if (!empty($g['mtype'])) $e['type'] = $g['mtype'];
