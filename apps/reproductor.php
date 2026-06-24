@@ -3432,7 +3432,26 @@ var addTrackCallback = null;
             taskbarManager.register('playlist-editor', 'Playlists', '<img src="assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">', 'flex');
         }
         showHome();
-        loadPlaylists();
+        /* Al abrir: si se está reproduciendo una playlist o un álbum,
+           abrir automáticamente su vista. */
+        loadPlaylists(autoOpenPlayingView);
+    }
+    /* Abre la vista de lo que se esté reproduciendo: playlist propia →
+       vista de esa playlist dentro de la ventana; álbum → su visor. Las
+       canciones sueltas (currentPlaylistId null) no abren nada. */
+    function autoOpenPlayingView() {
+        var pid = currentPlaylistId;
+        if (!pid) return;
+        if (typeof pid === 'string' && pid.indexOf('spotify-album:') === 0) {
+            var albId = pid.slice('spotify-album:'.length);
+            if (albId && typeof openAlbumViewer === 'function') openAlbumViewer(albId);
+            return;
+        }
+        var idx = -1;
+        for (var i = 0; i < allPlaylists.length; i++) {
+            if (String(allPlaylists[i].id) === String(pid)) { idx = i; break; }
+        }
+        if (idx !== -1) showEditorView(idx);
     }
     function closeEditor() {
         taskbarManager.unregister('playlist-editor');
@@ -3465,7 +3484,7 @@ var addTrackCallback = null;
         renderList();
     }
 
-    function loadPlaylists() {
+    function loadPlaylists(onReady) {
         plHomeList.innerHTML = '<div class="pl-home-msg">Cargando...</div>';
         fetch('assets/music/api.php?action=get-playlists')
         .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -3473,6 +3492,7 @@ var addTrackCallback = null;
             if (data.error) { plHomeList.innerHTML = '<div class="pl-home-msg">Error: ' + data.error + '</div>'; return; }
             allPlaylists = data;
             renderHome();
+            if (typeof onReady === 'function') onReady();
         })
         .catch(function(e) {
             plHomeList.innerHTML = '<div class="pl-home-msg">Error: ' + e.message + '</div>';
@@ -3494,7 +3514,9 @@ var addTrackCallback = null;
             ytPlayer.loadVideoById(playlist[0].videoId);
         }
         melonRecordRecent('playlist', String(pl.id), pl.name, pl.image || '', '');
-        closeEditor();
+        /* Antes se cerraba la ventana al reproducir; ahora se mantiene
+           abierta (reproducir desde el botón ▶ de la tarjeta NO entra ni
+           cierra la ventana). */
     }
 
     function deletePlaylist(pl, idx) {

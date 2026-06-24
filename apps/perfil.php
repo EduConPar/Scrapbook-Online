@@ -576,10 +576,16 @@ if ($_perfilStandalone) {
 <!-- EPISODE REVIEW POPUP (reseña de un capítulo) -->
 <div class="window" id="profile-episode-review" style="display:none;flex-direction:column;position:fixed;z-index:10004;width:300px;">
     <div class="title-bar" style="flex-shrink:0;">
-        <div class="title-bar-text" id="profile-episode-review-title">Reseña del capítulo</div>
+        <div class="title-bar-text" id="profile-episode-review-title">Editar capítulo</div>
         <div class="title-bar-controls"><button aria-label="Close" id="profile-episode-review-close"></button></div>
     </div>
     <div class="window-body" style="padding:10px 12px 12px;">
+        <div style="font-size:11px;margin-bottom:3px;">Título</div>
+        <input type="text" id="profile-episode-edit-title" style="width:100%;box-sizing:border-box;margin-bottom:8px;">
+        <div style="font-size:11px;margin-bottom:3px;">Imagen (URL horizontal)</div>
+        <input type="text" id="profile-episode-edit-image" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="https://...">
+        <div style="font-size:11px;margin-bottom:3px;">Duración (min)</div>
+        <input type="number" id="profile-episode-edit-dur" min="0" style="width:90px;box-sizing:border-box;margin-bottom:8px;" placeholder="0">
         <div style="font-size:11px;margin-bottom:3px;">Puntuación</div>
         <div style="display:flex;align-items:center;margin-bottom:8px;">
             <div id="profile-episode-review-stars" style="font-size:24px;letter-spacing:4px;"></div>
@@ -3852,18 +3858,17 @@ var PROFILE_USERS = <?php
         var watchHtml = _epCanWatch
             ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
             : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
-        var chartIco = '<img src="assets/img/appIcons/chatIcon.png" alt="Reseña" class="ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-        var revLabel = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-        return '<div class="ep-row" data-ep-id="' + ep.id + '">' +
+        /* Indicador discreto de "tienes reseña" (icono de gráfica). El
+           editar/eliminar viven ahora en el menú de click derecho. */
+        var chartIco = (ep.myStars != null) ? '<img src="assets/img/appIcons/chatIcon.png" alt="Reseñado" title="Tu reseña: ' + ep.myStars + '" class="ep-chart-ico" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' : '';
+        var controls = watchHtml + chartIco;
+        return '<div class="ep-row" data-ep-id="' + ep.id + '" title="Click derecho para editar o eliminar">' +
             '<div class="ep-drag" data-ep-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
             '<div class="ep-thumb">' + thumbInner + '</div>' +
             '<div class="ep-info">' +
                 '<div class="ep-title">' + n + '. ' + escHtml(ep.title) + '</div>' +
                 '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                '<div class="ep-controls">' + watchHtml +
-                    '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
-                    '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
-                '</div>' +
+                (controls ? '<div class="ep-controls">' + controls + '</div>' : '') +
             '</div>' +
         '</div>';
     }
@@ -3984,19 +3989,27 @@ var PROFILE_USERS = <?php
                 });
                 return;
             }
-            var rev = e.target.closest('[data-ep-review]');
-            if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
-            var rm = e.target.closest('[data-ep-remove]');
-            if (rm) {
-                var rid = parseInt(rm.getAttribute('data-ep-remove'), 10);
-                var rep = _epList.filter(function(x){ return x.id === rid; })[0];
-                confirmFn('¿Quitar el capítulo "' + (rep ? rep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
-                    fetch('assets/profile/api.php?action=delete-series-episode', {
-                        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: rid })
-                    }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== rid; }); renderEpisodesList(); }).catch(function(){});
-                });
-            }
+        });
+        /* Menú de capítulo (click derecho): Editar / Eliminar. Solo en
+           modo edición (en solo lectura las filas no llevan data-ep-id). */
+        function removeEpisode(ep) {
+            confirmFn('¿Quitar el capítulo "' + (ep ? ep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
+                fetch('assets/profile/api.php?action=delete-series-episode', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: ep.id })
+                }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== ep.id; }); renderEpisodesList(); }).catch(function(){});
+            });
+        }
+        listEl.addEventListener('contextmenu', function(e){
+            if (_epReadOnly) return;
+            var row = e.target.closest('.ep-row[data-ep-id]'); if (!row) return;
+            e.preventDefault();
+            var id = parseInt(row.getAttribute('data-ep-id'), 10);
+            var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (!ep) return;
+            showCtxMenu(e.clientX, e.clientY, [
+                { label: '✏ Editar', action: function(){ openEpisodeEditor(ep); } },
+                { label: '✕ Eliminar', action: function(){ removeEpisode(ep); } }
+            ]);
         });
         var addBtn = document.getElementById('ep-add-btn');
         if (addBtn) addBtn.addEventListener('click', function(){
@@ -4034,9 +4047,14 @@ var PROFILE_USERS = <?php
     })();
 
     /* Reseña individual de un capítulo (popup con estrellas + comentario). */
-    function openEpisodeReview(ep) {
+    /* Editor de capítulo: título, imagen, duración (compartidos) + reseña
+       propia (estrellas + comentario). */
+    function openEpisodeEditor(ep) {
         var win = document.getElementById('profile-episode-review');
-        document.getElementById('profile-episode-review-title').textContent = '★ ' + ep.title;
+        document.getElementById('profile-episode-review-title').textContent = '✏ Editar capítulo';
+        document.getElementById('profile-episode-edit-title').value = ep.title || '';
+        document.getElementById('profile-episode-edit-image').value = ep.image || '';
+        document.getElementById('profile-episode-edit-dur').value = ep.duration ? ep.duration : '';
         document.getElementById('profile-episode-review-comment').value = ep.myComment || '';
         var sel = ep.myStars || 0;
         var starsEl = document.getElementById('profile-episode-review-stars');
@@ -4065,12 +4083,20 @@ var PROFILE_USERS = <?php
         var saveBtn = document.getElementById('profile-episode-review-save');
         var newSave = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(newSave, saveBtn);
         newSave.addEventListener('click', function(){
+            var title = document.getElementById('profile-episode-edit-title').value.trim() || ep.title || '';
+            var image = document.getElementById('profile-episode-edit-image').value.trim();
+            var dur = parseInt(document.getElementById('profile-episode-edit-dur').value, 10) || 0;
             var comment = document.getElementById('profile-episode-review-comment').value.trim();
-            fetch('assets/profile/api.php?action=series-episode-state', {
+            /* Primero los datos compartidos del capítulo, luego mi reseña. */
+            fetch('assets/profile/api.php?action=save-series-episode', {
                 method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+                body: JSON.stringify({ id: ep.id, seriesTitle: _epSeriesTitle, title: title, image: image, duration: dur, season: ep.season || 1 })
             }).then(function(){
-                ep.myStars = sel > 0 ? sel : null; ep.myComment = comment;
+                return fetch('assets/profile/api.php?action=series-episode-state', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+                });
+            }).then(function(){
                 win.style.display = 'none';
                 openEpisodesWindow(_epSeriesTitle, _epCanWatch);
             }).catch(function(){});

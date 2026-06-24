@@ -1347,7 +1347,7 @@
 /* ── Context menu (clic derecho en items) ── */
 .profile-ctx-menu {
     position: fixed;
-    z-index: 9900;
+    z-index: 10010;
     background: var(--win-bg);
     color: var(--text);
     box-shadow: inset -1px -1px var(--bezel-dark-1), inset 1px 1px var(--bezel-light-1),
