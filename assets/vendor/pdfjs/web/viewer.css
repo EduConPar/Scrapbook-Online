@@ -4828,22 +4828,3 @@ dialog :link{
     display:none;
   }
 }
-
-/* ───────────────────────────────────────────────────────────────────
-   Override de embebido (Melon Hub): el campo de nº de página se salía
-   del header (alto) y recortaba el número. Lo encajamos en la barra y
-   lo ensanchamos para que el número se vea completo y centrado.
-   ─────────────────────────────────────────────────────────────────── */
-#toolbarContainer .toolbarField,
-#toolbarContainer #pageNumber {
-  box-sizing: border-box;
-  height: 24px;
-  line-height: 16px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  vertical-align: middle;
-}
-#toolbarContainer #pageNumber {
-  width: 54px;
-  text-align: center;
-}

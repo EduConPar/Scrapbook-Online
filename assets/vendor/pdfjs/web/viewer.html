@@ -598,35 +598,5 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
-    <!-- Melon Hub: desactiva las "page labels" para que la caja del nº de
-         página muestre el número real (1..N) y no la etiqueta del PDF
-         (que confundía: mostraba "19" estando en la 21). Tras desactivarlas
-         refrescamos la barra para que la caja no se quede vacía. -->
-    <script type="module">
-      window.addEventListener('load', function () {
-        var tries = 0;
-        var iv = setInterval(function () {
-          var app = window.PDFViewerApplication;
-          if (app && app.eventBus) {
-            clearInterval(iv);
-            var refresh = function () {
-              try {
-                app.pdfViewer.setPageLabels(null);
-                /* Tras quitar las etiquetas, refrescamos la caja para que
-                   muestre el número real (si no, se queda vacía). El resto
-                   de cambios de página ya los pinta PDF.js como número. */
-                if (app.toolbar && app.toolbar.setPageNumber) {
-                  app.toolbar.setPageNumber(app.pdfViewer.currentPageNumber || 1, null);
-                }
-              } catch (e) {}
-            };
-            app.eventBus.on('pagesloaded', refresh);
-            app.eventBus.on('pagesinit', refresh);
-          } else if (++tries > 60) {
-            clearInterval(iv);
-          }
-        }, 100);
-      });
-    </script>
   </body>
 </html>

@@ -4261,7 +4261,9 @@ var PROFILE_USERS = <?php
             embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
         } else {
             var fileParam = '../../../profile/pdf-proxy.php?url=' + encodeURIComponent(url);
-            embedSrc = 'assets/vendor/pdfjs/web/viewer.html?file=' + encodeURIComponent(fileParam);
+            /* ?v=<mtime> rompe la caché del navegador/edge cuando cambia el
+               visor (evita servir un viewer.html viejo cacheado). */
+            embedSrc = 'assets/vendor/pdfjs/web/viewer.html?v=<?php echo @filemtime(__DIR__ . "/../assets/vendor/pdfjs/web/viewer.html") ?: 0; ?>&file=' + encodeURIComponent(fileParam);
         }
         var old = document.getElementById('profile-pdf-viewer');
         if (old) old.parentNode.removeChild(old);
