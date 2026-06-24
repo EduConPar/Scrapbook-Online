@@ -1127,7 +1127,13 @@ case 'album-tracks': {
     $cached = cacheGet($cacheKey);
     if ($cached !== null) {
         $decoded = json_decode($cached, true);
-        if (is_array($decoded)) { jsonResponse($decoded); }
+        /* Solo servimos la caché si tiene PISTAS. Antes se cacheaban (30
+           días) álbumes con tracklist VACÍA — p.ej. los que la tienda US de
+           iTunes no listaba (japoneses como Masayoshi Takanaka). Esos
+           álbumes que ya habías abierto se quedaban vacíos para siempre.
+           Ignorando las cachés vacías se re-resuelven (ahora probando
+           JP/GB/DE) y se vuelven a cachear con sus pistas reales. */
+        if (is_array($decoded) && !empty($decoded['tracks'])) { jsonResponse($decoded); }
     }
 
     /* iTunes / Deezer: sin auth ni rate-limit estricto, fetch directo. */
@@ -1153,10 +1159,10 @@ case 'album-tracks': {
             } catch (Throwable $e) { /* cae al cierre de abajo */ }
         }
         /* Si teníamos el álbum (aunque sin pistas) lo devolvemos para que
-           al menos se vea su nombre/portada; si no, error. Cache corta
-           para no re-resolver en bucle pero permitir reintento. */
+           al menos se vea su nombre/portada; si no, error. NO lo cacheamos:
+           una tracklist vacía no debe persistir (si mañana sí está
+           disponible, queremos reintentar). */
         if ($r) {
-            cacheSet($cacheKey, json_encode($r, JSON_UNESCAPED_UNICODE), 3600);
             jsonResponse($r);
         }
         jsonError('No se pudo leer el álbum (' . $source . ')', 502);
