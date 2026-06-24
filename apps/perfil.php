@@ -4194,30 +4194,87 @@ var PROFILE_USERS = <?php
     }
     window.profileOpenEpisodes = openEpisodesWindow;
 
-    /* Visor de PDF embebido (libros). Ventana con un iframe al PDF. Solo
-       acepta URLs http(s); otros esquemas se ignoran por seguridad. */
+    /* Visor de PDF embebido (libros): ventana movible, redimensionable y
+       con maximizar/minimizar. Solo acepta URLs http(s). */
     function openPdfViewer(url, title) {
-        if (!url || !/^https?:\/\//i.test(url)) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+        if (!url || /^https?:\/\//i.test(url) === false) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
         var old = document.getElementById('profile-pdf-viewer');
         if (old) old.parentNode.removeChild(old);
         var win = document.createElement('div');
         win.id = 'profile-pdf-viewer';
         win.className = 'window';
-        win.style.cssText = 'position:fixed;z-index:10006;width:min(820px,94vw);height:min(88vh,1000px);display:flex;flex-direction:column;';
+        win.style.cssText = 'position:fixed;z-index:10006;width:min(820px,94vw);height:min(88vh,1000px);min-width:320px;min-height:200px;display:flex;flex-direction:column;';
         win.innerHTML =
-            '<div class="title-bar">' +
+            '<div class="title-bar" style="cursor:move;">' +
                 '<div class="title-bar-text">📖 ' + escHtml(title || 'PDF') + '</div>' +
                 '<div class="title-bar-controls">' +
+                    '<button aria-label="Minimize" type="button"></button>' +
+                    '<button aria-label="Maximize" type="button"></button>' +
                     '<button aria-label="Close" type="button"></button>' +
                 '</div>' +
             '</div>' +
-            '<div class="window-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
+            '<div class="window-body" id="pdf-viewer-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
                 '<iframe src="' + escHtml(url) + '" style="width:100%;height:100%;border:0;display:block;" referrerpolicy="no-referrer"></iframe>' +
-            '</div>';
+            '</div>' +
+            '<div class="pdf-resize-handle" style="position:absolute;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:2;"></div>';
         document.body.appendChild(win);
         win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
         win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
-        win.querySelector('.title-bar-controls button').addEventListener('click', function(){ win.parentNode.removeChild(win); });
+
+        var iframe = win.querySelector('iframe');
+        var body   = win.querySelector('#pdf-viewer-body');
+        var titleBar = win.querySelector('.title-bar');
+        var ctrls  = win.querySelector('.title-bar-controls');
+        function closeWin(){ if (win.parentNode) win.parentNode.removeChild(win); }
+        ctrls.querySelector('button[aria-label="Close"]').addEventListener('click', closeWin);
+
+        /* Mover arrastrando el title-bar (no sobre los controles). */
+        var maximized = false, prev = null, rolled = false, savedH = '';
+        titleBar.addEventListener('pointerdown', function(e){
+            if (e.target.closest('.title-bar-controls') || maximized) return;
+            e.preventDefault();
+            var r = win.getBoundingClientRect();
+            var ox = e.clientX - r.left, oy = e.clientY - r.top;
+            iframe.style.pointerEvents = 'none';
+            function mv(ev){
+                var x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - 60));
+                var y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 24));
+                win.style.left = x + 'px'; win.style.top = y + 'px';
+            }
+            function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
+            document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        });
+        /* Redimensionar desde la esquina inferior derecha. */
+        win.querySelector('.pdf-resize-handle').addEventListener('pointerdown', function(e){
+            if (maximized) return;
+            e.preventDefault(); e.stopPropagation();
+            var r = win.getBoundingClientRect();
+            var sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height;
+            iframe.style.pointerEvents = 'none';
+            function mv(ev){
+                win.style.width  = Math.max(320, sw + (ev.clientX - sx)) + 'px';
+                win.style.height = Math.max(200, sh + (ev.clientY - sy)) + 'px';
+            }
+            function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
+            document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        });
+        /* Maximizar: alterna pantalla completa / tamaño previo. */
+        ctrls.querySelector('button[aria-label="Maximize"]').addEventListener('click', function(){
+            if (!maximized) {
+                prev = { left: win.style.left, top: win.style.top, width: win.style.width, height: win.style.height };
+                win.style.left = '0'; win.style.top = '0'; win.style.width = '100vw'; win.style.height = '100vh';
+                maximized = true;
+            } else {
+                if (prev) { win.style.left = prev.left; win.style.top = prev.top; win.style.width = prev.width; win.style.height = prev.height; }
+                maximized = false;
+            }
+        });
+        /* Minimizar: enrolla la ventana a solo el title-bar (toggle). */
+        ctrls.querySelector('button[aria-label="Minimize"]').addEventListener('click', function(){
+            rolled = !rolled;
+            if (rolled) { savedH = win.style.height; body.style.display = 'none'; win.style.height = 'auto'; }
+            else { body.style.display = ''; win.style.height = savedH || ''; }
+        });
     }
     window.profileOpenPdf = openPdfViewer;
 
