@@ -1324,6 +1324,10 @@ var PROFILE_USERS = <?php
                             return;
                         }
                         showCtxMenu(e.clientX, e.clientY, [
+    { label: '✏ Editar', action: function() {
+                                var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
+                                if (i !== -1) showReviewWindow(cat, i);
+                            }},
     { label: '✓ Completar', action: function() {
                                 var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
