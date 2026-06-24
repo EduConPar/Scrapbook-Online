@@ -5477,31 +5477,57 @@ var PROFILE_USERS = <?php
         if (sig === chatLastSig) return;
         chatLastSig = sig;
         var atBottom = (listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight) < 40;
-        listEl.innerHTML = '';
+
+        /* Render INCREMENTAL: reutilizamos las filas ya pintadas y solo
+           añadimos las nuevas / actualizamos meta. CLAVE: así NO recreamos
+           las <img>/GIF de los mensajes existentes (recrearlas las recarga,
+           pasan a alto 0 y luego crecen → el scroll daba un tirón hacia
+           arriba al llegar un mensaje nuevo). */
+        var existing = {};
+        Array.prototype.forEach.call(listEl.querySelectorAll('.chat-msg'), function(r){ existing[r.dataset.msgId] = r; });
+        var seen = {};
+        var newImgs = [];
+
         messages.forEach(function(m) {
+            var idStr = String(m.id);
+            seen[idStr] = 1;
             var mine = m.from === currentSessionUser;
-            var row = document.createElement('div');
+            var row = existing[idStr];
+            var isNew = !row;
+            if (isNew) {
+                row = document.createElement('div');
+                row.dataset.msgId = m.id;
+            }
             row.className = 'chat-msg' + (mine ? ' chat-msg-mine' : ' chat-msg-theirs');
-            row.dataset.msgId = m.id;
-            row.dataset.mine  = mine ? '1' : '0';
+            row.dataset.mine = mine ? '1' : '0';
             row.dataset.deleted = m.deleted ? '1' : '0';
 
-            var bubble = document.createElement('div');
-            bubble.className = 'chat-bubble' + (m.deleted ? ' is-deleted' : '');
-            if (m.deleted) {
-                bubble.innerHTML = CHAT_TRASH_ICON_HTML + 'Mensaje eliminado';
-            } else {
-                bubble.innerHTML = chatRenderBody(m.text);
+            /* Burbuja: solo se (re)construye si es nueva o cambió el cuerpo
+               (texto editado o paso a "eliminado"). Si no, se deja intacta
+               para conservar las imágenes ya cargadas. */
+            var bubble = row.querySelector('.chat-bubble');
+            var bodyKey = m.deleted ? ' del' : ('t:' + (m.text || ''));
+            if (isNew || !bubble || row._chatBodyKey !== bodyKey) {
+                if (!bubble) { bubble = document.createElement('div'); row.insertBefore(bubble, row.firstChild); }
+                bubble.className = 'chat-bubble' + (m.deleted ? ' is-deleted' : '');
+                if (m.deleted) bubble.innerHTML = CHAT_TRASH_ICON_HTML + 'Mensaje eliminado';
+                else bubble.innerHTML = chatRenderBody(m.text);
+                row._chatBodyKey = bodyKey;
+                if (!isNew && atBottom) {
+                    Array.prototype.forEach.call(bubble.querySelectorAll('img'), function(img){ if (!img.complete) newImgs.push(img); });
+                }
             }
-            row.appendChild(bubble);
+            /* Context menu en MIS mensajes no borrados (onX → sin duplicar). */
+            bubble.oncontextmenu = (mine && !m.deleted)
+                ? function(ev) { ev.preventDefault(); openChatMsgMenu(ev.clientX, ev.clientY, m.id, m.text); }
+                : null;
 
-            /* Línea meta: tiempo + (editado) + ticks. */
-            var meta = document.createElement('div');
-            meta.className = 'chat-time';
+            /* Meta (tiempo + editado + ticks): se rehace siempre, no lleva
+               imágenes, así que es barato y mantiene los ticks al día. */
+            var meta = row.querySelector('.chat-time');
+            if (!meta) { meta = document.createElement('div'); meta.className = 'chat-time'; row.appendChild(meta); }
             var timeStr = relTime(m.sentAt || 0);
-            var editedHtml = (m.edited && !m.deleted)
-                ? '<span class="chat-edited-tag">(editado)</span>'
-                : '';
+            var editedHtml = (m.edited && !m.deleted) ? '<span class="chat-edited-tag">(editado)</span>' : '';
             var ticksHtml = '';
             if (mine && !m.deleted) {
                 if (m.read)           ticksHtml = '<span class="chat-ticks is-read" title="Leído">✓✓</span>';
@@ -5509,34 +5535,30 @@ var PROFILE_USERS = <?php
                 else                  ticksHtml = '<span class="chat-ticks is-sent" title="Enviado">✓</span>';
             }
             meta.innerHTML = '<span>' + escHtml(timeStr) + '</span>' + editedHtml + ticksHtml;
-            row.appendChild(meta);
 
-            /* Context menu para editar/eliminar en MIS mensajes no borrados. */
-            if (mine && !m.deleted) {
-                bubble.addEventListener('contextmenu', function(ev) {
-                    ev.preventDefault();
-                    openChatMsgMenu(ev.clientX, ev.clientY, m.id, m.text);
-                });
+            /* Las nuevas se añaden al final (el chat es siempre append). */
+            if (isNew) {
+                listEl.appendChild(row);
+                Array.prototype.forEach.call(row.querySelectorAll('img'), function(img){ if (!img.complete) newImgs.push(img); });
             }
-            listEl.appendChild(row);
         });
+
+        /* Quitar filas de mensajes que ya no estén (caso raro). */
+        Object.keys(existing).forEach(function(id){ if (!seen[id]) existing[id].remove(); });
+
         if (atBottom) {
             listEl.scrollTop = listEl.scrollHeight;
-            /* Solo en el render INICIAL (apertura del chat) registramos
-               pin handlers para mantener el scroll al fondo mientras las
-               imágenes/GIFs cargan. Grace de 3s para no pegar tirones
-               si el user empieza a scrollear inmediatamente. En polls
-               siguientes NO registramos pin: una imagen que carga tarde
-               no debe lanzar al user abajo cuando ya scrolleó arriba. */
-            if (initial) {
-                var startTime = Date.now();
-                var GRACE_MS  = 3000;
-                listEl.querySelectorAll('img').forEach(function(img){
-                    if (img.complete) return;
-                    var pin = function(){
-                        if (Date.now() - startTime > GRACE_MS) return;
-                        listEl.scrollTop = listEl.scrollHeight;
-                    };
+            /* Mantener el fondo mientras cargan las imágenes/GIFs de los
+               mensajes NUEVOS (las viejas ya estaban cargadas y no se
+               recrearon). Grace corto; si el usuario hace scroll, paramos. */
+            if (newImgs.length) {
+                var keepPin = true;
+                var until = Date.now() + 4000;
+                var stop = function(){ keepPin = false; };
+                listEl.addEventListener('wheel', stop, { once: true, passive: true });
+                listEl.addEventListener('touchmove', stop, { once: true, passive: true });
+                newImgs.forEach(function(img){
+                    var pin = function(){ if (keepPin && Date.now() < until) listEl.scrollTop = listEl.scrollHeight; };
                     img.addEventListener('load',  pin, { once: true });
                     img.addEventListener('error', pin, { once: true });
                 });
