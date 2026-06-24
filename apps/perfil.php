@@ -1039,7 +1039,36 @@ var PROFILE_USERS = <?php
         if (e.data.type === 'perfil-open-review' && e.data.reviewCategory && e.data.reviewTitle) {
             _perfilOpenReviewWhenReady(e.data.reviewCategory, e.data.reviewTitle, e.data.reviewMtype || '');
         }
+        /* Petición desde la ventana standalone de otro usuario: abrir el
+           EDITOR de reseña de un item de MÚSICA recién añadido a MI perfil,
+           en MI app (no en la del otro user). Solo lo atiende la instancia
+           principal (incluida en el shell), no las standalone. */
+        if (e.data.type === 'perfil-open-own-music-review' && e.data.title && !window.__PERFIL_STANDALONE) {
+            _openOwnMusicReviewByTitle(e.data.title);
+        }
     });
+
+    /* Abre, en MI perfil, el editor de reseña del item de música con ese
+       título (recién copiado desde el perfil de otra persona). */
+    function _openOwnMusicReviewByTitle(title) {
+        var titleNorm = String(title || '').toLowerCase().trim();
+        if (!titleNorm) return;
+        if (typeof viewingUser !== 'undefined' && viewingUser && typeof exitViewingUser === 'function') exitViewingUser();
+        if (typeof openProfileWindow === 'function') openProfileWindow();
+        var go = function(){
+            if (typeof showMusicView === 'function') showMusicView();
+            var arr = (typeof lists !== 'undefined' && lists && lists.music) ? lists.music : [];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] && (arr[i].title || '').toLowerCase().trim() === titleNorm) {
+                    if (typeof showMusicReviewWindow === 'function') showMusicReviewWindow(i);
+                    return;
+                }
+            }
+        };
+        /* Recargamos MIS listas para incluir el item recién guardado. */
+        if (typeof loadLists === 'function') loadLists(function(){ if (typeof updateCounts === 'function') updateCounts(); go(); });
+        else go();
+    }
 
     window.__perfilStandaloneInit = function() {
         loaded = true;
@@ -5981,6 +6010,22 @@ var PROFILE_USERS = <?php
         var newNo  = noBtn.cloneNode(true);  noBtn.parentNode.replaceChild(newNo, noBtn);
         newYes.addEventListener('click', function() {
             prompt.style.display = 'none';
+            /* Si estamos en la ventana standalone de OTRO usuario, NO
+               salimos de su perfil: pedimos a MI app de perfil (incluida
+               en el shell) que abra la reseña. Así la ventana del otro
+               usuario se queda como estaba. */
+            if (window.__PERFIL_STANDALONE) {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type:  'perfil-open-own-music-review',
+                            title: item.title || '',
+                            mtype: item.type || ''
+                        }, '*');
+                    }
+                } catch (_) {}
+                return;
+            }
             if (viewingUser) exitViewingUser();
             showMusicView();
             showMusicReviewWindow(newIdx);

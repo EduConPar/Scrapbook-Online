@@ -2771,17 +2771,33 @@ function openPdfViewerModal(url, title) {
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
-        '<div class="window pf-modal" style="width:96vw;max-width:96vw;height:90vh;display:flex;flex-direction:column;">' +
+        '<div class="window pf-modal pf-pdf-modal" style="width:96vw;max-width:96vw;height:90vh;display:flex;flex-direction:column;">' +
             '<div class="title-bar"><div class="title-bar-text">📖 ' + esc(title || 'PDF') + '</div>' +
-                '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
+                '<div class="title-bar-controls">' +
+                    '<button aria-label="Maximize" type="button"></button>' +
+                    '<button aria-label="Close" type="button"></button>' +
+                '</div></div>' +
             '<div class="window-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
                 '<iframe src="' + esc(embedSrc) + '" style="width:100%;height:100%;border:0;display:block;"></iframe>' +
             '</div>' +
         '</div>';
     document.body.appendChild(bd);
+    var win = bd.querySelector('.pf-pdf-modal');
     function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
-    bd.querySelector('.title-bar-controls button').addEventListener('click', close);
+    bd.querySelector('button[aria-label="Close"]').addEventListener('click', close);
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    /* Maximizar: alterna entre 96vw/90vh y pantalla completa real. */
+    var maxed = false;
+    bd.querySelector('button[aria-label="Maximize"]').addEventListener('click', function(){
+        maxed = !maxed;
+        if (maxed) {
+            bd.style.padding = '0';
+            win.style.width = '100vw'; win.style.maxWidth = '100vw'; win.style.height = '100vh';
+        } else {
+            bd.style.padding = '';
+            win.style.width = '96vw'; win.style.maxWidth = '96vw'; win.style.height = '90vh';
+        }
+    });
 }
 
 /* Editor de reseña: 5 estrellas (full-star, sin medios para móvil) +
