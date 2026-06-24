@@ -1181,7 +1181,12 @@ let autoplayRandom    = false;
    pista (force) y periódicamente desde startProgress (throttled). */
 var __NP_LAST = 0;
 function publishNowPlaying(isPlaying, force) {
-    var tr = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
+    /* Como GUEST de una sesión de escucha, lo que suena es el track de la
+       sesión (el del host), NO el de mi playlist local. Reportamos ese para
+       que el "escuchando ahora" del perfil muestre la canción real. */
+    var tr = (typeof LT_ROLE !== 'undefined' && LT_ROLE === 'guest' && _ltGuestTrack && _ltGuestTrack.videoId)
+        ? _ltGuestTrack
+        : ((typeof playlist !== 'undefined' && playlist[currentTrack]) || null);
     if (!tr || !tr.videoId) return;
     var now = Date.now();
     if (!force && now - __NP_LAST < 2000) return;
@@ -1298,6 +1303,10 @@ const LT_URL = 'assets/listen/api.php';
    se hace seek: evita micro-saltos atrás/alante por desfases pequeños. */
 const LT_SEEK_THRESHOLD_S = 2;
 let LT_ROLE         = null;     /* 'host' | 'guest' | null */
+/* Track ACTUAL de la sesión cuando soy guest. Sirve para reportar el
+   "escuchando ahora" y el wrapped con la canción REAL de la sesión (no la
+   que tenía en mi playlist antes de unirme). */
+let _ltGuestTrack   = null;
 let LT_SESSION_ID   = null;
 let LT_GUEST_POLL_T = null;
 let LT_HOST_BCAST_T = null;
@@ -1406,6 +1415,10 @@ async function ltGuestPoll() {
     const s = r.session;
     if (!ytPlayer || !s.video_id) return;
 
+    /* Track real de la sesión → lo usa publishNowPlaying para el
+       "escuchando ahora" del perfil. */
+    _ltGuestTrack = { videoId: s.video_id, title: s.track_title || '', artist: s.track_artist || '' };
+
     const isPlaying = parseInt(s.is_playing, 10) === 1;
     /* Posición REAL estimada del host AHORA: su último current_time_s más
        el tiempo transcurrido desde que lo posteó (solo si está sonando).
@@ -1423,7 +1436,23 @@ async function ltGuestPoll() {
         if (d) curVid = d.video_id || '';
     } catch (_) {}
     if (curVid !== s.video_id) {
+        /* WRAPPED: la pista de la sesión cambió. Logueamos la ANTERIOR con
+           el tiempo escuchado (posición actual antes de cargar la nueva) y
+           pasamos a seguir la nueva pista de la SESIÓN — no la de mi
+           playlist local (que es de antes de unirme). Sin esto, el wrapped
+           del guest registraba la canción equivocada. */
+        try {
+            var _wListened = 0;
+            try { _wListened = (ytPlayer.getCurrentTime && ytPlayer.getCurrentTime()) || 0; } catch (_) {}
+            if (_wrappedLastTrack && _wrappedLastTrack.videoId !== s.video_id) {
+                sendWrappedLog(_wrappedLastTrack, _wListened, _wrappedLastPlaylistId);
+            }
+            _wrappedLastTrack      = { videoId: s.video_id, title: s.track_title || '', artist: s.track_artist || '' };
+            _wrappedLastPlaylistId = null;
+        } catch (_) {}
         try { ytPlayer.loadVideoById(s.video_id, hostT); } catch (_) {}
+        /* Reporta de inmediato el "escuchando ahora" con la pista de la sesión. */
+        try { publishNowPlaying(isPlaying, true); } catch (_) {}
         /* Actualizamos el mini-player UI manualmente (cover + texto).
            IMPORTANTE: actualizamos los elementos EXISTENTES por textContent,
            NO reemplazamos el innerHTML de #player-info. Reemplazarlo
@@ -1512,6 +1541,10 @@ async function ltLeave() {
 }
 function ltLeaveLocal(msg) {
     LT_ROLE       = null;
+    /* Dejo de seguir la pista de la sesión: el "escuchando ahora" vuelve a
+       reportar mi reproducción local. El wrapped de la última canción de la
+       sesión lo cerrará el próximo cambio de pista (updateTrackUI). */
+    _ltGuestTrack = null;
     LT_SESSION_ID = null;
     if (LT_GUEST_POLL_T) { clearInterval(LT_GUEST_POLL_T); LT_GUEST_POLL_T = null; }
     if (LT_HOST_BCAST_T) { clearTimeout(LT_HOST_BCAST_T); LT_HOST_BCAST_T = null; }
@@ -3020,7 +3053,12 @@ function onYouTubeIframeAPIReady()
                     && (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.PAUSED)) {
                     ltHostBroadcastDebounced();
                 }
-                if (e.data === YT.PlayerState.ENDED) {
+                /* Como GUEST NO avanzamos la playlist local al terminar la
+                   canción: la siguiente la carga el poll de la sesión (el
+                   track del host). Sin esta guarda, el guest saltaba a su
+                   propia "siguiente" canción y, además, descuadraba el
+                   wrapped/escuchando-ahora. */
+                if (e.data === YT.PlayerState.ENDED && LT_ROLE !== 'guest') {
                     if (autoplayRandom && playlist.length > 1) {
                         let next;
                         do { next = Math.floor(Math.random() * playlist.length); } while (next === currentTrack);
