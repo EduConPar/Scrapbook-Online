@@ -76,40 +76,55 @@ function itunesSearchAlbumForTrack(string $title, string $artist): ?array {
 function itunesGetAlbumTracks(string $collectionId): ?array {
     $id = preg_replace('/[^0-9]/', '', $collectionId);
     if ($id === '') return null;
-    $url = 'https://itunes.apple.com/lookup?id=' . $id . '&entity=song&limit=200';
     $ctx = stream_context_create(['http' => [
-        'timeout'       => 8,
+        'timeout'       => 7,
         'ignore_errors' => true,
         'header'        => "User-Agent: MelonHub/1.0\r\n",
     ]]);
-    $raw = @file_get_contents($url, false, $ctx);
-    if (!$raw) return null;
-    $data = json_decode($raw, true);
-    if (!is_array($data) || empty($data['results'])) return null;
-    $album = null;
-    $tracks = [];
-    foreach ($data['results'] as $r) {
-        $wt = $r['wrapperType'] ?? '';
-        if ($wt === 'collection' && !$album) {
-            $img = (string)($r['artworkUrl100'] ?? '');
-            if ($img) $img = str_replace('100x100', '600x600', $img);
-            $album = [
-                'name'   => (string)($r['collectionName'] ?? ''),
-                'artist' => (string)($r['artistName']     ?? ''),
-                'image'  => $img,
-            ];
-        } elseif ($wt === 'track' && ($r['kind'] ?? '') === 'song') {
-            $tracks[] = [
-                'title'    => (string)($r['trackName']  ?? ''),
-                'artist'   => (string)($r['artistName'] ?? ''),
-                'duration' => isset($r['trackTimeMillis']) ? (int)round($r['trackTimeMillis'] / 1000) : 0,
-            ];
+    /* Los IDs de iTunes son globales, pero las CANCIONES de un álbum solo
+       las devuelve la tienda de su región. Muchos álbumes (p.ej. de
+       artistas japoneses como Masayoshi Takanaka) salen en el catálogo
+       pero la tienda US no lista sus temas → la tracklist venía vacía.
+       Probamos US (por defecto) y luego JP/GB/DE; nos quedamos con la
+       primera tienda que SÍ traiga pistas. Si ninguna trae pistas pero el
+       álbum existe, devolvemos la colección (nombre/artista/portada) para
+       que el caller pueda reintentar por nombre en otra fuente. */
+    $albumOnly = null;
+    foreach (['', 'JP', 'GB', 'DE'] as $store) {
+        $url = 'https://itunes.apple.com/lookup?id=' . $id . '&entity=song&limit=200'
+             . ($store !== '' ? '&country=' . $store : '');
+        $raw = @file_get_contents($url, false, $ctx);
+        if (!$raw) continue;
+        $data = json_decode($raw, true);
+        if (!is_array($data) || empty($data['results'])) continue;
+        $album = null;
+        $tracks = [];
+        foreach ($data['results'] as $r) {
+            $wt = $r['wrapperType'] ?? '';
+            if ($wt === 'collection' && !$album) {
+                $img = (string)($r['artworkUrl100'] ?? '');
+                if ($img) $img = str_replace('100x100', '600x600', $img);
+                $album = [
+                    'name'   => (string)($r['collectionName'] ?? ''),
+                    'artist' => (string)($r['artistName']     ?? ''),
+                    'image'  => $img,
+                ];
+            } elseif ($wt === 'track' && ($r['kind'] ?? '') === 'song') {
+                $tracks[] = [
+                    'title'    => (string)($r['trackName']  ?? ''),
+                    'artist'   => (string)($r['artistName'] ?? ''),
+                    'duration' => isset($r['trackTimeMillis']) ? (int)round($r['trackTimeMillis'] / 1000) : 0,
+                ];
+            }
         }
+        if ($album && $tracks) {
+            /* iTunes preserva el orden — los results vienen track 1, 2... */
+            $album['tracks'] = $tracks;
+            return $album;
+        }
+        if ($album && !$albumOnly) { $album['tracks'] = []; $albumOnly = $album; }
     }
-    if (!$album) return null;
-    /* iTunes preserva el orden — los results vienen track 1, track 2... */
-    $album['tracks'] = $tracks;
-    return $album;
+    return $albumOnly;
 }
 
 /* Normalización para comparación: lowercase, strip diacritics + ruido. */
