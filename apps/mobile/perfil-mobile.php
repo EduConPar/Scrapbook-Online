@@ -2754,6 +2754,54 @@ function openEpEditorModal(ep, seriesTitle, onSaved) {
     });
 }
 
+/* Visor de PDF embebido (libros). Modal a pantalla casi completa con un
+   iframe. Solo URLs http(s). */
+function openPdfViewerModal(url, title) {
+    if (!url || !/^https?:\/\//i.test(url)) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+    /* Drive → su visor /preview (se ve embebido en móvil). Resto → visor
+       completo de PDF.js (barra de páginas/zoom/descarga) sobre el proxy. */
+    var embedSrc;
+    if (/drive\.google\.com/i.test(url)) {
+        var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+        embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
+    } else {
+        var fileParam = '../../../profile/pdf-proxy.php?url=' + encodeURIComponent(url);
+        /* ?v=<mtime> rompe la caché del navegador/edge cuando cambia el
+           visor (evita servir un viewer.html viejo cacheado). */
+        embedSrc = '../../assets/vendor/pdfjs/web/viewer.html?v=<?php echo @filemtime(__DIR__ . "/../../assets/vendor/pdfjs/web/viewer.html") ?: 0; ?>&file=' + encodeURIComponent(fileParam);
+    }
+    var bd = document.createElement('div');
+    bd.className = 'pf-modal-backdrop';
+    bd.innerHTML =
+        '<div class="window pf-modal pf-pdf-modal" style="width:96vw;max-width:96vw;height:90vh;display:flex;flex-direction:column;">' +
+            '<div class="title-bar"><div class="title-bar-text">📖 ' + esc(title || 'PDF') + '</div>' +
+                '<div class="title-bar-controls">' +
+                    '<button aria-label="Maximize" type="button"></button>' +
+                    '<button aria-label="Close" type="button"></button>' +
+                '</div></div>' +
+            '<div class="window-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
+                '<iframe src="' + esc(embedSrc) + '" style="width:100%;height:100%;border:0;display:block;"></iframe>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(bd);
+    var win = bd.querySelector('.pf-pdf-modal');
+    function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
+    bd.querySelector('button[aria-label="Close"]').addEventListener('click', close);
+    bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
+    /* Maximizar: alterna entre 96vw/90vh y pantalla completa real. */
+    var maxed = false;
+    bd.querySelector('button[aria-label="Maximize"]').addEventListener('click', function(){
+        maxed = !maxed;
+        if (maxed) {
+            bd.style.padding = '0';
+            win.style.width = '100vw'; win.style.maxWidth = '100vw'; win.style.height = '100vh';
+        } else {
+            bd.style.padding = '';
+            win.style.width = '96vw'; win.style.maxWidth = '96vw'; win.style.height = '90vh';
+        }
+    });
+}
+
 /* Editor de reseña: 5 estrellas (full-star, sin medios para móvil) +
    textarea. Save → actualiza item.review + POST save-lists +
    notify-review. Delete → quita review + save-lists. */
@@ -2790,6 +2838,9 @@ function openReviewEditor(item, origIdx, cat) {
                            '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
                 (isSeries ? '<div class="pf-rev-edit-label">Capítulos</div>' +
                             '<button class="button" id="pf-rev-edit-eps" type="button" style="width:100%;box-sizing:border-box;">🎬 Ver / editar capítulos</button>' : '') +
+                (cat === 'books' ? '<div class="pf-rev-edit-label">PDF (URL) — al clicar el título del libro se abre</div>' +
+                            '<input type="text" id="pf-rev-edit-pdf" maxlength="2000" placeholder="https://....pdf  o  Drive .../preview" style="width:100%;box-sizing:border-box;">' +
+                            '<button class="button" id="pf-rev-edit-pdf-btn" type="button" style="width:100%;box-sizing:border-box;margin-top:4px;">📖 Abrir PDF</button>' : '') +
                 (allowReview
                     ? '<div class="pf-rev-edit-label">Puntuación</div>' +
                       '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
@@ -2818,6 +2869,18 @@ function openReviewEditor(item, origIdx, cat) {
     titleEl.value = item.title || '';
     imageEl.value = item.image || '';
     if (runtimeEl) runtimeEl.value = item.runtime ? item.runtime : '';
+    /* Libros: PDF compartido por título. Carga el actual y permite abrirlo. */
+    var pdfEl = bd.querySelector('#pf-rev-edit-pdf');
+    if (pdfEl) {
+        fetch(API + '?action=book-pdf&bookTitle=' + encodeURIComponent(item.title || ''), { credentials: 'same-origin' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(d){ if (d && d.url) pdfEl.value = d.url; }).catch(function(){});
+        var pdfBtn = bd.querySelector('#pf-rev-edit-pdf-btn');
+        if (pdfBtn) pdfBtn.addEventListener('click', function(){
+            var u = pdfEl.value.trim();
+            if (u) openPdfViewerModal(u, titleEl.value.trim() || item.title || 'Libro');
+        });
+    }
     var sel = cur;
 
     function renderStars() {
@@ -2853,6 +2916,13 @@ function openReviewEditor(item, origIdx, cat) {
         if (rtLabel && runtimeEl) {
             var rt = parseInt(runtimeEl.value, 10) || 0;
             if (rt > 0) list[origIdx].runtime = rt; else delete list[origIdx].runtime;
+        }
+        /* Libros: guardar/actualizar el PDF compartido por título. */
+        if (cat === 'books' && pdfEl) {
+            fetch(API + '?action=save-book-pdf', {
+                method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookTitle: list[origIdx].title, url: pdfEl.value.trim() })
+            }).catch(function(){});
         }
         /* La reseña solo se toca si está permitida (item completado o
            música). En otros estados se preserva lo que hubiera. */
@@ -3360,6 +3430,10 @@ function openAddItemDialog(cat) {
                 (cat === 'series' ? '<div class="pf-form-row">' +
                     '<button class="button" id="ai-eps-btn" type="button" style="width:100%;box-sizing:border-box;">🎬 Capítulos</button>' +
                 '</div>' : '') +
+                (cat === 'books' ? '<div class="pf-form-row">' +
+                    '<label for="ai-pdf">PDF (URL, opcional)</label>' +
+                    '<input type="text" id="ai-pdf" maxlength="2000" placeholder="https://....pdf  o  Drive .../preview">' +
+                '</div>' : '') +
                 '<div class="pf-form-row">' +
                     '<label for="ai-status">Estado</label>' +
                     '<select id="ai-status">' +
@@ -3412,6 +3486,17 @@ function openAddItemDialog(cat) {
             if (rt > 0) item.runtime = rt;
         }
         var newList = list.slice(); newList.push(item);
+        /* Libros: guardar el PDF (compartido por título) si se puso uno. */
+        if (cat === 'books') {
+            var pdfIn = bd.querySelector('#ai-pdf');
+            var pdfUrl = pdfIn ? pdfIn.value.trim() : '';
+            if (pdfUrl) {
+                fetch(API + '?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: title, url: pdfUrl })
+                }).catch(function(){});
+            }
+        }
         errEl.textContent = 'Guardando…';
         fetch(API + '?action=save-lists', {
             method: 'POST', credentials: 'same-origin',
@@ -4015,6 +4100,12 @@ function showMelonDetails(item) {
     head.appendChild(cover);
     var hinfo = document.createElement('div'); hinfo.className = 'pf-melon-detail-hinfo';
     var ht = document.createElement('div'); ht.className = 'pf-melon-detail-htitle'; ht.textContent = item.title || '';
+    /* Libros con PDF: clicar el título lo abre embebido. */
+    if (MELON_STATE.cat === 'books' && item.pdfUrl) {
+        ht.classList.add('pf-melon-detail-eplink');
+        ht.style.cursor = 'pointer';
+        ht.addEventListener('click', function(){ openPdfViewerModal(item.pdfUrl, item.title); });
+    }
     hinfo.appendChild(ht);
     if (item.artist) { var ha = document.createElement('div'); ha.className = 'pf-melon-detail-hartist'; ha.textContent = item.artist; hinfo.appendChild(ha); }
     var hr = document.createElement('div'); hr.className = 'pf-melon-detail-hrating';

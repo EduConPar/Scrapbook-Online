@@ -26,6 +26,9 @@ AddDefaultCharset UTF-8
 # el manifest y rechazan ofrecer la instalación.
 <IfModule mod_mime.c>
     AddType application/manifest+json .webmanifest
+    # Módulos ES (PDF.js se sirve como .mjs) — sin esto el navegador
+    # rechaza ejecutar el import por MIME incorrecto.
+    AddType text/javascript .mjs
 </IfModule>
 
 # Cache mediano para estáticos

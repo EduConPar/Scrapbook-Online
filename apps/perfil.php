@@ -701,6 +701,11 @@ if ($_perfilStandalone) {
         <div id="profile-add-eps-row" style="margin-top:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-add-eps-btn" type="button">🎬 Capítulos</button>
         </div>
+        <!-- Libros: enlace a un PDF (compartido por título). -->
+        <div id="profile-add-pdf-row" class="field-row-stacked" style="margin-top:8px;flex-shrink:0;display:none;">
+            <label for="profile-add-pdf">PDF (URL, opcional)</label>
+            <input type="text" id="profile-add-pdf" placeholder="https://....pdf  o  Drive .../preview">
+        </div>
         <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;flex-shrink:0;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-add-dialog-cancel">Cancelar</button>
@@ -767,6 +772,15 @@ if ($_perfilStandalone) {
         <!-- Series: en lugar de un número, un botón a la ventana de capítulos. -->
         <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
+        </div>
+        <!-- Libros: enlace a un PDF (compartido por título). Al clicar el
+             título del libro en Melon Reviews se abre embebido. -->
+        <div id="profile-review-pdf-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
+            <label for="profile-review-pdf" style="font-size:11px;margin-bottom:3px;">PDF (URL) — al clicar el título del libro se abre</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input type="text" id="profile-review-pdf" style="flex:1;box-sizing:border-box;" placeholder="https://....pdf  o  Drive .../preview">
+                <button class="button" id="profile-review-pdf-btn" type="button">📖 Abrir</button>
+            </div>
         </div>
         <div id="profile-review-only-completed" style="font-size:11px;margin-bottom:8px;flex-shrink:0;color:var(--text-faint);display:none;">Marca el item como completado para poder puntuarlo y reseñarlo.</div>
         <div id="profile-review-score-label" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
@@ -1030,7 +1044,36 @@ var PROFILE_USERS = <?php
         if (e.data.type === 'perfil-open-review' && e.data.reviewCategory && e.data.reviewTitle) {
             _perfilOpenReviewWhenReady(e.data.reviewCategory, e.data.reviewTitle, e.data.reviewMtype || '');
         }
+        /* Petición desde la ventana standalone de otro usuario: abrir el
+           EDITOR de reseña de un item de MÚSICA recién añadido a MI perfil,
+           en MI app (no en la del otro user). Solo lo atiende la instancia
+           principal (incluida en el shell), no las standalone. */
+        if (e.data.type === 'perfil-open-own-music-review' && e.data.title && !window.__PERFIL_STANDALONE) {
+            _openOwnMusicReviewByTitle(e.data.title);
+        }
     });
+
+    /* Abre, en MI perfil, el editor de reseña del item de música con ese
+       título (recién copiado desde el perfil de otra persona). */
+    function _openOwnMusicReviewByTitle(title) {
+        var titleNorm = String(title || '').toLowerCase().trim();
+        if (!titleNorm) return;
+        if (typeof viewingUser !== 'undefined' && viewingUser && typeof exitViewingUser === 'function') exitViewingUser();
+        if (typeof openProfileWindow === 'function') openProfileWindow();
+        var go = function(){
+            if (typeof showMusicView === 'function') showMusicView();
+            var arr = (typeof lists !== 'undefined' && lists && lists.music) ? lists.music : [];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] && (arr[i].title || '').toLowerCase().trim() === titleNorm) {
+                    if (typeof showMusicReviewWindow === 'function') showMusicReviewWindow(i);
+                    return;
+                }
+            }
+        };
+        /* Recargamos MIS listas para incluir el item recién guardado. */
+        if (typeof loadLists === 'function') loadLists(function(){ if (typeof updateCounts === 'function') updateCounts(); go(); });
+        else go();
+    }
 
     window.__perfilStandaloneInit = function() {
         loaded = true;
@@ -1315,6 +1358,10 @@ var PROFILE_USERS = <?php
                             return;
                         }
                         showCtxMenu(e.clientX, e.clientY, [
+    { label: '✏ Editar', action: function() {
+                                var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
+                                if (i !== -1) showReviewWindow(cat, i);
+                            }},
     { label: '✓ Completar', action: function() {
                                 var idx = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (idx !== -1) {
@@ -1734,6 +1781,25 @@ var PROFILE_USERS = <?php
             rtRow.style.display = 'none'; rtEl.value = '';
             epsRow.style.display = 'none';
         }
+        /* Libros: campo de PDF (compartido por título). Se carga el actual
+           y se guarda al pulsar Guardar. El botón Abrir lo previsualiza. */
+        var pdfRow = document.getElementById('profile-review-pdf-row');
+        var pdfEl  = document.getElementById('profile-review-pdf');
+        var pdfBtn = document.getElementById('profile-review-pdf-btn');
+        if (cat === 'books') {
+            pdfRow.style.display = '';
+            pdfEl.value = '';
+            fetch('assets/profile/api.php?action=book-pdf&bookTitle=' + encodeURIComponent(item.title || ''), { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){ if (d && d.url) pdfEl.value = d.url; }).catch(function(){});
+            var newPdfBtn = pdfBtn.cloneNode(true); pdfBtn.parentNode.replaceChild(newPdfBtn, pdfBtn);
+            newPdfBtn.addEventListener('click', function(){
+                var u = pdfEl.value.trim();
+                if (u) openPdfViewer(u, titleEl.value.trim() || item.title || 'Libro');
+            });
+        } else {
+            pdfRow.style.display = 'none';
+        }
 
         /* La nota y la reseña solo se pueden añadir si el item está
            completado. En pendiente/en curso solo se editan título/imagen/
@@ -1815,6 +1881,13 @@ var PROFILE_USERS = <?php
             if (RW_RT_LABEL[cat]) {
                 var rt = parseInt(rtEl.value, 10) || 0;
                 if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
+            }
+            /* Libros: guardar/actualizar el PDF compartido por título. */
+            if (cat === 'books') {
+                fetch('assets/profile/api.php?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: lists[cat][i].title, url: pdfEl.value.trim() })
+                }).catch(function(){});
             }
             /* Reseña: solo se toca si el item está completado. En otros
                estados se preserva lo que hubiera (no se añade nota/reseña). */
@@ -2287,6 +2360,11 @@ var PROFILE_USERS = <?php
         /* Botón de capítulos solo en series. */
         var addEpsRow = document.getElementById('profile-add-eps-row');
         if (addEpsRow) addEpsRow.style.display = (cat === 'series') ? '' : 'none';
+        /* Campo de PDF solo en libros. */
+        var addPdfRow = document.getElementById('profile-add-pdf-row');
+        var addPdfEl  = document.getElementById('profile-add-pdf');
+        if (addPdfEl) addPdfEl.value = '';
+        if (addPdfRow) addPdfRow.style.display = (cat === 'books') ? '' : 'none';
         document.getElementById('profile-add-error').textContent = '';
         addDlg.style.display = 'flex';
         setTimeout(function() { addNameInput.focus(); }, 0);
@@ -2319,6 +2397,17 @@ var PROFILE_USERS = <?php
         if (ADD_RUNTIME_LABEL[addDialogCat]) {
             var rt = parseInt(addRuntimeEl.value, 10) || 0;
             if (rt > 0) newItem.runtime = rt;
+        }
+        /* Libros: guardar el PDF (compartido por título) si se puso uno. */
+        if (addDialogCat === 'books') {
+            var pdfEl = document.getElementById('profile-add-pdf');
+            var pdfUrl = pdfEl ? pdfEl.value.trim() : '';
+            if (pdfUrl) {
+                fetch('assets/profile/api.php?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: title, url: pdfUrl })
+                }).catch(function(){});
+            }
         }
         lists[addDialogCat].push(newItem);
         saveCategory(addDialogCat);
@@ -4159,6 +4248,127 @@ var PROFILE_USERS = <?php
     }
     window.profileOpenEpisodes = openEpisodesWindow;
 
+    /* Visor de PDF embebido (libros): ventana movible, redimensionable y
+       con maximizar/minimizar. Solo acepta URLs http(s). */
+    function openPdfViewer(url, title) {
+        if (!url || /^https?:\/\//i.test(url) === false) { alert('El enlace del PDF debe empezar por http:// o https://'); return; }
+        /* Drive → su visor /preview (se ve embebido también en móvil).
+           Resto → visor completo de PDF.js (con barra de páginas/zoom/
+           descarga) sobre nuestro proxy mismo-origen (esquiva CORS/móvil). */
+        var embedSrc;
+        if (/drive\.google\.com/i.test(url)) {
+            var dm = url.match(/\/file\/d\/([^\/?#]+)/) || url.match(/[?&]id=([^&]+)/);
+            embedSrc = dm ? ('https://drive.google.com/file/d/' + dm[1] + '/preview') : url;
+        } else {
+            var fileParam = '../../../profile/pdf-proxy.php?url=' + encodeURIComponent(url);
+            /* ?v=<mtime> rompe la caché del navegador/edge cuando cambia el
+               visor (evita servir un viewer.html viejo cacheado). */
+            embedSrc = 'assets/vendor/pdfjs/web/viewer.html?v=<?php echo @filemtime(__DIR__ . "/../assets/vendor/pdfjs/web/viewer.html") ?: 0; ?>&file=' + encodeURIComponent(fileParam);
+        }
+        var old = document.getElementById('profile-pdf-viewer');
+        if (old) old.parentNode.removeChild(old);
+        var win = document.createElement('div');
+        win.id = 'profile-pdf-viewer';
+        win.className = 'window';
+        win.style.cssText = 'position:fixed;z-index:10006;width:min(820px,94vw);height:min(88vh,1000px);min-width:320px;min-height:200px;display:flex;flex-direction:column;';
+        win.innerHTML =
+            '<div class="title-bar" style="cursor:move;">' +
+                '<div class="title-bar-text">📖 ' + escHtml(title || 'PDF') + '</div>' +
+                '<div class="title-bar-controls">' +
+                    '<button aria-label="Minimize" type="button"></button>' +
+                    '<button aria-label="Maximize" type="button"></button>' +
+                    '<button aria-label="Close" type="button"></button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="window-body" id="pdf-viewer-body" style="flex:1;min-height:0;padding:0;overflow:hidden;">' +
+                '<iframe src="' + escHtml(embedSrc) + '" style="width:100%;height:100%;border:0;display:block;"></iframe>' +
+            '</div>';
+        document.body.appendChild(win);
+        win.style.left = Math.round((window.innerWidth - win.offsetWidth) / 2) + 'px';
+        win.style.top  = Math.round((window.innerHeight - win.offsetHeight) / 2) + 'px';
+
+        var iframe = win.querySelector('iframe');
+        var body   = win.querySelector('#pdf-viewer-body');
+        var titleBar = win.querySelector('.title-bar');
+        var ctrls  = win.querySelector('.title-bar-controls');
+        function closeWin(){ if (win.parentNode) win.parentNode.removeChild(win); }
+        ctrls.querySelector('button[aria-label="Close"]').addEventListener('click', closeWin);
+
+        /* Mover arrastrando el title-bar (no sobre los controles). */
+        var maximized = false, prev = null, rolled = false, savedH = '';
+        titleBar.addEventListener('pointerdown', function(e){
+            if (e.target.closest('.title-bar-controls') || maximized) return;
+            e.preventDefault();
+            var r = win.getBoundingClientRect();
+            var ox = e.clientX - r.left, oy = e.clientY - r.top;
+            iframe.style.pointerEvents = 'none';
+            function mv(ev){
+                var x = Math.max(0, Math.min(ev.clientX - ox, window.innerWidth - 60));
+                var y = Math.max(0, Math.min(ev.clientY - oy, window.innerHeight - 24));
+                win.style.left = x + 'px'; win.style.top = y + 'px';
+            }
+            function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
+            document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        });
+        /* Redimensionar desde las 4 esquinas y los 4 lados. Cada handle
+           lleva su 'edge' (combinación de n/s/e/w). */
+        var MINW = 320, MINH = 200;
+        var EDGES = [
+            { edge: 'nw', css: 'top:0;left:0;width:14px;height:14px;cursor:nwse-resize;' },
+            { edge: 'ne', css: 'top:0;right:0;width:14px;height:14px;cursor:nesw-resize;' },
+            { edge: 'sw', css: 'bottom:0;left:0;width:14px;height:14px;cursor:nesw-resize;' },
+            { edge: 'se', css: 'bottom:0;right:0;width:14px;height:14px;cursor:nwse-resize;' },
+            { edge: 'n',  css: 'top:0;left:14px;right:14px;height:6px;cursor:ns-resize;' },
+            { edge: 's',  css: 'bottom:0;left:14px;right:14px;height:6px;cursor:ns-resize;' },
+            { edge: 'w',  css: 'left:0;top:14px;bottom:14px;width:6px;cursor:ew-resize;' },
+            { edge: 'e',  css: 'right:0;top:14px;bottom:14px;width:6px;cursor:ew-resize;' }
+        ];
+        function startResize(e, edge){
+            if (maximized) return;
+            e.preventDefault(); e.stopPropagation();
+            var r = win.getBoundingClientRect();
+            var sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top;
+            iframe.style.pointerEvents = 'none';
+            function mv(ev){
+                var dx = ev.clientX - sx, dy = ev.clientY - sy;
+                var w = sw, h = sh, l = sl, t = st;
+                if (edge.indexOf('e') !== -1) w = Math.max(MINW, sw + dx);
+                if (edge.indexOf('s') !== -1) h = Math.max(MINH, sh + dy);
+                if (edge.indexOf('w') !== -1) { w = Math.max(MINW, sw - dx); l = sl + (sw - w); }
+                if (edge.indexOf('n') !== -1) { h = Math.max(MINH, sh - dy); t = st + (sh - h); }
+                win.style.width = w + 'px'; win.style.height = h + 'px';
+                win.style.left = l + 'px'; win.style.top = t + 'px';
+            }
+            function up(){ iframe.style.pointerEvents = ''; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); }
+            document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+        }
+        EDGES.forEach(function(h){
+            var d = document.createElement('div');
+            d.className = 'pdf-resize-handle';
+            d.style.cssText = 'position:absolute;z-index:3;' + h.css;
+            (function(edge){ d.addEventListener('pointerdown', function(e){ startResize(e, edge); }); })(h.edge);
+            win.appendChild(d);
+        });
+        /* Maximizar: alterna pantalla completa / tamaño previo. */
+        ctrls.querySelector('button[aria-label="Maximize"]').addEventListener('click', function(){
+            if (!maximized) {
+                prev = { left: win.style.left, top: win.style.top, width: win.style.width, height: win.style.height };
+                win.style.left = '0'; win.style.top = '0'; win.style.width = '100vw'; win.style.height = '100vh';
+                maximized = true;
+            } else {
+                if (prev) { win.style.left = prev.left; win.style.top = prev.top; win.style.width = prev.width; win.style.height = prev.height; }
+                maximized = false;
+            }
+        });
+        /* Minimizar: enrolla la ventana a solo el title-bar (toggle). */
+        ctrls.querySelector('button[aria-label="Minimize"]').addEventListener('click', function(){
+            rolled = !rolled;
+            if (rolled) { savedH = win.style.height; body.style.display = 'none'; win.style.height = 'auto'; }
+            else { body.style.display = ''; win.style.height = savedH || ''; }
+        });
+    }
+    window.profileOpenPdf = openPdfViewer;
+
     /* Formatea segundos: álbum → "45 min" / "1 h 12 min"; canción → "3:45". */
     function melonFmtDur(sec) {
         sec = Math.round(sec || 0);
@@ -4292,6 +4502,13 @@ var PROFILE_USERS = <?php
         var htitle = document.createElement('div');
         htitle.className = 'melon-detail-htitle';
         htitle.textContent = item.title; htitle.title = item.title;
+        /* Libros con PDF: clicar el título lo abre embebido. */
+        if (melonCat === 'books' && item.pdfUrl) {
+            htitle.classList.add('melon-detail-link');
+            htitle.style.cursor = 'pointer';
+            htitle.title = 'Abrir PDF';
+            htitle.addEventListener('click', function(){ openPdfViewer(item.pdfUrl, item.title); });
+        }
         hinfo.appendChild(htitle);
         if (item.artist) {
             var hart = document.createElement('div');
@@ -5816,6 +6033,22 @@ var PROFILE_USERS = <?php
         var newNo  = noBtn.cloneNode(true);  noBtn.parentNode.replaceChild(newNo, noBtn);
         newYes.addEventListener('click', function() {
             prompt.style.display = 'none';
+            /* Si estamos en la ventana standalone de OTRO usuario, NO
+               salimos de su perfil: pedimos a MI app de perfil (incluida
+               en el shell) que abra la reseña. Así la ventana del otro
+               usuario se queda como estaba. */
+            if (window.__PERFIL_STANDALONE) {
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type:  'perfil-open-own-music-review',
+                            title: item.title || '',
+                            mtype: item.type || ''
+                        }, '*');
+                    }
+                } catch (_) {}
+                return;
+            }
             if (viewingUser) exitViewingUser();
             showMusicView();
             showMusicReviewWindow(newIdx);
@@ -6238,6 +6471,8 @@ var PROFILE_USERS = <?php
         var mImageEl = document.getElementById('profile-review-image');
         document.getElementById('profile-review-rt-row').style.display = 'none';
         document.getElementById('profile-review-eps-row').style.display = 'none';
+        /* La música no usa el campo de PDF (es solo de libros). */
+        document.getElementById('profile-review-pdf-row').style.display = 'none';
         mTitleEl.value = item.title || '';
         mImageEl.value = item.image || '';
         var numEl = document.getElementById('profile-review-stars-num');
