@@ -933,7 +933,7 @@ function _awBuildAlbumCard(a) {
         if (r) card.insertAdjacentHTML('beforeend', mrBadge(r));
     });
     card.addEventListener('click', function(){
-        if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name);
+        if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name, _awArtistName || '', a.image || '');
         melonRecordRecent('album', a.albumKey, a.name, a.image, _awArtistName || '');
     });
     return card;
@@ -2062,7 +2062,7 @@ function closeAlbumViewer() {
     _albumViewerToken++;
 }
 
-async function openAlbumViewer(albumId, albumName, albumArtist) {
+async function openAlbumViewer(albumId, albumName, albumArtist, albumImage) {
     if (!albumId) return;
     const win = _albumViewerEl('album-viewer');
     if (!win) return;
@@ -2082,9 +2082,10 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
        conocemos de _currentAlbum (cover, nombre) para no esperar al
        endpoint para enseñar algo. */
     nameEl.textContent   = albumName || (_currentAlbum && _currentAlbum.albumName) || 'Cargando…';
-    artistEl.textContent = '';
+    artistEl.textContent = albumArtist || '';
     metaEl.textContent   = '';
-    coverEl.src          = (_currentAlbum && _currentAlbum.image) || '';
+    /* Portada del álbum CLICADO (si la conocemos) — no la del que suena. */
+    coverEl.src          = albumImage || (_currentAlbum && _currentAlbum.image) || '';
     tracksEl.innerHTML   = '<div class="album-viewer-msg">Cargando…</div>';
     playBtn.disabled     = true;
     playBtn.textContent  = '▶ Reproducir álbum';
@@ -2309,50 +2310,19 @@ async function openAlbumViewer(albumId, albumName, albumArtist) {
            vigente — si no, esta apertura fue superada por otra y la UI
            ya está mostrando el álbum nuevo. */
         if (myToken === _albumViewerToken) {
-            /* Fallback: en lugar de dejar al usuario con "Error", pintamos
-               un viewer mínimo con la canción que está sonando — el
-               botón "Reproducir álbum" reactivado lo deja seguir
-               escuchando lo que estaba. Mantiene la promesa: nunca un
-               álbum sin viewer utilizable. */
-            const curTrack = (typeof playlist !== 'undefined' && playlist[currentTrack]) || null;
-            nameEl.textContent   = (curTrack && curTrack.title)  || albumName || 'Álbum';
-            artistEl.textContent = (curTrack && curTrack.artist) || '';
-            metaEl.textContent   = '1 canción';
-            if (curTrack && curTrack.videoId) {
-                coverEl.src = 'https://img.youtube.com/vi/' + curTrack.videoId + '/mqdefault.jpg';
-            }
-            tracksEl.innerHTML = '';
-            const row = document.createElement('div');
-            row.className = 'album-viewer-row is-playing';
-            row.innerHTML =
-                '<span class="album-viewer-num">1</span>' +
-                '<div class="album-viewer-info">' +
-                  '<div class="album-viewer-title"></div>' +
-                  '<div class="album-viewer-artist"></div>' +
-                '</div>' +
-                '<span class="album-viewer-dur"></span>';
-            row.querySelector('.album-viewer-title').textContent  = (curTrack && curTrack.title)  || 'Track';
-            row.querySelector('.album-viewer-artist').textContent = (curTrack && curTrack.artist) || '';
-            row.addEventListener('click', () => _playAlbumFrom(0));
-            tracksEl.appendChild(row);
-            _albumViewerCurrent = {
-                albumId,
-                meta: { name: nameEl.textContent, artist: artistEl.textContent, image: coverEl.src,
-                        tracks: [{ title: row.querySelector('.album-viewer-title').textContent,
-                                   artist: row.querySelector('.album-viewer-artist').textContent,
-                                   duration: 0 }] },
-                resolved: [{ title: row.querySelector('.album-viewer-title').textContent,
-                             artist: row.querySelector('.album-viewer-artist').textContent,
-                             duration: 0,
-                             videoId: (curTrack && curTrack.videoId) || null }],
-            };
-            if (curTrack && curTrack.videoId) {
-                playBtn.disabled = false;
-                playBtn.textContent = '▶ Reproducir';
-                playBtn.onclick = () => _playAlbumFrom(0);
-            } else {
-                playBtn.textContent = 'No disponible';
-            }
+            /* No se pudieron leer las pistas del álbum. ANTES se pintaba
+               aquí un falso álbum con la canción que estaba SONANDO (con su
+               título e imagen), lo que confundía: parecía que el álbum era
+               esa única canción. Ahora mostramos la cabecera REAL del álbum
+               clicado (su nombre y portada) con un mensaje honesto. */
+            nameEl.textContent   = albumName || (typeof meta !== 'undefined' && meta && meta.name) || 'Álbum';
+            artistEl.textContent = albumArtist || (typeof meta !== 'undefined' && meta && meta.artist) || '';
+            metaEl.textContent   = '';
+            coverEl.src          = albumImage || coverEl.src || '';
+            tracksEl.innerHTML   = '<div class="album-viewer-msg">No se pudieron cargar las canciones de este álbum.<br>Puede que no esté disponible en iTunes/Deezer.</div>';
+            playBtn.disabled     = true;
+            playBtn.textContent  = 'No disponible';
+            _albumViewerCurrent  = { albumId, meta: null, resolved: null };
         }
     }
 }
@@ -2416,7 +2386,7 @@ if (playerTitle) {
     playerTitle.addEventListener('click', () => {
         if (!playerTitle.classList.contains('has-album')) return;
         if (!_currentAlbum) return;
-        openAlbumViewer(_currentAlbum.albumKey || _currentAlbum.spotifyAlbumId, _currentAlbum.albumName);
+        openAlbumViewer(_currentAlbum.albumKey || _currentAlbum.spotifyAlbumId, _currentAlbum.albumName, _currentAlbum.albumArtist || '', _currentAlbum.image || '');
     });
 }
 
@@ -5010,7 +4980,7 @@ var addTrackCallback = null;
 
     function playSong(tr){ melonPlaySong(tr); }
     function openAlbum(key, name, image, artist){
-        if (typeof openAlbumViewer === 'function') openAlbumViewer(key, name);
+        if (typeof openAlbumViewer === 'function') openAlbumViewer(key, name, artist || '', image || '');
         melonRecordRecent('album', key, name || '', image || '', artist || '');
     }
 
