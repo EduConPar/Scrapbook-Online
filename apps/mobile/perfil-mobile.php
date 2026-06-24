@@ -3428,6 +3428,10 @@ function openAddItemDialog(cat) {
                 (cat === 'series' ? '<div class="pf-form-row">' +
                     '<button class="button" id="ai-eps-btn" type="button" style="width:100%;box-sizing:border-box;">🎬 Capítulos</button>' +
                 '</div>' : '') +
+                (cat === 'books' ? '<div class="pf-form-row">' +
+                    '<label for="ai-pdf">PDF (URL, opcional)</label>' +
+                    '<input type="text" id="ai-pdf" maxlength="2000" placeholder="https://....pdf  o  Drive .../preview">' +
+                '</div>' : '') +
                 '<div class="pf-form-row">' +
                     '<label for="ai-status">Estado</label>' +
                     '<select id="ai-status">' +
@@ -3480,6 +3484,17 @@ function openAddItemDialog(cat) {
             if (rt > 0) item.runtime = rt;
         }
         var newList = list.slice(); newList.push(item);
+        /* Libros: guardar el PDF (compartido por título) si se puso uno. */
+        if (cat === 'books') {
+            var pdfIn = bd.querySelector('#ai-pdf');
+            var pdfUrl = pdfIn ? pdfIn.value.trim() : '';
+            if (pdfUrl) {
+                fetch(API + '?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: title, url: pdfUrl })
+                }).catch(function(){});
+            }
+        }
         errEl.textContent = 'Guardando…';
         fetch(API + '?action=save-lists', {
             method: 'POST', credentials: 'same-origin',

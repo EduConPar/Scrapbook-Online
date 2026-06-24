@@ -701,6 +701,11 @@ if ($_perfilStandalone) {
         <div id="profile-add-eps-row" style="margin-top:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-add-eps-btn" type="button">🎬 Capítulos</button>
         </div>
+        <!-- Libros: enlace a un PDF (compartido por título). -->
+        <div id="profile-add-pdf-row" class="field-row-stacked" style="margin-top:8px;flex-shrink:0;display:none;">
+            <label for="profile-add-pdf">PDF (URL, opcional)</label>
+            <input type="text" id="profile-add-pdf" placeholder="https://....pdf  o  Drive .../preview">
+        </div>
         <p id="profile-add-error" style="color:#c00;font-size:10px;margin:6px 0 0;min-height:14px;flex-shrink:0;"></p>
         <div class="field-row" style="justify-content:flex-end;gap:4px;margin-top:4px;flex-shrink:0;flex-wrap:wrap;">
             <button class="button" id="profile-add-dialog-cancel">Cancelar</button>
@@ -2355,6 +2360,11 @@ var PROFILE_USERS = <?php
         /* Botón de capítulos solo en series. */
         var addEpsRow = document.getElementById('profile-add-eps-row');
         if (addEpsRow) addEpsRow.style.display = (cat === 'series') ? '' : 'none';
+        /* Campo de PDF solo en libros. */
+        var addPdfRow = document.getElementById('profile-add-pdf-row');
+        var addPdfEl  = document.getElementById('profile-add-pdf');
+        if (addPdfEl) addPdfEl.value = '';
+        if (addPdfRow) addPdfRow.style.display = (cat === 'books') ? '' : 'none';
         document.getElementById('profile-add-error').textContent = '';
         addDlg.style.display = 'flex';
         setTimeout(function() { addNameInput.focus(); }, 0);
@@ -2387,6 +2397,17 @@ var PROFILE_USERS = <?php
         if (ADD_RUNTIME_LABEL[addDialogCat]) {
             var rt = parseInt(addRuntimeEl.value, 10) || 0;
             if (rt > 0) newItem.runtime = rt;
+        }
+        /* Libros: guardar el PDF (compartido por título) si se puso uno. */
+        if (addDialogCat === 'books') {
+            var pdfEl = document.getElementById('profile-add-pdf');
+            var pdfUrl = pdfEl ? pdfEl.value.trim() : '';
+            if (pdfUrl) {
+                fetch('assets/profile/api.php?action=save-book-pdf', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookTitle: title, url: pdfUrl })
+                }).catch(function(){});
+            }
         }
         lists[addDialogCat].push(newItem);
         saveCategory(addDialogCat);
@@ -6448,6 +6469,8 @@ var PROFILE_USERS = <?php
         var mImageEl = document.getElementById('profile-review-image');
         document.getElementById('profile-review-rt-row').style.display = 'none';
         document.getElementById('profile-review-eps-row').style.display = 'none';
+        /* La música no usa el campo de PDF (es solo de libros). */
+        document.getElementById('profile-review-pdf-row').style.display = 'none';
         mTitleEl.value = item.title || '';
         mImageEl.value = item.image || '';
         var numEl = document.getElementById('profile-review-stars-num');
