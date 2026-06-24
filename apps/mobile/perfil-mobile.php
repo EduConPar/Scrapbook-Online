@@ -1421,7 +1421,15 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
         .pf-episodes-body { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 90px); overflow: hidden; }
         .pf-ep-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
         .pf-ep-empty { font-size: 12px; color: var(--text-faint, #888); text-align: center; padding: 12px 4px; }
-        .pf-ep-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px; border: 1px solid var(--win-border, #808080); background: var(--win-bg-light, #fff); }
+        .pf-ep-season { margin-bottom: 8px; }
+        .pf-ep-season-head { display: flex; align-items: center; gap: 8px; padding: 4px 6px; margin-bottom: 4px; background: var(--accent, #1db954); color: var(--accent-text, #fff); }
+        .pf-ep-season-title { font-weight: bold; font-size: 12px; flex-shrink: 0; }
+        .pf-ep-season-meta { flex: 1; font-size: 10px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pf-ep-season-avg { flex-shrink: 0; font-size: 11px; font-weight: bold; }
+        .pf-ep-season-del { min-height: 22px; padding: 0 7px; font-size: 11px; }
+        .pf-ep-season-rows { display: flex; flex-direction: column; gap: 6px; }
+        .pf-ep-season-empty { font-size: 11px; color: var(--text-faint, #888); text-align: center; padding: 8px 4px; }
+        .pf-ep-row { display: flex; gap: 8px; align-items: flex-start; padding: 4px; border: 1px solid var(--win-border, #808080); background: var(--input-bg, #fff); color: var(--text, #000); }
         .pf-ep-thumb { width: 96px; aspect-ratio: 16/9; flex-shrink: 0; background: #000; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; }
         .pf-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .pf-ep-thumb-click { cursor: pointer; }
@@ -2150,19 +2158,17 @@ function showActionMenu(item, origIdx) {
     var lastAct   = isCollab ? 'leave' : 'delete';
     var items = [];
 
-    /* Las series se pueden editar (título/imagen/capítulos) en cualquier
-       estado, no solo completadas. */
-    var seriesEdit = (cat === 'series')
-        ? { act: 'review', icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' }
-        : null;
+    /* Cualquier item se puede editar en cualquier estado (título/imagen/
+       reseña/duración y, en series, capítulos), no solo completado. */
+    var editAction = { act: 'review', icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' };
 
     if (status === 'pending') {
-        if (seriesEdit) items.push(seriesEdit);
+        items.push(editAction);
         items.push({ act: 'inprogress', icon: '▶', label: 'Poner en curso' });
         items.push({ act: 'collab',     icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
         items.push({ act: lastAct,      icon: lastIcon, label: lastLabel });
     } else if (status === 'in-progress') {
-        if (seriesEdit) items.push(seriesEdit);
+        items.push(editAction);
         items.push({ act: 'complete', icon: '✓', label: 'Completar' });
         items.push({ act: 'unstart',  icon: '✕', label: 'Quitar de en curso' });
         items.push({ act: 'collab',   icon: '<img src="../../assets/img/appIcons/profileIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Colaboradores' });
@@ -2404,6 +2410,11 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     /* Desde Melon Reviews: solo lectura — sin barra para añadir. */
     var addBar = readOnly ? '' :
         '<div class="pf-ep-addbar">' +
+            '<div style="display:flex;gap:6px;align-items:center;">' +
+                '<label for="pf-ep-season" style="font-size:11px;">Temporada</label>' +
+                '<select id="pf-ep-season" style="flex:1;"></select>' +
+                '<button class="button" id="pf-ep-newseason" type="button">+ Temp.</button>' +
+            '</div>' +
             '<input type="text" id="pf-ep-title" placeholder="Título del capítulo">' +
             '<input type="text" id="pf-ep-image" placeholder="Imagen de preview (URL)">' +
             '<div style="display:flex;gap:6px;align-items:center;">' +
@@ -2426,36 +2437,78 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
     var listEl = bd.querySelector('#pf-ep-list');
     var eps = [];
-    function render() {
-        if (!eps.length) { listEl.innerHTML = '<div class="pf-ep-empty">Sin capítulos. Añade el primero abajo.</div>'; return; }
-        listEl.innerHTML = eps.map(function(ep, i){
-            var dur = epFmtDurM(ep.duration);
-            var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
-            var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
-            /* Solo lectura: miniatura abre las reseñas, sin controles de edición. */
-            if (readOnly) {
-                return '<div class="pf-ep-row">' +
-                    '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
-                    '<div class="pf-ep-info">' +
-                        '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
-                        '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '</div>' +
-                '</div>';
-            }
-            var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
-            var chartIco = '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseña" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-            var rev = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-            return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
-                '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
-                '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
+    var extraSeasons = [];
+    function seasonsList() {
+        var set = {};
+        eps.forEach(function(ep){ set[ep.season || 1] = true; });
+        extraSeasons.forEach(function(s){ set[s] = true; });
+        var arr = Object.keys(set).map(function(s){ return parseInt(s, 10); });
+        if (!arr.length) arr = [1];
+        arr.sort(function(a, b){ return a - b; });
+        return arr;
+    }
+    function syncSeasonSelect() {
+        var sel = bd.querySelector('#pf-ep-season');
+        if (!sel) return;
+        var prev = sel.value;
+        var seasons = seasonsList();
+        sel.innerHTML = seasons.map(function(s){ return '<option value="' + s + '">Temporada ' + s + '</option>'; }).join('');
+        if (prev && seasons.indexOf(parseInt(prev, 10)) !== -1) sel.value = prev;
+    }
+    function renderRow(ep, n) {
+        var dur = epFmtDurM(ep.duration);
+        var avg = (ep.avgStars != null) ? (makeStarsHtml(ep.avgStars, 5) + ' ' + ep.avgStars.toFixed(1) + ' (' + ep.reviewCount + ')') : 'Sin reseñas';
+        var thumbInner = ep.image ? '<img src="' + esc(ep.image) + '" alt="">' : '🎬';
+        if (readOnly) {
+            return '<div class="pf-ep-row">' +
+                '<div class="pf-ep-thumb pf-ep-thumb-click" data-rev="' + ep.id + '">' + thumbInner + '</div>' +
                 '<div class="pf-ep-info">' +
-                    '<div class="pf-ep-title">' + (i + 1) + '. ' + esc(ep.title) + '</div>' +
+                    '<div class="pf-ep-title">' + n + '. ' + esc(ep.title) + '</div>' +
                     '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="pf-ep-controls">' + watch +
-                        '<button class="button" data-r="' + ep.id + '">' + rev + '</button>' +
-                        '<button class="button" data-x="' + ep.id + '">✕</button>' +
-                    '</div>' +
                 '</div>' +
+            '</div>';
+        }
+        var watch = canWatch ? '<label class="pf-ep-watch"><input type="checkbox" data-w="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>' : (ep.watched ? '<span class="pf-ep-wtag">✓ Visto</span>' : '');
+        /* Indicador discreto de "tienes reseña"; editar/eliminar viven en
+           el menú que se abre manteniendo pulsado el capítulo. */
+        var chartIco = (ep.myStars != null) ? '<img src="../../assets/img/appIcons/chatIcon.png" alt="Reseñado" class="pf-ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' : '';
+        var controls = watch + chartIco;
+        return '<div class="pf-ep-row" data-ep-id="' + ep.id + '">' +
+            '<div class="pf-ep-drag" data-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
+            '<div class="pf-ep-thumb">' + thumbInner + '</div>' +
+            '<div class="pf-ep-info">' +
+                '<div class="pf-ep-title">' + n + '. ' + esc(ep.title) + '</div>' +
+                '<div class="pf-ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                (controls ? '<div class="pf-ep-controls">' + controls + '</div>' : '') +
+            '</div>' +
+        '</div>';
+    }
+    function render() {
+        syncSeasonSelect();
+        if (!eps.length && !extraSeasons.length) { listEl.innerHTML = '<div class="pf-ep-empty">Sin capítulos. Añade el primero abajo.</div>'; return; }
+        var seasons = seasonsList();
+        listEl.innerHTML = seasons.map(function(seasonNum){
+            var group = eps.filter(function(ep){ return (ep.season || 1) === seasonNum; });
+            var rowsHtml = group.length
+                ? group.map(function(ep, i){ return renderRow(ep, i + 1); }).join('')
+                : '<div class="pf-ep-season-empty">Sin capítulos en esta temporada.</div>';
+            var delBtn = readOnly ? '' : '<button class="button pf-ep-season-del" data-delseason="' + seasonNum + '">✕</button>';
+            /* Resumen de la temporada: nº de capítulos, duración total y
+               nota media (media de las notas medias de sus capítulos). */
+            var cnt = group.length;
+            var durSum = group.reduce(function(a, ep){ return a + (ep.duration || 0); }, 0);
+            var rated = group.filter(function(ep){ return ep.avgStars != null; });
+            var savg = rated.length ? (rated.reduce(function(a, ep){ return a + ep.avgStars; }, 0) / rated.length) : null;
+            var metaBits = [cnt + (cnt === 1 ? ' cap.' : ' caps.')];
+            if (durSum > 0) metaBits.push(epFmtDurM(durSum));
+            var avgHtml = (savg != null) ? '<span class="pf-ep-season-avg">★ ' + savg.toFixed(1) + '</span>' : '';
+            return '<div class="pf-ep-season">' +
+                '<div class="pf-ep-season-head">' +
+                    '<span class="pf-ep-season-title">Temporada ' + seasonNum + '</span>' +
+                    '<span class="pf-ep-season-meta">' + metaBits.join(' · ') + '</span>' +
+                    avgHtml + delBtn +
+                '</div>' +
+                '<div class="pf-ep-season-rows" data-season="' + seasonNum + '">' + rowsHtml + '</div>' +
             '</div>';
         }).join('');
     }
@@ -2471,10 +2524,11 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) ep.watched = cb.checked;
         fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: id, watched: cb.checked }) }).catch(function(){});
     });
-    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil). */
-    var dragRow = null;
+    /* Reordenar arrastrando el tirador (pointer events: ratón + táctil).
+       El reordenado es dentro de la misma temporada (su contenedor). */
+    var dragRow = null, dragCont = null;
     function epDragAfter(y) {
-        var els = Array.prototype.slice.call(listEl.querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
+        var els = Array.prototype.slice.call((dragCont || listEl).querySelectorAll('.pf-ep-row:not(.pf-ep-dragging)'));
         var closest = null, closestOff = -Infinity;
         els.forEach(function(ch){
             var box = ch.getBoundingClientRect();
@@ -2487,13 +2541,13 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         if (!dragRow) return;
         e.preventDefault();
         var after = epDragAfter(e.clientY);
-        if (after == null) listEl.appendChild(dragRow);
-        else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+        if (after == null) (dragCont || listEl).appendChild(dragRow);
+        else if (after !== dragRow) (dragCont || listEl).insertBefore(dragRow, after);
     }
     function epDragUp(){
         if (!dragRow) return;
         dragRow.classList.remove('pf-ep-dragging');
-        dragRow = null;
+        dragRow = null; dragCont = null;
         document.removeEventListener('pointermove', epDragMove);
         document.removeEventListener('pointerup', epDragUp);
         document.removeEventListener('pointercancel', epDragUp);
@@ -2506,7 +2560,7 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
         var h = e.target.closest('[data-drag]'); if (!h) return;
         var row = h.closest('.pf-ep-row'); if (!row) return;
         e.preventDefault();
-        dragRow = row; row.classList.add('pf-ep-dragging');
+        dragRow = row; dragCont = row.parentNode; row.classList.add('pf-ep-dragging');
         document.addEventListener('pointermove', epDragMove);
         document.addEventListener('pointerup', epDragUp);
         document.addEventListener('pointercancel', epDragUp);
@@ -2514,23 +2568,90 @@ function openEpisodesModal(seriesTitle, canWatch, readOnly) {
     listEl.addEventListener('click', function(e){
         var rv = e.target.closest('[data-rev]');
         if (rv) { var rvid = parseInt(rv.getAttribute('data-rev'), 10); var rvep = eps.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpReviewsModal(rvep); return; }
-        var r = e.target.closest('[data-r]');
-        if (r) { var id = parseInt(r.getAttribute('data-r'), 10); var ep = eps.filter(function(x){ return x.id === id; })[0]; if (ep) openEpReviewModal(ep, load); return; }
-        var x = e.target.closest('[data-x]');
-        if (x) {
-            var xid = parseInt(x.getAttribute('data-x'), 10);
-            if (confirm('¿Quitar este capítulo? Afecta a todos.')) {
-                fetch(API + '?action=delete-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: xid }) }).then(function(){ eps = eps.filter(function(y){ return y.id !== xid; }); render(); }).catch(function(){});
+        var dsn = e.target.closest('[data-delseason]');
+        if (dsn) {
+            var sNum = parseInt(dsn.getAttribute('data-delseason'), 10);
+            var inSeason = eps.filter(function(x){ return (x.season || 1) === sNum; });
+            if (!inSeason.length) { extraSeasons = extraSeasons.filter(function(s){ return s !== sNum; }); render(); return; }
+            if (confirm('¿Eliminar la Temporada ' + sNum + ' y sus ' + inSeason.length + ' capítulo(s)? Afecta a todos.')) {
+                fetch(API + '?action=delete-series-season', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, season: sNum }) })
+                    .then(function(){ eps = eps.filter(function(x){ return (x.season || 1) !== sNum; }); extraSeasons = extraSeasons.filter(function(s){ return s !== sNum; }); render(); }).catch(function(){});
             }
+            return;
         }
+    });
+    /* Menú del capítulo (Editar / Eliminar): se abre manteniendo pulsado
+       (long-press) o con click derecho. No se ofrece en solo lectura. */
+    function openEpRowMenu(ep) {
+        openCtxMenu(ep.title || 'Capítulo', [
+            { act: 'edit',   icon: '<img src="../../assets/img/appIcons/drawingIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">', label: 'Editar' },
+            { act: 'delete', icon: '✕', label: 'Eliminar' }
+        ], function(act){
+            if (act === 'edit') openEpEditorModal(ep, seriesTitle, load);
+            else if (act === 'delete') {
+                if (confirm('¿Quitar este capítulo? Afecta a todos.')) {
+                    fetch(API + '?action=delete-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ep.id }) }).then(function(){ eps = eps.filter(function(y){ return y.id !== ep.id; }); render(); }).catch(function(){});
+                }
+            }
+        });
+    }
+    function epRowFromEvent(target) {
+        if (readOnly || !target || !target.closest) return null;
+        if (target.closest('[data-drag]') || target.closest('.pf-ep-watch')) return null;
+        var row = target.closest('.pf-ep-row[data-ep-id]'); if (!row) return null;
+        var id = parseInt(row.getAttribute('data-ep-id'), 10);
+        return eps.filter(function(x){ return x.id === id; })[0] || null;
+    }
+    var epLpT = null, epLsx = 0, epLsy = 0;
+    listEl.addEventListener('touchstart', function(e){
+        var t = e.touches && e.touches[0]; if (!t) return;
+        var ep = epRowFromEvent(e.target); if (!ep) return;
+        epLsx = t.clientX; epLsy = t.clientY;
+        if (epLpT) clearTimeout(epLpT);
+        epLpT = setTimeout(function(){
+            epLpT = null;
+            try { navigator.vibrate && navigator.vibrate(30); } catch (_) {}
+            openEpRowMenu(ep);
+        }, LP_MS_PF);
+    }, { passive: true });
+    listEl.addEventListener('touchmove', function(e){
+        if (!epLpT) return;
+        var t = e.touches && e.touches[0]; if (!t) return;
+        if (Math.abs(t.clientX - epLsx) > LP_MOVE_PF || Math.abs(t.clientY - epLsy) > LP_MOVE_PF) { clearTimeout(epLpT); epLpT = null; }
+    }, { passive: true });
+    function epLpEnd(){ if (epLpT) { clearTimeout(epLpT); epLpT = null; } }
+    listEl.addEventListener('touchend', epLpEnd);
+    listEl.addEventListener('touchcancel', epLpEnd);
+    listEl.addEventListener('contextmenu', function(e){
+        var ep = epRowFromEvent(e.target); if (!ep) return;
+        e.preventDefault();
+        openEpRowMenu(ep);
     });
     var addEl = bd.querySelector('#pf-ep-add');
     if (addEl) addEl.addEventListener('click', function(){
         var t = bd.querySelector('#pf-ep-title').value.trim(); if (!t) return;
         var img = bd.querySelector('#pf-ep-image').value.trim();
         var dur = parseInt(bd.querySelector('#pf-ep-dur').value, 10) || 0;
-        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, title: t, image: img, duration: dur }) })
-            .then(function(){ bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = ''; load(); }).catch(function(){});
+        var seasonEl = bd.querySelector('#pf-ep-season');
+        var season = seasonEl ? (parseInt(seasonEl.value, 10) || 1) : 1;
+        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seriesTitle: seriesTitle, title: t, image: img, duration: dur, season: season }) })
+            .then(function(){
+                bd.querySelector('#pf-ep-title').value = ''; bd.querySelector('#pf-ep-image').value = ''; bd.querySelector('#pf-ep-dur').value = '';
+                /* Recargar conservando la temporada seleccionada. */
+                fetch(API + '?action=series-episodes&seriesTitle=' + encodeURIComponent(seriesTitle), { credentials: 'same-origin' })
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(d){ eps = (d && d.episodes) || []; render(); var s = bd.querySelector('#pf-ep-season'); if (s) s.value = season; })
+                    .catch(function(){});
+            }).catch(function(){});
+    });
+    /* Añadir temporada (transitoria hasta que tenga capítulos). */
+    var newSeasonEl = bd.querySelector('#pf-ep-newseason');
+    if (newSeasonEl) newSeasonEl.addEventListener('click', function(){
+        var seasons = seasonsList();
+        var next = (seasons.length ? seasons[seasons.length - 1] : 0) + 1;
+        extraSeasons.push(next);
+        render();
+        var s = bd.querySelector('#pf-ep-season'); if (s) s.value = next;
     });
     load();
 }
@@ -2569,15 +2690,23 @@ function openEpReviewsModal(ep) {
         })
         .catch(function(){ body.innerHTML = '<div class="pf-ep-empty">Error al cargar reseñas.</div>'; });
 }
-function openEpReviewModal(ep, onSaved) {
+/* Editor de capítulo: título, imagen y duración (compartidos) + reseña
+   propia (estrellas + comentario). */
+function openEpEditorModal(ep, seriesTitle, onSaved) {
     var sel = ep.myStars || 0;
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
     bd.innerHTML =
         '<div class="window pf-modal">' +
-            '<div class="title-bar"><div class="title-bar-text">★ ' + esc(ep.title || '—') + '</div>' +
+            '<div class="title-bar"><div class="title-bar-text">✏ Editar capítulo</div>' +
                 '<div class="title-bar-controls"><button aria-label="Close" type="button"></button></div></div>' +
             '<div class="window-body">' +
+                '<div class="pf-rev-edit-label">Título</div>' +
+                '<input type="text" id="pf-epe-title" maxlength="255" style="width:100%;box-sizing:border-box;">' +
+                '<div class="pf-rev-edit-label">Imagen (URL)</div>' +
+                '<input type="text" id="pf-epe-image" maxlength="2000" placeholder="https://..." style="width:100%;box-sizing:border-box;">' +
+                '<div class="pf-rev-edit-label">Duración (min)</div>' +
+                '<input type="number" id="pf-epe-dur" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' +
                 '<div class="pf-rev-edit-label">Puntuación</div>' +
                 '<div class="pf-rev-edit-stars" id="pf-epr-stars"></div>' +
                 '<div class="pf-rev-edit-label">Comentario</div>' +
@@ -2589,8 +2718,14 @@ function openEpReviewModal(ep, onSaved) {
             '</div>' +
         '</div>';
     document.body.appendChild(bd);
+    var titleEl = bd.querySelector('#pf-epe-title');
+    var imageEl = bd.querySelector('#pf-epe-image');
+    var durEl   = bd.querySelector('#pf-epe-dur');
     var starsBox = bd.querySelector('#pf-epr-stars');
     var commentEl = bd.querySelector('#pf-epr-comment');
+    titleEl.value = ep.title || '';
+    imageEl.value = ep.image || '';
+    durEl.value = ep.duration ? ep.duration : '';
     commentEl.value = ep.myComment || '';
     function renderStars() {
         var html = '';
@@ -2607,7 +2742,14 @@ function openEpReviewModal(ep, onSaved) {
     bd.querySelector('[data-act="cancel"]').addEventListener('click', close);
     bd.addEventListener('click', function(e){ if (e.target === bd) close(); });
     bd.querySelector('[data-act="save"]').addEventListener('click', function(){
-        fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: commentEl.value.trim() }) })
+        var title = titleEl.value.trim() || ep.title || '';
+        var image = imageEl.value.trim();
+        var dur = parseInt(durEl.value, 10) || 0;
+        var comment = commentEl.value.trim();
+        fetch(API + '?action=save-series-episode', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ep.id, seriesTitle: seriesTitle, title: title, image: image, duration: dur, season: ep.season || 1 }) })
+            .then(function(){
+                return fetch(API + '?action=series-episode-state', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment }) });
+            })
             .then(function(){ close(); if (onSaved) onSaved(); }).catch(function(){});
     });
 }
@@ -2625,6 +2767,9 @@ function openReviewEditor(item, origIdx, cat) {
     var RW_RT_LABEL = { movies: 'Duración (min)', books: 'Nº de capítulos' };
     var rtLabel = RW_RT_LABEL[cat];
     var isSeries = (cat === 'series');
+    /* La nota y la reseña solo si el item está completado (la música no
+       tiene estado → siempre se puede reseñar). */
+    var allowReview = (cat === 'music') || (normalizeStatus(item.status) === 'completed');
 
     var bd = document.createElement('div');
     bd.className = 'pf-modal-backdrop';
@@ -2645,12 +2790,14 @@ function openReviewEditor(item, origIdx, cat) {
                            '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
                 (isSeries ? '<div class="pf-rev-edit-label">Capítulos</div>' +
                             '<button class="button" id="pf-rev-edit-eps" type="button" style="width:100%;box-sizing:border-box;">🎬 Ver / editar capítulos</button>' : '') +
-                '<div class="pf-rev-edit-label">Puntuación</div>' +
-                '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
-                '<div class="pf-rev-edit-label">Comentario</div>' +
-                '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>' +
+                (allowReview
+                    ? '<div class="pf-rev-edit-label">Puntuación</div>' +
+                      '<div class="pf-rev-edit-stars" id="pf-rev-edit-stars"></div>' +
+                      '<div class="pf-rev-edit-label">Comentario</div>' +
+                      '<textarea class="pf-rev-edit-comment" id="pf-rev-edit-comment" maxlength="500" placeholder="Opcional"></textarea>'
+                    : '<div class="pf-rev-edit-label" style="color:var(--text-faint,#888);">Marca el item como completado para poder puntuarlo y reseñarlo.</div>') +
                 '<div class="modal-actions">' +
-                    (hadReview ? '<button class="button danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Borrar</button>' : '') +
+                    ((hadReview && allowReview) ? '<button class="button danger" data-act="delete" type="button"><img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Borrar</button>' : '') +
                     '<button class="button" data-act="cancel" type="button">Cancelar</button>' +
                     '<button class="button default" data-act="save" type="button">Guardar</button>' +
                 '</div>' +
@@ -2660,7 +2807,7 @@ function openReviewEditor(item, origIdx, cat) {
 
     var starsBox = bd.querySelector('#pf-rev-edit-stars');
     var commentEl = bd.querySelector('#pf-rev-edit-comment');
-    commentEl.value = curComment;
+    if (commentEl) commentEl.value = curComment;
     var titleEl = bd.querySelector('#pf-rev-edit-title');
     var imageEl = bd.querySelector('#pf-rev-edit-image');
     var runtimeEl = bd.querySelector('#pf-rev-edit-runtime');
@@ -2690,7 +2837,7 @@ function openReviewEditor(item, origIdx, cat) {
             });
         });
     }
-    renderStars();
+    if (starsBox) renderStars();
 
     function close(){ if (bd.parentNode) bd.parentNode.removeChild(bd); }
     bd.querySelector('.title-bar-controls button').addEventListener('click', close);
@@ -2707,14 +2854,18 @@ function openReviewEditor(item, origIdx, cat) {
             var rt = parseInt(runtimeEl.value, 10) || 0;
             if (rt > 0) list[origIdx].runtime = rt; else delete list[origIdx].runtime;
         }
-        if (sel > 0) {
-            list[origIdx].review = {
-                stars: sel,
-                comment: commentEl.value.trim(),
-                reviewedAt: Math.floor(Date.now() / 1000)
-            };
-        } else {
-            delete list[origIdx].review;
+        /* La reseña solo se toca si está permitida (item completado o
+           música). En otros estados se preserva lo que hubiera. */
+        if (allowReview) {
+            if (sel > 0) {
+                list[origIdx].review = {
+                    stars: sel,
+                    comment: commentEl ? commentEl.value.trim() : '',
+                    reviewedAt: Math.floor(Date.now() / 1000)
+                };
+            } else {
+                delete list[origIdx].review;
+            }
         }
         renderActiveList();
         fetch(API + '?action=save-lists', {
@@ -2727,7 +2878,7 @@ function openReviewEditor(item, origIdx, cat) {
         .then(function(d){
             if (d && Array.isArray(d.items)) { STATE.lists[cat] = d.items; renderActiveList(); }
             /* Notify a followers solo si hay reseña — mismo flow que escritorio. */
-            if (sel > 0) {
+            if (allowReview && sel > 0) {
                 fetch(API + '?action=notify-review', {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -3886,13 +4037,16 @@ function showMelonDetails(item) {
             hinfo.appendChild(hrt);
         }
     }
-    /* Series con capítulos: nº de capítulos + duración total, clicable → modal de capítulos. */
+    /* Series con capítulos: nº de temporadas + nº de capítulos + duración
+       total, clicable → modal de capítulos. */
     if (MELON_STATE.cat === 'series' && item.episodeCount > 0) {
         var hep = document.createElement('div');
         hep.className = 'pf-melon-detail-hruntime pf-melon-detail-eplink';
-        var epTxt = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos');
-        if (item.episodeDuration > 0) epTxt += ' · ' + epFmtDurM(item.episodeDuration);
-        hep.textContent = '🎬 ' + epTxt;
+        var epBits = [];
+        if (item.seasonCount > 0) epBits.push(item.seasonCount + (item.seasonCount === 1 ? ' temporada' : ' temporadas'));
+        epBits.push(item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos'));
+        if (item.episodeDuration > 0) epBits.push(epFmtDurM(item.episodeDuration));
+        hep.textContent = '🎬 ' + epBits.join(' · ');
         hep.style.cursor = 'pointer';
         hep.addEventListener('click', function(){ openEpisodesModal(item.title, false, true); });
         hinfo.appendChild(hep);

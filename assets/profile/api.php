@@ -126,6 +126,10 @@ $pdo->exec("
         INDEX idx_series (series_key, position)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 ");
+/* Temporadas: cada capítulo pertenece a una temporada (entero, por defecto
+   1). Compartidas por título igual que los capítulos. */
+try { $pdo->exec("ALTER TABLE series_episodes ADD COLUMN season INT NOT NULL DEFAULT 1"); }
+catch (Throwable $e) { /* ya existe */ }
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS series_episode_state (
         episode_id  INT NOT NULL,
@@ -420,6 +424,37 @@ function pf_pushItemStatus(PDO $pdo, int $toUid, int $fromUid, ?int $itemId, str
             $itemMeta['music_type'] ?? null,
             $itemMeta['artist'] ?? null,
         ]);
+}
+
+/* Notifica a TODOS los participantes de un item compartido (host +
+   colaboradores) menos al editor, para que refresquen sus listas en vivo
+   cuando alguien edita el item. Colapsa notifs 'item-edited' pendientes
+   del mismo item/destinatario para no acumular. */
+function pf_pushItemEdited(PDO $pdo, int $itemId, int $ownerUid, int $editorUid, array $meta): void {
+    $recips = [];
+    if ($ownerUid !== $editorUid) $recips[$ownerUid] = true;
+    $stmt = $pdo->prepare("SELECT user_id FROM list_item_collaborators WHERE item_id = ?");
+    $stmt->execute([$itemId]);
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $cid) {
+        $cid = (int)$cid;
+        if ($cid !== $editorUid) $recips[$cid] = true;
+    }
+    if (!$recips) return;
+    $del = $pdo->prepare("DELETE FROM item_invites WHERE to_user_id = ? AND item_id = ? AND type = 'item-edited'");
+    $ins = $pdo->prepare("INSERT INTO item_invites
+        (to_user_id, from_user_id, type, item_id, category, item_title, item_image, item_music_type, item_artist)
+        VALUES (?, ?, 'item-edited', ?, ?, ?, ?, ?, ?)");
+    foreach (array_keys($recips) as $rid) {
+        $del->execute([$rid, $itemId]);
+        $ins->execute([
+            $rid, $editorUid, $itemId,
+            $meta['category'],
+            $meta['title']  ?? '',
+            $meta['image']  ?? null,
+            $meta['music_type'] ?? null,
+            $meta['artist'] ?? null,
+        ]);
+    }
 }
 
 /* Resuelve/crea el chat entre dos usuarios. Canoniza pair_id por orden. */
@@ -1111,11 +1146,21 @@ case 'save-lists': {
                 $params[] = $id; $params[] = $uid;
                 $pdo->prepare($sql)->execute($params);
                 $fnPersistReview($id, $clean);
+                /* Si el item propio tiene colaboradores, avisarles del cambio
+                   para que refresquen (título/imagen/duración/estado). */
+                if (!empty($oldItems[$id]['collabs'])) {
+                    pf_pushItemEdited($pdo, $id, $uid, $uid, [
+                        'category' => $category, 'title' => $clean['title'], 'image' => $clean['image'],
+                        'music_type' => $clean['music_type'], 'artist' => $clean['artist'],
+                    ]);
+                }
             } elseif ($isNumeric && isset($sharedWithMe[(int)$rawId])) {
-                /* UPDATE de item compartido: el dueño es otro, solo puedo
-                   editar mis preferencias visibles (status/featured) — ya
-                   NO toco la review compartida del item (era el bug). Mi
-                   review se persiste por usuario via $fnPersistReview. */
+                /* UPDATE de item compartido: el dueño es otro, pero ahora
+                   cualquier colaborador puede editar los datos compartidos
+                   del item (título/imagen/duración/estado/datos de música).
+                   La fila es única → el cambio lo ven el host y el resto de
+                   colaboradores. Mi review sigue siendo por-usuario
+                   ($fnPersistReview). */
                 $id = (int)$rawId;
                 $touchedShared[$id] = $sharedWithMe[$id];
                 $oldStatus = $oldShared[$id]['status']       ?? null;
@@ -1124,16 +1169,25 @@ case 'save-lists': {
                     ? $fnCompletedAt($clean['status'], $oldStatus, $oldCompTs)
                     : null;
                 $sql = "UPDATE list_items SET
-                            status = ?, featured = ?,
+                            title = ?, image = ?, status = ?, music_type = ?, artist = ?,
+                            featured = ?, yt_id = ?, spotify_id = ?, yt_playlist_id = ?,
+                            spotify_album_id = ?, runtime = ?,
                             completed_at = " . ($newCompletedAt === null ? "NULL" : "FROM_UNIXTIME(?)") . "
                         WHERE id = ?";
                 $params = [
-                    $clean['status'], $clean['featured'],
+                    $clean['title'], $clean['image'], $clean['status'], $clean['music_type'], $clean['artist'],
+                    $clean['featured'], $clean['yt_id'], $clean['spotify_id'], $clean['yt_playlist_id'],
+                    $clean['spotify_album_id'], $clean['runtime'],
                 ];
                 if ($newCompletedAt !== null) $params[] = $newCompletedAt;
                 $params[] = $id;
                 $pdo->prepare($sql)->execute($params);
                 $fnPersistReview($id, $clean);
+                /* Avisar al host y a los demás colaboradores del cambio. */
+                pf_pushItemEdited($pdo, $id, $sharedWithMe[$id], $uid, [
+                    'category' => $category, 'title' => $clean['title'], 'image' => $clean['image'],
+                    'music_type' => $clean['music_type'], 'artist' => $clean['artist'],
+                ]);
             } else {
                 /* INSERT (item nuevo) — si entra ya marcado como completed,
                    completed_at se setea ahora. La review (si la trae) va a
@@ -2119,20 +2173,21 @@ case 'series-episodes': {
     $key = mb_strtolower(trim((string)($_GET['seriesTitle'] ?? '')));
     if ($key === '') jsonResponse(['ok' => true, 'episodes' => []]);
     $st = $pdo->prepare("
-        SELECT e.id, e.position, e.title, e.image, e.duration,
+        SELECT e.id, e.position, e.season, e.title, e.image, e.duration,
                s.watched AS myWatched, s.stars AS myStars, s.comment AS myComment,
                (SELECT AVG(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS avgStars,
                (SELECT COUNT(stars) FROM series_episode_state WHERE episode_id = e.id AND stars IS NOT NULL) AS reviewCount
         FROM series_episodes e
         LEFT JOIN series_episode_state s ON s.episode_id = e.id AND s.user_id = ?
         WHERE e.series_key = ?
-        ORDER BY e.position ASC, e.id ASC
+        ORDER BY e.season ASC, e.position ASC, e.id ASC
     ");
     $st->execute([$uid, $key]);
     $eps = [];
     foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $eps[] = [
             'id'          => (int)$r['id'],
+            'season'      => (int)($r['season'] ?? 1),
             'title'       => $r['title'],
             'image'       => $r['image'] ?? '',
             'duration'    => $r['duration'] !== null ? (int)$r['duration'] : null,
@@ -2183,16 +2238,17 @@ case 'save-series-episode': {
     if ($key === '' || $title === '') jsonError('Faltan datos');
     $image = mb_substr(trim((string)($b['image'] ?? '')), 0, 2000);
     $dur   = (isset($b['duration']) && is_numeric($b['duration']) && (int)$b['duration'] > 0) ? min(100000, (int)$b['duration']) : null;
+    $season = (isset($b['season']) && is_numeric($b['season']) && (int)$b['season'] > 0) ? (int)$b['season'] : 1;
     $epId  = (isset($b['id']) && is_numeric($b['id'])) ? (int)$b['id'] : 0;
     if ($epId > 0) {
-        $pdo->prepare("UPDATE series_episodes SET title=?, image=?, duration=? WHERE id=? AND series_key=?")
-            ->execute([$title, $image, $dur, $epId, $key]);
+        $pdo->prepare("UPDATE series_episodes SET title=?, image=?, duration=?, season=? WHERE id=? AND series_key=?")
+            ->execute([$title, $image, $dur, $season, $epId, $key]);
     } else {
         $posStmt = $pdo->prepare("SELECT COALESCE(MAX(position),0)+1 FROM series_episodes WHERE series_key=?");
         $posStmt->execute([$key]);
         $pos = (int)$posStmt->fetchColumn();
-        $pdo->prepare("INSERT INTO series_episodes (series_key, position, title, image, duration, created_by) VALUES (?,?,?,?,?,?)")
-            ->execute([$key, $pos, $title, $image, $dur, $uid]);
+        $pdo->prepare("INSERT INTO series_episodes (series_key, position, season, title, image, duration, created_by) VALUES (?,?,?,?,?,?,?)")
+            ->execute([$key, $pos, $season, $title, $image, $dur, $uid]);
         $epId = (int)$pdo->lastInsertId();
     }
     jsonResponse(['ok' => true, 'id' => $epId]);
@@ -2205,6 +2261,25 @@ case 'delete-series-episode': {
     if (!$epId) jsonError('Falta id');
     $pdo->prepare("DELETE FROM series_episodes WHERE id=?")->execute([$epId]);
     $pdo->prepare("DELETE FROM series_episode_state WHERE episode_id=?")->execute([$epId]);
+    jsonResponse(['ok' => true]);
+}
+
+case 'delete-series-season': {
+    /* Borra una temporada entera: sus capítulos y el estado de éstos. */
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    $b = jsonBody();
+    $key = mb_strtolower(trim((string)($b['seriesTitle'] ?? '')));
+    $season = (int)($b['season'] ?? 0);
+    if ($key === '' || $season <= 0) jsonError('Faltan datos');
+    /* Borrar primero el estado de los capítulos de la temporada. */
+    $ids = $pdo->prepare("SELECT id FROM series_episodes WHERE series_key=? AND season=?");
+    $ids->execute([$key, $season]);
+    $epIds = $ids->fetchAll(PDO::FETCH_COLUMN);
+    if ($epIds) {
+        $place = implode(',', array_fill(0, count($epIds), '?'));
+        $pdo->prepare("DELETE FROM series_episode_state WHERE episode_id IN ($place)")->execute($epIds);
+    }
+    $pdo->prepare("DELETE FROM series_episodes WHERE series_key=? AND season=?")->execute([$key, $season]);
     jsonResponse(['ok' => true]);
 }
 
@@ -2393,11 +2468,12 @@ case 'melon-reviews': {
         ];
     }
 
-    /* Series: nº de capítulos + duración total (compartidos) por título. */
+    /* Series: nº de capítulos + nº de temporadas + duración total
+       (compartidos) por título. */
     $epMap = [];
     if ($cat === 'series') {
-        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
-            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'dur' => (int)$er['dur']];
+        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, COUNT(DISTINCT season) AS seasons, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
+            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'seasons' => (int)$er['seasons'], 'dur' => (int)$er['dur']];
         }
     }
 
@@ -2414,6 +2490,7 @@ case 'melon-reviews': {
             if (isset($epMap[$lk]) && $epMap[$lk]['cnt'] > 0) {
                 $e['episodeCount']    = $epMap[$lk]['cnt'];
                 $e['episodeDuration'] = $epMap[$lk]['dur'];
+                $e['seasonCount']     = $epMap[$lk]['seasons'];
             }
         }
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];

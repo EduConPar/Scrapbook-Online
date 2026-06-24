@@ -558,6 +558,11 @@ if ($_perfilStandalone) {
         <div id="profile-episodes-list" style="flex:1;min-height:0;overflow-y:auto;padding:8px;"></div>
         <div id="profile-episodes-addbar" style="flex-shrink:0;border-top:1px solid var(--border);padding:8px;display:none;">
             <div style="font-size:11px;font-weight:bold;margin-bottom:4px;">Añadir capítulo</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+                <label for="ep-add-season" style="font-size:11px;">Temporada</label>
+                <select id="ep-add-season" style="flex:1;box-sizing:border-box;"></select>
+                <button class="button" id="ep-add-newseason" type="button">+ Temporada</button>
+            </div>
             <input type="text" id="ep-add-title" placeholder="Título del capítulo" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
             <input type="text" id="ep-add-image" placeholder="Imagen de preview (URL horizontal)" style="width:100%;box-sizing:border-box;margin-bottom:4px;">
             <div style="display:flex;gap:6px;align-items:center;">
@@ -571,10 +576,16 @@ if ($_perfilStandalone) {
 <!-- EPISODE REVIEW POPUP (reseña de un capítulo) -->
 <div class="window" id="profile-episode-review" style="display:none;flex-direction:column;position:fixed;z-index:10004;width:300px;">
     <div class="title-bar" style="flex-shrink:0;">
-        <div class="title-bar-text" id="profile-episode-review-title">Reseña del capítulo</div>
+        <div class="title-bar-text" id="profile-episode-review-title">Editar capítulo</div>
         <div class="title-bar-controls"><button aria-label="Close" id="profile-episode-review-close"></button></div>
     </div>
     <div class="window-body" style="padding:10px 12px 12px;">
+        <div style="font-size:11px;margin-bottom:3px;">Título</div>
+        <input type="text" id="profile-episode-edit-title" style="width:100%;box-sizing:border-box;margin-bottom:8px;">
+        <div style="font-size:11px;margin-bottom:3px;">Imagen (URL horizontal)</div>
+        <input type="text" id="profile-episode-edit-image" style="width:100%;box-sizing:border-box;margin-bottom:8px;" placeholder="https://...">
+        <div style="font-size:11px;margin-bottom:3px;">Duración (min)</div>
+        <input type="number" id="profile-episode-edit-dur" min="0" style="width:90px;box-sizing:border-box;margin-bottom:8px;" placeholder="0">
         <div style="font-size:11px;margin-bottom:3px;">Puntuación</div>
         <div style="display:flex;align-items:center;margin-bottom:8px;">
             <div id="profile-episode-review-stars" style="font-size:24px;letter-spacing:4px;"></div>
@@ -757,12 +768,13 @@ if ($_perfilStandalone) {
         <div id="profile-review-eps-row" class="field-row" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <button class="button" id="profile-review-eps-btn" type="button">🎬 Capítulos</button>
         </div>
-        <div style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
-        <div style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
+        <div id="profile-review-only-completed" style="font-size:11px;margin-bottom:8px;flex-shrink:0;color:var(--text-faint);display:none;">Marca el item como completado para poder puntuarlo y reseñarlo.</div>
+        <div id="profile-review-score-label" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Puntuación</div>
+        <div id="profile-review-score-row" style="display:flex;align-items:center;margin-bottom:10px;flex-shrink:0;">
             <div id="profile-review-stars" style="font-size:26px;letter-spacing:4px;"></div>
             <span id="profile-review-stars-num" style="font-size:14px;margin-left:10px;min-width:2em;font-weight:bold;"></span>
         </div>
-        <div class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
+        <div id="profile-review-comment-row" class="field-row-stacked" style="margin-bottom:10px;flex:1;min-height:0;display:flex;flex-direction:column;">
             <label for="profile-review-comment" style="font-size:11px;margin-bottom:3px;flex-shrink:0;">Comentario (opcional)</label>
             <!-- resize:none — el resize:vertical permitía al usuario
                  arrastrar el handle y agrandar el textarea fuera de su
@@ -1417,6 +1429,14 @@ var PROFILE_USERS = <?php
     };
 
     function pushItemNotif(notif) {
+        /* item-edited: un colaborador/host editó un item compartido →
+           refrescamos en silencio (sin popup ni sonido) y descartamos la
+           notif en el servidor para que no se acumule. */
+        if (notif.type === 'item-edited') {
+            if (typeof postItemAction === 'function') postItemAction(notif.id, 'dismiss').catch(function(){});
+            if (typeof loadLists === 'function') loadLists(function() { if (typeof updateCounts === 'function') updateCounts(); if (typeof reloadCurrentView === 'function') reloadCurrentView(); });
+            return;
+        }
         if (!window.notifSystem || window.notifSystem.isShown(notif.id) || window.notifSystem.isDismissed(notif.id)) return;
         /* SSE recibió una notif nueva → sonido inmediato (respetando
            el filtro por tipo). El throttle interno colapsa con el play
@@ -1715,6 +1735,15 @@ var PROFILE_USERS = <?php
             epsRow.style.display = 'none';
         }
 
+        /* La nota y la reseña solo se pueden añadir si el item está
+           completado. En pendiente/en curso solo se editan título/imagen/
+           duración (y, en series, capítulos). */
+        var allowReview = (item.status === 'completed');
+        document.getElementById('profile-review-only-completed').style.display = allowReview ? 'none' : '';
+        document.getElementById('profile-review-score-label').style.display = allowReview ? '' : 'none';
+        document.getElementById('profile-review-score-row').style.display = allowReview ? '' : 'none';
+        document.getElementById('profile-review-comment-row').style.display = allowReview ? '' : 'none';
+
         var numEl = document.getElementById('profile-review-stars-num');
         function setStarDisp(el, val, pos) {
             if (val >= pos) { el.innerHTML = '★'; el.style.clipPath = ''; el.style.opacity = ''; }
@@ -1769,8 +1798,9 @@ var PROFILE_USERS = <?php
         var newCancel = cancelBtn.cloneNode(true); cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
         var newSubmit = submitBtn.cloneNode(true); submitBtn.parentNode.replaceChild(newSubmit, submitBtn);
         var newDelete = deleteBtn.cloneNode(true); deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
-        /* Botón Eliminar solo si ya hay una reseña guardada */
-        newDelete.style.display = (item.review && item.review.stars) ? '' : 'none';
+        /* Botón Eliminar solo si ya hay una reseña guardada y el item está
+           completado (en otros estados no se gestiona reseña). */
+        newDelete.style.display = (allowReview && item.review && item.review.stars) ? '' : 'none';
 
         function closeWin() { win.style.display = 'none'; }
         newClose.addEventListener('click', closeWin);
@@ -1786,12 +1816,15 @@ var PROFILE_USERS = <?php
                 var rt = parseInt(rtEl.value, 10) || 0;
                 if (rt > 0) lists[cat][i].runtime = rt; else delete lists[cat][i].runtime;
             }
-            /* Reseña: con estrellas la guarda; sin estrellas la quita. */
-            if (sel > 0) {
-                lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
-                notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
-            } else {
-                delete lists[cat][i].review;
+            /* Reseña: solo se toca si el item está completado. En otros
+               estados se preserva lo que hubiera (no se añade nota/reseña). */
+            if (allowReview) {
+                if (sel > 0) {
+                    lists[cat][i].review = { stars: sel, comment: commentEl.value.trim(), reviewedAt: Math.floor(Date.now() / 1000) };
+                    notifyReviewToFollowers(cat, lists[cat][i].title, lists[cat][i].type);
+                } else {
+                    delete lists[cat][i].review;
+                }
             }
             saveCategory(cat);
             renderCatView(cat);
@@ -2063,15 +2096,13 @@ var PROFILE_USERS = <?php
                                 if (i !== -1) showReviewWindow(cat, i);
                             }});
                         } else {
-                            /* Las series se pueden editar (título/imagen/capítulos)
-                               también estando pendientes o en curso, no solo al
-                               completarlas. */
-                            if (cat === 'series') {
-                                menuItems.push({ label: '✏ Editar', action: function() {
-                                    var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
-                                    if (i !== -1) showReviewWindow(cat, i);
-                                }});
-                            }
+                            /* Cualquier item se puede editar en cualquier estado
+                               (título/imagen/reseña/duración y, en series, capítulos),
+                               no solo al completarlo. */
+                            menuItems.push({ label: '✏ Editar', action: function() {
+                                var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
+                                if (i !== -1) showReviewWindow(cat, i);
+                            }});
                             menuItems.push({ label: '▶ Poner en curso', action: function() {
                                 var i = lists[cat].findIndex(function(x){ return x.id === it.id; });
                                 if (i !== -1) {
@@ -3765,7 +3796,7 @@ var PROFILE_USERS = <?php
     }
 
     /* ═══ Capítulos de series (compartidos por título) ═══════════════ */
-    var _epSeriesTitle = '', _epCanWatch = false, _epReadOnly = false, _epList = [];
+    var _epSeriesTitle = '', _epCanWatch = false, _epReadOnly = false, _epList = [], _epExtraSeasons = [];
     function epFmtDur(min) {
         min = parseInt(min, 10) || 0;
         if (min <= 0) return '';
@@ -3778,7 +3809,7 @@ var PROFILE_USERS = <?php
     }
     function openEpisodesWindow(seriesTitle, canWatch, readOnly) {
         if (!seriesTitle) return;
-        _epSeriesTitle = seriesTitle; _epCanWatch = !!canWatch; _epReadOnly = !!readOnly;
+        _epSeriesTitle = seriesTitle; _epCanWatch = !!canWatch; _epReadOnly = !!readOnly; _epExtraSeasons = [];
         var win = document.getElementById('profile-episodes-window');
         document.getElementById('profile-episodes-title').textContent = '🎬 Capítulos · ' + seriesTitle;
         /* Desde Melon Reviews: solo lectura — sin barra para añadir capítulos. */
@@ -3799,42 +3830,83 @@ var PROFILE_USERS = <?php
             body: JSON.stringify({ seriesTitle: _epSeriesTitle, order: _epList.map(function(x){ return x.id; }) })
         }).catch(function(){});
     }
+    /* Lista ordenada de temporadas presentes (capítulos + transitorias). */
+    function epSeasonsList() {
+        var set = {};
+        _epList.forEach(function(ep){ set[ep.season || 1] = true; });
+        _epExtraSeasons.forEach(function(s){ set[s] = true; });
+        var arr = Object.keys(set).map(function(s){ return parseInt(s, 10); });
+        if (!arr.length) arr = [1];
+        arr.sort(function(a, b){ return a - b; });
+        return arr;
+    }
+    function epRenderRow(ep, n) {
+        var dur = epFmtDur(ep.duration);
+        var avg = (ep.avgStars != null)
+            ? (makeStarsHtml(ep.avgStars, 5) + ' <span class="ep-avg">' + ep.avgStars.toFixed(1) + '</span> <span class="ep-cnt">(' + ep.reviewCount + ')</span>')
+            : '<span class="ep-noavg">Sin reseñas</span>';
+        var thumbInner = ep.image ? '<img src="' + escHtml(ep.image) + '" alt="">' : '<div class="ep-thumb-ph">🎬</div>';
+        if (_epReadOnly) {
+            return '<div class="ep-row">' +
+                '<div class="ep-thumb ep-thumb-click" data-ep-reviews="' + ep.id + '" title="Ver reseñas">' + thumbInner + '</div>' +
+                '<div class="ep-info">' +
+                    '<div class="ep-title">' + n + '. ' + escHtml(ep.title) + '</div>' +
+                    '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                '</div>' +
+            '</div>';
+        }
+        var watchHtml = _epCanWatch
+            ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
+            : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
+        /* Indicador discreto de "tienes reseña" (icono de gráfica). El
+           editar/eliminar viven ahora en el menú de click derecho. */
+        var chartIco = (ep.myStars != null) ? '<img src="assets/img/appIcons/chatIcon.png" alt="Reseñado" title="Tu reseña: ' + ep.myStars + '" class="ep-chart-ico" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">' : '';
+        var controls = watchHtml + chartIco;
+        return '<div class="ep-row" data-ep-id="' + ep.id + '" title="Click derecho para editar o eliminar">' +
+            '<div class="ep-drag" data-ep-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
+            '<div class="ep-thumb">' + thumbInner + '</div>' +
+            '<div class="ep-info">' +
+                '<div class="ep-title">' + n + '. ' + escHtml(ep.title) + '</div>' +
+                '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
+                (controls ? '<div class="ep-controls">' + controls + '</div>' : '') +
+            '</div>' +
+        '</div>';
+    }
+    function epSyncSeasonSelect() {
+        var sel = document.getElementById('ep-add-season');
+        if (!sel) return;
+        var prev = sel.value;
+        var seasons = epSeasonsList();
+        sel.innerHTML = seasons.map(function(s){ return '<option value="' + s + '">Temporada ' + s + '</option>'; }).join('');
+        if (prev && seasons.indexOf(parseInt(prev, 10)) !== -1) sel.value = prev;
+    }
     function renderEpisodesList() {
         var listEl = document.getElementById('profile-episodes-list');
-        if (!_epList.length) { listEl.innerHTML = '<div class="ep-empty">Sin capítulos todavía. Añade el primero abajo.</div>'; return; }
-        listEl.innerHTML = _epList.map(function(ep, i){
-            var dur = epFmtDur(ep.duration);
-            var avg = (ep.avgStars != null)
-                ? (makeStarsHtml(ep.avgStars, 5) + ' <span class="ep-avg">' + ep.avgStars.toFixed(1) + '</span> <span class="ep-cnt">(' + ep.reviewCount + ')</span>')
-                : '<span class="ep-noavg">Sin reseñas</span>';
-            var thumbInner = ep.image ? '<img src="' + escHtml(ep.image) + '" alt="">' : '<div class="ep-thumb-ph">🎬</div>';
-            /* Solo lectura (desde Melon Reviews): la miniatura abre las reseñas. */
-            if (_epReadOnly) {
-                return '<div class="ep-row">' +
-                    '<div class="ep-thumb ep-thumb-click" data-ep-reviews="' + ep.id + '" title="Ver reseñas">' + thumbInner + '</div>' +
-                    '<div class="ep-info">' +
-                        '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
-                        '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '</div>' +
-                '</div>';
-            }
-            var watchHtml = _epCanWatch
-                ? '<label class="ep-watch"><input type="checkbox" data-ep-watch="' + ep.id + '"' + (ep.watched ? ' checked' : '') + '> Visto</label>'
-                : (ep.watched ? '<span class="ep-watched-tag">✓ Visto</span>' : '');
-            /* Botón reseña: si ya hay reseña muestra el icono de gráfica; si no, "Reseñar". */
-            var chartIco = '<img src="assets/img/appIcons/chatIcon.png" alt="Reseña" class="ep-chart-ico" style="width:15px;height:15px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">';
-            var revLabel = (ep.myStars != null) ? chartIco : '✎ Reseñar';
-            return '<div class="ep-row" data-ep-id="' + ep.id + '">' +
-                '<div class="ep-drag" data-ep-drag="' + ep.id + '" title="Arrastrar para reordenar">⠿</div>' +
-                '<div class="ep-thumb">' + thumbInner + '</div>' +
-                '<div class="ep-info">' +
-                    '<div class="ep-title">' + (i + 1) + '. ' + escHtml(ep.title) + '</div>' +
-                    '<div class="ep-meta">' + (dur ? dur + ' · ' : '') + avg + '</div>' +
-                    '<div class="ep-controls">' + watchHtml +
-                        '<button class="button ep-review-btn" data-ep-review="' + ep.id + '">' + revLabel + '</button>' +
-                        '<button class="button ep-remove-btn" data-ep-remove="' + ep.id + '" title="Quitar capítulo">✕</button>' +
-                    '</div>' +
+        epSyncSeasonSelect();
+        if (!_epList.length && !_epExtraSeasons.length) { listEl.innerHTML = '<div class="ep-empty">Sin capítulos todavía. Añade el primero abajo.</div>'; return; }
+        var seasons = epSeasonsList();
+        listEl.innerHTML = seasons.map(function(seasonNum){
+            var eps = _epList.filter(function(ep){ return (ep.season || 1) === seasonNum; });
+            var rowsHtml = eps.length
+                ? eps.map(function(ep, i){ return epRenderRow(ep, i + 1); }).join('')
+                : '<div class="ep-season-empty">Sin capítulos en esta temporada.</div>';
+            var delBtn = _epReadOnly ? '' : '<button class="button ep-season-del" data-ep-delseason="' + seasonNum + '" title="Eliminar temporada">✕</button>';
+            /* Resumen de la temporada: nº de capítulos, duración total y
+               nota media (media de las notas medias de sus capítulos). */
+            var cnt = eps.length;
+            var durSum = eps.reduce(function(a, ep){ return a + (ep.duration || 0); }, 0);
+            var rated = eps.filter(function(ep){ return ep.avgStars != null; });
+            var savg = rated.length ? (rated.reduce(function(a, ep){ return a + ep.avgStars; }, 0) / rated.length) : null;
+            var metaBits = [cnt + (cnt === 1 ? ' capítulo' : ' capítulos')];
+            if (durSum > 0) metaBits.push(epFmtDur(durSum));
+            var avgHtml = (savg != null) ? '<span class="ep-season-avg">★ ' + savg.toFixed(1) + '</span>' : '';
+            return '<div class="ep-season">' +
+                '<div class="ep-season-head">' +
+                    '<span class="ep-season-title">Temporada ' + seasonNum + '</span>' +
+                    '<span class="ep-season-meta">' + metaBits.join(' · ') + '</span>' +
+                    avgHtml + delBtn +
                 '</div>' +
+                '<div class="ep-season-rows" data-season="' + seasonNum + '">' + rowsHtml + '</div>' +
             '</div>';
         }).join('');
     }
@@ -3852,9 +3924,10 @@ var PROFILE_USERS = <?php
         });
         /* Reordenar arrastrando el tirador (.ep-drag). Pointer events →
            funciona con ratón y con táctil. */
-        var dragRow = null;
+        var dragRow = null, dragCont = null;
         function epDragAfter(y) {
-            var els = Array.prototype.slice.call(listEl.querySelectorAll('.ep-row:not(.ep-dragging)'));
+            /* Reordenado dentro de la misma temporada (su contenedor). */
+            var els = Array.prototype.slice.call((dragCont || listEl).querySelectorAll('.ep-row:not(.ep-dragging)'));
             var closest = null, closestOff = -Infinity;
             els.forEach(function(ch){
                 var box = ch.getBoundingClientRect();
@@ -3867,13 +3940,13 @@ var PROFILE_USERS = <?php
             if (!dragRow) return;
             e.preventDefault();
             var after = epDragAfter(e.clientY);
-            if (after == null) listEl.appendChild(dragRow);
-            else if (after !== dragRow) listEl.insertBefore(dragRow, after);
+            if (after == null) (dragCont || listEl).appendChild(dragRow);
+            else if (after !== dragRow) (dragCont || listEl).insertBefore(dragRow, after);
         }
         function epDragUp(){
             if (!dragRow) return;
             dragRow.classList.remove('ep-dragging');
-            dragRow = null;
+            dragRow = null; dragCont = null;
             document.removeEventListener('pointermove', epDragMove);
             document.removeEventListener('pointerup', epDragUp);
             document.removeEventListener('pointercancel', epDragUp);
@@ -3886,7 +3959,7 @@ var PROFILE_USERS = <?php
             var h = e.target.closest('[data-ep-drag]'); if (!h) return;
             var row = h.closest('.ep-row'); if (!row) return;
             e.preventDefault();
-            dragRow = row; row.classList.add('ep-dragging');
+            dragRow = row; dragCont = row.parentNode; row.classList.add('ep-dragging');
             document.addEventListener('pointermove', epDragMove);
             document.addEventListener('pointerup', epDragUp);
             document.addEventListener('pointercancel', epDragUp);
@@ -3894,43 +3967,94 @@ var PROFILE_USERS = <?php
         listEl.addEventListener('click', function(e){
             var rvw = e.target.closest('[data-ep-reviews]');
             if (rvw) { var rvid = parseInt(rvw.getAttribute('data-ep-reviews'), 10); var rvep = _epList.filter(function(x){ return x.id === rvid; })[0]; if (rvep) openEpisodeReviewsView(rvep); return; }
-            var rev = e.target.closest('[data-ep-review]');
-            if (rev) { var id = parseInt(rev.getAttribute('data-ep-review'), 10); var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (ep) openEpisodeReview(ep); return; }
-            var rm = e.target.closest('[data-ep-remove]');
-            if (rm) {
-                var rid = parseInt(rm.getAttribute('data-ep-remove'), 10);
-                var rep = _epList.filter(function(x){ return x.id === rid; })[0];
-                confirmFn('¿Quitar el capítulo "' + (rep ? rep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
-                    fetch('assets/profile/api.php?action=delete-series-episode', {
+            var ds = e.target.closest('[data-ep-delseason]');
+            if (ds) {
+                var sNum = parseInt(ds.getAttribute('data-ep-delseason'), 10);
+                var inSeason = _epList.filter(function(x){ return (x.season || 1) === sNum; });
+                if (!inSeason.length) {
+                    /* Temporada vacía (transitoria): solo quitarla localmente. */
+                    _epExtraSeasons = _epExtraSeasons.filter(function(s){ return s !== sNum; });
+                    renderEpisodesList();
+                    return;
+                }
+                confirmFn('¿Eliminar la Temporada ' + sNum + ' y sus ' + inSeason.length + ' capítulo(s)? Afecta a todos.', 'Eliminar', function(){
+                    fetch('assets/profile/api.php?action=delete-series-season', {
                         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: rid })
-                    }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== rid; }); renderEpisodesList(); }).catch(function(){});
+                        body: JSON.stringify({ seriesTitle: _epSeriesTitle, season: sNum })
+                    }).then(function(){
+                        _epList = _epList.filter(function(x){ return (x.season || 1) !== sNum; });
+                        _epExtraSeasons = _epExtraSeasons.filter(function(s){ return s !== sNum; });
+                        renderEpisodesList();
+                    }).catch(function(){});
                 });
+                return;
             }
+        });
+        /* Menú de capítulo (click derecho): Editar / Eliminar. Solo en
+           modo edición (en solo lectura las filas no llevan data-ep-id). */
+        function removeEpisode(ep) {
+            confirmFn('¿Quitar el capítulo "' + (ep ? ep.title : '') + '"? Afecta a todos.', 'Quitar', function(){
+                fetch('assets/profile/api.php?action=delete-series-episode', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: ep.id })
+                }).then(function(){ _epList = _epList.filter(function(x){ return x.id !== ep.id; }); renderEpisodesList(); }).catch(function(){});
+            });
+        }
+        listEl.addEventListener('contextmenu', function(e){
+            if (_epReadOnly) return;
+            var row = e.target.closest('.ep-row[data-ep-id]'); if (!row) return;
+            e.preventDefault();
+            var id = parseInt(row.getAttribute('data-ep-id'), 10);
+            var ep = _epList.filter(function(x){ return x.id === id; })[0]; if (!ep) return;
+            showCtxMenu(e.clientX, e.clientY, [
+                { label: '✏ Editar', action: function(){ openEpisodeEditor(ep); } },
+                { label: '✕ Eliminar', action: function(){ removeEpisode(ep); } }
+            ]);
         });
         var addBtn = document.getElementById('ep-add-btn');
         if (addBtn) addBtn.addEventListener('click', function(){
             var t = document.getElementById('ep-add-title').value.trim(); if (!t) return;
             var img = document.getElementById('ep-add-image').value.trim();
             var dur = parseInt(document.getElementById('ep-add-dur').value, 10) || 0;
+            var seasonEl = document.getElementById('ep-add-season');
+            var season = seasonEl ? (parseInt(seasonEl.value, 10) || 1) : 1;
             fetch('assets/profile/api.php?action=save-series-episode', {
                 method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ seriesTitle: _epSeriesTitle, title: t, image: img, duration: dur })
+                body: JSON.stringify({ seriesTitle: _epSeriesTitle, title: t, image: img, duration: dur, season: season })
             }).then(function(r){ return r.ok ? r.json() : null; }).then(function(){
                 document.getElementById('ep-add-title').value = '';
                 document.getElementById('ep-add-image').value = '';
                 document.getElementById('ep-add-dur').value = '';
-                openEpisodesWindow(_epSeriesTitle, _epCanWatch);
+                /* Recargar conservando la temporada seleccionada. */
+                fetch('assets/profile/api.php?action=series-episodes&seriesTitle=' + encodeURIComponent(_epSeriesTitle), { credentials: 'same-origin' })
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(d){ _epList = (d && d.episodes) || []; renderEpisodesList(); var s = document.getElementById('ep-add-season'); if (s) s.value = season; })
+                    .catch(function(){});
             }).catch(function(){});
+        });
+        /* Añadir temporada: crea una nueva (transitoria hasta que tenga
+           capítulos) y la deja seleccionada en el desplegable. */
+        var newSeasonBtn = document.getElementById('ep-add-newseason');
+        if (newSeasonBtn) newSeasonBtn.addEventListener('click', function(){
+            var seasons = epSeasonsList();
+            var next = (seasons.length ? seasons[seasons.length - 1] : 0) + 1;
+            _epExtraSeasons.push(next);
+            renderEpisodesList();
+            var s = document.getElementById('ep-add-season'); if (s) s.value = next;
         });
         var closeBtn = document.getElementById('profile-episodes-close');
         if (closeBtn) closeBtn.addEventListener('click', function(){ document.getElementById('profile-episodes-window').style.display = 'none'; });
     })();
 
     /* Reseña individual de un capítulo (popup con estrellas + comentario). */
-    function openEpisodeReview(ep) {
+    /* Editor de capítulo: título, imagen, duración (compartidos) + reseña
+       propia (estrellas + comentario). */
+    function openEpisodeEditor(ep) {
         var win = document.getElementById('profile-episode-review');
-        document.getElementById('profile-episode-review-title').textContent = '★ ' + ep.title;
+        document.getElementById('profile-episode-review-title').textContent = '✏ Editar capítulo';
+        document.getElementById('profile-episode-edit-title').value = ep.title || '';
+        document.getElementById('profile-episode-edit-image').value = ep.image || '';
+        document.getElementById('profile-episode-edit-dur').value = ep.duration ? ep.duration : '';
         document.getElementById('profile-episode-review-comment').value = ep.myComment || '';
         var sel = ep.myStars || 0;
         var starsEl = document.getElementById('profile-episode-review-stars');
@@ -3959,12 +4083,20 @@ var PROFILE_USERS = <?php
         var saveBtn = document.getElementById('profile-episode-review-save');
         var newSave = saveBtn.cloneNode(true); saveBtn.parentNode.replaceChild(newSave, saveBtn);
         newSave.addEventListener('click', function(){
+            var title = document.getElementById('profile-episode-edit-title').value.trim() || ep.title || '';
+            var image = document.getElementById('profile-episode-edit-image').value.trim();
+            var dur = parseInt(document.getElementById('profile-episode-edit-dur').value, 10) || 0;
             var comment = document.getElementById('profile-episode-review-comment').value.trim();
-            fetch('assets/profile/api.php?action=series-episode-state', {
+            /* Primero los datos compartidos del capítulo, luego mi reseña. */
+            fetch('assets/profile/api.php?action=save-series-episode', {
                 method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+                body: JSON.stringify({ id: ep.id, seriesTitle: _epSeriesTitle, title: title, image: image, duration: dur, season: ep.season || 1 })
             }).then(function(){
-                ep.myStars = sel > 0 ? sel : null; ep.myComment = comment;
+                return fetch('assets/profile/api.php?action=series-episode-state', {
+                    method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ episodeId: ep.id, stars: sel, comment: comment })
+                });
+            }).then(function(){
                 win.style.display = 'none';
                 openEpisodesWindow(_epSeriesTitle, _epCanWatch);
             }).catch(function(){});
@@ -4193,11 +4325,15 @@ var PROFILE_USERS = <?php
            abre la página de capítulos con sus notas. */
         if (melonCat === 'series' && item.episodeCount && item.episodeCount > 0) {
             var epDur = item.episodeDuration ? epFmtDur(item.episodeDuration) : '';
+            var epBits = [];
+            if (item.seasonCount && item.seasonCount > 0) epBits.push(item.seasonCount + (item.seasonCount === 1 ? ' temporada' : ' temporadas'));
+            epBits.push(item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos'));
+            if (epDur) epBits.push(epDur);
             var epEl = document.createElement('div');
             epEl.className = 'melon-detail-hruntime melon-detail-link';
             epEl.style.cursor = 'pointer';
             epEl.title = 'Ver capítulos y sus notas';
-            epEl.textContent = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos') + (epDur ? ' · ' + epDur : '');
+            epEl.textContent = epBits.join(' · ');
             epEl.addEventListener('click', function(){ openEpisodesWindow(item.title, false, true); });
             hinfo.appendChild(epEl);
         }
