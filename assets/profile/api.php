@@ -2468,11 +2468,12 @@ case 'melon-reviews': {
         ];
     }
 
-    /* Series: nº de capítulos + duración total (compartidos) por título. */
+    /* Series: nº de capítulos + nº de temporadas + duración total
+       (compartidos) por título. */
     $epMap = [];
     if ($cat === 'series') {
-        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
-            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'dur' => (int)$er['dur']];
+        foreach ($pdo->query("SELECT series_key, COUNT(*) AS cnt, COUNT(DISTINCT season) AS seasons, SUM(duration) AS dur FROM series_episodes GROUP BY series_key")->fetchAll(PDO::FETCH_ASSOC) as $er) {
+            $epMap[$er['series_key']] = ['cnt' => (int)$er['cnt'], 'seasons' => (int)$er['seasons'], 'dur' => (int)$er['dur']];
         }
     }
 
@@ -2489,6 +2490,7 @@ case 'melon-reviews': {
             if (isset($epMap[$lk]) && $epMap[$lk]['cnt'] > 0) {
                 $e['episodeCount']    = $epMap[$lk]['cnt'];
                 $e['episodeDuration'] = $epMap[$lk]['dur'];
+                $e['seasonCount']     = $epMap[$lk]['seasons'];
             }
         }
         foreach (['ytId','spotifyId','ytPlaylistId','spotifyAlbumId'] as $f) if (!empty($g[$f])) $e[$f] = $g[$f];

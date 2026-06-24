@@ -4325,11 +4325,15 @@ var PROFILE_USERS = <?php
            abre la página de capítulos con sus notas. */
         if (melonCat === 'series' && item.episodeCount && item.episodeCount > 0) {
             var epDur = item.episodeDuration ? epFmtDur(item.episodeDuration) : '';
+            var epBits = [];
+            if (item.seasonCount && item.seasonCount > 0) epBits.push(item.seasonCount + (item.seasonCount === 1 ? ' temporada' : ' temporadas'));
+            epBits.push(item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos'));
+            if (epDur) epBits.push(epDur);
             var epEl = document.createElement('div');
             epEl.className = 'melon-detail-hruntime melon-detail-link';
             epEl.style.cursor = 'pointer';
             epEl.title = 'Ver capítulos y sus notas';
-            epEl.textContent = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos') + (epDur ? ' · ' + epDur : '');
+            epEl.textContent = epBits.join(' · ');
             epEl.addEventListener('click', function(){ openEpisodesWindow(item.title, false, true); });
             hinfo.appendChild(epEl);
         }

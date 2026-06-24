@@ -4037,13 +4037,16 @@ function showMelonDetails(item) {
             hinfo.appendChild(hrt);
         }
     }
-    /* Series con capítulos: nº de capítulos + duración total, clicable → modal de capítulos. */
+    /* Series con capítulos: nº de temporadas + nº de capítulos + duración
+       total, clicable → modal de capítulos. */
     if (MELON_STATE.cat === 'series' && item.episodeCount > 0) {
         var hep = document.createElement('div');
         hep.className = 'pf-melon-detail-hruntime pf-melon-detail-eplink';
-        var epTxt = item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos');
-        if (item.episodeDuration > 0) epTxt += ' · ' + epFmtDurM(item.episodeDuration);
-        hep.textContent = '🎬 ' + epTxt;
+        var epBits = [];
+        if (item.seasonCount > 0) epBits.push(item.seasonCount + (item.seasonCount === 1 ? ' temporada' : ' temporadas'));
+        epBits.push(item.episodeCount + (item.episodeCount === 1 ? ' capítulo' : ' capítulos'));
+        if (item.episodeDuration > 0) epBits.push(epFmtDurM(item.episodeDuration));
+        hep.textContent = '🎬 ' + epBits.join(' · ');
         hep.style.cursor = 'pointer';
         hep.addEventListener('click', function(){ openEpisodesModal(item.title, false, true); });
         hinfo.appendChild(hep);
