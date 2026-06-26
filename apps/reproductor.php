@@ -936,6 +936,13 @@ function _awBuildAlbumCard(a) {
         if (typeof openAlbumViewer === 'function') openAlbumViewer(a.albumKey, a.name, _awArtistName || '', a.image || '');
         melonRecordRecent('album', a.albumKey, a.name, a.image, _awArtistName || '');
     });
+    /* Click derecho → añadir el álbum a una playlist o al perfil. */
+    card.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        if (typeof showSearchAlbumCtxMenu === 'function') {
+            showSearchAlbumCtxMenu(e.clientX, e.clientY, { albumKey: a.albumKey, name: a.name, artist: _awArtistName || '', image: a.image || '' });
+        }
+    });
     return card;
 }
 function _awApplyTab() {
@@ -995,6 +1002,11 @@ function openArtistWindow(name) {
         topEl.innerHTML = html;
         topEl.querySelectorAll('.aw-top-row').forEach(function(row){
             row.addEventListener('click', function(){ playArtistTrackByName(row.dataset.title, row.dataset.artist); });
+            /* Click derecho → resolver en YouTube y abrir menú de track. */
+            row.addEventListener('contextmenu', function(e){
+                e.preventDefault();
+                _resolveAndOpenTrackCtx(row.dataset.title, row.dataset.artist, e.clientX, e.clientY);
+            });
         });
         /* Nota media de la comunidad, delante del tiempo de cada canción. */
         loadMusicRatings().then(function(){
@@ -2602,6 +2614,52 @@ async function _addAlbumToPlaylistFlow() {
         alert('Aún resolviendo el álbum, prueba en un momento.');
         return;
     }
+    const albumName = (_albumViewerCurrent.meta && _albumViewerCurrent.meta.name) || 'álbum';
+    const tracksToAdd = _albumViewerCurrent.resolved
+        .filter(t => t.videoId)
+        .map(t => ({ title: t.title, artist: t.artist, videoId: t.videoId, duration: t.duration || 0 }));
+    if (!tracksToAdd.length) { alert('El álbum no tiene canciones resueltas.'); return; }
+    _showAlbumPlaylistPicker(albumName, tracksToAdd);
+}
+
+/* Carga un álbum por su key (itunes:/deezer:/spotify:), resuelve sus
+   canciones en YouTube y abre el picker para añadirlas a una playlist.
+   Lo usa el menú contextual de álbumes en la búsqueda y en la página de
+   artista (donde el álbum NO está abierto en el visor). */
+async function _addAlbumKeyToPlaylist(albumKey, albumName, albumArtist) {
+    if (!albumKey) return;
+    const param = (typeof albumKey === 'string' && albumKey.indexOf(':') !== -1)
+        ? 'key=' + encodeURIComponent(albumKey)
+        : 'id=' + encodeURIComponent(albumKey);
+    let url = 'assets/music/api.php?action=album-tracks&' + param;
+    if (albumName)   url += '&name='   + encodeURIComponent(albumName);
+    if (albumArtist) url += '&artist=' + encodeURIComponent(albumArtist);
+    let meta;
+    try { const r = await fetch(url); if (!r.ok) throw 0; meta = await r.json(); }
+    catch (_) { alert('No se pudo leer el álbum.'); return; }
+    if (!meta || !meta.tracks || !meta.tracks.length) { alert('El álbum no tiene canciones.'); return; }
+    let resolved;
+    try {
+        const yr = await fetch('assets/music/api.php?action=yt-search-batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tracks: meta.tracks }),
+        });
+        const yd = await yr.json();
+        const byTitle = {};
+        (yd.tracks || []).forEach(t => { if (t && t.title) byTitle[t.title] = t.videoId || null; });
+        resolved = meta.tracks
+            .map(t => ({ title: t.title, artist: t.artist, videoId: byTitle[t.title] || null, duration: t.duration || 0 }))
+            .filter(t => t.videoId);
+    } catch (_) { alert('No se pudo resolver el álbum en YouTube.'); return; }
+    if (!resolved.length) { alert('Ninguna canción del álbum se encontró en YouTube.'); return; }
+    _showAlbumPlaylistPicker(meta.name || albumName || 'álbum', resolved);
+}
+
+/* Picker de playlists destino para un conjunto de tracks ya resueltos
+   (videoId). Reutilizable: lo usan el visor de álbum y el menú contextual
+   de álbumes (búsqueda / página de artista). */
+async function _showAlbumPlaylistPicker(albumName, tracksToAdd) {
+    if (!tracksToAdd || !tracksToAdd.length) { alert('El álbum no tiene canciones.'); return; }
     /* Lista de playlists del usuario para elegir destino. */
     let playlists;
     try {
@@ -2612,16 +2670,6 @@ async function _addAlbumToPlaylistFlow() {
         alert('No tienes playlists. Crea una primero.');
         return;
     }
-
-    /* Misma UI que el picker de "Añadir a otra playlist" para tracks
-       individuales: ventana Win98 con lista de playlists clickables.
-       Crea (o reusa) un picker dedicado al álbum, anclado al centro
-       del viewer. */
-    const albumName = (_albumViewerCurrent.meta && _albumViewerCurrent.meta.name) || 'álbum';
-    const tracksToAdd = _albumViewerCurrent.resolved
-        .filter(t => t.videoId)
-        .map(t => ({ title: t.title, artist: t.artist, videoId: t.videoId, duration: t.duration || 0 }));
-    if (!tracksToAdd.length) { alert('El álbum no tiene canciones resueltas.'); return; }
 
     let picker = document.getElementById('add-album-picker');
     if (!picker) {
@@ -2677,6 +2725,70 @@ async function _addAlbumToPlaylistFlow() {
     const pw = picker.offsetWidth, ph = picker.offsetHeight;
     picker.style.left = Math.max(8, Math.round((window.innerWidth  - pw) / 2)) + 'px';
     picker.style.top  = Math.max(8, Math.round((window.innerHeight - ph) / 2)) + 'px';
+}
+
+/* Añade un objeto-álbum (de la búsqueda / página de artista) al perfil. */
+function _addAlbumObjToProfile(album) {
+    if (typeof window.profileAddAlbum !== 'function') {
+        alert('La app de Perfil no está disponible en esta sesión.');
+        return;
+    }
+    window.profileAddAlbum({
+        name:           album.name   || '',
+        artist:         album.artist || '',
+        image:          album.image  || '',
+        spotifyAlbumId: album.albumKey || '',
+    });
+}
+
+/* Menú contextual de un ÁLBUM en la búsqueda / página de artista:
+   añadir a una playlist o al perfil. Reusa el contenedor del ctx menu
+   de tracks (#pl-ctx-menu-el) por su CSS + auto-cierre al click fuera. */
+function showSearchAlbumCtxMenu(x, y, album) {
+    const menu = document.getElementById('pl-ctx-menu-el');
+    if (!menu || !album || !album.albumKey) return;
+    menu.innerHTML = '';
+    const addPl = document.createElement('div');
+    addPl.className = 'pl-menu-item';
+    addPl.textContent = '➕ Añadir a playlist';
+    addPl.addEventListener('click', () => {
+        menu.style.display = 'none';
+        _addAlbumKeyToPlaylist(album.albumKey, album.name, album.artist);
+    });
+    menu.appendChild(addPl);
+    const addProf = document.createElement('div');
+    addProf.className = 'pl-menu-item';
+    addProf.textContent = '🎵 Añadir a mi perfil';
+    addProf.addEventListener('click', () => {
+        menu.style.display = 'none';
+        _addAlbumObjToProfile(album);
+    });
+    menu.appendChild(addProf);
+    menu.style.display = 'block';
+    const cw = menu.offsetWidth, ch = menu.offsetHeight;
+    menu.style.left = Math.min(x, window.innerWidth  - cw - 8) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - ch - 8) + 'px';
+}
+
+/* Una CANCIÓN de la página de artista (populares) no trae videoId: lo
+   resolvemos en YouTube y abrimos el menú de track normal (añadir a
+   playlist / al perfil / corregir). */
+function _resolveAndOpenTrackCtx(title, artist, x, y) {
+    if (!title) return;
+    const q = (title + ' ' + (artist || '')).trim();
+    fetch('assets/music/api.php?action=yt-search&q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(d => {
+            const res = (d && d.results) || [];
+            if (!res.length || !res[0].videoId) { alert('No se encontró la canción en YouTube.'); return; }
+            if (typeof window.openTrackCtxMenu === 'function') {
+                window.openTrackCtxMenu(
+                    { preventDefault: function(){}, clientX: x, clientY: y },
+                    { videoId: res[0].videoId, title: title, artist: artist || res[0].artist || '', duration: res[0].duration || 0 }
+                );
+            }
+        })
+        .catch(() => { alert('Error al resolver la canción.'); });
 }
 
 /* Registra el álbum en el perfil del usuario. Delegamos a
@@ -4008,11 +4120,15 @@ var addTrackCallback = null;
        tras un lazy-fetch o si ya estaban cargadas. */
     function renderAddToPicker(track, pickerList) {
         pickerList.innerHTML = '';
-        var currentId = editingPlIdx >= 0 && allPlaylists[editingPlIdx] ? allPlaylists[editingPlIdx].id : null;
-        var targets = allPlaylists.filter(function(pl) { return pl.id !== currentId; });
+        /* Este picker SIEMPRE se abre desde una canción/álbum que NO está
+           dentro de una playlist (visor de álbum, reproductor, búsqueda),
+           así que NO hay "playlist actual" que excluir: mostramos TODAS las
+           playlists del usuario. (Antes se filtraba la última playlist
+           abierta en el editor → si solo tenías esa, no salía ninguna.) */
+        var targets = (allPlaylists || []).slice();
 
         if (!targets.length) {
-            pickerList.innerHTML = '<div style="font-size:11px;padding:4px;color:#808080;">No hay otras playlists propias.</div>';
+            pickerList.innerHTML = '<div style="font-size:11px;padding:4px;color:#808080;">No tienes playlists. Crea una primero.</div>';
         } else {
             targets.forEach(function(pl) {
                 var item = document.createElement('div');
@@ -4044,7 +4160,7 @@ var addTrackCallback = null;
 
         var addPl = document.createElement('div');
         addPl.className = 'pl-menu-item';
-        addPl.textContent = '➕ Añadir a otra playlist';
+        addPl.textContent = '➕ Añadir';
         addPl.addEventListener('click', function() {
             ctxMenu.style.display = 'none';
             showAddToPicker(ex, ey, track);
@@ -5054,6 +5170,12 @@ var addTrackCallback = null;
             if (b) b.addEventListener('click', function(){ runSearch(true); });
             results.querySelectorAll('.pl-sr-album-card').forEach(function(card){
                 card.addEventListener('click', function(){ openAlbum(card.dataset.key, card.dataset.name, card.dataset.image, ''); });
+                card.addEventListener('contextmenu', function(e){
+                    e.preventDefault();
+                    if (typeof showSearchAlbumCtxMenu === 'function') {
+                        showSearchAlbumCtxMenu(e.clientX, e.clientY, { albumKey: card.dataset.key, name: card.dataset.name, artist: name || '', image: card.dataset.image || '' });
+                    }
+                });
             });
         })
         .catch(function(){
@@ -5173,6 +5295,23 @@ var addTrackCallback = null;
             /* Vista MODERNA del artista (banner + populares + discografía),
                no la rejilla antigua dentro del menú. */
             if (typeof openArtistWindow === 'function') openArtistWindow(row.dataset.name);
+        }
+    });
+
+    /* Click derecho en un resultado de búsqueda → añadir a playlist / al
+       perfil. Canciones: menú de track normal. Álbumes: menú de álbum. */
+    results.addEventListener('contextmenu', function(e){
+        var row = e.target.closest('.pl-sr-row');
+        if (!row) return;
+        var type = row.dataset.type;
+        if (type === 'song') {
+            e.preventDefault();
+            if (typeof window.openTrackCtxMenu === 'function') {
+                window.openTrackCtxMenu(e, { videoId: row.dataset.vid, title: row.dataset.title, artist: row.dataset.artist, duration: parseInt(row.dataset.dur,10)||0 });
+            }
+        } else if (type === 'album') {
+            e.preventDefault();
+            showSearchAlbumCtxMenu(e.clientX, e.clientY, { albumKey: row.dataset.key, name: row.dataset.name, artist: row.dataset.artist, image: row.dataset.image });
         }
     });
 

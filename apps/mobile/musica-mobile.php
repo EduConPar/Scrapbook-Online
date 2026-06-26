@@ -2682,7 +2682,7 @@ function muOpenNowPlayingMenu() {
     var tr = QUEUE[CUR_IDX];
     var items = [
         { act: 'fixAlbum', label: MU_FIX_ICON + 'Corregir' },
-        { act: 'addPl',    label: '📋 Añadir a otra playlist' }
+        { act: 'addPl',    label: '📋 Añadir' }
     ];
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;color:var(--text-faint, #666);">' +
                      esc(tr.title || tr.videoId || 'Canción') +
@@ -2750,7 +2750,17 @@ function muOpenNowPlayingMenu() {
 })();
 
 function muOpenAddCurrentToPlaylist(tr) {
-    if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+    /* Si aún no se cargaron las playlists (no se abrió la pantalla de
+       playlists), las cargamos y reintentamos — antes salía "no tienes
+       playlists" aunque sí las tuvieras, al añadir desde una canción/álbum
+       que no está dentro de ninguna playlist. */
+    if (!PLAYLISTS.length) {
+        loadPlaylists().then(function(){
+            if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+            muOpenAddCurrentToPlaylist(tr);
+        }).catch(function(){ muAlert('No se pudieron cargar las playlists'); });
+        return;
+    }
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;">' +
                      'Añadir "' + esc(tr.title || tr.videoId || 'canción') + '" a:' +
                    '</p>';
@@ -3274,7 +3284,7 @@ function muOpenTrackMenu(pi, ti) {
     if (!tr) return;
     var items = [
         { act: 'addProfile', label: '➕ Añadir a mi perfil' },
-        { act: 'addPl',      label: '📋 Añadir a otra playlist' },
+        { act: 'addPl',      label: '📋 Añadir' },
         { act: 'fixAlbum',   label: MU_FIX_ICON + 'Corregir' },
         { act: 'remove',     label: '<img src="../../assets/img/appIcons/trashIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin-right:4px;">Quitar de la playlist', danger: true }
     ];
@@ -5257,7 +5267,15 @@ function muAddAlbumToProfile(albumId, album) {
 
 /* ── Añadir álbum a una playlist: picker idéntico al de track. */
 function muAddAlbumToPlaylist(album) {
-    if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+    /* Carga perezosa: si no se abrió la pantalla de playlists, PLAYLISTS
+       está vacío aunque sí tengas; cargamos y reintentamos. */
+    if (!PLAYLISTS.length) {
+        loadPlaylists().then(function(){
+            if (!PLAYLISTS.length) { muAlert('No tienes playlists todavía'); return; }
+            muAddAlbumToPlaylist(album);
+        }).catch(function(){ muAlert('No se pudieron cargar las playlists'); });
+        return;
+    }
     var bodyHtml = '<p class="modal-msg" style="margin:0 0 6px;">' +
                      'Añadir "' + esc(album.name || 'álbum') + '" a:' +
                    '</p>' +
