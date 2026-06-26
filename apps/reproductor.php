@@ -3859,6 +3859,21 @@ var addTrackCallback = null;
                         if (found) playPlaylist(found);
                     }
                 });
+                /* Click derecho → añadir a playlist / al perfil (canciones y
+                   álbumes; las playlists no tienen menú). */
+                card.addEventListener('contextmenu', function(e){
+                    if (it.type === 'song') {
+                        e.preventDefault();
+                        if (typeof window.openTrackCtxMenu === 'function') {
+                            window.openTrackCtxMenu(e, { videoId: it.key, title: it.name, artist: it.artist || '', duration: 0 });
+                        }
+                    } else if (it.type === 'album') {
+                        e.preventDefault();
+                        if (typeof showSearchAlbumCtxMenu === 'function') {
+                            showSearchAlbumCtxMenu(e.clientX, e.clientY, { albumKey: it.key, name: it.name, artist: it.artist || '', image: it.image || '' });
+                        }
+                    }
+                });
                 grid.appendChild(card);
             });
             box.appendChild(grid);
