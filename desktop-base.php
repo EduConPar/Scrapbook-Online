@@ -2078,6 +2078,16 @@ window.notifSystem = (function() {
                 if (typeof opts.onClick === 'function') {
                     try { opts.onClick(ev); } catch (_) {}
                 }
+                /* El click ES el descarte definitivo — no hay auto-dismiss.
+                   Avisamos al caller para que lo persista en servidor; si
+                   no, `dismissedIds` solo vive en memoria y la notif vuelve
+                   a aparecer en cada carga mientras su fila siga en BD.
+                   `onAutoDismiss` se acepta como alias legacy: quedó
+                   huérfano al deshabilitarse el auto-dismiss. */
+                var onDismiss = opts.onDismiss || opts.onAutoDismiss;
+                if (typeof onDismiss === 'function') {
+                    try { onDismiss(); } catch (_) {}
+                }
                 removeSlot(slot);
             });
         }

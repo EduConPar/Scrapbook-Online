@@ -5447,7 +5447,10 @@ function relTime(sentAt) {
                 title:   TITLES[inv.type] || 'Notificación',
                 message: messageFor(inv),
                 sentAt:  inv.sentAt,
-                onAutoDismiss: function() { serverPost(inv.id, 'dismiss').catch(function(){}); }
+                /* Al cerrarla, consumimos la fila en servidor (respond-invite
+                   'dismiss' hace DELETE). Sin esto el SSE la reenvía en cada
+                   sesión y la notif reaparece para siempre. */
+                onDismiss: function() { serverPost(inv.id, 'dismiss').catch(function(){}); }
             });
         }
     }

@@ -4883,8 +4883,28 @@ var PROFILE_USERS = <?php
         /* Al ver el perfil de otra persona, salimos de modo edición */
         document.dispatchEvent(new Event('profile-edit-cancel'));
         console.log('[viewOtherUser] fetch', userKey);
-        fetch('assets/profile/api.php?action=view-user&user=' + encodeURIComponent(userKey))
-            .then(function(r) { return r.json(); })
+        var apiUrl = 'assets/profile/api.php?action=view-user&user=' + encodeURIComponent(userKey);
+        fetch(apiUrl)
+            .then(function(r) {
+                /* Leemos el cuerpo como texto y parseamos a mano: con
+                   r.json() directo, una respuesta no-JSON (fatal de PHP,
+                   404 de Apache, HTML de login) solo dejaba un SyntaxError
+                   pelado que el .catch se tragaba, sin URL ni status ni
+                   cuerpo — imposible de diagnosticar desde consola. */
+                return r.text().then(function(raw) {
+                    try {
+                        return JSON.parse(raw);
+                    } catch (e) {
+                        console.error('[viewOtherUser] respuesta no-JSON', {
+                            url:         apiUrl,
+                            status:      r.status + ' ' + r.statusText,
+                            contentType: r.headers.get('content-type'),
+                            body:        raw.slice(0, 1000)
+                        });
+                        throw e;
+                    }
+                });
+            })
             .then(function(data) {
                 console.log('[viewOtherUser] response', data);
                 if (!data || data.error) {
@@ -4945,7 +4965,13 @@ var PROFILE_USERS = <?php
                    sin tocar el resto del shell). */
                 applyVisitedUserTheme(data.userKey);
             })
-            .catch(function() { alert('No se pudo cargar el perfil'); });
+            .catch(function(err) {
+                /* Ojo: aquí caen TANTO los fallos de red/parseo como
+                   cualquier excepción lanzada por el .then de render de
+                   arriba. El log distingue unos de otros. */
+                console.error('[viewOtherUser] fallo cargando', userKey, err);
+                alert('No se pudo cargar el perfil');
+            });
     }
 
     function updateFollowButton(isFollowing) {
@@ -7669,8 +7695,14 @@ var PROFILE_USERS = <?php
         }
     }
 
-    // Arrancar stream aunque el perfil no se abra (para recibir notificaciones en segundo plano)
-    startItemNotifStream();
+    /* Arrancar stream aunque el perfil no se abra (para recibir
+       notificaciones en segundo plano).
+       En standalone NO: cada ventana de perfil ajeno es otro perfil.php
+       completo, y su stream (a) duplicaría notifs que el shell padre ya
+       emite —el notifSystem de standalone se las reenvía por postMessage—
+       y (b) retiene un proceso PHP del pool compartido 25s en bucle,
+       compitiendo con el propio fetch de view-user de esa misma ventana. */
+    if (!window.__PERFIL_STANDALONE) startItemNotifStream();
 
     /* Escuchar postMessage de iframes (galería) cuando publican un post.
        Solo refrescamos si estoy viendo MI propio perfil (no interrumpe la
