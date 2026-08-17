@@ -87,8 +87,10 @@ function ensureLoginUsers(): void {
             ? $GLOBALS['pdo']
             : null;
         if (!$pdo) {
+            /* Mismas esperas que db.php: ~1.85s en el peor caso. */
+            $esperas     = [100000, 250000, 500000, 1000000];
             $ultimoError = null;
-            for ($intento = 0; $intento < 3; $intento++) {
+            for ($intento = 0; $intento <= count($esperas); $intento++) {
                 try {
                     $pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
                                    DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
@@ -96,7 +98,7 @@ function ensureLoginUsers(): void {
                 } catch (PDOException $e) {
                     $pdo         = null;
                     $ultimoError = $e;
-                    if ($intento < 2) usleep(150000 * ($intento + 1));   /* 150ms, luego 300ms */
+                    if ($intento < count($esperas)) usleep($esperas[$intento]);
                 }
             }
             if (!$pdo) throw $ultimoError;

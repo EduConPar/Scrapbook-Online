@@ -4889,7 +4889,32 @@ var PROFILE_USERS = <?php
         delete pw.dataset.visitedThemeCss;
     }
 
-    function viewOtherUser(userKey) {
+    /* Si el perfil del visitado no carga, la ventana standalone se quedaba
+       enseñando el perfil PROPIO del visitante bajo el nombre y el tema del
+       visitado: parecía que habías entrado y que sus listas eran las tuyas.
+       Vaciamos el body entero — así es imposible confundir tus datos con
+       los suyos — y ofrecemos reintentar. */
+    function showProfileLoadError(msg) {
+        var body = document.querySelector('#profile-window > .window-body');
+        if (!body) { alert(msg); return; }
+        body.innerHTML = '';
+        body.style.display = 'flex';
+        var box = document.createElement('div');
+        box.style.cssText = 'margin:auto;padding:18px;text-align:center;font-size:12px;max-width:340px;';
+        var p = document.createElement('p');
+        p.style.cssText = 'margin:0 0 10px;';
+        p.textContent = msg;
+        var btn = document.createElement('button');
+        btn.className = 'button';
+        btn.textContent = 'Reintentar';
+        btn.addEventListener('click', function() { location.reload(); });
+        box.appendChild(p);
+        box.appendChild(btn);
+        body.appendChild(box);
+    }
+
+    function viewOtherUser(userKey, _intento) {
+        _intento = _intento || 0;
         /* Al ver el perfil de otra persona, salimos de modo edición */
         document.dispatchEvent(new Event('profile-edit-cancel'));
         console.log('[viewOtherUser] fetch', userKey);
@@ -4918,13 +4943,20 @@ var PROFILE_USERS = <?php
             .then(function(data) {
                 console.log('[viewOtherUser] response', data);
                 if (!data || data.error) {
-                    /* En standalone no popamos alert para no romper UX
-                       del visitante — sólo log y bail. */
-                    if (window.__PERFIL_STANDALONE) {
-                        console.error('[viewOtherUser] error', data);
+                    console.error('[viewOtherUser] error', data);
+                    /* La BD puede estar saturada un instante (ráfaga de
+                       conexiones al recargar el shell y todas las apps).
+                       Reintentamos con backoff antes de rendirnos: el
+                       fallo es transitorio y así el usuario ni lo nota. */
+                    if (_intento < 2) {
+                        setTimeout(function() {
+                            viewOtherUser(userKey, _intento + 1);
+                        }, 600 * (_intento + 1));
                         return;
                     }
-                    alert(data && data.error ? data.error : 'Error');
+                    var msg = (data && data.error) ? data.error : 'No se pudo cargar el perfil';
+                    if (window.__PERFIL_STANDALONE) { showProfileLoadError(msg); return; }
+                    alert(msg);
                     return;
                 }
                 if (!ownLists) ownLists = lists;
@@ -4980,6 +5012,16 @@ var PROFILE_USERS = <?php
                    cualquier excepción lanzada por el .then de render de
                    arriba. El log distingue unos de otros. */
                 console.error('[viewOtherUser] fallo cargando', userKey, err);
+                if (_intento < 2) {
+                    setTimeout(function() {
+                        viewOtherUser(userKey, _intento + 1);
+                    }, 600 * (_intento + 1));
+                    return;
+                }
+                if (window.__PERFIL_STANDALONE) {
+                    showProfileLoadError('No se pudo cargar el perfil');
+                    return;
+                }
                 alert('No se pudo cargar el perfil');
             });
     }

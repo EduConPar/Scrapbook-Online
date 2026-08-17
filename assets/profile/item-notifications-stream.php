@@ -49,9 +49,21 @@ while (true) {
     if ($hash !== $lastHash) {
         $lastHash = $hash;
         echo 'data: ' . json_encode($invites) . "\n\n";
-        if (ob_get_level()) ob_flush();
-        flush();
+    } else {
+        /* Heartbeat: comentario SSE (línea que empieza por ':'), que
+           EventSource ignora. Es imprescindible para detectar el cierre
+           del cliente: PHP solo se entera de que el socket murió cuando
+           INTENTA escribir. Sin esto, un stream cuyo contenido no cambia
+           no escribía nunca, connection_aborted() no saltaba jamás y el
+           proceso seguía vivo —reteniendo su conexión MySQL— los 25s
+           completos aunque la pestaña ya estuviera cerrada.
+           Al cambiar de interfaz se recarga todo de golpe, así que esos
+           zombis se solapaban con las conexiones de la página nueva y
+           agotaban el tope de la cuenta. */
+        echo ": ping\n\n";
     }
+    if (ob_get_level()) ob_flush();
+    flush();
     sleep(1);
 }
 
