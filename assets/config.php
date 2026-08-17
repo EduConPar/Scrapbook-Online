@@ -75,10 +75,32 @@ function ensureLoginUsers(): void {
     global $loginUsers;
     if (!empty($loginUsers)) return;
     try {
+        /* Reintento con backoff, igual que en db.php. Esta ruta NO pasa
+           por db.php (config.php se carga antes en muchos sitios), así
+           que necesita su propia protección. En hosting compartido el
+           connect falla con [2002] Operation not permitted cuando la
+           cuenta roza su tope de conexiones — y sin $loginUsers la app
+           degrada a la pantalla de "No hay usuarios para mostrar".
+           Pasa sobre todo al cambiar de interfaz: recarga el shell y
+           todas las apps abiertas a la vez, en ráfaga. */
         $pdo = isset($GLOBALS['pdo']) && $GLOBALS['pdo'] instanceof PDO
             ? $GLOBALS['pdo']
-            : new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
-                       DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+            : null;
+        if (!$pdo) {
+            $ultimoError = null;
+            for ($intento = 0; $intento < 3; $intento++) {
+                try {
+                    $pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+                                   DB_USER, DB_PASS, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                    break;
+                } catch (PDOException $e) {
+                    $pdo         = null;
+                    $ultimoError = $e;
+                    if ($intento < 2) usleep(150000 * ($intento + 1));   /* 150ms, luego 300ms */
+                }
+            }
+            if (!$pdo) throw $ultimoError;
+        }
         $stmt = $pdo->query("SELECT id, user_key, label, password FROM usuarios ORDER BY id ASC");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -112,7 +134,11 @@ function ensureLoginUsers(): void {
             $GLOBALS['_loginUsersError'] = 'La tabla `usuarios` está vacía. Importa el SQL.';
         }
     } catch (Throwable $e) {
-        $GLOBALS['_loginUsersError'] = 'BD: ' . $e->getMessage();
+        /* El detalle va al log, no a la pantalla de login: exponía
+           SQLSTATE, host y usuario de BD a cualquier visitante capaz de
+           provocar el fallo. */
+        error_log('[config] ensureLoginUsers falló: ' . $e->getMessage());
+        $GLOBALS['_loginUsersError'] = 'No se puede conectar con la base de datos. Recarga en unos segundos.';
     }
 }
 ensureLoginUsers();

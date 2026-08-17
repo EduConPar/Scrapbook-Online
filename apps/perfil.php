@@ -1191,8 +1191,18 @@ var PROFILE_USERS = <?php
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data && !data.error) {
+                    /* get-lists devuelve SIEMPRE las listas del usuario de
+                       sesión. Si ahora mismo estamos viendo el perfil de
+                       otra persona, `lists` contiene LAS SUYAS: escribir
+                       aquí las mías dejaba su perfil mostrando mi
+                       contenido en cuanto cualquier callback llamara a
+                       loadLists (notif de item-edited, respuesta a una
+                       invitación, alta de música…). En ese caso
+                       refrescamos el backup propio y dejamos `lists`
+                       intacta; viewOtherUser ya la restaura al volver. */
+                    var destino = viewingUser ? (ownLists = ownLists || {}) : lists;
                     ['movies', 'series', 'books', 'games', 'music'].forEach(function(k) {
-                        lists[k] = Array.isArray(data[k]) ? data[k] : [];
+                        destino[k] = Array.isArray(data[k]) ? data[k] : [];
                     });
                 }
                 if (cb) cb();
