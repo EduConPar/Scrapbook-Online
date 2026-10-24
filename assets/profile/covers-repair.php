@@ -7,6 +7,8 @@
      - si carga      → copia local y los items pasan a usarla
      - si está caída → busca sustituta (cv_findReplacement)
      - si da un error pasajero → la deja para otra pasada
+   Y a los items sin foto (de cualquier categoría) les busca una
+   (cv_autoImage).
    Se lanza:
      - Navegador, con sesión iniciada: abre esta página y pulsa
        "Empezar". Va por tandas para no pasarse del tiempo máximo de PHP.
@@ -24,10 +26,12 @@ cv_ensureTables($pdo);
    pasar $deadline. Devuelve [resultados, nuevo cursor, ¿terminado?]. */
 function repair_batch(PDO $pdo, int $after, int $limit, float $deadline): array {
     $stmt = $pdo->prepare("
-        SELECT MIN(id) AS firstId, category, MIN(title) AS title, image
+        SELECT MIN(id) AS firstId, category, MIN(title) AS title, COALESCE(image, '') AS image,
+               MIN(artist) AS artist, MIN(music_type) AS mtype
         FROM list_items
-        WHERE category IN ('movies','series','books','games') AND image LIKE 'http%'
-        GROUP BY category, LOWER(title), image
+        WHERE (category IN ('movies','series','books','games') AND image LIKE 'http%')
+           OR image IS NULL OR image = ''
+        GROUP BY category, LOWER(title), COALESCE(image, '')
         HAVING MIN(id) > ?
         ORDER BY firstId
         LIMIT " . (int)$limit);
@@ -40,6 +44,18 @@ function repair_batch(PDO $pdo, int $after, int $limit, float $deadline): array 
         $cursor = (int)$r['firstId'];
         $processed++;
         $url = (string)$r['image'];
+        if ($url === '') {
+            $auto = cv_autoImage($pdo, $r['category'], $r['title'], ['artist' => (string)$r['artist'], 'type' => (string)$r['mtype']]);
+            if ($auto !== null) {
+                $pdo->prepare("UPDATE list_items SET image = ? WHERE category = ? AND LOWER(title) = ? AND (image IS NULL OR image = '')")
+                    ->execute([$auto, $r['category'], mb_strtolower(trim($r['title']))]);
+                $result = 'sin foto → añadida';
+            } else {
+                $result = 'sin foto, no se encontró ninguna';
+            }
+            $out[] = ['category' => $r['category'], 'title' => $r['title'], 'result' => $result];
+            continue;
+        }
         if (!cv_isRemote($url)) continue;
 
         $local = cv_cacheRemote($pdo, $url, $status, 6, $detail);
@@ -108,7 +124,7 @@ if (isset($_GET['step'])) {
 </head>
 <body>
 <h1>Repaso de fotos de las listas</h1>
-<p>Copia en local las fotos de pelis, series, libros y juegos que aún son enlaces externos, y busca otra para las que estén caídas. Se puede repetir cuando quieras.</p>
+<p>Copia en local las fotos de pelis, series, libros y juegos que aún son enlaces externos, busca otra para las que estén caídas y pone una a los items que no tienen. Se puede repetir cuando quieras.</p>
 <?php $tmdb = cv_tmdbStatus(); ?>
 <p>TMDB (pósters de pelis y series): <strong style="color:<?= $tmdb === 'ok' ? '#1a7f37' : '#c00' ?>"><?= htmlspecialchars($tmdb) ?></strong></p>
 <p><button id="go">Empezar</button> <span id="state"></span></p>

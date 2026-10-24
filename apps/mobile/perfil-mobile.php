@@ -2842,8 +2842,8 @@ function openReviewEditor(item, origIdx, cat) {
             '<div class="window-body">' +
                 '<div class="pf-rev-edit-label">Título</div>' +
                 '<input type="text" id="pf-rev-edit-title" maxlength="200" style="width:100%;box-sizing:border-box;">' +
-                '<div class="pf-rev-edit-label">Imagen (URL)</div>' +
-                '<input type="text" id="pf-rev-edit-image" maxlength="500" placeholder="https://..." style="width:100%;box-sizing:border-box;">' +
+                '<div class="pf-rev-edit-label">Imagen (URL, opcional)</div>' +
+                '<input type="text" id="pf-rev-edit-image" maxlength="500" placeholder="Déjala vacía y se busca sola" style="width:100%;box-sizing:border-box;">' +
                 (rtLabel ? '<div class="pf-rev-edit-label">' + rtLabel + '</div>' +
                            '<input type="number" id="pf-rev-edit-runtime" min="0" step="1" inputmode="numeric" placeholder="0" class="pf-rev-edit-runtime">' : '') +
                 (isSeries ? '<div class="pf-rev-edit-label">Capítulos</div>' +
@@ -3431,7 +3431,7 @@ function openAddItemDialog(cat) {
                 '</div>' +
                 '<div class="pf-form-row">' +
                     '<label for="ai-image">Imagen (URL, opcional)</label>' +
-                    '<input type="text" id="ai-image" maxlength="500" placeholder="https://...">' +
+                    '<input type="text" id="ai-image" maxlength="500" placeholder="Déjala vacía y se busca sola">' +
                 '</div>' +
                 (rtLabel ? '<div class="pf-form-row">' +
                     '<label for="ai-runtime">' + rtLabel + '</label>' +

@@ -1024,15 +1024,18 @@ case 'save-lists': {
         }
     }
 
-    /* Copia local de las fotos nuevas o cambiadas (ver cover-helpers.php),
-       para que no se caigan si la web de origen las borra. Va FUERA de la
-       transacción: son descargas de red y no queremos la BD bloqueada
-       mientras tanto. Máx. 3 descargas por guardado para que guardar no
-       se eternice; el resto se copian con covers-repair.php o cuando
-       fallen (fix-cover). Música no se copia (ver cover-helpers.php). */
+    /* Fotos (ver cover-helpers.php). Va FUERA de la transacción: son
+       descargas y búsquedas de red y no queremos la BD bloqueada mientras
+       tanto. Con topes (3 descargas, 3 búsquedas, 8 s) para que guardar no
+       se eternice; lo que quede lo hace covers-repair.php o, cuando una
+       foto falla al verse, fix-cover.
+         - Copia local de las fotos nuevas o cambiadas, para que no se
+           caigan si la web de origen las borra. Música no se copia.
+         - Foto automática para los items sin foto (es opcional). */
+    require_once __DIR__ . '/cover-helpers.php';
+    cv_ensureTables($pdo);
+    $coverDeadline = microtime(true) + 8;
     if (!$isMusic) {
-        require_once __DIR__ . '/cover-helpers.php';
-        cv_ensureTables($pdo);
         $oldImages = [];   /* item_id => image guardada */
         $knownIds  = array_merge($myOwnIds, array_keys($sharedWithMe));
         if (!empty($knownIds)) {
@@ -1053,11 +1056,30 @@ case 'save-lists': {
             $rawId = $items[$k]['id'] ?? null;
             $oldImg = (is_int($rawId) || (is_string($rawId) && ctype_digit($rawId))) ? ($oldImages[(int)$rawId] ?? null) : null;
             /* Sin cambios respecto a lo guardado → la copia la hará el repaso. */
-            if ($img === $oldImg || $downloads >= 3) continue;
+            if ($img === $oldImg || $downloads >= 3 || microtime(true) > $coverDeadline) continue;
             $downloads++;
             $local = cv_cacheRemote($pdo, $img, $cvStatus, 5);
             if ($local) { $items[$k]['image'] = $local; $cached[$img] = $local; }
         }
+    }
+    /* Sin foto → automática. Primero los items nuevos (los que el usuario
+       acaba de añadir); los que ya estaban sin foto, si queda margen. */
+    $noImageNew = []; $noImageOld = [];
+    foreach ($items as $k => $item) {
+        if (!is_array($item) || trim((string)($item['title'] ?? '')) === '' || trim((string)($item['image'] ?? '')) !== '') continue;
+        $rawId = $item['id'] ?? null;
+        if (is_int($rawId) || (is_string($rawId) && ctype_digit($rawId))) $noImageOld[] = $k;
+        else $noImageNew[] = $k;
+    }
+    $searches = 0;
+    foreach (array_merge($noImageNew, $noImageOld) as $k) {
+        if ($searches >= 3 || microtime(true) > $coverDeadline) break;
+        $rawId = $items[$k]['id'] ?? null;
+        $hints = ['excludeId' => (is_int($rawId) || (is_string($rawId) && ctype_digit($rawId))) ? (int)$rawId : 0];
+        if ($isMusic) $hints += ['artist' => (string)($items[$k]['artist'] ?? ''), 'type' => (string)($items[$k]['type'] ?? '')];
+        $auto  = cv_autoImage($pdo, $category, (string)$items[$k]['title'], $hints, $didSearch);
+        if ($didSearch) $searches++;
+        if ($auto !== null) $items[$k]['image'] = $auto;
     }
 
     /* Iterar los items entrantes y separar:
@@ -2629,9 +2651,7 @@ case 'fix-cover': {
     cv_ensureTables($pdo);
     @set_time_limit(60);
 
-    /* Si TMDB se configura después de un intento fallido, la clave del
-       registro cambia y se vuelve a buscar en vez de esperar 12 h. */
-    $checkKey = sha1($category . '|' . $titleKey . '|' . $failing . '|' . (TMDB_API_KEY !== '' ? 'tmdb' : ''));
+    $checkKey = cv_checkKey($category, $titleKey, $failing);
     $stmt = $pdo->prepare("SELECT fails, UNIX_TIMESTAMP(gave_up_at) AS gaveUp, UNIX_TIMESTAMP(checked_at) AS checkedAt
                            FROM cover_checks WHERE hash = ?");
     $stmt->execute([$checkKey]);
