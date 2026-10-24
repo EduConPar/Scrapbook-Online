@@ -154,6 +154,7 @@ if ($_perfilStandalone) {
         window.__ICON_PACK_OVERRIDE = <?= json_encode($_perfilViewingKey !== '' ? $_lookIconPack : null) ?>;
     </script>
     <script src="assets/js/icon-pack.js"></script>
+    <script src="assets/js/cover-fallback.js"></script>
     <link rel="stylesheet" href="assets/css/reproductor.css">
     <link rel="stylesheet" href="assets/css/perfil.css?v=<?php echo @filemtime(dirname(__DIR__) . '/assets/css/perfil.css'); ?>">
     <link rel="stylesheet" href="assets/css/themes.css">
@@ -1315,6 +1316,8 @@ var PROFILE_USERS = <?php
                 var img = document.createElement('img');
                 img.src = item.image;
                 img.alt = item.title;
+                img.setAttribute('data-cover-cat', cat);
+                img.setAttribute('data-cover-title', item.title);
                 (function(b, ct) {
                     img.onerror = function() { b.innerHTML = catPlaceholderHTML(ct, 42); };
                 })(body, cat);
@@ -2099,6 +2102,8 @@ var PROFILE_USERS = <?php
                 img.className = 'profile-gallery-img';
                 img.src = item.image;
                 img.alt = item.title;
+                img.setAttribute('data-cover-cat', cat);
+                img.setAttribute('data-cover-title', item.title);
                 img.onerror = function() {
                     imgWrap.innerHTML = catPlaceholderHTML(cat, 48);
                 };
@@ -3836,6 +3841,8 @@ var PROFILE_USERS = <?php
             if (item.image) {
                 var img = document.createElement('img');
                 img.src = item.image; img.alt = item.title;
+                img.setAttribute('data-cover-cat', melonCat);
+                img.setAttribute('data-cover-title', item.title);
                 (function(b, fb) { img.onerror = function() { b.innerHTML = fb; }; })(body, fallback);
                 body.appendChild(img);
             } else {
@@ -4501,6 +4508,8 @@ var PROFILE_USERS = <?php
         if (item.image) {
             var cimg = document.createElement('img');
             cimg.src = item.image; cimg.alt = item.title;
+            cimg.setAttribute('data-cover-cat', melonCat);
+            cimg.setAttribute('data-cover-title', item.title);
             (function(c){ cimg.onerror = function(){ c.classList.add('melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
             cover.appendChild(cimg);
         } else {
@@ -6267,6 +6276,8 @@ var PROFILE_USERS = <?php
             if (item && item.image) {
                 var img = document.createElement('img');
                 img.src = item.image; img.alt = item.title;
+                img.setAttribute('data-cover-cat', 'music');
+                img.setAttribute('data-cover-title', item.title);
                 (function(b, it) { img.onerror = function() { b.textContent = it.type === 'album' ? '💿' : '🎵'; }; })(body, item);
                 body.appendChild(img);
             } else if (item) {
@@ -6429,6 +6440,8 @@ var PROFILE_USERS = <?php
             if (item.image) {
                 var img = document.createElement('img');
                 img.src = item.image; img.alt = item.title;
+                img.setAttribute('data-cover-cat', 'music');
+                img.setAttribute('data-cover-title', item.title);
                 (function(c, it) { img.onerror = function() { c.innerHTML = '<div class="music-list-cover-ph">' + (it.type === 'album' ? '💿' : '🎵') + '</div>'; }; })(cover, item);
                 cover.appendChild(img);
             } else {

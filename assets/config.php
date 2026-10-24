@@ -56,6 +56,10 @@ define('TIDAL_COUNTRY',       env('TIDAL_COUNTRY',       'US'));
    géneros por artista vía Spotify. Crear key gratis en
    https://www.last.fm/api/account/create */
 define('LASTFM_API_KEY',      env('LASTFM_API_KEY',      ''));
+/* TMDB — pósters de pelis y series cuando la foto de un item de lista se
+   cae (assets/profile/cover-helpers.php). Vale la "API Key" o el "API
+   Read Access Token". Gratis en https://www.themoviedb.org/settings/api */
+define('TMDB_API_KEY',        env('TMDB_API_KEY',        ''));
 
 /* ─── Conexión a BD (la usa db.php) ─── */
 define('DB_HOST', env('DB_HOST', 'localhost'));

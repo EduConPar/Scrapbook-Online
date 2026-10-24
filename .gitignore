@@ -87,3 +87,9 @@ Thumbs.db
 # vuelo desde la BD si faltan.
 /uploads/themes/*
 !/uploads/themes/.gitkeep
+
+# Copias locales de las fotos de las listas. Caché en disco: la fuente de
+# verdad es la tabla cover_cache y assets/profile/cover.php las regenera
+# desde la BD si faltan.
+/uploads/covers/*
+!/uploads/covers/.gitkeep

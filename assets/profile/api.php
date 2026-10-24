@@ -29,6 +29,7 @@
    POST  ?action=leave-collab          { action: 'leave'|'remove', category, itemId, collaboratorUser? }
    POST  ?action=notify-review         { category, itemTitle, mtype? }
    POST  ?action=play-music-item       { ... }
+   POST  ?action=fix-cover             { category, title, image }
    GET   ?action=get-vapid-public-key
    POST  ?action=save-push-subscription   { endpoint, p256dh, auth }
    POST  ?action=delete-push-subscription { endpoint }
@@ -1020,6 +1021,42 @@ case 'save-lists': {
                 'status'       => $r['status'],
                 'completed_at' => $r['completed_at_ts'] !== null ? (int)$r['completed_at_ts'] : null,
             ];
+        }
+    }
+
+    /* Copia local de las fotos nuevas o cambiadas (ver cover-helpers.php),
+       para que no se caigan si la web de origen las borra. Va FUERA de la
+       transacción: son descargas de red y no queremos la BD bloqueada
+       mientras tanto. Máx. 3 descargas por guardado para que guardar no
+       se eternice; el resto se copian con covers-repair.php o cuando
+       fallen (fix-cover). Música no se copia (ver cover-helpers.php). */
+    if (!$isMusic) {
+        require_once __DIR__ . '/cover-helpers.php';
+        cv_ensureTables($pdo);
+        $oldImages = [];   /* item_id => image guardada */
+        $knownIds  = array_merge($myOwnIds, array_keys($sharedWithMe));
+        if (!empty($knownIds)) {
+            $place = implode(',', array_fill(0, count($knownIds), '?'));
+            $stmt = $pdo->prepare("SELECT id, image FROM list_items WHERE id IN ($place)");
+            $stmt->execute($knownIds);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) $oldImages[(int)$r['id']] = (string)$r['image'];
+        }
+        $remote = [];
+        foreach ($items as $k => $item) {
+            $img = is_array($item) ? trim((string)($item['image'] ?? '')) : '';
+            if (cv_isRemote($img)) $remote[$k] = $img;
+        }
+        $cached    = cv_cachedUrls($pdo, array_values(array_unique($remote)));
+        $downloads = 0;
+        foreach ($remote as $k => $img) {
+            if (isset($cached[$img])) { $items[$k]['image'] = $cached[$img]; continue; }
+            $rawId = $items[$k]['id'] ?? null;
+            $oldImg = (is_int($rawId) || (is_string($rawId) && ctype_digit($rawId))) ? ($oldImages[(int)$rawId] ?? null) : null;
+            /* Sin cambios respecto a lo guardado → la copia la hará el repaso. */
+            if ($img === $oldImg || $downloads >= 3) continue;
+            $downloads++;
+            $local = cv_cacheRemote($pdo, $img, $cvStatus, 5);
+            if ($local) { $items[$k]['image'] = $local; $cached[$img] = $local; }
         }
     }
 
@@ -2568,6 +2605,61 @@ case 'melon-reviews': {
         });
     }
     jsonResponse(['ok' => true, 'items' => $items]);
+}
+
+/* Foto caída de un item de lista: assets/js/cover-fallback.js avisa
+   cuando una <img> no carga y aquí buscamos otra (cv_findReplacement).
+   Si aparece, se guarda en TODOS los items con ese título y esa misma
+   foto caída → se arregla una vez para todo el mundo. */
+case 'fix-cover': {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonError('Método no permitido', 405);
+    require_once __DIR__ . '/cover-helpers.php';
+    $b        = jsonBody();
+    $category = (string)($b['category'] ?? '');
+    $title    = trim((string)($b['title'] ?? ''));
+    $failing  = trim((string)($b['image'] ?? ''));
+    if (!in_array($category, ['movies','series','books','games','music'], true) || $title === '' || $failing === '') {
+        jsonError('Datos inválidos');
+    }
+    /* El cliente puede mandar la copia local ya resuelta ("../../assets/…"
+       o absoluta): la llevamos a la forma con la que se guarda en BD. */
+    $h = cv_localHash($failing);
+    if ($h !== null) $failing = cv_localUrl($h);
+    $titleKey = mb_strtolower($title);
+    cv_ensureTables($pdo);
+    @set_time_limit(60);
+
+    $checkKey = sha1($category . '|' . $titleKey . '|' . $failing);
+    $stmt = $pdo->prepare("SELECT fails, UNIX_TIMESTAMP(gave_up_at) AS gaveUp, UNIX_TIMESTAMP(checked_at) AS checkedAt
+                           FROM cover_checks WHERE hash = ?");
+    $stmt->execute([$checkKey]);
+    $check = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['fails' => 0, 'gaveUp' => null, 'checkedAt' => null];
+    /* Ya buscamos hace poco y no había nada: no repetir en cada visita. */
+    if ($check['gaveUp'] && time() - (int)$check['gaveUp'] < 12 * 3600) {
+        jsonResponse(['ok' => true, 'image' => null]);
+    }
+    /* Tras 3 errores pasajeros (separados al menos 10 min) damos la
+       original por muerta. */
+    $res = cv_findReplacement($pdo, $category, $title, $failing, (int)$check['fails'] >= 3);
+
+    if ($res['status'] === 'transient') {
+        if (!$check['checkedAt'] || time() - (int)$check['checkedAt'] >= 600) {
+            $pdo->prepare("INSERT INTO cover_checks (hash, fails) VALUES (?, 1)
+                           ON DUPLICATE KEY UPDATE fails = fails + 1")
+                ->execute([$checkKey]);
+        }
+        jsonResponse(['ok' => true, 'image' => null]);
+    }
+    if ($res['status'] === 'none') {
+        $pdo->prepare("INSERT INTO cover_checks (hash, gave_up_at) VALUES (?, NOW())
+                       ON DUPLICATE KEY UPDATE gave_up_at = NOW()")
+            ->execute([$checkKey]);
+        jsonResponse(['ok' => true, 'image' => null]);
+    }
+    $pdo->prepare("UPDATE list_items SET image = ? WHERE category = ? AND LOWER(title) = ? AND image = ?")
+        ->execute([$res['url'], $category, $titleKey, $failing]);
+    $pdo->prepare("DELETE FROM cover_checks WHERE hash = ?")->execute([$checkKey]);
+    jsonResponse(['ok' => true, 'image' => $res['url']]);
 }
 
 /* ─── Música: resolución / playback (sin almacenamiento) ── */

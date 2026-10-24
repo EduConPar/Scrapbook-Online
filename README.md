@@ -104,6 +104,7 @@ MELON_HUB_WEBHOOK_URL=
 MELON_HUB_CHANNEL_ID=
 POINTS_PER_REACTION=10
 LASTFM_API_KEY=
+TMDB_API_KEY=
 ```
 
 ### 5. (Opcional pero recomendado) Generar HTTPS para PWA
@@ -184,6 +185,8 @@ php -l <archivo.php>
 ## Créditos
 
 Hecho a partir de [98.css](https://github.com/jdan/98.css) y muchas tardes. Los iconos de aplicaciones son obra propia o de creative commons.
+
+Los pósters de pelis y series que sustituyen a fotos caídas vienen de [TMDB](https://www.themoviedb.org/). Este producto usa la API de TMDB, pero TMDB no lo respalda ni lo certifica.
 
 ## Licencia
 

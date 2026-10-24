@@ -173,6 +173,7 @@ if ($activeTheme !== '' && isset($_userThemes['themes'][$activeTheme]['colors'][
     </script>
     <script src="../../assets/js/icon-pack.js"></script>
     <script src="../../assets/js/notif-sound.js"></script>
+    <script src="../../assets/js/cover-fallback.js"></script>
     <?php
         require_once dirname(__DIR__, 2) . "/assets/php/active-interface.php";
         emitInterfaceCss("../../");
@@ -1823,6 +1824,15 @@ function esc(s) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* src + data-cover-* de la foto de un item de lista. La ruta pasa por
+   MhCover.url() porque las copias locales ("assets/profile/cover.php?h=…")
+   son relativas al root y esta página no tiene <base href>; los data-*
+   hacen que cover-fallback.js busque otra foto si esta no carga. */
+function coverImgAttrs(cat, item) {
+    var src = window.MhCover ? MhCover.url(item.image) : item.image;
+    return 'src="' + esc(src) + '" data-cover-cat="' + esc(cat) + '" data-cover-title="' + esc(item.title || '') + '"';
+}
+
 function renderActiveList() {
     var listEl = document.getElementById('pf-list');
     var musicSubtabsEl  = document.getElementById('pf-music-subtabs');
@@ -1887,7 +1897,7 @@ function renderActiveList() {
         var idx = entry.origIdx;       /* índice en STATE.lists[cat] sin filtrar */
         var isMusic = (STATE.current === 'music');
         var posterHtml = it.image
-            ? '<img class="pf-item-poster" src="' + esc(it.image) + '" alt="" loading="lazy">'
+            ? '<img class="pf-item-poster" ' + coverImgAttrs(STATE.current, it) + ' alt="" loading="lazy">'
             : '<div class="pf-item-poster placeholder">' +
               (isMusic ? '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">' : STATE.current === 'movies' ? '<img src="../../assets/img/appIcons/pelisIcon.png" alt="" style="width:32px;height:32px;object-fit:contain;image-rendering:pixelated;vertical-align:middle;">'
                 : STATE.current === 'series' ? '<img src="../../assets/img/appIcons/melonArchiveIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">'
@@ -1972,7 +1982,7 @@ function renderDestacados() {
         }
         var it = entry.it;
         var imgHtml = it.image
-            ? '<img class="pf-dest-cover" src="' + esc(it.image) + '" alt="" loading="lazy">'
+            ? '<img class="pf-dest-cover" ' + coverImgAttrs('music', it) + ' alt="" loading="lazy">'
             : '<div class="pf-dest-cover pf-dest-cover-ph">' + (it.type === 'album' ? '💿' : '<img src="../../assets/img/appIcons/musicaIcon.png" alt="" style="width:14px;height:14px;object-fit:contain;image-rendering:pixelated;vertical-align:-2px;margin:0 4px 0 0;">') + '</div>';
         var hasReview = !!(it.review && it.review.stars);
         var starsHtml = hasReview
@@ -3971,7 +3981,7 @@ function renderMelonItems() {
            img si hay cover, div.placeholder con emoji si no. */
         var posterHtml;
         if (item.image) {
-            posterHtml = '<img class="pf-item-poster" src="' + esc(item.image) + '" alt="" loading="lazy">';
+            posterHtml = '<img class="pf-item-poster" ' + coverImgAttrs(MELON_STATE.cat, item) + ' alt="" loading="lazy">';
         } else {
             posterHtml = '<div class="pf-item-poster placeholder">' + (ICON_FALLBACK[MELON_STATE.cat] || '🖼') + '</div>';
         }
@@ -4093,7 +4103,9 @@ function showMelonDetails(item) {
     /* Música = cuadrada; resto (pelis/series/libros/juegos) = póster vertical. */
     if (MELON_STATE.cat !== 'music') cover.classList.add('pf-melon-cover-portrait');
     if (item.image) {
-        var cimg = document.createElement('img'); cimg.src = item.image; cimg.alt = item.title || '';
+        var cimg = document.createElement('img'); cimg.src = window.MhCover ? MhCover.url(item.image) : item.image; cimg.alt = item.title || '';
+        cimg.setAttribute('data-cover-cat', MELON_STATE.cat);
+        cimg.setAttribute('data-cover-title', item.title || '');
         (function(c){ cimg.onerror = function(){ c.classList.add('pf-melon-detail-cover-ph'); c.textContent = '🍈'; }; })(cover);
         cover.appendChild(cimg);
     } else { cover.classList.add('pf-melon-detail-cover-ph'); cover.textContent = '🍈'; }
