@@ -114,17 +114,18 @@ function cv_publicIp(string $host): ?string {
      'ok'    → 200 con cuerpo
      'dead'  → el enlace no sirve: no resuelve, 4xx, certificado roto,
                demasiado grande, "removed.png" de imgur…
-     'error' → fallo que puede ser pasajero (timeout, conexión, 5xx, 429) */
+     'error' → fallo que puede ser pasajero (timeout, conexión, 5xx, 429)
+   'detail' explica el motivo para el diagnóstico de covers-repair.php. */
 function cv_fetch(string $url, int $timeout = 6): array {
     for ($hop = 0; $hop <= 4; $hop++) {
         $p      = parse_url($url);
         $scheme = strtolower($p['scheme'] ?? '');
         $host   = $p['host'] ?? '';
-        if (!in_array($scheme, ['http', 'https'], true) || $host === '') return ['status' => 'dead'];
+        if (!in_array($scheme, ['http', 'https'], true) || $host === '') return ['status' => 'dead', 'detail' => 'URL no válida'];
         /* Imgur redirige las imágenes borradas a su "removed.png". */
-        if (preg_match('#^/removed\.(?:png|jpe?g)$#i', $p['path'] ?? '')) return ['status' => 'dead'];
+        if (preg_match('#^/removed\.(?:png|jpe?g)$#i', $p['path'] ?? '')) return ['status' => 'dead', 'detail' => 'borrada en imgur'];
         $ip = cv_publicIp($host);
-        if ($ip === null) return ['status' => 'dead'];
+        if ($ip === null) return ['status' => 'dead', 'detail' => 'el dominio no existe o es de red interna'];
         $port = (int)($p['port'] ?? ($scheme === 'https' ? 443 : 80));
 
         $body = ''; $tooBig = false;
@@ -157,16 +158,16 @@ function cv_fetch(string $url, int $timeout = 6): array {
         $code  = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $next  = (string)curl_getinfo($ch, CURLINFO_REDIRECT_URL);
 
-        if ($tooBig) return ['status' => 'dead'];
+        if ($tooBig) return ['status' => 'dead', 'detail' => 'demasiado grande'];
         /* 51/60: certificado inválido o caducado — el navegador tampoco la carga. */
-        if ($errno === 51 || $errno === 60) return ['status' => 'dead'];
-        if ($errno) return ['status' => 'error'];
+        if ($errno === 51 || $errno === 60) return ['status' => 'dead', 'detail' => 'certificado inválido'];
+        if ($errno) return ['status' => 'error', 'detail' => $errno === 28 ? 'no responde (timeout)' : 'error de conexión (curl ' . $errno . ')'];
         if ($code >= 300 && $code < 400 && $next !== '') { $url = $next; continue; }
-        if ($code === 429 || $code >= 500) return ['status' => 'error'];
-        if ($code !== 200 || $body === '') return ['status' => 'dead'];
-        return ['status' => 'ok', 'body' => $body];
+        if ($code === 429 || $code >= 500) return ['status' => 'error', 'detail' => 'HTTP ' . $code];
+        if ($code !== 200 || $body === '') return ['status' => 'dead', 'detail' => 'HTTP ' . $code];
+        return ['status' => 'ok', 'body' => $body, 'detail' => 'HTTP 200'];
     }
-    return ['status' => 'dead'];   /* demasiadas redirecciones */
+    return ['status' => 'dead', 'detail' => 'demasiadas redirecciones'];
 }
 
 /* ── Imagen ────────────────────────────────────────────────────────── */
@@ -261,18 +262,24 @@ function cv_cachedUrls(PDO $pdo, array $urls): array {
 }
 
 /* Copia local de una URL externa. Devuelve la ruta local o null, y deja
-   en $status 'ok' | 'dead' | 'error' (ver cv_fetch). Si ya estaba
-   copiada no la vuelve a descargar. */
-function cv_cacheRemote(PDO $pdo, string $url, ?string &$status = null, int $timeout = 6): ?string {
+   en $status 'ok' | 'dead' | 'error' y en $detail el motivo (ver
+   cv_fetch). Si ya estaba copiada no la vuelve a descargar. */
+function cv_cacheRemote(PDO $pdo, string $url, ?string &$status = null, int $timeout = 6, ?string &$detail = null): ?string {
     $status = 'ok';
+    $detail = 'ya copiada';
     $cached = cv_cachedUrls($pdo, [$url]);
     if (isset($cached[$url])) return $cached[$url];
 
     $res    = cv_fetch($url, $timeout);
     $status = $res['status'];
+    $detail = $res['detail'];
     if ($status !== 'ok') return null;
     $img = cv_processImage($res['body']);
-    if (!$img) { $status = 'dead'; return null; }   /* no es una imagen (p. ej. una página HTML) */
+    if (!$img) {   /* no es una imagen (p. ej. la página HTML de un anti-hotlink) */
+        $status = 'dead';
+        $detail = 'no es una imagen';
+        return null;
+    }
     return cv_store($pdo, $url, $img);
 }
 
@@ -451,13 +458,20 @@ function cv_externalCandidates(string $category, string $title, string $artist, 
      'ok'        → la original sí carga desde el servidor (fallaba por
                    hotlink); url = su copia local
      'replaced'  → url = otra foto (copia local; externa en música)
-     'transient' → error que puede ser pasajero: no tocamos nada esta vez
+     'transient' → la original dio un error que puede ser pasajero. url,
+                   si no es null, es una sustituta para ENSEÑAR ahora sin
+                   guardarla: si la original vuelve, se queda la original
      'none'      → no hay sustituta
    $skipOriginal: dar la original por muerta sin volver a pedirla. */
 function cv_findReplacement(PDO $pdo, string $category, string $title, string $failing, bool $skipOriginal = false): array {
     $deadline = microtime(true) + 20;   /* margen dentro del max_execution_time */
     $isMusic  = ($category === 'music');
     $titleKey = mb_strtolower(trim($title));
+    $originalTransient = false;
+    $found = function (?string $url) use (&$originalTransient): array {
+        if ($originalTransient) return ['status' => 'transient', 'url' => $url];
+        return ['status' => $url !== null ? 'replaced' : 'none', 'url' => $url];
+    };
 
     /* a) La original, pedida desde el servidor. */
     if (!$skipOriginal && cv_isRemote($failing)) {
@@ -471,7 +485,7 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
             $local = cv_cacheRemote($pdo, $failing, $status);
             if ($local) return ['status' => 'ok', 'url' => $local];
         }
-        if ($status === 'error') return ['status' => 'transient', 'url' => null];
+        if ($status === 'error') $originalTransient = true;
     }
     /* Una copia local que no carga pero sigue en BD es un fallo puntual
        del servidor, no una foto caída. */
@@ -493,17 +507,17 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
         if ($h !== null) {
             $chk = $pdo->prepare("SELECT 1 FROM cover_cache WHERE hash = ?");
             $chk->execute([$h]);
-            if ($chk->fetchColumn()) return ['status' => 'replaced', 'url' => cv_localUrl($h)];
+            if ($chk->fetchColumn()) return $found(cv_localUrl($h));
             continue;
         }
         if (!cv_isRemote($img)) continue;
         if ($isMusic) {
             $res = cv_fetch($img);
-            if ($res['status'] === 'ok' && cv_imageInfo($res['body'])) return ['status' => 'replaced', 'url' => $img];
+            if ($res['status'] === 'ok' && cv_imageInfo($res['body'])) return $found($img);
             continue;
         }
         $local = cv_cacheRemote($pdo, $img);
-        if ($local) return ['status' => 'replaced', 'url' => $local];
+        if ($local) return $found($local);
     }
 
     /* c) Webs de datos. */
@@ -519,9 +533,27 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
     foreach (cv_externalCandidates($category, trim($title), $artist, $musicType) as $url) {
         if (microtime(true) > $deadline) break;
         /* Música: CDN de Apple, no hace falta comprobarla ni copiarla. */
-        if ($isMusic) return ['status' => 'replaced', 'url' => $url];
+        if ($isMusic) return $found($url);
         $local = cv_cacheRemote($pdo, $url);
-        if ($local) return ['status' => 'replaced', 'url' => $local];
+        if ($local) return $found($local);
     }
-    return ['status' => 'none', 'url' => null];
+    return $found(null);
+}
+
+/* Estado de la clave de TMDB para el diagnóstico de covers-repair.php:
+   'sin clave' | 'ok' | 'clave rechazada (HTTP 401)' | 'sin respuesta'… */
+function cv_tmdbStatus(): string {
+    $key = defined('TMDB_API_KEY') ? TMDB_API_KEY : '';
+    if ($key === '') return 'sin clave (TMDB_API_KEY vacía en el .env de este servidor)';
+    $params = ['query' => 'Oppenheimer'];
+    $headers = [];
+    if (str_starts_with($key, 'eyJ')) $headers[] = 'Authorization: Bearer ' . $key;
+    else $params['api_key'] = $key;
+    $ch = curl_init('https://api.themoviedb.org/3/search/movie?' . http_build_query($params));
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 7, CURLOPT_HTTPHEADER => $headers]);
+    curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    if ($code === 200) return 'ok';
+    if ($code === 0)   return 'sin respuesta (¿el servidor no puede salir a api.themoviedb.org?)';
+    return 'clave rechazada (HTTP ' . $code . ')';
 }

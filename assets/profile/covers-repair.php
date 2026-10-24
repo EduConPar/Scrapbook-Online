@@ -42,7 +42,9 @@ function repair_batch(PDO $pdo, int $after, int $limit, float $deadline): array 
         $url = (string)$r['image'];
         if (!cv_isRemote($url)) continue;
 
-        $local = cv_cacheRemote($pdo, $url, $status);
+        $local = cv_cacheRemote($pdo, $url, $status, 6, $detail);
+        /* Un error pasajero se reintenta una vez antes de rendirse. */
+        if (!$local && $status === 'error') $local = cv_cacheRemote($pdo, $url, $status, 10, $detail);
         if ($local) {
             $pdo->prepare("UPDATE list_items SET image = ? WHERE category = ? AND image = ?")
                 ->execute([$local, $r['category'], $url]);
@@ -52,12 +54,12 @@ function repair_batch(PDO $pdo, int $after, int $limit, float $deadline): array 
             if ($rep['url']) {
                 $pdo->prepare("UPDATE list_items SET image = ? WHERE category = ? AND LOWER(title) = ? AND image = ?")
                     ->execute([$rep['url'], $r['category'], mb_strtolower(trim($r['title'])), $url]);
-                $result = 'caída → sustituida';
+                $result = "caída ($detail) → sustituida";
             } else {
-                $result = 'caída, sin sustituta';
+                $result = "caída ($detail), sin sustituta";
             }
         } else {
-            $result = 'error pasajero, se reintentará en otra pasada';
+            $result = "error pasajero ($detail), se reintentará en otra pasada";
         }
         $out[] = ['category' => $r['category'], 'title' => $r['title'], 'result' => $result];
     }
@@ -65,7 +67,16 @@ function repair_batch(PDO $pdo, int $after, int $limit, float $deadline): array 
     return [$out, $cursor, $done];
 }
 
+/* Al empezar un repaso se olvidan los "no había sustituta": puede que
+   desde entonces se haya configurado TMDB o que otro usuario tenga ya
+   una foto buena del mismo título. */
+function repair_reset(PDO $pdo): void {
+    $pdo->exec("DELETE FROM cover_checks WHERE gave_up_at IS NOT NULL");
+}
+
 if ($isCli) {
+    echo 'TMDB: ' . cv_tmdbStatus() . "\n";
+    repair_reset($pdo);
     $after = 0;
     do {
         [$out, $after, $done] = repair_batch($pdo, $after, 20, microtime(true) + 300);
@@ -77,7 +88,9 @@ if ($isCli) {
 
 if (isset($_GET['step'])) {
     @set_time_limit(60);
-    [$out, $after, $done] = repair_batch($pdo, (int)($_GET['after'] ?? 0), 6, microtime(true) + 20);
+    $after = (int)($_GET['after'] ?? 0);
+    if ($after === 0) repair_reset($pdo);
+    [$out, $after, $done] = repair_batch($pdo, $after, 6, microtime(true) + 20);
     jsonResponse(['ok' => true, 'results' => $out, 'after' => $after, 'done' => $done]);
 }
 ?>
@@ -96,6 +109,8 @@ if (isset($_GET['step'])) {
 <body>
 <h1>Repaso de fotos de las listas</h1>
 <p>Copia en local las fotos de pelis, series, libros y juegos que aún son enlaces externos, y busca otra para las que estén caídas. Se puede repetir cuando quieras.</p>
+<?php $tmdb = cv_tmdbStatus(); ?>
+<p>TMDB (pósters de pelis y series): <strong style="color:<?= $tmdb === 'ok' ? '#1a7f37' : '#c00' ?>"><?= htmlspecialchars($tmdb) ?></strong></p>
 <p><button id="go">Empezar</button> <span id="state"></span></p>
 <div id="log"></div>
 <script>

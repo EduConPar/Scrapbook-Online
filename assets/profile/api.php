@@ -2629,7 +2629,9 @@ case 'fix-cover': {
     cv_ensureTables($pdo);
     @set_time_limit(60);
 
-    $checkKey = sha1($category . '|' . $titleKey . '|' . $failing);
+    /* Si TMDB se configura después de un intento fallido, la clave del
+       registro cambia y se vuelve a buscar en vez de esperar 12 h. */
+    $checkKey = sha1($category . '|' . $titleKey . '|' . $failing . '|' . (TMDB_API_KEY !== '' ? 'tmdb' : ''));
     $stmt = $pdo->prepare("SELECT fails, UNIX_TIMESTAMP(gave_up_at) AS gaveUp, UNIX_TIMESTAMP(checked_at) AS checkedAt
                            FROM cover_checks WHERE hash = ?");
     $stmt->execute([$checkKey]);
@@ -2648,7 +2650,8 @@ case 'fix-cover': {
                            ON DUPLICATE KEY UPDATE fails = fails + 1")
                 ->execute([$checkKey]);
         }
-        jsonResponse(['ok' => true, 'image' => null]);
+        /* Puede traer una sustituta para enseñar ya, sin guardarla. */
+        jsonResponse(['ok' => true, 'image' => $res['url']]);
     }
     if ($res['status'] === 'none') {
         $pdo->prepare("INSERT INTO cover_checks (hash, gave_up_at) VALUES (?, NOW())
