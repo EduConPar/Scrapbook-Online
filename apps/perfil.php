@@ -688,8 +688,8 @@ if ($_perfilStandalone) {
             <div id="profile-add-suggest" class="profile-add-suggest" hidden></div>
         </div>
         <div class="field-row-stacked" style="margin-top:8px;flex-shrink:0;">
-            <label for="profile-add-image">Imagen (URL)</label>
-            <input type="text" id="profile-add-image" placeholder="https://...">
+            <label for="profile-add-image">Imagen (URL, opcional)</label>
+            <input type="text" id="profile-add-image" placeholder="Déjala vacía y se busca sola">
         </div>
         <!-- Duración (pelis) / nº de capítulos (series, libros). El label y
              la visibilidad los ajusta openAddDialog según la categoría.
@@ -763,8 +763,8 @@ if ($_perfilStandalone) {
             <input type="text" id="profile-review-title" style="width:100%;box-sizing:border-box;">
         </div>
         <div class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;">
-            <label for="profile-review-image" style="font-size:11px;margin-bottom:3px;">Imagen (URL)</label>
-            <input type="text" id="profile-review-image" style="width:100%;box-sizing:border-box;" placeholder="https://...">
+            <label for="profile-review-image" style="font-size:11px;margin-bottom:3px;">Imagen (URL, opcional)</label>
+            <input type="text" id="profile-review-image" style="width:100%;box-sizing:border-box;" placeholder="Déjala vacía y se busca sola">
         </div>
         <div id="profile-review-rt-row" class="field-row-stacked" style="margin-bottom:8px;flex-shrink:0;display:none;">
             <label id="profile-review-rt-label" for="profile-review-rt" style="font-size:11px;margin-bottom:3px;">Duración (min)</label>
@@ -1212,7 +1212,10 @@ var PROFILE_USERS = <?php
     }
 
     function saveCategory(cat) {
-        var prevIds = (lists[cat] || []).map(function(x){ return x.id; }).join(',');
+        function listSig(arr) {
+            return (arr || []).map(function(x){ return x.id + '|' + (x.image || ''); }).join(',');
+        }
+        var prevSig = listSig(lists[cat]);
         fetch('assets/profile/api.php?action=save-lists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1228,9 +1231,10 @@ var PROFILE_USERS = <?php
                   /* Si los IDs cambiaron (item nuevo recibió su id real),
                      re-renderizar la vista activa para que los closures del
                      DOM apunten a los nuevos objetos. Sin esto, un ítem recién
-                     creado no respondería a clicks hasta recargar. */
-                  var newIds = lists[cat].map(function(x){ return x.id; }).join(',');
-                  if (newIds !== prevIds) {
+                     creado no respondería a clicks hasta recargar. También
+                     si cambió alguna foto: el servidor copia las nuevas en
+                     local y busca una a los items que se guardan sin foto. */
+                  if (listSig(lists[cat]) !== prevSig) {
                       if (cat === 'music' && currentCat === 'music') {
                           renderMusicView(currentMusicTab); renderMusicDestacados();
                       } else if (currentCat === cat) {

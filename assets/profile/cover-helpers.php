@@ -21,10 +21,13 @@
         c) TMDB (pelis/series), Open Library / Google Books (libros),
            Steam (juegos), iTunes (música)
 
+   3. AUTOMÁTICA. La foto es opcional: cv_autoImage() le busca una (pasos
+      b y c) a los items que se guardan sin foto.
+
    Música NO se copia en local: sus fotos vienen de YouTube/Spotify/
    iTunes (CDNs estables) y también las pinta musica-mobile, que no tiene
    <base href> y no resolvería la ruta relativa. Solo se le busca
-   sustituta cuando la foto está caída.
+   sustituta cuando la foto está caída o no tiene.
    ────────────────────────────────────────────────────────────────────── */
 
 const CV_MAX_W     = 500;               /* tamaño máximo de la copia */
@@ -462,8 +465,13 @@ function cv_externalCandidates(string $category, string $title, string $artist, 
                    si no es null, es una sustituta para ENSEÑAR ahora sin
                    guardarla: si la original vuelve, se queda la original
      'none'      → no hay sustituta
-   $skipOriginal: dar la original por muerta sin volver a pedirla. */
-function cv_findReplacement(PDO $pdo, string $category, string $title, string $failing, bool $skipOriginal = false): array {
+   $failing vacío = el item no tiene foto (cv_autoImage).
+   $skipOriginal: dar la original por muerta sin volver a pedirla.
+   $hints: ['artist' => …, 'type' => song|album] de música, para items
+   que aún no están en BD (si no, se leen de list_items), y 'excludeId':
+   el propio item, para que al quitarle la foto no se le devuelva la
+   misma que tenía guardada. */
+function cv_findReplacement(PDO $pdo, string $category, string $title, string $failing, bool $skipOriginal = false, array $hints = []): array {
     $deadline = microtime(true) + 20;   /* margen dentro del max_execution_time */
     $isMusic  = ($category === 'music');
     $titleKey = mb_strtolower(trim($title));
@@ -498,9 +506,9 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
 
     /* b) La misma obra en las listas de otros usuarios. */
     $st = $pdo->prepare("SELECT DISTINCT image FROM list_items
-                         WHERE category = ? AND LOWER(title) = ? AND image <> '' AND image <> ?
+                         WHERE category = ? AND LOWER(title) = ? AND image <> '' AND image <> ? AND id <> ?
                          LIMIT 5");
-    $st->execute([$category, $titleKey, $failing]);
+    $st->execute([$category, $titleKey, $failing, (int)($hints['excludeId'] ?? 0)]);
     foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $img) {
         if (microtime(true) > $deadline) break;
         $h = cv_localHash($img);
@@ -521,8 +529,9 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
     }
 
     /* c) Webs de datos. */
-    $artist = ''; $musicType = '';
-    if ($isMusic) {
+    $artist    = trim((string)($hints['artist'] ?? ''));
+    $musicType = (string)($hints['type'] ?? '');
+    if ($isMusic && $artist === '' && $musicType === '') {
         $st = $pdo->prepare("SELECT artist, music_type FROM list_items
                              WHERE category = 'music' AND LOWER(title) = ? LIMIT 1");
         $st->execute([$titleKey]);
@@ -538,6 +547,41 @@ function cv_findReplacement(PDO $pdo, string $category, string $title, string $f
         if ($local) return $found($local);
     }
     return $found(null);
+}
+
+/* Clave de cover_checks para (categoría, título, foto). Incluye si TMDB
+   está configurado: si se configura después de un intento fallido, la
+   clave cambia y se vuelve a buscar en vez de esperar. */
+function cv_checkKey(string $category, string $titleKey, string $failing): string {
+    $tmdb = defined('TMDB_API_KEY') && TMDB_API_KEY !== '' ? 'tmdb' : '';
+    return sha1($category . '|' . $titleKey . '|' . $failing . '|' . $tmdb);
+}
+
+/* Foto automática para un item guardado sin foto. Devuelve la URL (copia
+   local; externa en música) o null. Si no hay ninguna lo apunta en
+   cover_checks y no lo vuelve a buscar en 3 días (si no, cada guardado
+   de la lista repetiría las búsquedas). $searched dice si ha buscado de
+   verdad o ha salido por ese registro. */
+function cv_autoImage(PDO $pdo, string $category, string $title, array $hints = [], ?bool &$searched = null): ?string {
+    $searched = false;
+    $titleKey = mb_strtolower(trim($title));
+    if ($titleKey === '') return null;
+    $key = cv_checkKey($category, $titleKey, '');
+    $st = $pdo->prepare("SELECT UNIX_TIMESTAMP(gave_up_at) FROM cover_checks WHERE hash = ?");
+    $st->execute([$key]);
+    $gaveUp = (int)$st->fetchColumn();
+    if ($gaveUp && time() - $gaveUp < 3 * 86400) return null;
+
+    $searched = true;
+    $res = cv_findReplacement($pdo, $category, $title, '', false, $hints);
+    if ($res['url'] !== null) {
+        $pdo->prepare("DELETE FROM cover_checks WHERE hash = ?")->execute([$key]);
+        return $res['url'];
+    }
+    $pdo->prepare("INSERT INTO cover_checks (hash, gave_up_at) VALUES (?, NOW())
+                   ON DUPLICATE KEY UPDATE gave_up_at = NOW()")
+        ->execute([$key]);
+    return null;
 }
 
 /* Estado de la clave de TMDB para el diagnóstico de covers-repair.php:
